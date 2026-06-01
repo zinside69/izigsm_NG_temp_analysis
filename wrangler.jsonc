@@ -3,32 +3,31 @@
   "name": "webapp",
   "compatibility_date": "2026-04-13",
   "pages_build_output_dir": "./dist",
-  "compatibility_flags": [
-    "nodejs_compat"
+  "compatibility_flags": ["nodejs_compat"],
+
+  // ── Cloudflare D1 (SQLite edge) ──────────────────────────────────────────
+  // Créer en prod : npx wrangler d1 create izigsm-production
+  // Remplacer database_id par la valeur retournée
+  "d1_databases": [
+    {
+      "binding":       "DB",
+      "database_name": "izigsm-production",
+      "database_id":   "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+
+  // ── Cloudflare KV (OTP + Refresh tokens) ────────────────────────────────
+  // Créer en prod : npx wrangler kv:namespace create izigsm_KV
+  // Remplacer id et preview_id par les valeurs retournées
+  "kv_namespaces": [
+    {
+      "binding":     "KV",
+      "id":          "00000000000000000000000000000001",
+      "preview_id":  "00000000000000000000000000000002"
+    }
   ]
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // }
+
+  // ── Secrets (ne jamais mettre en clair ici) ──────────────────────────────
+  // Configurer via : wrangler secret put JWT_SECRET
+  // En local : fichier .dev.vars (voir .dev.vars.example)
 }

@@ -1,25 +1,74 @@
 /**
  * iziGSM — Gestion Stock
  * CRUD complet : pièces détachées, alertes stock bas, valorisation
+ * Connecté à la vraie API D1 avec fallback localStorage
  */
 
 'use strict';
+
+let allStockCache  = [];
+let stockUseApi    = true;
+let adjustingStockId = null;  // déplacé ici depuis plus bas
 
 // ─── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   requireAuth();
   buildSidebar('stock');
   initSeedData();
-  renderKPIs();
-  renderStock();
+  loadStock();
   bindSearch();
   bindFilters();
-  renderLowStockAlerts();
 });
+
+// ─── Chargement depuis l'API ───────────────────────────────────────────────
+async function loadStock() {
+  try {
+    const boutiqueId = getBoutiqueId();
+    const params = { limit: 200 };
+    if (boutiqueId) params.boutique_id = boutiqueId;
+
+    const result = await apiGet('/api/produits', params);
+    if (!result.ok) throw new Error(result.error || 'Erreur API');
+
+    // Mapper API (produits) vers format legacy (stock)
+    allStockCache = (result.data?.data || []).map(p => ({
+      id:        p.id,
+      name:      p.nom       || p.name      || '—',
+      nom:       p.nom       || '',
+      reference: p.reference || '',
+      category:  p.categorie_nom || p.categorie || p.category || '—',
+      categorie_id: p.categorie_id || null,
+      qty:       p.stock_actuel  ?? p.qty ?? 0,
+      stock_actuel: p.stock_actuel ?? 0,
+      minQty:    p.stock_minimum ?? p.minQty ?? 0,
+      stock_minimum: p.stock_minimum ?? 0,
+      price:     p.prix_vente_ht ?? p.price ?? 0,
+      prix_vente_ht: p.prix_vente_ht ?? 0,
+      prix_achat_ht: p.prix_achat_ht ?? 0,
+      supplier:  p.fournisseur || p.supplier || '',
+      location:  p.emplacement || p.location || '',
+      notes:     p.notes || '',
+      actif:     p.actif ?? 1,
+      createdAt: p.created_at || p.createdAt || '',
+    }));
+
+    setDB('stock', allStockCache);
+    stockUseApi = true;
+
+  } catch (err) {
+    console.warn('[Stock] API indisponible, fallback localStorage:', err.message);
+    allStockCache = getDB('stock');
+    stockUseApi = false;
+  }
+
+  renderKPIs();
+  renderStock();
+  renderLowStockAlerts();
+}
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────
 function renderKPIs() {
-  const items = getDB('stock');
+  const items = allStockCache.length ? allStockCache : getDB('stock');
 
   const total      = items.length;
   const lowStock   = items.filter(i => i.qty <= i.minQty).length;
@@ -34,7 +83,7 @@ function renderKPIs() {
 
 // ─── Alertes stock bas ──────────────────────────────────────────────────────
 function renderLowStockAlerts() {
-  const items    = getDB('stock');
+  const items    = allStockCache.length ? allStockCache : getDB('stock');
   const low      = items.filter(i => parseInt(i.qty) <= parseInt(i.minQty));
   const alertBox = document.getElementById('low-stock-alerts');
   if (!alertBox) return;
@@ -62,7 +111,7 @@ function renderLowStockAlerts() {
 
 // ─── Rendu principal du tableau ─────────────────────────────────────────────
 function renderStock(search = '', categoryFilter = 'all', statusFilter = 'all') {
-  const items = getDB('stock');
+  const items = allStockCache.length ? allStockCache : getDB('stock');
   const tbody = document.getElementById('stock-tbody');
   const counter = document.getElementById('stock-count');
 
@@ -190,7 +239,7 @@ function openNewStock() {
 }
 
 function editStock(id) {
-  const items = getDB('stock');
+  const items = allStockCache.length ? allStockCache : getDB('stock');
   const item  = items.find(x => x.id == id);
   if (!item) return;
 
@@ -218,58 +267,76 @@ function resetStockForm() {
   if (minEl) minEl.value = '5';
 }
 
-function saveStock() {
+async function saveStock() {
   const name = document.getElementById('stock-name').value.trim();
   if (!name) { showFlash('Le nom de la pièce est obligatoire.', 'error'); return; }
 
   const qty    = parseInt(document.getElementById('stock-qty').value)     || 0;
   const minQty = parseInt(document.getElementById('stock-min-qty').value) || 0;
   const price  = parseFloat(document.getElementById('stock-price').value) || 0;
-
-  const id = document.getElementById('stock-id').value;
+  const id     = document.getElementById('stock-id').value;
+  const boutiqueId = getBoutiqueId();
 
   const data = {
+    nom:           name,
     name,
-    reference : document.getElementById('stock-reference').value.trim(),
-    category  : document.getElementById('stock-category').value,
+    reference:     document.getElementById('stock-reference').value.trim(),
+    category:      document.getElementById('stock-category').value,
+    stock_actuel:  qty,
     qty,
+    stock_minimum: minQty,
     minQty,
+    prix_vente_ht: price,
     price,
-    supplier  : document.getElementById('stock-supplier').value.trim(),
-    location  : document.getElementById('stock-location').value.trim(),
-    notes     : document.getElementById('stock-notes').value.trim(),
+    fournisseur:   document.getElementById('stock-supplier').value.trim(),
+    supplier:      document.getElementById('stock-supplier').value.trim(),
+    emplacement:   document.getElementById('stock-location').value.trim(),
+    location:      document.getElementById('stock-location').value.trim(),
+    notes:         document.getElementById('stock-notes').value.trim(),
+    boutique_id:   boutiqueId,
   };
 
-  if (id) {
-    updateInDB('stock', parseInt(id), data);
-    showFlash('Pièce mise à jour.', 'success');
-  } else {
-    data.createdAt = new Date().toISOString();
-    addToDB('stock', data);
-    showFlash('Pièce ajoutée au stock.', 'success');
+  try {
+    if (stockUseApi) {
+      let result;
+      if (id) {
+        result = await apiPut('/api/produits/' + id, data);
+      } else {
+        result = await apiPost('/api/produits', data);
+      }
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+      showFlash(id ? 'Pièce mise à jour.' : 'Pièce ajoutée au stock.', 'success');
+    } else {
+      if (id) { updateInDB('stock', parseInt(id), data); showFlash('Pièce mise à jour.', 'success'); }
+      else { data.createdAt = new Date().toISOString(); addToDB('stock', data); showFlash('Pièce ajoutée.', 'success'); }
+    }
+    closeModal('modal-stock');
+    await loadStock();
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
   }
-
-  closeModal('modal-stock');
-  renderKPIs();
-  renderStock();
-  renderLowStockAlerts();
 }
 
-function deleteStock(id) {
+async function deleteStock(id) {
   if (!confirm('Supprimer cette pièce du stock ?')) return;
-  deleteFromDB('stock', id);
-  showFlash('Pièce supprimée.', 'success');
-  renderKPIs();
-  renderStock();
-  renderLowStockAlerts();
+  try {
+    if (stockUseApi) {
+      const result = await apiDelete('/api/produits/' + id);
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+    } else {
+      deleteFromDB('stock', id);
+    }
+    showFlash('Pièce supprimée.', 'success');
+    await loadStock();
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
+  }
 }
 
 // ─── Modal Ajustement de stock ──────────────────────────────────────────────
-let adjustingStockId = null;
-
 function openAdjustStock(id) {
   adjustingStockId = id;
-  const items  = getDB('stock');
+  const items  = allStockCache.length ? allStockCache : getDB('stock');
   const item   = items.find(x => x.id == id);
   if (!item) return;
 
@@ -281,34 +348,45 @@ function openAdjustStock(id) {
   openModal('modal-adjust-stock');
 }
 
-function confirmAdjustStock() {
+async function confirmAdjustStock() {
   if (!adjustingStockId) return;
 
   const qty       = parseInt(document.getElementById('adjust-qty').value);
   const operation = document.getElementById('adjust-operation').value;
+  const reason    = document.getElementById('adjust-reason')?.value || '';
 
   if (isNaN(qty) || qty <= 0) { showFlash('Quantité invalide.', 'error'); return; }
 
-  const items = getDB('stock');
+  const items = allStockCache.length ? allStockCache : getDB('stock');
   const item  = items.find(x => x.id == adjustingStockId);
   if (!item) return;
 
   let newQty = parseInt(item.qty) || 0;
   if (operation === 'add') newQty += qty;
-  else if (operation === 'remove') {
-    newQty = Math.max(0, newQty - qty);
-  } else if (operation === 'set') {
-    newQty = qty;
+  else if (operation === 'remove') newQty = Math.max(0, newQty - qty);
+  else if (operation === 'set')    newQty = qty;
+
+  // Mapper opération vers type mouvement API
+  const typeMap = { add: 'entree', remove: 'sortie', set: 'ajustement' };
+
+  try {
+    if (stockUseApi) {
+      const result = await apiPost('/api/produits/' + adjustingStockId + '/mouvement', {
+        type:     typeMap[operation] || 'ajustement',
+        quantite: operation === 'set' ? newQty : qty,
+        motif:    reason || 'Ajustement manuel',
+      });
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+    } else {
+      updateInDB('stock', adjustingStockId, { qty: newQty });
+    }
+    showFlash('Stock mis à jour : ' + newQty + ' unite(s).', 'success');
+    closeModal('modal-adjust-stock');
+    adjustingStockId = null;
+    await loadStock();
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
   }
-
-  updateInDB('stock', adjustingStockId, { qty: newQty });
-  showFlash(`Stock mis à jour : ${newQty} unité(s).`, 'success');
-
-  closeModal('modal-adjust-stock');
-  adjustingStockId = null;
-  renderKPIs();
-  renderStock();
-  renderLowStockAlerts();
 }
 
 // ─── Réapprovisionnement rapide ─────────────────────────────────────────────

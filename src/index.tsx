@@ -1,123 +1,128 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
+// Routes
+import authRoutes       from './routes/auth'
+import clientsRoutes    from './routes/clients'
+import ticketsRoutes    from './routes/tickets'
+import stocksRoutes     from './routes/stocks'
+import facturationRoutes from './routes/facturation'
+import personnelRoutes  from './routes/personnel'
+import boutiquesRoutes  from './routes/boutiques'
+
 /**
- * iziGSM — API Backend (Cloudflare Pages Functions)
+ * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
  *
- * Architecture Cloudflare Pages :
- * - Les fichiers dans dist/ (HTML, CSS, JS) sont servis AUTOMATIQUEMENT
- *   par Cloudflare Pages sans aucune route Hono nécessaire.
- * - Hono gère UNIQUEMENT les routes /api/* côté Worker.
- * - Le routing des pages HTML est géré par _routes.json généré par wrangler.
+ * Architecture :
+ * - HTML/CSS/JS dans dist/ → servis automatiquement par Cloudflare Pages CDN
+ * - Hono Workers → gère uniquement les routes /api/*
+ * - D1 (SQLite edge) → persistance de toutes les données
+ * - KV → OTP (TTL 10min) + refresh tokens JWT (TTL 7j)
+ *
+ * Routes disponibles :
+ *   /api/auth/*         → Authentification (register, login, refresh, logout, me)
+ *   /api/clients/*      → CRUD clients + appareils
+ *   /api/tickets/*      → CRUD tickets + machine à états statuts
+ *   /api/produits/*     → CRUD produits + mouvements stock
+ *   /api/categories/*   → CRUD catégories stock
+ *   /api/devis/*        → CRUD devis + conversion → facture
+ *   /api/factures/*     → CRUD factures + paiements
+ *   /api/employes/*     → CRUD employés
+ *   /api/pointage/*     → Pointage (machine à états) + rapports
+ *   /api/boutiques/*    → CRUD boutiques + NF525 verify/cloture
+ *   /api/stats          → KPIs dashboard (depuis D1)
+ *   /api/health         → Health check
  */
 
-const app = new Hono()
+type Bindings = {
+  DB:         D1Database
+  KV:         KVNamespace
+  JWT_SECRET: string
+}
 
-// ─── CORS pour les routes API ───────────────────────────────────────────────
+const app = new Hono<{ Bindings: Bindings }>()
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use('/api/*', cors({
-  origin: '*',
+  origin: ['http://localhost:3000', 'https://izigsm.pages.dev'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }))
 
-// ─── Health check ───────────────────────────────────────────────────────────
+// ─── Routes ───────────────────────────────────────────────────────────────────
+app.route('/api/auth',       authRoutes)
+app.route('/api',            clientsRoutes)     // /api/clients/*
+app.route('/api',            ticketsRoutes)     // /api/tickets/*
+app.route('/api',            stocksRoutes)      // /api/produits/* + /api/categories/*
+app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/*
+app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
+app.route('/api/boutiques',  boutiquesRoutes)
+
+// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (c) => {
   return c.json({
-    status   : 'ok',
-    app      : 'iziGSM',
-    version  : '1.0.0',
-    timestamp: new Date().toISOString()
+    status:    'ok',
+    app:       'iziGSM',
+    version:   '2.0.0',
+    sprint:    '1 — D1 + JWT + NF525 + Personnel',
+    timestamp: new Date().toISOString(),
   })
 })
 
-// ─── POST /api/register ─────────────────────────────────────────────────────
-app.post('/api/register', async (c) => {
+// ─── Dashboard stats (données réelles D1) ────────────────────────────────────
+app.get('/api/stats', async (c) => {
+  // Récupérer le JWT pour connaître la boutique
+  const authHeader = c.req.header('Authorization')
+  if (!authHeader) return c.json({ success: false, error: 'Non authentifié.' }, 401)
+
+  const token = authHeader.slice(7)
+  // Décoder le payload sans vérification (la vérification est dans authMiddleware)
   try {
-    const body = await c.req.json()
-    const { email, firstName, lastName, workshopName, phone } = body
+    const [, payloadB64] = token.split('.')
+    const pad = payloadB64.length % 4 === 0 ? '' : '='.repeat(4 - payloadB64.length % 4)
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/') + pad))
+    const boutiqueId = payload.boutique_id ?? 1
 
-    if (!email || !firstName || !lastName) {
-      return c.json({ success: false, error: 'Champs obligatoires manquants.' }, 400)
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString()
-    console.log(`[iziGSM] Nouveau compte : ${email} — OTP DÉMO: ${otp}`)
+    const [clients, tickets_en_cours, tickets_today, ca_mois, stock_bas, employes_en_poste] =
+      await Promise.all([
+        c.env.DB.prepare('SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1')
+          .bind(boutiqueId).first<{ cnt: number }>(),
+        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1")
+          .bind(boutiqueId).first<{ cnt: number }>(),
+        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND DATE(created_at) = DATE('now') AND actif = 1")
+          .bind(boutiqueId).first<{ cnt: number }>(),
+        c.env.DB.prepare("SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')")
+          .bind(boutiqueId).first<{ ca: number }>(),
+        c.env.DB.prepare('SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1')
+          .bind(boutiqueId).first<{ cnt: number }>(),
+        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM employes WHERE boutique_id = ? AND statut_pointage = 'en_poste' AND actif = 1")
+          .bind(boutiqueId).first<{ cnt: number }>(),
+      ])
 
     return c.json({
-      success : true,
-      message : 'Code OTP généré.',
-      otpDemo : otp,
-      user    : { email, firstName, lastName, workshopName, phone }
-    })
-  } catch {
-    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
-  }
-})
-
-// ─── POST /api/verify-otp ───────────────────────────────────────────────────
-app.post('/api/verify-otp', async (c) => {
-  try {
-    const { email, otp, expectedOtp } = await c.req.json()
-    if (!email || !otp) return c.json({ success: false, error: 'Données manquantes.' }, 400)
-
-    const valid = otp === expectedOtp
-    return c.json({
-      success: valid,
-      message: valid ? 'Compte activé avec succès !' : 'Code OTP invalide ou expiré.',
-      token  : valid ? `demo_${Date.now()}` : null
-    })
-  } catch {
-    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
-  }
-})
-
-// ─── POST /api/login ────────────────────────────────────────────────────────
-app.post('/api/login', async (c) => {
-  try {
-    const { email, password } = await c.req.json()
-    if (!email || !password) {
-      return c.json({ success: false, error: 'Email et mot de passe requis.' }, 400)
-    }
-
-    const isDemo        = email === 'demo@izigsm.fr' && password === 'Demo1234'
-    const isValidFormat = email.includes('@') && password.length >= 6
-
-    if (!isDemo && !isValidFormat) {
-      return c.json({ success: false, error: 'Identifiants incorrects.' }, 401)
-    }
-
-    return c.json({
-      success : true,
-      message : 'Connexion réussie.',
-      token   : `session_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      user    : {
-        id           : 1,
-        email,
-        firstName    : isDemo ? 'Démo' : email.split('@')[0],
-        lastName     : 'iziGSM',
-        workshopName : isDemo ? 'Atelier Démo' : 'Mon Atelier',
-        plan         : 'trial',
-        trialDaysLeft: 14
+      success: true,
+      data: {
+        nb_clients:          clients?.cnt           ?? 0,
+        tickets_en_cours:    tickets_en_cours?.cnt  ?? 0,
+        tickets_aujourd_hui: tickets_today?.cnt     ?? 0,
+        ca_mois:             ca_mois?.ca            ?? 0,
+        stock_bas:           stock_bas?.cnt         ?? 0,
+        employes_en_poste:   employes_en_poste?.cnt ?? 0,
       }
     })
   } catch {
-    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+    return c.json({ success: false, error: 'Erreur token.' }, 401)
   }
 })
 
-// ─── POST /api/logout ───────────────────────────────────────────────────────
-app.post('/api/logout', (c) => {
-  return c.json({ success: true, message: 'Déconnecté.' })
-})
-
-// ─── GET /api/stats ─────────────────────────────────────────────────────────
-app.get('/api/stats', (c) => {
-  return c.json({
-    tickets  : { total: 12, enCours: 5, termines: 7 },
-    devis    : { total: 8,  enAttente: 3, acceptes: 5 },
-    factures : { total: 6,  montantTotal: 2340.50 },
-    clients  : { total: 24, nouveaux: 3 }
-  })
+// ─── 404 fallback API ─────────────────────────────────────────────────────────
+app.notFound((c) => {
+  if (c.req.path.startsWith('/api/')) {
+    return c.json({ success: false, error: `Route API introuvable : ${c.req.method} ${c.req.path}` }, 404)
+  }
+  // Pour les routes non-API, laisser Cloudflare Pages servir le HTML
+  return c.notFound()
 })
 
 export default app

@@ -1,0 +1,17 @@
+# Copier ce fichier en .dev.vars et remplir les valeurs
+# Ne jamais committer .dev.vars
+
+JWT_SECRET=<générer avec : openssl rand -base64 64>
+APP_ENV=development
+FRONTEND_URL=http://localhost:3000
+
+# Sprint 3 — Email
+# RESEND_API_KEY=re_xxxxxxxxxxxx
+
+# Sprint 3 — SMS
+# TWILIO_ACCOUNT_SID=ACxxxxxxxxxx
+# TWILIO_AUTH_TOKEN=xxxxxxxx
+# TWILIO_PHONE_NUMBER=+33xxxxxxxxx
+
+# Sprint 3 — Paiements
+# STRIPE_SECRET_KEY=sk_test_xxxxxxxxx

@@ -34,6 +34,7 @@ function buildSidebar(activePage) {
     { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },
     { id:'stock', icon:'📦', label:'Stock', href:'stock.html', section:'gestion', badge: getStockAlert() },
     { id:'clients', icon:'👥', label:'Clients', href:'clients.html', section:'gestion', badge: null },
+    { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel.html', section:'gestion', badge: null },
     { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings.html', section:'config', badge: null },
     { id:'modules', icon:'🧩', label:'Modules', href:'modules.html', section:'config', badge: null },
   ];
@@ -279,3 +280,223 @@ document.addEventListener('DOMContentLoaded', function() {
     if (av) av.textContent = initials;
   }
 });
+
+// ======================== API HELPERS (JWT réel) ========================
+
+/**
+ * Récupère le JWT stocké (localStorage ou sessionStorage)
+ */
+function getToken() {
+  return localStorage.getItem('izigsm_token') || sessionStorage.getItem('izigsm_token') || '';
+}
+
+/**
+ * Stocke le JWT et la session après login
+ * @param {string} token - JWT access token
+ * @param {string} refreshToken - Refresh token
+ * @param {object} user - Payload utilisateur { id, email, nom, prenom, role, boutique_id, boutique_name }
+ * @param {boolean} remember - Si true, stocker en localStorage (persistant), sinon sessionStorage
+ */
+function storeSession(token, refreshToken, user, remember = true) {
+  const session = {
+    name:         `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+    email:        user.email,
+    role:         user.role,
+    boutique_id:  user.boutique_id,
+    boutique_name: user.boutique_name || 'Mon Atelier',
+    company:      user.boutique_name || 'Mon Atelier',
+  };
+
+  if (remember) {
+    localStorage.setItem('izigsm_token', token);
+    localStorage.setItem('izigsm_refresh_token', refreshToken);
+    localStorage.setItem('izigsm_session', JSON.stringify(session));
+  } else {
+    sessionStorage.setItem('izigsm_token', token);
+    sessionStorage.setItem('izigsm_refresh_token', refreshToken);
+    sessionStorage.setItem('izigsm_session', JSON.stringify(session));
+  }
+}
+
+/**
+ * Headers HTTP avec Authorization Bearer
+ */
+function authHeaders(extra = {}) {
+  const token = getToken();
+  const base = { 'Content-Type': 'application/json' };
+  if (token) base['Authorization'] = `Bearer ${token}`;
+  return { ...base, ...extra };
+}
+
+/**
+ * Wrapper fetch avec gestion automatique 401 → refresh token → retry
+ * Retourne { ok, data, status, error }
+ */
+async function api(method, url, body = null, opts = {}) {
+  const options = {
+    method: method.toUpperCase(),
+    headers: authHeaders(opts.headers || {}),
+  };
+  if (body && method.toUpperCase() !== 'GET') {
+    options.body = JSON.stringify(body);
+  }
+
+  let res = await fetch(url, options);
+
+  // 401 → tentative de refresh
+  if (res.status === 401 && !opts._retry) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      return api(method, url, body, { ...opts, _retry: true });
+    }
+    // Refresh échoué → redirection login
+    localStorage.removeItem('izigsm_token');
+    localStorage.removeItem('izigsm_session');
+    sessionStorage.removeItem('izigsm_token');
+    sessionStorage.removeItem('izigsm_session');
+    window.location.href = '/login.html';
+    return { ok: false, status: 401, error: 'Session expirée' };
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+
+  return {
+    ok:     res.ok,
+    status: res.status,
+    data,
+    error:  res.ok ? null : (data?.error || `Erreur HTTP ${res.status}`),
+  };
+}
+
+/**
+ * Tente de renouveler le JWT avec le refresh token
+ * Retourne true si succès, false sinon
+ */
+async function tryRefreshToken() {
+  const refresh = localStorage.getItem('izigsm_refresh_token') || sessionStorage.getItem('izigsm_refresh_token');
+  const session = JSON.parse(localStorage.getItem('izigsm_session') || sessionStorage.getItem('izigsm_session') || 'null');
+  if (!refresh || !session) return false;
+
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: refresh, user_id: session.id }),
+    });
+    if (!res.ok) return false;
+
+    const data = await res.json();
+    if (!data.success || !data.access_token) return false;
+
+    // Mettre à jour le token
+    if (localStorage.getItem('izigsm_token')) {
+      localStorage.setItem('izigsm_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('izigsm_refresh_token', data.refresh_token);
+    } else {
+      sessionStorage.setItem('izigsm_token', data.access_token);
+      if (data.refresh_token) sessionStorage.setItem('izigsm_refresh_token', data.refresh_token);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * GET helper
+ */
+async function apiGet(url, params = {}) {
+  const qs = Object.keys(params).length
+    ? '?' + new URLSearchParams(params).toString()
+    : '';
+  return api('GET', url + qs);
+}
+
+/**
+ * POST helper
+ */
+async function apiPost(url, body) {
+  return api('POST', url, body);
+}
+
+/**
+ * PUT helper
+ */
+async function apiPut(url, body) {
+  return api('PUT', url, body);
+}
+
+/**
+ * DELETE helper
+ */
+async function apiDelete(url) {
+  return api('DELETE', url);
+}
+
+/**
+ * logout amélioré : révoque le token côté serveur
+ */
+async function logout() {
+  try {
+    const token = getToken();
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+    }
+  } catch { /* ignore */ }
+
+  localStorage.removeItem('izigsm_token');
+  localStorage.removeItem('izigsm_refresh_token');
+  localStorage.removeItem('izigsm_session');
+  sessionStorage.removeItem('izigsm_token');
+  sessionStorage.removeItem('izigsm_refresh_token');
+  sessionStorage.removeItem('izigsm_session');
+  window.location.href = '/login.html';
+}
+
+/**
+ * Vérifie l'auth : si pas de token → redirige
+ * Compatible avec l'ancien requireAuth() qui retournait la session
+ */
+function requireAuth() {
+  const token   = getToken();
+  const session = JSON.parse(
+    localStorage.getItem('izigsm_session') ||
+    sessionStorage.getItem('izigsm_session') ||
+    'null'
+  );
+
+  if (!token && !session) {
+    window.location.href = '/login.html';
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Vérifie si l'utilisateur a un rôle donné
+ */
+function hasRole(...roles) {
+  const session = JSON.parse(
+    localStorage.getItem('izigsm_session') ||
+    sessionStorage.getItem('izigsm_session') ||
+    'null'
+  );
+  if (!session) return false;
+  return roles.includes(session.role);
+}
+
+/**
+ * Retourne le boutique_id depuis la session
+ */
+function getBoutiqueId() {
+  const session = JSON.parse(
+    localStorage.getItem('izigsm_session') ||
+    sessionStorage.getItem('izigsm_session') ||
+    'null'
+  );
+  return session?.boutique_id ?? null;
+}

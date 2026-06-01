@@ -1,20 +1,73 @@
 /**
  * iziGSM — tickets.js
+ * CRUD tickets connecté à la vraie API D1 (avec fallback localStorage)
  */
 
 let currentTicketId = null;
 let sigCanvas = null, sigCtx = null, sigDrawing = false;
 let attachmentFiles = [];
+let allTicketsCache  = [];  // cache local depuis l'API
+let ticketsUseApi    = true;
 
 document.addEventListener('DOMContentLoaded', function() {
   buildSidebar('tickets');
-  renderTickets();
+  loadTickets();   // remplace renderTickets() direct
   initSignature();
   populateClients();
 });
 
+// ─── Chargement API ────────────────────────────────────────────────────────
+async function loadTickets() {
+  try {
+    const boutiqueId = getBoutiqueId();
+    const params = { limit: 100 };
+    if (boutiqueId) params.boutique_id = boutiqueId;
+
+    const result = await apiGet('/api/tickets', params);
+    if (!result.ok) throw new Error(result.error || 'Erreur API');
+
+    // Mapper API vers format attendu par renderTickets
+    allTicketsCache = (result.data?.data || []).map(t => ({
+      id:          t.id,
+      clientName:  t.client_nom   || t.clientName  || '—',
+      phone:       t.client_tel   || t.phone        || '',
+      email:       t.client_email || t.email        || '',
+      deviceType:  t.marque       || t.deviceType   || '',
+      deviceModel: t.modele       || t.deviceModel  || '',
+      imei:        t.imei         || '',
+      description: t.description  || '',
+      notes:       t.notes_internes || t.notes      || '',
+      status:      mapStatutToLegacy(t.statut || t.status),
+      statut:      t.statut       || '',
+      priority:    t.priorite     || t.priority     || 'Moyenne',
+      technician:  t.technicien_nom || t.technician || 'Non assigné',
+      price:       t.devis_montant  || t.price      || 0,
+      numero:      t.numero       || '',
+      hasSignature: false,
+      attachments: [],
+      createdAt:   t.created_at   || t.createdAt   || '',
+    }));
+
+    setDB('tickets', allTicketsCache);
+    ticketsUseApi = true;
+
+  } catch (err) {
+    console.warn('[Tickets] API indisponible, fallback localStorage:', err.message);
+    allTicketsCache = getDB('tickets');
+    ticketsUseApi = false;
+  }
+
+  renderTickets();
+}
+
+// Mapper statuts API snake_case vers anciens libellés
+function mapStatutToLegacy(statut) {
+  const map = { recu:'Nouveau', diagnostic:'En cours', en_reparation:'En cours', termine:'Terminé', livre:'Terminé', annule:'Annulé' };
+  return map[statut] || statut || 'Nouveau';
+}
+
 function renderTickets(filter = '') {
-  let data = getDB('tickets');
+  let data = allTicketsCache.length ? allTicketsCache : getDB('tickets');
   const statusFilter = document.getElementById('filter-status')?.value || '';
   const priorityFilter = document.getElementById('filter-priority')?.value || '';
 
@@ -159,18 +212,41 @@ function viewTicket(id) {
   openModal('modal-ticket-detail');
 }
 
-function changeStatus(id, status) {
-  updateInDB('tickets', id, { status });
-  closeModal('modal-ticket-detail');
-  renderTickets();
-  showFlash(`✓ Statut mis à jour : ${status}`);
+async function changeStatus(id, status) {
+  // Mapper statut legacy vers statut API
+  const statutMap = { 'Nouveau': 'recu', 'En cours': 'en_reparation', 'Terminé': 'termine', 'Annulé': 'annule' };
+  const statutApi = statutMap[status] || status;
+
+  try {
+    if (ticketsUseApi) {
+      const result = await apiPut('/api/tickets/' + id + '/statut', { statut: statutApi });
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+    } else {
+      updateInDB('tickets', id, { status });
+    }
+    closeModal('modal-ticket-detail');
+    await loadTickets();
+    showFlash('Statut mis à jour : ' + status);
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
+  }
 }
 
-function deleteTicket(id) {
+async function deleteTicket(id) {
   if (!confirm('Supprimer cette prise en charge ?')) return;
-  deleteFromDB('tickets', id);
-  renderTickets();
-  showFlash('✓ Prise en charge supprimée', 'info');
+  try {
+    if (ticketsUseApi) {
+      const result = await apiDelete('/api/tickets/' + id);
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+    } else {
+      deleteFromDB('tickets', id);
+    }
+    allTicketsCache = allTicketsCache.filter(t => t.id !== id);
+    renderTickets();
+    showFlash('Prise en charge supprimée', 'info');
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
+  }
 }
 
 function createDevisFromTicket() {
@@ -180,38 +256,66 @@ function createDevisFromTicket() {
   }
 }
 
-function saveTicket() {
+async function saveTicket() {
   const clientName = document.getElementById('t-new-client').value.trim() || 'Client inconnu';
   const description = document.getElementById('t-description').value.trim();
-  if (!description) { showFlash('❌ La description est requise.', 'error'); return; }
+  if (!description) { showFlash('La description est requise.', 'error'); return; }
+
+  const boutiqueId = getBoutiqueId();
 
   const ticket = {
+    // Champs API D1
+    client_nom:     clientName,
+    client_tel:     document.getElementById('t-phone').value.trim(),
+    client_email:   document.getElementById('t-email').value.trim(),
+    marque:         document.getElementById('t-device-type').value,
+    modele:         document.getElementById('t-device-model').value.trim(),
+    imei:           document.getElementById('t-imei').value.trim(),
+    priorite:       document.getElementById('t-priority').value,
+    description,
+    notes_internes: document.getElementById('t-notes').value.trim(),
+    devis_montant:  parseFloat(document.getElementById('t-price').value) || 0,
+    boutique_id:    boutiqueId,
+    // Champs legacy pour fallback localStorage
     clientName,
-    phone: document.getElementById('t-phone').value.trim(),
-    email: document.getElementById('t-email').value.trim(),
+    phone:      document.getElementById('t-phone').value.trim(),
+    email:      document.getElementById('t-email').value.trim(),
     deviceType: document.getElementById('t-device-type').value,
     deviceModel: document.getElementById('t-device-model').value.trim(),
-    imei: document.getElementById('t-imei').value.trim(),
-    priority: document.getElementById('t-priority').value,
-    technician: document.getElementById('t-technician').value,
-    price: parseFloat(document.getElementById('t-price').value) || 0,
-    description,
-    notes: document.getElementById('t-notes').value.trim(),
+    priority:   document.getElementById('t-priority').value,
+    technician: document.getElementById('t-technician')?.value || 'Non assigné',
+    price:      parseFloat(document.getElementById('t-price').value) || 0,
+    notes:      document.getElementById('t-notes').value.trim(),
     status: 'Nouveau',
     hasSignature: !!sigCanvas && !isSigEmpty(),
     attachments: attachmentFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
   };
 
-  if (currentTicketId) {
-    updateInDB('tickets', currentTicketId, ticket);
-    showFlash('✓ Prise en charge mise à jour');
-  } else {
-    addToDB('tickets', ticket);
-    showFlash('✓ Prise en charge créée');
+  try {
+    if (ticketsUseApi) {
+      let result;
+      if (currentTicketId) {
+        result = await apiPut('/api/tickets/' + currentTicketId, ticket);
+      } else {
+        result = await apiPost('/api/tickets', ticket);
+      }
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+      showFlash(currentTicketId ? 'Prise en charge mise à jour' : 'Prise en charge créée');
+    } else {
+      if (currentTicketId) {
+        updateInDB('tickets', currentTicketId, ticket);
+        showFlash('Prise en charge mise à jour');
+      } else {
+        ticket.createdAt = new Date().toISOString();
+        addToDB('tickets', ticket);
+        showFlash('Prise en charge créée');
+      }
+    }
+    closeModal('modal-ticket');
+    await loadTickets();
+  } catch (err) {
+    showFlash('Erreur: ' + err.message, 'error');
   }
-
-  closeModal('modal-ticket');
-  renderTickets();
 }
 
 function clearTicketForm() {

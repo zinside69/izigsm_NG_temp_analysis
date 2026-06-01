@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iziGSM — Personnel & Pointage</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/app.css" rel="stylesheet">
+  <style>
+    .statut-badge { @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium; }
+    .statut-en_poste { background: #dcfce7; color: #166534; }
+    .statut-pause    { background: #fef9c3; color: #854d0e; }
+    .statut-absent   { background: #fee2e2; color: #991b1b; }
+    .statut-termine  { background: #f3f4f6; color: #374151; }
+    .employe-card { transition: all .2s; }
+    .employe-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.12); }
+    .pulse-green { animation: pulse-g 2s infinite; }
+    @keyframes pulse-g { 0%,100%{opacity:1} 50%{opacity:.5} }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+  <div class="flex items-center justify-between px-6 py-3">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" class="text-gray-500 hover:text-gray-700 lg:hidden">
+        <i class="fas fa-bars text-xl"></i>
+      </button>
+      <a href="/dashboard.html" class="flex items-center gap-2">
+        <div class="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-mobile-alt text-white text-sm"></i>
+        </div>
+        <span class="font-bold text-gray-900 text-lg">izi<span class="text-blue-600">GSM</span></span>
+      </a>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="header-boutique" class="hidden sm:block text-sm text-gray-500"></span>
+      <button onclick="logout()" class="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors">
+        <i class="fas fa-sign-out-alt"></i>
+        <span class="hidden sm:inline">Déconnexion</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="flex">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="w-64 bg-white border-r border-gray-200 min-h-screen fixed lg:static z-30 -translate-x-full lg:translate-x-0 transition-transform">
+    <nav class="p-4 space-y-1">
+      <a href="/dashboard.html"  class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-chart-line w-5"></i>Tableau de bord</a>
+      <a href="/tickets.html"    class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-tools w-5"></i>Tickets</a>
+      <a href="/clients.html"    class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-users w-5"></i>Clients</a>
+      <a href="/stock.html"      class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-boxes w-5"></i>Stock</a>
+      <a href="/devis.html"      class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-file-alt w-5"></i>Devis</a>
+      <a href="/factures.html"   class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-file-invoice w-5"></i>Factures</a>
+      <a href="/personnel.html"  class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-medium"><i class="fas fa-user-clock w-5"></i>Personnel</a>
+      <a href="/qualirepar.html" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-leaf w-5"></i>Qualirépar</a>
+      <a href="/settings.html"   class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"><i class="fas fa-cog w-5"></i>Paramètres</a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 p-6 lg:p-8 overflow-x-hidden">
+    <!-- Page header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Personnel & Pointage</h1>
+        <p class="text-gray-500 mt-1">Suivi des présences en temps réel</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openRapportModal()" class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors">
+          <i class="fas fa-chart-bar"></i> Rapport
+        </button>
+        <button onclick="openAddEmployeModal()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+          <i class="fas fa-user-plus"></i> Nouvel employé
+        </button>
+      </div>
+    </div>
+
+    <!-- Résumé statuts -->
+    <div id="statuts-resume" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div class="bg-green-50 rounded-xl p-4 text-center border border-green-100">
+        <div id="cnt-en-poste" class="text-3xl font-bold text-green-700">—</div>
+        <div class="text-sm text-green-600 mt-1 flex items-center justify-center gap-1">
+          <span class="w-2 h-2 bg-green-500 rounded-full pulse-green"></span> En poste
+        </div>
+      </div>
+      <div class="bg-yellow-50 rounded-xl p-4 text-center border border-yellow-100">
+        <div id="cnt-pause" class="text-3xl font-bold text-yellow-700">—</div>
+        <div class="text-sm text-yellow-600 mt-1">🟡 En pause</div>
+      </div>
+      <div class="bg-red-50 rounded-xl p-4 text-center border border-red-100">
+        <div id="cnt-absent" class="text-3xl font-bold text-red-700">—</div>
+        <div class="text-sm text-red-600 mt-1">🔴 Absent</div>
+      </div>
+      <div class="bg-gray-50 rounded-xl p-4 text-center border border-gray-200">
+        <div id="cnt-termine" class="text-3xl font-bold text-gray-700">—</div>
+        <div class="text-sm text-gray-500 mt-1">⚫ Terminé</div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="flex flex-col sm:flex-row gap-3 mb-6">
+      <input type="text" id="search-employes" placeholder="Rechercher un employé…"
+        class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        oninput="filterEmployes()">
+      <select id="filter-statut" onchange="filterEmployes()"
+        class="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+        <option value="">Tous les statuts</option>
+        <option value="en_poste">En poste</option>
+        <option value="pause">En pause</option>
+        <option value="absent">Absent</option>
+        <option value="termine">Terminé</option>
+      </select>
+    </div>
+
+    <!-- Grille employés -->
+    <div id="employes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <!-- Chargement -->
+      <div id="loading-state" class="col-span-full flex flex-col items-center justify-center py-16 text-gray-400">
+        <i class="fas fa-spinner fa-spin text-4xl mb-4"></i>
+        <p>Chargement des employés…</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Modal Pointage ─────────────────────────────────────────────────────── -->
+<div id="modal-pointage" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="p-6 border-b border-gray-100">
+      <h2 class="text-xl font-semibold text-gray-900">Pointage employé</h2>
+    </div>
+    <div class="p-6">
+      <div id="pointage-employe-info" class="flex items-center gap-4 mb-6">
+        <div class="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center text-xl font-bold text-blue-600" id="pointage-avatar"></div>
+        <div>
+          <div class="font-semibold text-gray-900 text-lg" id="pointage-nom"></div>
+          <div class="text-sm text-gray-500" id="pointage-poste"></div>
+          <div class="mt-1" id="pointage-statut-actuel"></div>
+        </div>
+      </div>
+
+      <div id="pointage-transitions" class="space-y-3">
+        <!-- Boutons de transition générés dynamiquement -->
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Note (optionnel)</label>
+        <input type="text" id="pointage-note" placeholder="Commentaire…"
+          class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+    </div>
+    <div class="p-6 pt-0 flex justify-end gap-3">
+      <button onclick="closeModal('modal-pointage')" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal Ajout Employé ────────────────────────────────────────────────── -->
+<div id="modal-add-employe" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+    <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-gray-900">Nouvel employé</h2>
+      <button onclick="closeModal('modal-add-employe')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <form id="form-add-employe" class="p-6 space-y-4" onsubmit="submitAddEmploye(event)">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
+          <input type="text" name="prenom" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Jean">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+          <input type="text" name="nom" required class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Dupont">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Poste</label>
+        <select name="poste" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <option value="technicien">Technicien</option>
+          <option value="accueil">Accueil</option>
+          <option value="manager">Manager</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input type="email" name="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="jean@izigsm.fr">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+          <input type="tel" name="telephone" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="06 12 34 56 78">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Taux horaire (€)</label>
+          <input type="number" name="taux_horaire" step="0.01" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="12.50">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+          <input type="number" name="commission_pct" step="0.1" min="0" max="100" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="5">
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="closeModal('modal-add-employe')" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium">Annuler</button>
+        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+          <i class="fas fa-plus mr-2"></i>Créer
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Modal Rapport ──────────────────────────────────────────────────────── -->
+<div id="modal-rapport" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+    <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-gray-900">Rapport de présences</h2>
+      <button onclick="closeModal('modal-rapport')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-6">
+      <div class="flex gap-3 mb-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Du</label>
+          <input type="date" id="rapport-debut" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Au</label>
+          <input type="date" id="rapport-fin" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="flex items-end">
+          <button onclick="loadRapport()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+      </div>
+      <div id="rapport-content" class="overflow-x-auto">
+        <p class="text-gray-400 text-center py-8">Sélectionnez une période et cliquez sur Rechercher</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+<script src="/static/js/personnel.js"></script>
+</body>
+</html>
