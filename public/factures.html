@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factures — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Factures</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1>Factures</h1>
+            <p>Gérez vos factures et suivez vos encaissements</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm">📥 Export comptable</button>
+            <button class="btn btn-primary" onclick="openNewFacture()">+ Nouvelle facture</button>
+          </div>
+        </div>
+
+        <!-- KPIs factures -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;">
+          <div class="kpi-card">
+            <div class="kpi-label">CA Total</div>
+            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-ca">12 480 €</div>
+            <div class="kpi-delta up">Ce mois</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Encaissé</div>
+            <div class="kpi-value" style="font-size:1.6rem;color:var(--green);" id="kpi-paid">9 240 €</div>
+            <div class="kpi-delta up">8 factures</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">En attente</div>
+            <div class="kpi-value" style="font-size:1.6rem;color:var(--accent-strong);" id="kpi-pending">3 240 €</div>
+            <div class="kpi-delta down">4 factures</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">En retard</div>
+            <div class="kpi-value" style="font-size:1.6rem;color:var(--red);" id="kpi-overdue">0 €</div>
+            <div class="kpi-delta" style="color:var(--green);">Tout est à jour ✓</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+          <div class="search-input" style="flex:1;max-width:300px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Rechercher…" oninput="filterFactures(this.value)">
+          </div>
+          <select onchange="filterFactureStatus(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+            <option value="">Tous statuts</option>
+            <option value="Brouillon">Brouillon</option>
+            <option value="Envoyée">Envoyée</option>
+            <option value="Payée">Payée</option>
+            <option value="En retard">En retard</option>
+            <option value="Annulée">Annulée</option>
+          </select>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>N° Facture</th>
+                <th>Client</th>
+                <th>Description</th>
+                <th>Montant HT</th>
+                <th>TVA</th>
+                <th>Total TTC</th>
+                <th>Statut</th>
+                <th>Date</th>
+                <th>Échéance</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="factures-table"></tbody>
+          </table>
+          <div id="factures-empty" class="empty-state hidden">
+            <div class="empty-icon">💶</div>
+            <h3>Aucune facture</h3>
+            <p>Transformez un devis accepté en facture ou créez-en une directement.</p>
+            <button class="btn btn-primary" onclick="openNewFacture()">+ Nouvelle facture</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Nouvelle Facture -->
+  <div class="modal-overlay" id="modal-facture">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h2 id="modal-facture-title">Nouvelle facture</h2>
+        <button class="modal-close" onclick="closeModal('modal-facture')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-panel">
+          <span class="info-icon">💡</span>
+          <span>Vous pouvez créer une facture directement ou depuis un devis accepté. Les données seront pré-remplies automatiquement.</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Client *</label>
+            <select id="f-client" required><option value="">Sélectionner</option></select>
+          </div>
+          <div class="form-field">
+            <label>Devis source</label>
+            <select id="f-devis"><option value="">Créer sans devis</option></select>
+          </div>
+          <div class="form-field full">
+            <label>Description *</label>
+            <textarea id="f-description" rows="2" placeholder="Description de la prestation facturée"></textarea>
+          </div>
+        </div>
+        <!-- Lignes -->
+        <div style="margin-top:18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <label style="font-weight:700;font-size:0.88rem;">Lignes de facture</label>
+            <button class="btn btn-ghost btn-sm" onclick="addFactureLine()">+ Ajouter</button>
+          </div>
+          <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#f3f4f6;">
+                  <th style="text-align:left;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);">Description</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:80px;">Qté</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:110px;">Prix unit. HT</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:110px;">Total HT</th>
+                  <th style="width:40px;"></th>
+                </tr>
+              </thead>
+              <tbody id="facture-lines"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;text-align:right;" id="facture-totals">
+            <div style="font-size:0.9rem;color:var(--muted);">Sous-total HT : <strong id="f-subtotal-ht">0,00 €</strong></div>
+            <div style="font-size:0.9rem;color:var(--muted);">TVA (20%) : <strong id="f-total-tva">0,00 €</strong></div>
+            <div style="font-size:1.1rem;font-weight:800;margin-top:8px;">Total TTC : <span id="f-total-ttc" style="color:var(--primary);">0,00 €</span></div>
+          </div>
+        </div>
+        <div class="form-grid" style="margin-top:16px;">
+          <div class="form-field">
+            <label>Mode de paiement</label>
+            <select id="f-payment">
+              <option>Virement bancaire</option>
+              <option>Carte bancaire</option>
+              <option>Espèces</option>
+              <option>Chèque</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Statut</label>
+            <select id="f-status">
+              <option value="Brouillon">Brouillon</option>
+              <option value="Envoyée">Envoyée</option>
+              <option value="Payée">Payée</option>
+            </select>
+          </div>
+          <div class="form-field full">
+            <label>Notes / Conditions</label>
+            <textarea id="f-notes" rows="2" placeholder="Conditions de paiement, mentions légales..."></textarea>
+          </div>
+        </div>
+        <!-- Signature -->
+        <div style="margin-top:18px;">
+          <label style="font-size:0.8rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#667085;display:block;margin-bottom:10px;">Signature électronique (optionnel)</label>
+          <div class="signature-area" id="f-sig-area" style="height:140px;">
+            <div class="signature-placeholder" id="f-sig-placeholder">
+              <span style="font-size:1.8rem;opacity:0.2;">✍️</span>
+              <span style="font-size:0.88rem;">Cliquez pour signer</span>
+            </div>
+            <canvas class="sig-canvas" id="f-sig-canvas"></canvas>
+          </div>
+          <div class="sig-actions">
+            <button class="btn btn-ghost btn-sm" onclick="clearSig('f-sig-canvas','f-sig-placeholder')">🗑 Effacer</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-facture')">Annuler</button>
+        <button class="btn btn-ghost" onclick="saveFacture('Brouillon')">💾 Brouillon</button>
+        <button class="btn btn-primary" onclick="saveFacture('Envoyée')">📧 Enregistrer & Envoyer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/factures.js"></script>
+</body>
+</html>

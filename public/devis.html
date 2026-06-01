@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devis — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Devis</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1>Devis</h1>
+            <p>Créez et gérez vos devis de réparation</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm">📥 Exporter PDF</button>
+            <button class="btn btn-primary" onclick="openNewDevis()">+ Nouveau devis</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+          <div class="search-input" style="flex:1;max-width:300px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Rechercher…" oninput="filterDevis(this.value)">
+          </div>
+          <select onchange="filterDevisStatus(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+            <option value="">Tous statuts</option>
+            <option value="Brouillon">Brouillon</option>
+            <option value="Envoyé">Envoyé</option>
+            <option value="Accepté">Accepté</option>
+            <option value="Refusé">Refusé</option>
+            <option value="Expiré">Expiré</option>
+          </select>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>N° Devis</th>
+                <th>Client</th>
+                <th>Appareil</th>
+                <th>Montant HT</th>
+                <th>TVA</th>
+                <th>Total TTC</th>
+                <th>Statut</th>
+                <th>Date</th>
+                <th>Validité</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="devis-table"></tbody>
+          </table>
+          <div id="devis-empty" class="empty-state hidden">
+            <div class="empty-icon">📋</div>
+            <h3>Aucun devis</h3>
+            <p>Créez votre premier devis ou transformez une prise en charge.</p>
+            <button class="btn btn-primary" onclick="openNewDevis()">+ Nouveau devis</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Nouveau Devis -->
+  <div class="modal-overlay" id="modal-devis">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h2 id="modal-devis-title">Nouveau devis</h2>
+        <button class="modal-close" onclick="closeModal('modal-devis')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Client *</label>
+            <select id="d-client" required>
+              <option value="">Sélectionner</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Ticket associé</label>
+            <select id="d-ticket">
+              <option value="">Aucun</option>
+            </select>
+          </div>
+          <div class="form-field full">
+            <label>Description de la réparation *</label>
+            <textarea id="d-description" rows="2" placeholder="Ex : Remplacement écran iPhone 14 Pro Max"></textarea>
+          </div>
+        </div>
+
+        <!-- Lignes de devis -->
+        <div style="margin-top:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <label style="font-weight:700;font-size:0.88rem;">Lignes du devis</label>
+            <button class="btn btn-ghost btn-sm" onclick="addLine()">+ Ajouter une ligne</button>
+          </div>
+          <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#f3f4f6;">
+                  <th style="text-align:left;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">Description</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:80px;">Qté</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:110px;">Prix unit. HT</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:110px;">Total HT</th>
+                  <th style="width:40px;"></th>
+                </tr>
+              </thead>
+              <tbody id="devis-lines"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;text-align:right;" id="devis-totals">
+            <div style="font-size:0.9rem;color:var(--muted);">Sous-total HT : <strong id="subtotal-ht">0,00 €</strong></div>
+            <div style="font-size:0.9rem;color:var(--muted);">TVA (20%) : <strong id="total-tva">0,00 €</strong></div>
+            <div style="font-size:1.1rem;font-weight:800;margin-top:8px;">Total TTC : <span id="total-ttc" style="color:var(--primary);">0,00 €</span></div>
+          </div>
+        </div>
+
+        <div class="form-grid" style="margin-top:18px;">
+          <div class="form-field">
+            <label>Validité du devis</label>
+            <select id="d-validity">
+              <option value="15">15 jours</option>
+              <option value="30" selected>30 jours</option>
+              <option value="60">60 jours</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Statut</label>
+            <select id="d-status">
+              <option value="Brouillon">Brouillon</option>
+              <option value="Envoyé">Envoyé</option>
+            </select>
+          </div>
+          <div class="form-field full">
+            <label>Conditions de paiement / Notes</label>
+            <textarea id="d-notes" rows="2" placeholder="Ex : Paiement à réception, acompte 30%..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-devis')">Annuler</button>
+        <button class="btn btn-ghost" onclick="saveDevis('Brouillon')">💾 Brouillon</button>
+        <button class="btn btn-primary" onclick="saveDevis('Envoyé')">📧 Enregistrer & Envoyer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/devis.js"></script>
+</body>
+</html>

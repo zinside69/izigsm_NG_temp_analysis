@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QualiRépar — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Module QualiRépar</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1>Dossiers QualiRépar</h1>
+            <p>Gérez vos demandes de subvention pour la réparation d'appareils électroniques</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm">📥 Exporter CSV</button>
+            <button class="btn btn-primary" onclick="openNewQR()">+ Nouveau dossier</button>
+          </div>
+        </div>
+
+        <!-- Bannière QualiRépar -->
+        <div class="qualirepar-banner">
+          <div>
+            <h3>🌿 Dispositif QualiRépar — Bonus Réparation</h3>
+            <p>Ce dispositif offre une réduction sur les réparations d'appareils électroniques aux consommateurs. Votre atelier est labellisé QualiRépar et peut soumettre des dossiers de subvention directement depuis iziGSM.</p>
+          </div>
+          <div style="display:flex;gap:32px;flex-shrink:0;">
+            <div class="qualirepar-stat">
+              <strong id="qr-total">7</strong>
+              <span>Dossiers total</span>
+            </div>
+            <div class="qualirepar-stat">
+              <strong id="qr-validated">5</strong>
+              <span>Validés</span>
+            </div>
+            <div class="qualirepar-stat">
+              <strong id="qr-amount">420 €</strong>
+              <span>Subventions perçues</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info panel -->
+        <div class="info-panel">
+          <span class="info-icon">ℹ️</span>
+          <span>Le bonus réparation varie entre <strong>10 €</strong> et <strong>45 €</strong> selon l'appareil réparé. Les dossiers doivent être soumis dans les <strong>30 jours</strong> suivant la réparation. <a href="https://www.ecologie.gouv.fr/bonus-reparation" target="_blank" style="color:var(--primary);font-weight:700;">En savoir plus →</a></span>
+        </div>
+
+        <!-- Filtres -->
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+          <div class="search-input" style="flex:1;max-width:300px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Rechercher un dossier…" oninput="filterQR(this.value)">
+          </div>
+          <select onchange="filterQRStatus(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+            <option value="">Tous statuts</option>
+            <option value="Brouillon">Brouillon</option>
+            <option value="Soumis">Soumis</option>
+            <option value="En instruction">En instruction</option>
+            <option value="Validé">Validé</option>
+            <option value="Refusé">Refusé</option>
+          </select>
+        </div>
+
+        <!-- Tableau dossiers -->
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>N° Dossier</th>
+                <th>Client</th>
+                <th>Appareil</th>
+                <th>Type de réparation</th>
+                <th>Montant réparation</th>
+                <th>Bonus demandé</th>
+                <th>Statut</th>
+                <th>Date soumission</th>
+                <th>Source</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="qr-table"></tbody>
+          </table>
+          <div id="qr-empty" class="empty-state hidden">
+            <div class="empty-icon">🌿</div>
+            <h3>Aucun dossier QualiRépar</h3>
+            <p>Créez votre premier dossier de subvention depuis une prise en charge.</p>
+            <button class="btn btn-primary" onclick="openNewQR()">+ Nouveau dossier</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Nouveau Dossier QR -->
+  <div class="modal-overlay" id="modal-qr">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h2>Nouveau dossier QualiRépar</h2>
+        <button class="modal-close" onclick="closeModal('modal-qr')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-panel" style="margin-bottom:18px;">
+          <span class="info-icon">🌿</span>
+          <span>Renseignez les informations de la réparation pour créer votre dossier de subvention. Le système calcule automatiquement le bonus éligible.</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Prise en charge associée</label>
+            <select id="qr-ticket"><option value="">Sélectionner un ticket</option></select>
+          </div>
+          <div class="form-field">
+            <label>Client</label>
+            <input type="text" id="qr-client" placeholder="Nom du client">
+          </div>
+          <div class="form-field">
+            <label>Type d'appareil *</label>
+            <select id="qr-device" onchange="updateBonus()">
+              <option value="">Sélectionner</option>
+              <option value="Smartphone" data-bonus="25">Smartphone / Téléphone</option>
+              <option value="Tablette" data-bonus="45">Tablette</option>
+              <option value="Ordinateur portable" data-bonus="45">Ordinateur portable</option>
+              <option value="Écran" data-bonus="30">Écran d'ordinateur</option>
+              <option value="Console" data-bonus="25">Console de jeux</option>
+              <option value="Aspirateur" data-bonus="25">Aspirateur robot</option>
+              <option value="Nettoyeur" data-bonus="15">Nettoyeur vapeur</option>
+              <option value="Autre" data-bonus="10">Autre appareil</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Marque / Modèle</label>
+            <input type="text" id="qr-model" placeholder="Ex : Apple iPhone 13">
+          </div>
+          <div class="form-field">
+            <label>Type de réparation *</label>
+            <select id="qr-repair-type">
+              <option value="Remplacement écran">Remplacement écran</option>
+              <option value="Remplacement batterie">Remplacement batterie</option>
+              <option value="Réparation connecteur">Réparation connecteur</option>
+              <option value="Dommage eau">Dommage eau</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Montant réparation HT (€) *</label>
+            <input type="number" id="qr-amount" min="0" step="0.01" placeholder="0.00" oninput="updateBonus()">
+          </div>
+          <div class="form-field">
+            <label>Bonus QualiRépar éligible</label>
+            <input type="text" id="qr-bonus-display" readonly style="background:#f0fdf4;font-weight:700;color:#059669;">
+          </div>
+          <div class="form-field">
+            <label>Source du dossier</label>
+            <select id="qr-source">
+              <option value="ADEME">ADEME (direct)</option>
+              <option value="Intermédiaire">Via intermédiaire</option>
+            </select>
+          </div>
+          <div class="form-field full">
+            <label>N° de facture associée</label>
+            <select id="qr-facture"><option value="">Sélectionner une facture</option></select>
+          </div>
+          <div class="form-field full">
+            <label>Notes / Informations complémentaires</label>
+            <textarea id="qr-notes" rows="2" placeholder="Informations supplémentaires pour le dossier..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-qr')">Annuler</button>
+        <button class="btn btn-ghost" onclick="saveQR('Brouillon')">💾 Brouillon</button>
+        <button class="btn btn-primary" onclick="saveQR('Soumis')">🌿 Soumettre le dossier</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/qualirepar.js"></script>
+</body>
+</html>

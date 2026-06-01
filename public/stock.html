@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Gestion du stock</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div><h1>Stock de pièces</h1><p>Gérez votre inventaire de pièces détachées</p></div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm">📥 Importer</button>
+            <button class="btn btn-primary" onclick="openNewPart()">+ Nouvelle pièce</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;">
+          <div class="kpi-card">
+            <div class="kpi-label">Références</div>
+            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-refs">48</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Valeur stock</div>
+            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-stock-val">3 240 €</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Alertes seuil bas</div>
+            <div class="kpi-value" style="font-size:1.6rem;color:var(--red);" id="kpi-alerts">3</div>
+            <div class="kpi-delta down">À commander</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+          <div class="search-input" style="flex:1;max-width:300px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Rechercher une pièce…" oninput="filterParts(this.value)">
+          </div>
+          <select onchange="filterCategory(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+            <option value="">Toutes catégories</option>
+            <option value="Écran">Écrans</option>
+            <option value="Batterie">Batteries</option>
+            <option value="Connecteur">Connecteurs</option>
+            <option value="Coque">Coques</option>
+            <option value="Autre">Autres</option>
+          </select>
+        </div>
+
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Référence</th>
+                <th>Nom</th>
+                <th>Catégorie</th>
+                <th>Compatibilité</th>
+                <th>Stock</th>
+                <th>Seuil</th>
+                <th>Prix achat</th>
+                <th>Prix vente</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="stock-table"></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Pièce -->
+  <div class="modal-overlay" id="modal-part">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Nouvelle pièce</h2>
+        <button class="modal-close" onclick="closeModal('modal-part')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Référence</label>
+            <input type="text" id="p-ref" placeholder="SCR-IPH14-001">
+          </div>
+          <div class="form-field">
+            <label>Nom *</label>
+            <input type="text" id="p-name" placeholder="Écran iPhone 14" required>
+          </div>
+          <div class="form-field">
+            <label>Catégorie</label>
+            <select id="p-cat">
+              <option>Écran</option>
+              <option>Batterie</option>
+              <option>Connecteur</option>
+              <option>Coque</option>
+              <option>Autre</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Compatibilité</label>
+            <input type="text" id="p-compat" placeholder="iPhone 14 / 14 Pro">
+          </div>
+          <div class="form-field">
+            <label>Quantité en stock</label>
+            <input type="number" id="p-qty" min="0" value="0">
+          </div>
+          <div class="form-field">
+            <label>Seuil d'alerte</label>
+            <input type="number" id="p-threshold" min="0" value="2">
+          </div>
+          <div class="form-field">
+            <label>Prix d'achat (€)</label>
+            <input type="number" id="p-buy" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-field">
+            <label>Prix de vente HT (€)</label>
+            <input type="number" id="p-sell" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-part')">Annuler</button>
+        <button class="btn btn-primary" onclick="savePart()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/stock.js"></script>
+</body>
+</html>

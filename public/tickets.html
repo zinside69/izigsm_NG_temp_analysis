@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prises en charge — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar incluse via JS -->
+    <div id="sidebar-placeholder"></div>
+
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Prises en charge</div>
+        </div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1>Prises en charge</h1>
+            <p>Gérez toutes vos réparations en cours et passées</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportTickets()">📥 Exporter</button>
+            <button class="btn btn-primary" onclick="openNewTicket()">+ Nouvelle prise en charge</button>
+          </div>
+        </div>
+
+        <!-- Filtres & recherche -->
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+          <div class="search-input" style="flex:1;max-width:320px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="search-tickets" placeholder="Rechercher un client, appareil, ticket…" oninput="filterTickets()">
+          </div>
+          <select id="filter-status" onchange="filterTickets()" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;color:var(--text);background:#fff;">
+            <option value="">Tous les statuts</option>
+            <option value="Nouveau">Nouveau</option>
+            <option value="En cours">En cours</option>
+            <option value="Terminé">Terminé</option>
+            <option value="Annulé">Annulé</option>
+          </select>
+          <select id="filter-priority" onchange="filterTickets()" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;color:var(--text);background:#fff;">
+            <option value="">Toutes priorités</option>
+            <option value="Haute">Haute</option>
+            <option value="Moyenne">Moyenne</option>
+            <option value="Basse">Basse</option>
+          </select>
+        </div>
+
+        <!-- Tableau -->
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>N° Ticket</th>
+                <th>Client</th>
+                <th>Appareil</th>
+                <th>Problème</th>
+                <th>Statut</th>
+                <th>Priorité</th>
+                <th>Technicien</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tickets-table"></tbody>
+          </table>
+          <div id="tickets-empty" class="empty-state hidden">
+            <div class="empty-icon">🔧</div>
+            <h3>Aucune prise en charge</h3>
+            <p>Créez votre première prise en charge pour commencer.</p>
+            <button class="btn btn-primary" onclick="openNewTicket()">+ Créer une prise en charge</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Nouveau Ticket -->
+  <div class="modal-overlay" id="modal-ticket">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <h2 id="modal-ticket-title">Nouvelle prise en charge</h2>
+        <button class="modal-close" onclick="closeModal('modal-ticket')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchTab('info')">Informations</button>
+          <button class="tab-btn" onclick="switchTab('attachments')">Pièces jointes</button>
+          <button class="tab-btn" onclick="switchTab('signature')">Signature</button>
+        </div>
+
+        <!-- Onglet Info -->
+        <div class="tab-content active" id="tab-info">
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Client *</label>
+              <select id="t-client" required>
+                <option value="">Sélectionner un client</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Ou nouveau client</label>
+              <input type="text" id="t-new-client" placeholder="Nom du client">
+            </div>
+            <div class="form-field">
+              <label>Téléphone client</label>
+              <input type="tel" id="t-phone" placeholder="+33 6 12 34 56 78">
+            </div>
+            <div class="form-field">
+              <label>Email client</label>
+              <input type="email" id="t-email" placeholder="client@email.com">
+            </div>
+            <div class="form-field">
+              <label>Appareil *</label>
+              <select id="t-device-type">
+                <option value="iPhone">iPhone</option>
+                <option value="Samsung">Samsung</option>
+                <option value="Huawei">Huawei</option>
+                <option value="Xiaomi">Xiaomi</option>
+                <option value="iPad">iPad</option>
+                <option value="Ordinateur">Ordinateur</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Modèle</label>
+              <input type="text" id="t-device-model" placeholder="Ex : iPhone 14 Pro">
+            </div>
+            <div class="form-field">
+              <label>IMEI / N° de série</label>
+              <input type="text" id="t-imei" placeholder="352999111234567">
+            </div>
+            <div class="form-field">
+              <label>Priorité</label>
+              <select id="t-priority">
+                <option value="Basse">Basse</option>
+                <option value="Moyenne" selected>Moyenne</option>
+                <option value="Haute">Haute</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Technicien</label>
+              <select id="t-technician">
+                <option value="Non assigné">Non assigné</option>
+                <option value="Jean D.">Jean D.</option>
+                <option value="Marie L.">Marie L.</option>
+                <option value="Pierre M.">Pierre M.</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Prix estimé (€)</label>
+              <input type="number" id="t-price" placeholder="0.00" min="0" step="0.01">
+            </div>
+            <div class="form-field full">
+              <label>Description du problème *</label>
+              <textarea id="t-description" placeholder="Décrivez le problème constaté..." rows="3" required></textarea>
+            </div>
+            <div class="form-field full">
+              <label>Notes internes</label>
+              <textarea id="t-notes" placeholder="Notes visibles uniquement par votre équipe..." rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Onglet Pièces jointes -->
+        <div class="tab-content" id="tab-attachments">
+          <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+            <div class="dropzone-icon">📎</div>
+            <p><span class="dz-action">Cliquez pour ajouter</span> ou glissez-déposez des fichiers</p>
+            <p style="font-size:0.8rem;color:#9ca3af;margin-top:6px;">Photos, PDF — Max 10 Mo par fichier</p>
+          </div>
+          <input type="file" id="file-input" multiple accept="image/*,.pdf" style="display:none" onchange="handleFiles(event)">
+          <div class="attachments-list" id="attachments-list"></div>
+        </div>
+
+        <!-- Onglet Signature -->
+        <div class="tab-content" id="tab-signature">
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:16px;">
+            Faites signer le client pour valider la prise en charge et les conditions de réparation.
+          </p>
+          <label style="font-size:0.8rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#667085;display:block;margin-bottom:8px;">Signature client</label>
+          <div class="signature-area" id="sig-area">
+            <div class="signature-placeholder" id="sig-placeholder">
+              <span style="font-size:2rem;opacity:0.2;">✍️</span>
+              <span>Cliquez et glissez pour signer</span>
+            </div>
+            <canvas class="sig-canvas" id="sig-canvas"></canvas>
+          </div>
+          <div class="sig-actions">
+            <button class="btn btn-ghost btn-sm" onclick="clearSignature()">🗑 Effacer</button>
+            <button class="btn btn-secondary btn-sm" id="sig-status">✓ Non signé</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ticket')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveTicket()">Enregistrer la prise en charge →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal détail ticket -->
+  <div class="modal-overlay" id="modal-ticket-detail">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h2 id="detail-title">Prise en charge #001</h2>
+        <button class="modal-close" onclick="closeModal('modal-ticket-detail')">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-ticket-detail')">Fermer</button>
+        <button class="btn btn-accent" id="btn-create-devis" onclick="createDevisFromTicket()">Créer un devis →</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/tickets.js"></script>
+</body>
+</html>

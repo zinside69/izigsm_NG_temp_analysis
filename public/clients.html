@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clients — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Clients</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div><h1>Clients</h1><p>Gérez votre base clients</p></div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm">📥 Importer CSV</button>
+            <button class="btn btn-primary" onclick="openNewClient()">+ Nouveau client</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:20px;">
+          <div class="search-input" style="flex:1;max-width:320px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Rechercher un client…" oninput="filterClients(this.value)">
+          </div>
+        </div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Email</th>
+                <th>Téléphone</th>
+                <th>Tickets</th>
+                <th>CA total</th>
+                <th>Depuis</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="clients-table"></tbody>
+          </table>
+          <div id="clients-empty" class="empty-state hidden">
+            <div class="empty-icon">👥</div>
+            <h3>Aucun client</h3>
+            <p>Vos clients apparaîtront ici à mesure que vous créerez des tickets.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <!-- Modal client -->
+  <div class="modal-overlay" id="modal-client">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Nouveau client</h2>
+        <button class="modal-close" onclick="closeModal('modal-client')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Prénom</label>
+            <input type="text" id="c-first" placeholder="Jean">
+          </div>
+          <div class="form-field">
+            <label>Nom *</label>
+            <input type="text" id="c-last" placeholder="Dupont" required>
+          </div>
+          <div class="form-field">
+            <label>Email</label>
+            <input type="email" id="c-email" placeholder="jean@email.com">
+          </div>
+          <div class="form-field">
+            <label>Téléphone</label>
+            <input type="tel" id="c-phone" placeholder="+33 6 12 34 56 78">
+          </div>
+          <div class="form-field full">
+            <label>Adresse</label>
+            <input type="text" id="c-address" placeholder="12 rue de la Paix, 75001 Paris">
+          </div>
+          <div class="form-field full">
+            <label>Notes</label>
+            <textarea id="c-notes" rows="2" placeholder="Notes sur ce client..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-client')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveClient()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/clients.js"></script>
+</body>
+</html>

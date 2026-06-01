@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paramètres — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Paramètres</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔</div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div><h1>Paramètres du compte</h1><p>Gérez votre profil et les informations de votre atelier</p></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start;">
+          <!-- Menu paramètres -->
+          <div class="table-card" style="padding:12px;">
+            <button class="nav-item active" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('profil')">
+              <span class="nav-icon" style="color:inherit;">👤</span> Profil
+            </button>
+            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('atelier')">
+              <span class="nav-icon" style="color:inherit;">🔧</span> Atelier
+            </button>
+            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('facturation')">
+              <span class="nav-icon" style="color:inherit;">💶</span> Facturation
+            </button>
+            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('securite')">
+              <span class="nav-icon" style="color:inherit;">🔒</span> Sécurité
+            </button>
+            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('abonnement')">
+              <span class="nav-icon" style="color:inherit;">⭐</span> Abonnement
+            </button>
+          </div>
+
+          <!-- Contenu onglets -->
+          <div>
+            <!-- Onglet Profil -->
+            <div class="table-card" id="settings-profil" style="padding:26px;">
+              <h3 style="margin:0 0 20px;">Mon profil</h3>
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Prénom</label>
+                  <input type="text" id="s-first" value="Jean">
+                </div>
+                <div class="form-field">
+                  <label>Nom</label>
+                  <input type="text" id="s-last" value="Dupont">
+                </div>
+                <div class="form-field full">
+                  <label>Email professionnel</label>
+                  <input type="email" id="s-email" value="jean@monatelier.fr">
+                </div>
+                <div class="form-field full">
+                  <label>Téléphone</label>
+                  <input type="tel" id="s-phone" value="+33 6 12 34 56 78">
+                </div>
+              </div>
+              <div style="margin-top:20px;">
+                <button class="btn btn-primary" onclick="saveSettings('profil')">Enregistrer les modifications</button>
+              </div>
+            </div>
+
+            <!-- Onglet Atelier -->
+            <div class="table-card hidden" id="settings-atelier" style="padding:26px;">
+              <h3 style="margin:0 0 20px;">Mon atelier</h3>
+              <div class="form-grid">
+                <div class="form-field full">
+                  <label>Nom de l'entreprise</label>
+                  <input type="text" id="s-company" value="Mon Atelier SARL">
+                </div>
+                <div class="form-field">
+                  <label>SIRET</label>
+                  <input type="text" id="s-siret" value="12345678900012">
+                </div>
+                <div class="form-field">
+                  <label>N° TVA</label>
+                  <input type="text" id="s-vat" placeholder="FR 12 123456789">
+                </div>
+                <div class="form-field full">
+                  <label>Adresse</label>
+                  <input type="text" id="s-address" value="12 Rue de la Paix, 75001 Paris">
+                </div>
+                <div class="form-field">
+                  <label>Zone TVA</label>
+                  <select id="s-vat-zone">
+                    <option selected>France métropolitaine — TVA 20%</option>
+                    <option>DOM — TVA 8,5%</option>
+                    <option>Belgique — TVA 21%</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Forme juridique</label>
+                  <select id="s-legal">
+                    <option>SARL</option>
+                    <option>SAS</option>
+                    <option>EI</option>
+                    <option>Auto-entrepreneur</option>
+                  </select>
+                </div>
+                <div class="form-field full">
+                  <label>Logo (URL ou upload)</label>
+                  <input type="text" id="s-logo" placeholder="https://...">
+                </div>
+              </div>
+              <div style="margin-top:20px;">
+                <button class="btn btn-primary" onclick="saveSettings('atelier')">Enregistrer</button>
+              </div>
+            </div>
+
+            <!-- Onglet Facturation -->
+            <div class="table-card hidden" id="settings-facturation" style="padding:26px;">
+              <h3 style="margin:0 0 20px;">Paramètres de facturation</h3>
+              <div class="form-grid">
+                <div class="form-field">
+                  <label>Préfixe de numérotation</label>
+                  <input type="text" id="s-prefix" value="FAC-2026-" placeholder="FAC-2026-">
+                </div>
+                <div class="form-field">
+                  <label>Prochain numéro</label>
+                  <input type="number" id="s-next-num" value="0014" min="1">
+                </div>
+                <div class="form-field">
+                  <label>Délai de paiement par défaut</label>
+                  <select id="s-payment-delay">
+                    <option>À réception</option>
+                    <option>15 jours</option>
+                    <option selected>30 jours</option>
+                    <option>60 jours</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Mode de paiement préféré</label>
+                  <select id="s-payment-method">
+                    <option>Virement bancaire</option>
+                    <option>Carte bancaire</option>
+                    <option>Espèces</option>
+                  </select>
+                </div>
+                <div class="form-field full">
+                  <label>Mentions légales bas de facture</label>
+                  <textarea id="s-legal-mention" rows="3" placeholder="Ex : TVA non applicable selon article 293B CGI...">En cas de retard de paiement, une pénalité de 3 fois le taux d'intérêt légal sera appliquée, ainsi qu'une indemnité forfaitaire de 40€.</textarea>
+                </div>
+                <div class="form-field full">
+                  <label>IBAN (pour mentions sur factures)</label>
+                  <input type="text" id="s-iban" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+                </div>
+              </div>
+              <div style="margin-top:20px;">
+                <button class="btn btn-primary" onclick="saveSettings('facturation')">Enregistrer</button>
+              </div>
+            </div>
+
+            <!-- Onglet Sécurité -->
+            <div class="table-card hidden" id="settings-securite" style="padding:26px;">
+              <h3 style="margin:0 0 20px;">Sécurité du compte</h3>
+              <div class="form-grid">
+                <div class="form-field full">
+                  <label>Mot de passe actuel</label>
+                  <input type="password" id="s-pass-current" placeholder="••••••••">
+                </div>
+                <div class="form-field">
+                  <label>Nouveau mot de passe</label>
+                  <input type="password" id="s-pass-new" placeholder="••••••••">
+                </div>
+                <div class="form-field">
+                  <label>Confirmer le nouveau mot de passe</label>
+                  <input type="password" id="s-pass-confirm" placeholder="••••••••">
+                </div>
+              </div>
+              <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="saveSettings('securite')">Changer le mot de passe</button>
+                <button class="btn btn-secondary" onclick="alert('2FA simulé — fonctionnalité disponible dans la V2 complète')">Activer la double authentification</button>
+              </div>
+            </div>
+
+            <!-- Onglet Abonnement -->
+            <div class="table-card hidden" id="settings-abonnement" style="padding:26px;">
+              <h3 style="margin:0 0 20px;">Mon abonnement</h3>
+              <div style="background:linear-gradient(135deg,var(--primary-light),#f0ecff);border:1px solid #c4b5fd;border-radius:16px;padding:22px;margin-bottom:20px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                  <div>
+                    <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary);margin-bottom:6px;">Plan actuel</div>
+                    <div style="font-size:1.4rem;font-weight:800;color:var(--navy);">Essai gratuit</div>
+                    <div style="color:var(--muted);font-size:0.9rem;margin-top:4px;">14 jours restants · Aucune carte requise</div>
+                  </div>
+                  <button class="btn btn-primary">Passer à Pro 39€/mois →</button>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">
+                  <div style="font-weight:700;margin-bottom:8px;">Plan Pro — 39€/mois</div>
+                  <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:0.9rem;line-height:1.8;">
+                    <li>Tickets illimités</li>
+                    <li>Devis & factures illimités</li>
+                    <li>Module QualiRépar</li>
+                    <li>Multi-techniciens (5 comptes)</li>
+                    <li>Export PDF & comptable</li>
+                    <li>Support prioritaire</li>
+                  </ul>
+                </div>
+                <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">
+                  <div style="font-weight:700;margin-bottom:8px;">Plan Entreprise — 89€/mois</div>
+                  <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:0.9rem;line-height:1.8;">
+                    <li>Tout le plan Pro</li>
+                    <li>Multi-ateliers</li>
+                    <li>Comptes illimités</li>
+                    <li>API d'intégration</li>
+                    <li>Account manager dédié</li>
+                    <li>SLA 99,9%</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="/static/js/app.js"></script>
+  <script>
+    function showSettingsTab(name) {
+      document.querySelectorAll('[id^="settings-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById('settings-' + name).classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+    }
+    function saveSettings(tab) {
+      showFlash('✓ Paramètres enregistrés avec succès !', 'success');
+    }
+    function showFlash(msg, type) {
+      const f = document.createElement('div');
+      f.className = 'flash ' + type;
+      f.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;min-width:300px;';
+      f.textContent = msg;
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 3000);
+    }
+  </script>
+</body>
+</html>

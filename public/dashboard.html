@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- ===== SIDEBAR ===== -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="s-mark">i</span>
+        <span class="s-name">iziGSM</span>
+        <span class="s-plan">Essai</span>
+      </div>
+
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Principal</div>
+          <a class="nav-item active" href="dashboard.html" data-page="dashboard">
+            <span class="nav-icon">🏠</span> Tableau de bord
+          </a>
+          <a class="nav-item" href="tickets.html" data-page="tickets">
+            <span class="nav-icon">🔧</span> Prises en charge
+            <span class="nav-badge" id="badge-tickets">3</span>
+          </a>
+          <a class="nav-item" href="devis.html" data-page="devis">
+            <span class="nav-icon">📋</span> Devis
+          </a>
+          <a class="nav-item" href="factures.html" data-page="factures">
+            <span class="nav-icon">💶</span> Factures
+          </a>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Subvention</div>
+          <a class="nav-item" href="qualirepar.html" data-page="qualirepar">
+            <span class="nav-icon">🌿</span> QualiRépar
+            <span class="nav-badge" style="background:#059669;">2</span>
+          </a>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Gestion</div>
+          <a class="nav-item" href="stock.html" data-page="stock">
+            <span class="nav-icon">📦</span> Stock
+          </a>
+          <a class="nav-item" href="clients.html" data-page="clients">
+            <span class="nav-icon">👥</span> Clients
+          </a>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Configuration</div>
+          <a class="nav-item" href="settings.html" data-page="settings">
+            <span class="nav-icon">⚙️</span> Paramètres
+          </a>
+          <a class="nav-item" href="modules.html" data-page="modules">
+            <span class="nav-icon">🧩</span> Modules
+          </a>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user" onclick="window.location.href='settings.html'">
+          <div class="user-avatar" id="sidebar-avatar">JD</div>
+          <div class="user-info">
+            <div class="u-name" id="sidebar-name">Jean Dupont</div>
+            <div class="u-role">Administrateur</div>
+          </div>
+          <span class="user-chevron">›</span>
+        </div>
+        <a class="nav-item" href="#" onclick="logout()" style="margin-top:4px;">
+          <span class="nav-icon">🚪</span> Se déconnecter
+        </a>
+      </div>
+    </nav>
+
+    <!-- ===== CONTENU PRINCIPAL ===== -->
+    <div class="main-content">
+      <!-- Topbar -->
+      <header class="dash-topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Tableau de bord</div>
+        </div>
+        <div class="topbar-right">
+          <div class="topbar-notif" title="Notifications">
+            🔔 <span class="notif-dot"></span>
+          </div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="page-content">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#ede9ff;">🔧</div>
+            <div class="kpi-label">Prises en charge</div>
+            <div class="kpi-value" id="kpi-tickets">12</div>
+            <div class="kpi-delta up">↑ 3 cette semaine</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#e0f2fe;">💶</div>
+            <div class="kpi-label">CA ce mois</div>
+            <div class="kpi-value" id="kpi-revenue">3 240 €</div>
+            <div class="kpi-delta up">↑ +12% vs mois dernier</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fef9c3;">📋</div>
+            <div class="kpi-label">Devis en attente</div>
+            <div class="kpi-value" id="kpi-devis">5</div>
+            <div class="kpi-delta down">↓ 2 expirés</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:#ecfdf3;">🌿</div>
+            <div class="kpi-label">Dossiers QualiRépar</div>
+            <div class="kpi-value" id="kpi-qr">7</div>
+            <div class="kpi-delta up">↑ 2 soumis ce mois</div>
+          </div>
+        </div>
+
+        <!-- Tickets récents + Activité -->
+        <div style="display:grid;grid-template-columns:1fr 360px;gap:22px;">
+          <!-- Tableau des tickets récents -->
+          <div class="table-card">
+            <div class="table-header">
+              <h3>Prises en charge récentes</h3>
+              <div class="table-actions">
+                <a class="btn btn-primary btn-sm" href="tickets.html">Voir tout →</a>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Client</th>
+                  <th>Appareil</th>
+                  <th>Statut</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="recent-tickets">
+                <!-- rempli par JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Activité récente -->
+          <div class="table-card" style="padding:0;">
+            <div class="table-header">
+              <h3>Activité récente</h3>
+            </div>
+            <div style="padding:18px;display:grid;gap:14px;" id="activity-feed">
+              <!-- rempli par JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Statistiques rapides -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px;">
+          <div class="table-card" style="padding:20px;">
+            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">TAUX DE RÉPARATION</h4>
+            <div style="font-size:2.2rem;font-weight:800;color:var(--primary);">87%</div>
+            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Sur les 30 derniers jours</div>
+            <div style="height:6px;background:#e5e7eb;border-radius:999px;margin-top:14px;">
+              <div style="width:87%;height:100%;background:var(--primary);border-radius:999px;"></div>
+            </div>
+          </div>
+          <div class="table-card" style="padding:20px;">
+            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">DÉLAI MOYEN</h4>
+            <div style="font-size:2.2rem;font-weight:800;color:var(--accent-strong);">2,3 j</div>
+            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Entre dépôt et rendu</div>
+            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+              <span class="chip" style="background:#fff8e1;border-color:#fde68a;color:#b45309;">iPhone: 1,8j</span>
+              <span class="chip" style="background:#ede9ff;border-color:#c4b5fd;color:var(--primary);">Android: 2,8j</span>
+            </div>
+          </div>
+          <div class="table-card" style="padding:20px;">
+            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">QualiRépar CE MOIS</h4>
+            <div style="font-size:2.2rem;font-weight:800;color:#059669;">240 €</div>
+            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Subventions accordées</div>
+            <div style="margin-top:14px;">
+              <span class="status-badge status-done">2 dossiers validés</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bannière essai gratuit -->
+        <div style="margin-top:22px;background:linear-gradient(135deg,var(--primary),#9b77ff);border-radius:16px;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;color:#fff;">
+          <div>
+            <h3 style="margin:0 0 6px;font-size:1.1rem;">🎉 Essai gratuit — 14 jours restants</h3>
+            <p style="margin:0;opacity:0.85;font-size:0.9rem;">Profitez de toutes les fonctionnalités premium sans limitation. Aucune carte bancaire requise.</p>
+          </div>
+          <button class="btn btn-secondary" style="flex-shrink:0;">Passer à Pro →</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

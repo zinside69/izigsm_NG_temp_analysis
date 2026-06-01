@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modules — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Modules</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔</div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div><h1>Activation des modules</h1><p>Activez ou désactivez les fonctionnalités selon vos besoins</p></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;">
+          <!-- Module QualiRépar -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">🌿</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-qualirepar" checked onchange="toggleModule('QualiRépar', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--green);">Actif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">QualiRépar</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Gestion des dossiers de subvention bonus réparation. Soumission directe via l'interface.</p>
+            <div style="margin-top:12px;"><span class="chip" style="background:#ecfdf3;border-color:#abefc6;color:#027a48;">Inclus Pro</span></div>
+          </div>
+
+          <!-- Module Signature électronique -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">✍️</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-signature" checked onchange="toggleModule('Signature', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--green);">Actif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">Signature électronique</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Faites signer vos clients sur tablette ou téléphone pour valider les prises en charge et devis.</p>
+            <div style="margin-top:12px;"><span class="chip" style="background:#ecfdf3;border-color:#abefc6;color:#027a48;">Inclus Pro</span></div>
+          </div>
+
+          <!-- Module SMS -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">📱</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-sms" onchange="toggleModule('SMS', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--muted);">Inactif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">Notifications SMS</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Envoyez automatiquement des SMS à vos clients quand leur appareil est prêt ou pour les rappels.</p>
+            <div style="margin-top:12px;"><span class="chip">Add-on +9€/mois</span></div>
+          </div>
+
+          <!-- Module Caisse -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">🏧</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-caisse" onchange="toggleModule('Caisse', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--muted);">Inactif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">Module caisse</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Gérez vos encaissements, tickets de caisse et clôtures journalières directement depuis iziGSM.</p>
+            <div style="margin-top:12px;"><span class="chip">Entreprise</span></div>
+          </div>
+
+          <!-- Module API -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">🔌</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-api" onchange="toggleModule('API', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--muted);">Inactif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">API REST</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Accès complet à l'API REST pour intégrer iziGSM à vos outils externes (ERP, e-commerce, etc.).</p>
+            <div style="margin-top:12px;"><span class="chip">Entreprise</span></div>
+          </div>
+
+          <!-- Module Multi-ateliers -->
+          <div class="table-card" style="padding:22px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:2rem;">🏪</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="mod-multi" onchange="toggleModule('Multi-ateliers', this.checked)">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--muted);">Inactif</span>
+              </label>
+            </div>
+            <h4 style="margin:0 0 8px;">Multi-ateliers</h4>
+            <p style="margin:0;color:var(--muted);font-size:0.88rem;line-height:1.6;">Gérez plusieurs points de vente ou ateliers depuis un seul compte avec des accès séparés.</p>
+            <div style="margin-top:12px;"><span class="chip">Entreprise</span></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    function toggleModule(name, active) {
+      const msg = active ? `✓ Module ${name} activé !` : `Module ${name} désactivé`;
+      const type = active ? 'success' : 'info';
+      const f = document.createElement('div');
+      f.className = 'flash ' + type;
+      f.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;min-width:280px;';
+      f.textContent = msg;
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 3000);
+      const label = event.currentTarget.closest('label').querySelector('span');
+      if (label) { label.textContent = active ? 'Actif' : 'Inactif'; label.style.color = active ? 'var(--green)' : 'var(--muted)'; }
+    }
+  </script>
+</body>
+</html>

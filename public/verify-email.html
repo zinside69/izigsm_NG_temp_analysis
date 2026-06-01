@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vérifiez votre email — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="verify-page">
+    <div class="verify-topbar">
+      <a class="verify-logo" href="/">iziGSM</a>
+    </div>
+
+    <div class="verify-center">
+      <div class="verify-icon">✉️</div>
+      <h1>Vérifiez votre email</h1>
+      <p>Un email de confirmation a été envoyé à</p>
+      <p class="verify-email-highlight" id="verify-email">votre adresse email</p>
+      <p style="margin-top:10px;">Cliquez sur le lien dans l'email pour activer votre compte<br>et commencer votre essai gratuit de 14 jours.</p>
+
+      <div class="verify-tips">
+        <h4>Vous ne trouvez pas l'email ?</h4>
+        <ul>
+          <li>Vérifiez votre dossier spam / courrier indésirable</li>
+          <li>L'email peut prendre quelques minutes à arriver</li>
+          <li>Vérifiez que vous avez saisi la bonne adresse</li>
+        </ul>
+      </div>
+
+      <div class="verify-actions">
+        <button class="verify-resend" onclick="resendEmail()">Renvoyer l'email de confirmation →</button>
+        <a class="verify-login-link" href="/login.html">Déjà un compte vérifié ? Se connecter</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Récupérer l'email depuis l'URL ou le localStorage
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get('email') || localStorage.getItem('reg_email') || 'votre adresse email';
+    document.getElementById('verify-email').textContent = email;
+
+    function resendEmail() {
+      const btn = event.target;
+      btn.textContent = '✓ Email renvoyé !';
+      btn.style.color = '#1ea97c';
+      setTimeout(() => {
+        btn.textContent = 'Renvoyer l\'email de confirmation →';
+        btn.style.color = '';
+      }, 3000);
+    }
+  </script>
+</body>
+</html>

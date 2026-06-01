@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="public-bg">
+  <div style="min-height:100vh;display:flex;flex-direction:column;">
+    <header class="topbar simple">
+      <a class="brand" href="/"><span class="brand-mark">i</span><span>iziGSM</span></a>
+      <a class="btn btn-ghost btn-sm" href="/register.html">Créer un compte</a>
+    </header>
+
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:20px;">
+      <div style="background:rgba(255,255,255,0.96);border-radius:24px;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,0.96);width:100%;max-width:440px;overflow:hidden;">
+        <!-- Barre violet -->
+        <div style="height:4px;background:linear-gradient(90deg,#b39dff,var(--primary));"></div>
+
+        <div style="padding:36px;">
+          <div style="margin-bottom:28px;">
+            <p class="eyebrow" style="margin:0 0 8px;">CONNEXION</p>
+            <h2 style="margin:0 0 8px;font-size:1.8rem;letter-spacing:-0.05em;">Bon retour 👋</h2>
+            <p style="margin:0;color:#667085;font-size:0.95rem;">Connectez-vous à votre espace iziGSM.</p>
+          </div>
+
+          <div class="flash-stack" id="flash-area" style="display:none;padding:0;margin-bottom:16px;"></div>
+
+          <form id="login-form" novalidate>
+            <div class="field" style="margin-bottom:16px;">
+              <label for="login-email">Email professionnel *</label>
+              <input type="email" id="login-email" name="email" placeholder="jean@monatelier.fr" required autocomplete="email">
+            </div>
+            <div class="field" style="margin-bottom:8px;">
+              <label for="login-password">Mot de passe *</label>
+              <input type="password" id="login-password" name="password" required autocomplete="current-password">
+            </div>
+            <div style="text-align:right;margin-bottom:22px;">
+              <a href="#" style="color:var(--primary);font-size:0.88rem;font-weight:600;">Mot de passe oublié ?</a>
+            </div>
+            <button type="submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;">
+              Se connecter
+            </button>
+          </form>
+
+          <div class="separator" style="margin:20px 0;">OU</div>
+
+          <div class="oauth-box" onclick="alert('OAuth Google — non disponible en démo')">
+            <span class="oauth-logo">G</span>
+            Continuer avec Google
+          </div>
+
+          <p style="text-align:center;margin:20px 0 0;color:#667085;font-size:0.9rem;">
+            Pas encore de compte ? <a href="/register.html" style="color:var(--primary);font-weight:700;">Inscription gratuite →</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Credentials demo
+    const DEMO_USERS = [
+      { email: 'demo@izigsm.fr', password: 'Demo1234', name: 'Demo', company: 'Atelier Demo' },
+      { email: 'admin@izigsm.fr', password: 'Admin1234', name: 'Admin', company: 'iziGSM HQ' },
+    ];
+
+    document.getElementById('login-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const flash = document.getElementById('flash-area');
+
+      // Vérifier les données demo ou localStorage
+      const stored = JSON.parse(localStorage.getItem('izigsm_user') || 'null');
+      const demoUser = DEMO_USERS.find(u => u.email === email);
+
+      let user = null;
+      if (demoUser && demoUser.password === password) {
+        user = demoUser;
+      } else if (stored && stored.email === email) {
+        // En vrai on vérifierait le hash, ici on accepte n'importe quel mdp pour la démo
+        user = stored;
+      }
+
+      if (user) {
+        localStorage.setItem('izigsm_session', JSON.stringify({ ...user, loggedAt: Date.now() }));
+        window.location.href = '/dashboard.html';
+      } else {
+        flash.style.display = 'grid';
+        flash.innerHTML = '<div class="flash error">❌ Email ou mot de passe incorrect. <br><small>Comptes démo : demo@izigsm.fr / Demo1234</small></div>';
+      }
+    });
+  </script>
+</body>
+</html>
