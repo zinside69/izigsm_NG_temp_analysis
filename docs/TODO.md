@@ -1,7 +1,8 @@
 # TODO — iziGSM Progression & Roadmap
-> **Dernière mise à jour** : 1er juin 2026  
+> **Dernière mise à jour** : 1er juin 2026 — Analyse CDC complète intégrée  
 > **Version app** : 1.1.0 — Sprint 1 complet — Backend D1 + Auth JWT + NF525 + Frontend connecté  
-> **Stack** : Hono + Cloudflare Pages/Workers + D1 + KV + R2
+> **Stack** : Hono + Cloudflare Pages/Workers + D1 + KV + R2  
+> **CDC** : `docs/CDC_izigsm.pdf` — 18 modules identifiés, 75 fonctionnalités, Sprint 2 restructuré
 
 ---
 
@@ -195,90 +196,195 @@
 
 ---
 
-## ⏳ SPRINT 2 — Fonctionnalités Cœur
-> **Objectif** : Flux métier complets (devis → ticket → facture), upload photos, export PDF
+## ⏳ SPRINT 2 — Fonctionnalités Cœur (restructuré selon CDC complet)
+> **Objectif** : Modules légaux critiques + flux métier complets + vitrine publique + catalogue services  
+> **Durée estimée** : 4 semaines  
+> **Référence** : CDC v1.0 — `docs/CDC_izigsm.pdf`
 
-### 2.1 — Flux Métier Complet
-- [ ] Lier devis ↔ ticket ↔ facture (foreign keys + UI)
-- [ ] Bouton "Convertir en ticket" depuis un devis
+### 2.0 — Déploiement Cloudflare (PRÉ-REQUIS)
+- [ ] `wrangler d1 create izigsm-production` — Créer la base D1 prod
+- [ ] Mettre à jour `wrangler.jsonc` avec le vrai database_id
+- [ ] `wrangler kv:namespace create izigsm_KV` — Créer namespace KV prod
+- [ ] `wrangler secret put JWT_SECRET` — Injecter secret production
+- [ ] `wrangler d1 migrations apply izigsm-production` — Appliquer les 9 migrations
+- [ ] `npm run build && wrangler pages deploy dist` — Premier déploiement
+
+### 2.1 — 🔴 LÉGAL CRITIQUE : Verrouillage factures + Avoirs (MOD-02/11)
+> Sans ces éléments, l'application n'est pas conforme CGI (Code Général des Impôts)
+- [ ] **Migration** : Ajouter colonne `locked BOOLEAN DEFAULT FALSE` sur table `factures`
+- [ ] **Règle API** : Interdire toute modification si `locked = true` (après émission)
+- [ ] **`POST /api/factures/:id/emettre`** — Émettre la facture (passe `locked = true`, renseigne `issued_at`)
+- [ ] **Table `avoirs`** — Migration `0010_avoirs.sql` (id, numero `AV-YYYY-XXXX`, facture_id, montant, motif, hash_nf525)
+- [ ] **`POST /api/avoirs`** — Créer un avoir (annulation facture ou geste commercial)
+- [ ] **`GET /api/avoirs`** — Liste avoirs + NF525 chain
+- [ ] Intégrer les avoirs dans la chaîne NF525
+- [ ] Affichage avoirs dans `factures.js` (bouton "Émettre un avoir")
+
+### 2.2 — 🔴 LÉGAL CRITIQUE : Rachats / Livre de police (MOD-06)
+> Obligation légale pour tout achat de matériel d'occasion (Code pénal art. 321-7)
+- [ ] **Migration** `0011_rachats.sql` — Table `rachats` (id, boutique_id, numero_registre séquentiel, date_acquisition, vendeur_nom, vendeur_prenom, vendeur_adresse, vendeur_piece_identite, description_objet, imei_serie, prix_achat_ht, statut `en_stock|vendu|rendu`)
+- [ ] **Page `public/rachats.html`** — Interface gestion rachats
+- [ ] **`public/static/js/rachats.js`** — CRUD rachats
+- [ ] **`GET /api/buybacks`** — Liste avec KPIs
+- [ ] **`POST /api/buybacks`** — Créer rachat (validation champs obligatoires légaux)
+- [ ] **`PATCH /api/buybacks/:id`** — Modifier statut (vente → lien produit stock)
+- [ ] **`GET /api/buybacks/export`** — Export CSV livre de police (format légal)
+- [ ] Lien sidebar + app.js
+
+### 2.3 — Auth étendue : PIN technicien + permissions granulaires (MOD-18/A4)
+- [ ] **Migration** `0012_pin_permissions.sql` — Colonnes `pin_hash`, `permissions JSONB` sur table `users`
+- [ ] **`POST /api/auth/pin`** — Switch de contexte par PIN 4 chiffres (sans déconnexion)
+- [ ] **Page `/tech-login`** — Connexion rapide technicien
+- [ ] Modal PIN in-app (header)
+- [ ] UI configuration permissions par module dans `settings.html`
+- [ ] Mise à jour `requireRole()` pour vérifier permissions JSONB
+
+### 2.4 — Catalogue services hiérarchique (MOD-17)
+- [ ] **Migration** `0013_catalogue.sql` — Tables `domaines`, `marques`, `modeles_appareils`, `services_catalogue` (avec prix_vente_ht, cout_revient_ht)
+- [ ] **Page `public/catalogue.html`** — Interface admin catalogue
+- [ ] **`GET /api/catalogue`** — Arbre complet domaine→marque→modèle→services
+- [ ] **`POST /api/catalogue/services`** — Créer service avec prix
+- [ ] Autocomplete dans formulaire ticket (sélection marque/modèle → services pré-remplis)
+
+### 2.5 — Fournisseurs + Bons de commande (MOD-10)
+- [ ] **Migration** `0014_fournisseurs.sql` — Tables `fournisseurs`, `bons_commande`, `lignes_commande`
+- [ ] **Page `public/fournisseurs.html`** — Liste fournisseurs + commandes
+- [ ] **`GET|POST /api/fournisseurs`** — CRUD fournisseurs
+- [ ] **`GET|POST /api/commandes`** — CRUD bons de commande (draft→awaiting_delivery→received→cancelled)
+- [ ] **`POST /api/commandes/:id/recevoir`** — Réception → mise à jour stock + calcul CUMP
+- [ ] Calcul CUMP : `(ancien_stock × ancien_cump + qté × prix) / total_qté`
+- [ ] Lien sidebar
+
+### 2.6 — Agenda / Rendez-vous (MOD-08)
+- [ ] **Migration** `0015_agenda.sql` — Table `rendez_vous` (id, boutique_id, client_id, technicien_id, date_heure, duree_min, statut, notes, ticket_id nullable)
+- [ ] **Page `public/agenda.html`** — Vue calendrier (semaine/mois)
+- [ ] **`GET|POST /api/agenda`** — CRUD rendez-vous
+- [ ] **`PUT /api/agenda/:id/statut`** — Machine à états (PENDING→SCHEDULED→DONE|CANCELLED|NO_SHOW)
+- [ ] **`GET /api/calendar/:tenant_id/:token.ics`** — Export iCal (webcal)
+- [ ] Conversion RDV → Ticket en 1 clic
+- [ ] Lien sidebar
+
+### 2.7 — Vitrine publique (MOD-14)
+- [ ] **Page `public/pro/[slug].html`** — Vitrine boutique (sans auth)
+- [ ] **`GET /api/public/boutique/:slug`** — Infos publiques boutique
+- [ ] **Suivi ticket public** — Page `public/tracking.html` + `GET /api/tracking/:token`
+- [ ] **Génération token de suivi** sur création ticket (UUID, stocké en D1)
+- [ ] **Formulaire RDV public** `public/booking.html` → `POST /api/public/rdv`
+- [ ] **Formulaire devis public** `public/devis-public.html` → `POST /api/quotes/request`
+- [ ] Slug personnalisé par boutique dans `settings.html`
+
+### 2.8 — Caisse POS (MOD-13)
+- [ ] **Page `public/caisse.html`** — Interface encaissement
+- [ ] Multi-modes paiement (espèces + carte + virement + chèque simultanés)
+- [ ] **Journal de caisse quotidien** — `GET /api/caisse/journal?date=`
+- [ ] **`POST /api/caisse/cloture`** — Clôture journalière + hash NF525
+- [ ] Impression ticket caisse (CSS @media print ou QZ Tray si dispo)
+- [ ] Lien sidebar
+
+### 2.9 — Flux métier complets + Photos R2
+- [ ] Bouton "Convertir en ticket" depuis un devis (lien devis_id sur ticket)
 - [ ] Bouton "Générer facture" depuis un ticket terminé
-- [ ] Vue chronologique sur la fiche client
+- [ ] Vue chronologique fiche client (tickets + factures + RDV + rachats)
+- [ ] **Upload photos R2** — `POST /api/tickets/:id/photos`, compression Canvas, affichage avant/après
+- [ ] **Kanban tickets** — Vue colonnes par statut (`GET /api/tickets/kanban`)
+- [ ] Assignation technicien (`PATCH /api/tickets/:id/assign`)
 
-### 2.2 — Upload Photos (Cloudflare R2)
-- [ ] Configurer R2 bucket `izigsm-photos`
-- [ ] `POST /api/tickets/:id/photos` — Upload photo vers R2
-- [ ] Compression côté client avant upload (Canvas API)
-- [ ] `GET /api/tickets/:id/photos` — Récupérer les URLs photos
-- [ ] Affichage photos avant/après dans le ticket
+### 2.10 — Export PDF + Dashboard graphiques
+- [ ] Export PDF factures (html2canvas + jsPDF via CDN)
+- [ ] Template PDF : logo, boutique, lignes, hash NF525
+- [ ] Graphiques Chart.js dashboard branchés sur D1 réel
+- [ ] Sélecteur période (jour/semaine/mois/année)
+- [ ] **Rapports** : activité tickets, journal caisse, export comptable CSV, livre de police
 
-### 2.3 — Export PDF Factures
-- [ ] Générer un PDF côté client (html2canvas + jsPDF via CDN)
-- [ ] Template HTML → PDF avec logo, données boutique, lignes, NF525 hash
-- [ ] `GET /api/factures/:id/pdf` — Ou génération purement client
+### 2.11 — PWA installable
+- [ ] `public/manifest.json` — Icônes, nom, thème, display standalone
+- [ ] `public/static/js/sw.js` — Service Worker (cache assets statiques)
+- [ ] `<link rel="manifest">` dans tous les HTML
+- [ ] Meta `theme-color`, `apple-mobile-web-app-*`
 
-### 2.4 — Calcul Commissions Techniciens
-- [ ] Champ `commission_%` sur profil employé
-- [ ] Calcul automatique à la clôture d'une réparation
-- [ ] Vue "Mes commissions" dans le module personnel
-
-### 2.5 — Dashboard Réel
-- [ ] Graphiques Chart.js branchés sur données réelles (actuellement KPIs texte)
-- [ ] Sélecteur période (aujourd'hui / semaine / mois / année)
+### 2.12 — CRM étendu (MOD-07)
+- [ ] Champ `referral_code` unique sur clients (génération auto)
+- [ ] Lien parrainage `referred_by` client_id
+- [ ] Historique consolidé client (tickets + factures + RDV) dans `clients.html`
+- [ ] Import CSV clients (`POST /api/clients/import`)
 
 ---
 
-## ⏳ SPRINT 3 — Intégrations Externes
+## ⏳ SPRINT 3 — Intégrations Externes + Communication + SAV
+> **Objectif** : Automation email/SMS, OAuth Google, Qualirépar, SAV/Garanties, remise en état
 
-### 3.1 — Email (Resend API)
+### 3.1 — Communication automatisée (MOD-12)
 - [ ] `wrangler secret put RESEND_API_KEY`
-- [ ] Service email dans `src/lib/email.ts`
-- [ ] Email de confirmation inscription (OTP)
-- [ ] Email de notification livraison ticket
-- [ ] Email de devis (PDF en pièce jointe)
-
-### 3.2 — SMS (Twilio)
+- [ ] `src/lib/email.ts` — Service email (Resend)
+- [ ] `src/lib/sms.ts` — Service SMS (Twilio)
 - [ ] `wrangler secret put TWILIO_*`
-- [ ] Service SMS dans `src/lib/sms.ts`
-- [ ] SMS à la réception de l'appareil
-- [ ] SMS quand réparation terminée
+- [ ] **Automation Engine** — Triggers : changement statut ticket, anniversaire client, RDV J-1
+- [ ] **Templates** — Table `templates_communication` D1 (email/SMS, personnalisables)
+- [ ] Emails transactionnels : OTP, confirmation inscription, livraison ticket, devis PDF
+- [ ] SMS : réception appareil, réparation terminée, rappel RDV
 
-### 3.3 — Qualirépar API
-- [ ] `GET /api/qualirepar/declarations` — Liste déclarations
-- [ ] `POST /api/qualirepar/declarer` — Soumettre une déclaration bonus
-- [ ] Intégration avec l'API officielle Qualirépar
-- [ ] Relances automatiques de paiement
-
-### 3.4 — OAuth2 Google
+### 3.2 — OAuth2 Google (A3)
 - [ ] `wrangler secret put GOOGLE_CLIENT_ID/SECRET`
-- [ ] Flow OAuth dans Hono (redirect → callback → JWT)
+- [ ] Flow OAuth Hono (redirect → callback → JWT)
 - [ ] Bouton "Continuer avec Google" sur login/register
 
+### 3.3 — Qualirépar API (MOD intégration)
+- [ ] `GET /api/qualirepar/declarations`
+- [ ] `POST /api/qualirepar/declarer`
+- [ ] Intégration API officielle + relances
+
+### 3.4 — SAV / Garanties (MOD-09)
+- [ ] Migration `0016_garanties.sql` — Table `garanties` (facture_id, durée_mois, date_debut, date_fin)
+- [ ] Déclenchement ticket SAV depuis fiche client si sous garantie
+- [ ] Flux SAV : réparation (ticket) / échange / avoir
+- [ ] `GET /api/garanties/client/:id`
+
+### 3.5 — Remise en état (MOD-05)
+- [ ] Suivi coût réparation vs valeur revente
+- [ ] Calcul marge reconditionnement
+- [ ] Lien avec module rachat (achat → remise en état → revente)
+
+### 3.6 — Import catalogues fournisseurs
+- [ ] Import CSV produits (SKU, nom, prix achat, stock min)
+- [ ] Mapping colonnes Mobilax / Utopya / Phone LCD
+- [ ] `POST /api/produits/import`
+
 ---
 
-## ⏳ SPRINT 4 — Multi-boutiques + Hardening
+## ⏳ SPRINT 4 — Multi-sites + Hardening + RGPD + Finitions
 
-### 4.1 — Multi-boutiques
-- [ ] Filtre global par boutique sur toutes les requêtes D1
-- [ ] Isolation des données par `boutique_id`
+### 4.1 — Réseau multi-sites / Franchise (MOD-16)
+- [ ] Cockpit consolidé siège (requêtes agrégées cross-boutiques D1)
+- [ ] `GET /api/network/overview` — Stats consolidées
+- [ ] `POST /api/network/switch` — Switch boutique avec nouveau JWT tenant_id
 - [ ] Sélecteur boutique dans le header
 - [ ] Rapports consolidés multi-boutiques (Admin only)
 
-### 4.2 — Import Catalogues Fournisseurs
-- [ ] Import CSV produits (colonnes : SKU, nom, prix achat, stock min)
-- [ ] Mapping colonnes Mobilax / Utopya / Phone LCD
-- [ ] `POST /api/produits/import` — Upload CSV + parsing + insert D1
-
-### 4.3 — Hardening Sécurité
-- [ ] CORS restreint au domaine de production (plus `*`)
-- [ ] Rate limiting custom sur `/api/login` (5 tentatives / 15min via KV)
-- [ ] Headers sécurité (CSP, X-Frame-Options) dans Hono middleware
-- [ ] Logs d'audit en D1 (qui a fait quoi, quand)
+### 4.2 — Hardening Sécurité
+- [ ] CORS restreint au domaine de production
+- [ ] Rate limiting `/api/login` (5 tentatives / 15min via KV)
+- [ ] Headers sécurité (CSP, X-Frame-Options, HSTS) dans Hono middleware
 - [ ] `wrangler secret put APP_ENV production`
 
-### 4.4 — RGPD
-- [ ] `GET /api/clients/:id/export` — Export complet données client (droit à la portabilité)
+### 4.3 — RGPD
+- [ ] `GET /api/clients/:id/export` — Export complet données client
 - [ ] `DELETE /api/clients/:id/purge` — Effacement complet (droit à l'oubli)
 - [ ] Consentement cookies (bannière déjà présente, à relier)
+
+### 4.4 — Signature eIDAS (MOD-03)
+- [ ] Intégration Yousign ou Docusign API (tiers de confiance)
+- [ ] Canvas signature actuel conservé pour usage interne
+- [ ] `POST /api/quotes/:id/sign` — Déclencher signature eIDAS
+
+### 4.5 — Google Calendar sync bidirectionnel (MOD-08)
+- [ ] OAuth Google Calendar scope
+- [ ] Sync push (iziGSM → Google) + pull (Google → iziGSM)
+
+### 4.6 — Notifications temps réel (alternative WebSocket)
+- [ ] ⚠️ WebSocket natif impossible sur CF Workers
+- [ ] Option A : Polling intelligent 15s (déjà en place sur Personnel)
+- [ ] Option B : Cloudflare Durable Objects (~$5/mois) si besoin push réel
+- [ ] Notifications in-app (badge cloche, centre de notifications)
 
 ---
 
