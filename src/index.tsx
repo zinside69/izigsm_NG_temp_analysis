@@ -9,6 +9,7 @@ import stocksRoutes     from './routes/stocks'
 import facturationRoutes from './routes/facturation'
 import personnelRoutes  from './routes/personnel'
 import boutiquesRoutes  from './routes/boutiques'
+import rachatsRoutes    from './routes/rachats'
 
 /**
  * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
@@ -54,7 +55,8 @@ app.use('/api/*', cors({
 // IMPORTANT : l'ordre est critique — les routes avec params dynamiques (:id)
 // doivent venir APRÈS les routes à segments fixes (avoirs, factures, devis…)
 app.route('/api/auth',       authRoutes)
-app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*  ← EN PREMIER (avant clients /:id)
+app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*
+app.route('/api',            rachatsRoutes)     // /api/rachats/* (livre de police)
 app.route('/api',            ticketsRoutes)     // /api/tickets/*
 app.route('/api',            stocksRoutes)      // /api/produits/* + /api/categories/*
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes

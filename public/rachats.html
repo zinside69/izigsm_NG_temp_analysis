@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Livre de police — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+      <header class="dash-topbar">
+        <div class="topbar-left"><div class="topbar-title">Livre de police</div></div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1>📒 Livre de police — Rachats</h1>
+            <p>Registre légal des achats d'occasion — Code pénal art. 321-7</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportLivrePolice()">📥 Export CSV réglementaire</button>
+            <button class="btn btn-primary" onclick="openNewRachat()">+ Nouveau rachat</button>
+          </div>
+        </div>
+
+        <!-- Bandeau légal -->
+        <div id="bandeau-legal" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+          <span style="font-size:1.4rem;">⚠️</span>
+          <div>
+            <strong style="color:#92400e;">Obligation légale — Code pénal art. 321-7</strong>
+            <p style="margin:2px 0 0;font-size:0.85rem;color:#78350f;">
+              Tout achat d'appareil d'occasion doit être enregistré avec identification complète du vendeur (pièce d'identité obligatoire).
+              Conservation 10 ans minimum. Non-respect : jusqu'à 3 ans d'emprisonnement et 45 000 € d'amende.
+            </p>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;">
+          <div class="kpi-card">
+            <div class="kpi-label">En stock</div>
+            <div class="kpi-value" id="kpi-enstock">—</div>
+            <div class="kpi-delta">Appareils rachetés</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Vendus</div>
+            <div class="kpi-value" style="color:var(--green);" id="kpi-vendus">—</div>
+            <div class="kpi-delta up">Depuis l'ouverture</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total décaissé</div>
+            <div class="kpi-value" style="color:var(--accent-strong);" id="kpi-decaisse">—</div>
+            <div class="kpi-delta">Rachats cumulés</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Litiges</div>
+            <div class="kpi-value" style="color:var(--red);" id="kpi-litiges">—</div>
+            <div class="kpi-delta down">Signalements actifs</div>
+          </div>
+        </div>
+
+        <!-- Filtres -->
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+          <div class="search-input" style="flex:1;max-width:320px;">
+            <span class="search-icon">🔍</span>
+            <input type="text" placeholder="Nom, IMEI, N° LP, modèle…" oninput="filterRachats(this.value)">
+          </div>
+          <select onchange="filterRachatStatut(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+            <option value="">Tous statuts</option>
+            <option value="en_stock">En stock</option>
+            <option value="vendu">Vendu</option>
+            <option value="retourne">Retourné</option>
+            <option value="litige">Litige</option>
+          </select>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="date" id="filtre-debut" placeholder="Du" onchange="filterRachatDate()"
+              style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;font:inherit;font-size:0.88rem;">
+            <span style="color:var(--muted);font-size:0.85rem;">au</span>
+            <input type="date" id="filtre-fin" placeholder="Au" onchange="filterRachatDate()"
+              style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;font:inherit;font-size:0.88rem;">
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>N° LP</th>
+                <th>Date</th>
+                <th>Vendeur</th>
+                <th>Appareil</th>
+                <th>IMEI</th>
+                <th>État</th>
+                <th>Prix rachat</th>
+                <th>Paiement</th>
+                <th>Statut</th>
+                <th>Opérateur</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rachats-table"></tbody>
+          </table>
+          <div id="rachats-empty" class="empty-state hidden">
+            <div class="empty-icon">📒</div>
+            <h3>Aucun rachat enregistré</h3>
+            <p>Enregistrez chaque achat d'appareil d'occasion dans le livre de police.</p>
+            <button class="btn btn-primary" onclick="openNewRachat()">+ Nouveau rachat</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MODAL — Nouveau rachat (Livre de police)
+  ════════════════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-rachat" style="display:none;">
+    <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+      <div class="modal-header">
+        <h2>📒 Enregistrement livre de police</h2>
+        <button class="modal-close" onclick="closeModal('modal-rachat')">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- SECTION 1 : Vendeur -->
+        <section style="margin-bottom:20px;">
+          <h3 style="font-size:0.95rem;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:6px;margin-bottom:14px;">
+            👤 Identification du vendeur <span style="color:var(--red);font-size:0.8rem;">(obligatoire — art. 321-7)</span>
+          </h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Nom *</label>
+              <input type="text" id="r-nom" placeholder="DUPONT" style="text-transform:uppercase;">
+            </div>
+            <div class="form-field">
+              <label>Prénom *</label>
+              <input type="text" id="r-prenom" placeholder="Jean">
+            </div>
+            <div class="form-field">
+              <label>Date de naissance</label>
+              <input type="date" id="r-naissance">
+            </div>
+            <div class="form-field">
+              <label>Téléphone</label>
+              <input type="tel" id="r-telephone" placeholder="06 12 34 56 78">
+            </div>
+            <div class="form-field full">
+              <label>Adresse</label>
+              <input type="text" id="r-adresse" placeholder="15 rue de la Paix">
+            </div>
+            <div class="form-field">
+              <label>Code postal</label>
+              <input type="text" id="r-cp" placeholder="75001" maxlength="5">
+            </div>
+            <div class="form-field">
+              <label>Ville</label>
+              <input type="text" id="r-ville" placeholder="Paris">
+            </div>
+            <div class="form-field">
+              <label>Type de pièce *</label>
+              <select id="r-piece">
+                <option value="CNI">Carte nationale d'identité</option>
+                <option value="PASSEPORT">Passeport</option>
+                <option value="SEJOUR">Titre de séjour</option>
+                <option value="PERMIS">Permis de conduire</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Numéro de pièce *</label>
+              <input type="text" id="r-piece-num" placeholder="Ex: 123456789012">
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 2 : Appareil -->
+        <section style="margin-bottom:20px;">
+          <h3 style="font-size:0.95rem;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:6px;margin-bottom:14px;">
+            📱 Appareil racheté
+          </h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Marque *</label>
+              <input type="text" id="r-marque" placeholder="Apple, Samsung…">
+            </div>
+            <div class="form-field">
+              <label>Modèle *</label>
+              <input type="text" id="r-modele" placeholder="iPhone 13 Pro, Galaxy S22…">
+            </div>
+            <div class="form-field">
+              <label>IMEI 1 <span style="color:var(--muted);font-size:0.8rem;">(recommandé)</span></label>
+              <input type="text" id="r-imei" placeholder="15 chiffres" maxlength="15" oninput="verifierImei(this.value)">
+              <div id="r-imei-alerte" style="margin-top:4px;font-size:0.8rem;color:var(--red);display:none;"></div>
+            </div>
+            <div class="form-field">
+              <label>IMEI 2 <span style="color:var(--muted);font-size:0.8rem;">(dual-SIM)</span></label>
+              <input type="text" id="r-imei2" placeholder="15 chiffres optionnel" maxlength="15">
+            </div>
+            <div class="form-field">
+              <label>Couleur</label>
+              <input type="text" id="r-couleur" placeholder="Noir, Blanc, Bleu…">
+            </div>
+            <div class="form-field">
+              <label>Capacité</label>
+              <input type="text" id="r-capacite" placeholder="128 Go, 256 Go…">
+            </div>
+            <div class="form-field">
+              <label>État *</label>
+              <select id="r-etat">
+                <option value="neuf">Neuf (jamais utilisé)</option>
+                <option value="bon" selected>Bon état (légères traces)</option>
+                <option value="correct">Correct (traces visibles)</option>
+                <option value="mauvais">Mauvais (dommages importants)</option>
+                <option value="hs">Hors service</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Accessoires inclus</label>
+              <input type="text" id="r-accessoires" placeholder="Chargeur, boîte, coque…">
+            </div>
+            <div class="form-field full">
+              <label>Observations techniques</label>
+              <textarea id="r-observations" rows="2" placeholder="Écran fissuré, batterie à 80%, Face ID HS…" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font:inherit;resize:vertical;"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 3 : Prix & paiement -->
+        <section>
+          <h3 style="font-size:0.95rem;color:var(--primary);border-bottom:2px solid var(--primary);padding-bottom:6px;margin-bottom:14px;">
+            💶 Prix de rachat
+          </h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Montant versé (€) *</label>
+              <input type="number" id="r-prix" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-field">
+              <label>Mode de paiement *</label>
+              <select id="r-mode">
+                <option value="especes">Espèces</option>
+                <option value="virement">Virement bancaire</option>
+                <option value="cheque">Chèque</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <label>Référence paiement <span style="color:var(--muted);font-size:0.8rem;">(N° chèque, référence virement)</span></label>
+              <input type="text" id="r-ref-paiement" placeholder="CHQ-001234">
+            </div>
+          </div>
+        </section>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-rachat')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveRachat()">📒 Enregistrer dans le livre de police</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal détail rachat -->
+  <div class="modal-overlay" id="modal-rachat-detail" style="display:none;">
+    <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto;">
+      <div class="modal-header">
+        <h2>📒 Détail — <span id="detail-numero"></span></h2>
+        <button class="modal-close" onclick="closeModal('modal-rachat-detail')">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body">
+        <!-- rempli dynamiquement -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-rachat-detail')">Fermer</button>
+        <button class="btn btn-ghost" id="btn-signaler" style="color:var(--red);" onclick="signalerLitige()">⚠️ Signaler litige</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/rachats.js"></script>
+</body>
+</html>

@@ -33,6 +33,7 @@ function buildSidebar(activePage) {
     { id:'factures', icon:'💶', label:'Factures', href:'factures.html', section:'principal', badge: null },
     { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },
     { id:'stock', icon:'📦', label:'Stock', href:'stock.html', section:'gestion', badge: getStockAlert() },
+    { id:'rachats', icon:'📒', label:'Livre de police', href:'rachats.html', section:'gestion', badge: null },
     { id:'clients', icon:'👥', label:'Clients', href:'clients.html', section:'gestion', badge: null },
     { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel.html', section:'gestion', badge: null },
     { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings.html', section:'config', badge: null },
@@ -432,6 +433,14 @@ async function apiPut(url, body) {
  */
 async function apiDelete(url) {
   return api('DELETE', url);
+}
+
+async function apiPatch(url, body) {
+  return api('PATCH', url, body);
+}
+
+async function apiPut(url, body) {
+  return api('PUT', url, body);
 }
 
 /**
