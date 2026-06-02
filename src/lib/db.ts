@@ -12,7 +12,7 @@
 export async function nextNumero(
   db: D1Database,
   boutique_id: number,
-  type: 'ticket' | 'facture' | 'devis'
+  type: 'ticket' | 'facture' | 'devis' | 'avoir' | 'rachat'
 ): Promise<string> {
   const annee = new Date().getFullYear()
 
@@ -30,8 +30,14 @@ export async function nextNumero(
   `).bind(boutique_id, type, annee).first<{ dernier_num: number }>()
 
   const num = row?.dernier_num ?? 1
-  const prefix = { ticket: 'TKT', facture: 'FAC', devis: 'DEV' }[type]
-  return `${prefix}-${annee}-${String(num).padStart(5, '0')}`
+  const prefix: Record<string, string> = {
+    ticket:  'TKT',
+    facture: 'FAC',
+    devis:   'DEV',
+    avoir:   'AV',    // Avoirs NF525 (Sprint 2.1)
+    rachat:  'LP',    // Livre de police rachats (Sprint 2.2)
+  }
+  return `${prefix[type]}-${annee}-${String(num).padStart(5, '0')}`
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

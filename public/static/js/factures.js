@@ -11,6 +11,8 @@ let allFacturesCache = [];          // cache local enrichi
 let facturesUseApi   = true;        // false si l'API est indisponible
 let allClientsForFactures = [];     // cache clients pour le <select>
 let allDevisAcceptes      = [];     // cache devis acceptés pour le <select>
+let _avoirFactureId       = null;   // facture source pour le modal avoir
+let avoirLines            = [];     // lignes du modal avoir
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async function () {
@@ -84,6 +86,8 @@ function mapApiFacture(f) {
     status:         statutLabel,
     createdAt:      f.date_emission || f.created_at || new Date().toISOString(),
     hash_nf525:     f.hash_nf525   || null,
+    locked:         f.locked        === 1 || f.locked === true,
+    issued_at:      f.issued_at     || null,
     // Champs bruts API (préservés pour les opérations serveur)
     _statut:        f.statut,
     _raw:           f,
@@ -212,12 +216,33 @@ function renderFactures(filter = '', statusFilter = '') {
     const nf525Badge   = f.hash_nf525
       ? `<span title="NF525 : ${esc(f.hash_nf525.slice(0, 16))}…" style="color:var(--green);font-size:0.78rem;margin-left:4px;">🔐</span>`
       : '';
+    // Badge verrouillage CGI art. 289
+    const lockBadge    = f.locked
+      ? `<span title="Émise le ${f.issued_at ? new Date(f.issued_at).toLocaleDateString('fr-FR') : '—'} — Inaltérable (CGI art. 289)" style="color:var(--muted);font-size:0.78rem;margin-left:4px;">🔒</span>`
+      : '';
+
+    // Boutons actions contextuels
+    const btnPrint   = `<button class="btn btn-ghost btn-sm" onclick="printFacture(${f.id})" title="Imprimer / PDF">🖨</button>`;
+    const btnEmettre = !f.locked
+      ? `<button class="btn btn-ghost btn-icon" onclick="emettreFacture(${f.id})" title="Émettre et verrouiller (CGI art. 289)" style="color:var(--primary);font-weight:700;">📤</button>`
+      : '';
+    const btnPaiement = !f.locked && f._statut !== 'payee' && f._statut !== 'annulee'
+      ? `<button class="btn btn-ghost btn-icon" onclick="openMarkAsPaid(${f.id})" title="Enregistrer un paiement" style="color:var(--green);">💰</button>`
+      : (f.locked && f._statut !== 'payee' && f._statut !== 'annulee'
+          ? `<button class="btn btn-ghost btn-icon" onclick="openMarkAsPaid(${f.id})" title="Enregistrer un paiement" style="color:var(--green);">💰</button>`
+          : '');
+    const btnAvoir   = f.locked
+      ? `<button class="btn btn-ghost btn-icon" onclick="openModalAvoir(${f.id})" title="Créer un avoir (NF525)" style="color:var(--accent);">↩️</button>`
+      : '';
+    const btnDelete  = !f.locked
+      ? `<button class="btn btn-ghost btn-icon" onclick="deleteFacture(${f.id})" style="color:var(--red);" title="Supprimer">🗑</button>`
+      : `<button class="btn btn-ghost btn-icon" disabled title="Facture verrouillée — non supprimable (NF525)" style="color:var(--muted);cursor:not-allowed;">🗑</button>`;
 
     return `
     <tr>
       <td>
         <span style="font-weight:700;color:var(--primary);">${esc(f.number)}</span>
-        ${nf525Badge}
+        ${nf525Badge}${lockBadge}
       </td>
       <td>${esc(f.clientName)}</td>
       <td><span style="font-size:0.88rem;">${esc(f.description).slice(0, 40)}${f.description?.length > 40 ? '…' : ''}</span></td>
@@ -231,11 +256,7 @@ function renderFactures(filter = '', statusFilter = '') {
       </td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-ghost btn-sm" onclick="printFacture(${f.id})" title="Imprimer / PDF">🖨</button>
-          ${f._statut !== 'payee' && f._statut !== 'annulee'
-            ? `<button class="btn btn-ghost btn-icon" onclick="openMarkAsPaid(${f.id})" title="Enregistrer un paiement" style="color:var(--green);">💰</button>`
-            : ''}
-          <button class="btn btn-ghost btn-icon" onclick="deleteFacture(${f.id})" style="color:var(--red);" title="Supprimer">🗑</button>
+          ${btnPrint}${btnEmettre}${btnPaiement}${btnAvoir}${btnDelete}
         </div>
       </td>
     </tr>`;
@@ -682,6 +703,245 @@ async function deleteFacture(id) {
   showFlash('✓ Facture supprimée (hors-ligne).', 'info');
 }
 
+// ─── Émission facture (CGI art. 289 — verrouillage) ─────────────────────────
+async function emettreFacture(id) {
+  const facture = allFacturesCache.find(f => f.id == id);
+  if (!facture) return;
+  if (facture.locked) {
+    showFlash('ℹ️ Facture déjà émise et verrouillée.', 'info');
+    return;
+  }
+
+  const confirm = window.confirm(
+    `Émettre la facture ${esc(facture.number)} ?\n\n` +
+    `⚠️ ATTENTION : Une fois émise, la facture sera verrouillée et ne pourra plus être modifiée (CGI art. 289).\n\n` +
+    `Cliquez OK pour confirmer.`
+  );
+  if (!confirm) return;
+
+  try {
+    const result = await apiPost(`/api/factures/${id}/emettre`, {});
+    if (result.ok) {
+      showFlash(`✅ Facture ${esc(facture.number)} émise et verrouillée. Hash NF525 enregistré.`, 'success');
+      await loadFactures();
+    } else {
+      const msg = result.data?.error || 'Erreur lors de l\'émission.';
+      showFlash(`⚠️ ${msg}`, 'error');
+    }
+  } catch (err) {
+    console.warn('[factures] emettreFacture erreur réseau', err);
+    showFlash('⚠️ Erreur réseau — réessayez.', 'error');
+  }
+}
+
+// ─── Modal Avoir (NF525) ──────────────────────────────────────────────────────
+function openModalAvoir(factureId) {
+  const facture = allFacturesCache.find(f => f.id == factureId);
+  if (!facture) return;
+  if (!facture.locked) {
+    showFlash('⚠️ L\'avoir ne peut être émis que sur une facture émise.', 'error');
+    return;
+  }
+
+  _avoirFactureId = factureId;
+  avoirLines      = [];
+
+  // Créer/réutiliser le modal avoir
+  let modal = document.getElementById('modal-avoir');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modal-avoir';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:640px;">
+        <div class="modal-header">
+          <h2>↩️ Créer un avoir — <span id="avoir-facture-numero"></span></h2>
+          <button class="modal-close" onclick="closeModal('modal-avoir')">✕</button>
+        </div>
+        <div class="modal-body">
+          <p id="avoir-facture-info" style="font-size:0.88rem;color:var(--muted);margin-bottom:16px;"></p>
+
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="form-field">
+              <label>Type d'avoir *</label>
+              <select id="avoir-type" style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font:inherit;">
+                <option value="remboursement">Remboursement</option>
+                <option value="bon_achat">Bon d'achat</option>
+                <option value="echange">Échange</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Motif *</label>
+              <input type="text" id="avoir-motif" placeholder="Ex: Retour produit défectueux"
+                style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font:inherit;">
+            </div>
+            <div class="form-field full">
+              <label>Notes internes</label>
+              <textarea id="avoir-notes" rows="2" placeholder="Observations…"
+                style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;font:inherit;resize:vertical;"></textarea>
+            </div>
+          </div>
+
+          <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb;">
+          <h4 style="margin:0 0 8px;font-size:0.95rem;">Lignes de l'avoir</h4>
+          <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+            <thead><tr style="color:var(--muted);">
+              <th style="padding:4px 8px;text-align:left;">Description</th>
+              <th style="padding:4px 8px;text-align:right;width:70px;">Qté</th>
+              <th style="padding:4px 8px;text-align:right;width:100px;">P.U. HT (€)</th>
+              <th style="padding:4px 8px;text-align:right;width:90px;">Total HT</th>
+              <th style="width:32px;"></th>
+            </tr></thead>
+            <tbody id="avoir-lines"></tbody>
+          </table>
+          <button class="btn btn-ghost btn-sm" onclick="addAvoirLine()" style="margin-top:8px;">+ Ajouter une ligne</button>
+
+          <div style="margin-top:12px;text-align:right;font-size:0.9rem;">
+            <span style="color:var(--muted);">Total HT :</span> <strong id="avoir-total-ht">0,00 €</strong> &nbsp;
+            <span style="color:var(--muted);">TVA 20% :</span> <strong id="avoir-total-tva">0,00 €</strong> &nbsp;
+            <span style="color:var(--muted);">Total TTC :</span> <strong id="avoir-total-ttc" style="color:var(--primary);">0,00 €</strong>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('modal-avoir')">Annuler</button>
+          <button class="btn btn-primary" onclick="confirmAvoir()">↩️ Émettre l'avoir (NF525)</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Remplir les infos de la facture source
+  const numEl  = document.getElementById('avoir-facture-numero');
+  const infoEl = document.getElementById('avoir-facture-info');
+  if (numEl)  numEl.textContent  = facture.number;
+  if (infoEl) infoEl.innerHTML   =
+    `Facture source : <strong>${esc(facture.number)}</strong> — ${esc(facture.clientName)} — ` +
+    `Total TTC : <strong>${formatMoney(facture.totalTTC)}</strong>`;
+
+  // Réinitialiser le formulaire
+  const avoirType  = document.getElementById('avoir-type');  if (avoirType)  avoirType.value  = 'remboursement';
+  const avoirMotif = document.getElementById('avoir-motif'); if (avoirMotif) avoirMotif.value = '';
+  const avoirNotes = document.getElementById('avoir-notes'); if (avoirNotes) avoirNotes.value = '';
+  const avoirLinesEl = document.getElementById('avoir-lines'); if (avoirLinesEl) avoirLinesEl.innerHTML = '';
+  updateAvoirTotals();
+  addAvoirLine();  // une ligne vide par défaut
+
+  openModal('modal-avoir');
+}
+
+function addAvoirLine() {
+  const lid    = Date.now() + Math.random();
+  avoirLines.push(lid);
+  const tbody  = document.getElementById('avoir-lines');
+  if (!tbody) return;
+  const tr     = document.createElement('tr');
+  tr.id        = 'al-row-' + lid;
+  tr.innerHTML = `
+    <td style="padding:4px 8px;">
+      <input type="text" id="al-desc-${lid}" placeholder="Description…"
+        style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;font:inherit;font-size:0.88rem;">
+    </td>
+    <td style="padding:4px 8px;">
+      <input type="number" id="al-qty-${lid}" value="1" min="0.01" step="0.01"
+        style="width:65px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
+        oninput="updateAvoirLineTotals(${lid})">
+    </td>
+    <td style="padding:4px 8px;">
+      <input type="number" id="al-price-${lid}" value="" min="0" step="0.01" placeholder="0.00"
+        style="width:90px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
+        oninput="updateAvoirLineTotals(${lid})">
+    </td>
+    <td style="padding:4px 8px;text-align:right;">
+      <span id="al-total-${lid}" style="font-weight:600;">0,00 €</span>
+    </td>
+    <td style="padding:4px 4px;text-align:center;">
+      <button onclick="removeAvoirLine(${lid})"
+        style="border:none;background:none;cursor:pointer;color:var(--muted);font-size:1rem;" title="Supprimer">✕</button>
+    </td>`;
+  tbody.appendChild(tr);
+}
+
+function removeAvoirLine(lid) {
+  if (avoirLines.length <= 1) {
+    showFlash('ℹ️ Au moins une ligne est requise.', 'info');
+    return;
+  }
+  avoirLines = avoirLines.filter(l => l !== lid);
+  document.getElementById('al-row-' + lid)?.remove();
+  updateAvoirTotals();
+}
+
+function updateAvoirLineTotals(lid) {
+  const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
+  const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
+  const total = qty * price;
+  const el    = document.getElementById('al-total-' + lid);
+  if (el) el.textContent = formatMoney(total);
+  updateAvoirTotals();
+}
+
+function updateAvoirTotals() {
+  const totalHT = avoirLines.reduce((s, lid) => {
+    const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
+    const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
+    return s + qty * price;
+  }, 0);
+  const tva = totalHT * 0.2;
+  const ttc = totalHT + tva;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
+  set('avoir-total-ht',  totalHT);
+  set('avoir-total-tva', tva);
+  set('avoir-total-ttc', ttc);
+}
+
+async function confirmAvoir() {
+  const type  = document.getElementById('avoir-type')?.value  || 'remboursement';
+  const motif = document.getElementById('avoir-motif')?.value.trim() || '';
+  const notes = document.getElementById('avoir-notes')?.value.trim() || null;
+
+  if (!motif) {
+    showFlash('⚠️ Le motif est obligatoire.', 'error');
+    return;
+  }
+
+  // Construire les lignes
+  const lignes = avoirLines.map(lid => ({
+    description:      document.getElementById('al-desc-'  + lid)?.value.trim() || '',
+    quantite:         parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 1,
+    prix_unitaire_ht: parseFloat(document.getElementById('al-price-' + lid)?.value) || 0,
+    tva_taux:         20,
+  })).filter(l => l.description || l.prix_unitaire_ht > 0);
+
+  if (!lignes.length) {
+    showFlash('⚠️ Ajoutez au moins une ligne à l\'avoir.', 'error');
+    return;
+  }
+
+  const payload = {
+    facture_id: _avoirFactureId,
+    type,
+    motif,
+    notes,
+    lignes,
+  };
+
+  try {
+    const result = await apiPost('/api/avoirs', payload);
+    if (result.ok) {
+      const numero = result.data?.numero || '?';
+      closeModal('modal-avoir');
+      showFlash(`✅ Avoir ${numero} émis et enregistré dans le journal NF525.`, 'success');
+      await loadFactures();
+    } else {
+      const msg = result.data?.error || 'Erreur lors de la création de l\'avoir.';
+      showFlash(`⚠️ ${msg}`, 'error');
+    }
+  } catch (err) {
+    console.warn('[factures] confirmAvoir erreur réseau', err);
+    showFlash('⚠️ Erreur réseau — réessayez.', 'error');
+  }
+}
+
 // ─── Impression / PDF ─────────────────────────────────────────────────────────
 function printFacture(id) {
   const f = allFacturesCache.find(x => x.id == id);
@@ -805,16 +1065,23 @@ function esc(s) {
 }
 
 // ─── Exposition globale ───────────────────────────────────────────────────────
-window.openNewFacture       = openNewFacture;
-window.saveFacture          = saveFacture;
-window.markAsPaid           = markAsPaid;
-window.openMarkAsPaid       = openMarkAsPaid;
-window.confirmPaiement      = confirmPaiement;
-window.deleteFacture        = deleteFacture;
-window.printFacture         = printFacture;
-window.filterFactures       = filterFactures;
-window.filterFactureStatus  = filterFactureStatus;
-window.addFactureLine       = addFactureLine;
-window.removeFactureLine    = removeFactureLine;
+window.openNewFacture          = openNewFacture;
+window.saveFacture             = saveFacture;
+window.markAsPaid              = markAsPaid;
+window.openMarkAsPaid          = openMarkAsPaid;
+window.confirmPaiement         = confirmPaiement;
+window.deleteFacture           = deleteFacture;
+window.printFacture            = printFacture;
+window.filterFactures          = filterFactures;
+window.filterFactureStatus     = filterFactureStatus;
+window.addFactureLine          = addFactureLine;
+window.removeFactureLine       = removeFactureLine;
 window.updateFactureLineTotals = updateFactureLineTotals;
-window.clearSig             = clearSig;
+window.clearSig                = clearSig;
+// Sprint 2.1 — Émission + Avoirs
+window.emettreFacture          = emettreFacture;
+window.openModalAvoir          = openModalAvoir;
+window.confirmAvoir            = confirmAvoir;
+window.addAvoirLine            = addAvoirLine;
+window.removeAvoirLine         = removeAvoirLine;
+window.updateAvoirLineTotals   = updateAvoirLineTotals;
