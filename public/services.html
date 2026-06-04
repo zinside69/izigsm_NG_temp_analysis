@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catalogue services — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    /* ── Layout catalogue ── */
+    .catalogue-layout { display: grid; grid-template-columns: 280px 1fr; gap: 0; height: calc(100vh - 60px); overflow: hidden; }
+    .catalogue-sidebar { background: #f8fafc; border-right: 1px solid #e2e8f0; overflow-y: auto; padding: 16px 0; }
+    .catalogue-main { overflow-y: auto; padding: 24px; background: #fff; }
+
+    /* ── Catégories sidebar ── */
+    .cat-section-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; padding: 8px 16px 4px; }
+    .cat-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; border-radius: 0; transition: background .15s; font-size: 13.5px; color: #374151; }
+    .cat-item:hover { background: #e0e7ff; }
+    .cat-item.active { background: #e0e7ff; color: #4f46e5; font-weight: 600; }
+    .cat-item.child { padding-left: 36px; font-size: 13px; }
+    .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .cat-badge { margin-left: auto; background: #e2e8f0; color: #64748b; font-size: 11px; padding: 1px 7px; border-radius: 10px; }
+    .cat-actions { display: none; gap: 4px; margin-left: auto; }
+    .cat-item:hover .cat-actions { display: flex; }
+    .cat-item:hover .cat-badge { display: none; }
+    .btn-cat-action { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; }
+    .btn-cat-action:hover { background: #c7d2fe; }
+
+    /* ── Services grid ── */
+    .services-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .services-title { font-size: 18px; font-weight: 700; color: #1e293b; }
+    .services-subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+    .services-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+    /* ── Carte service ── */
+    .service-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; transition: box-shadow .2s, border-color .2s; position: relative; }
+    .service-card:hover { box-shadow: 0 4px 16px rgba(79,70,229,.1); border-color: #a5b4fc; }
+    .service-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+    .service-nom { font-size: 14px; font-weight: 600; color: #1e293b; }
+    .service-ref { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    .service-desc { font-size: 12.5px; color: #64748b; margin-bottom: 12px; min-height: 18px; }
+    .service-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .service-prix { font-size: 18px; font-weight: 700; color: #4f46e5; }
+    .service-prix-sub { font-size: 11px; color: #94a3b8; }
+    .service-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+    .badge-duree { background: #f0fdf4; color: #16a34a; }
+    .badge-garantie { background: #fef3c7; color: #d97706; }
+    .badge-tva { background: #f1f5f9; color: #64748b; }
+    .service-card-actions { position: absolute; top: 12px; right: 12px; display: none; gap: 4px; }
+    .service-card:hover .service-card-actions { display: flex; }
+    .btn-icon { background: #f1f5f9; border: none; cursor: pointer; width: 28px; height: 28px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+    .btn-icon:hover { background: #e0e7ff; }
+    .btn-icon.danger:hover { background: #fee2e2; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+    .empty-state .es-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state .es-title { font-size: 16px; font-weight: 600; color: #64748b; margin-bottom: 6px; }
+
+    /* ── Modals ── */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#fff; border-radius:16px; padding:28px; width:100%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+    .modal-title { font-size:17px; font-weight:700; color:#1e293b; margin-bottom:20px; }
+    .form-group { margin-bottom:16px; }
+    .form-label { display:block; font-size:12.5px; font-weight:600; color:#374151; margin-bottom:5px; }
+    .form-label .req { color:#ef4444; }
+    .form-control { width:100%; padding:9px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:13.5px; box-sizing:border-box; }
+    .form-control:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.1); }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; border-top:1px solid #f1f5f9; padding-top:16px; }
+    .btn { padding:9px 20px; border-radius:8px; font-size:13.5px; font-weight:600; cursor:pointer; border:none; }
+    .btn-primary { background:#4f46e5; color:#fff; }
+    .btn-primary:hover { background:#4338ca; }
+    .btn-secondary { background:#f1f5f9; color:#374151; }
+    .btn-secondary:hover { background:#e2e8f0; }
+    .btn-success { background:#059669; color:#fff; }
+
+    /* ── Couleur picker ── */
+    .color-grid { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+    .color-swatch { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:border-color .15s; }
+    .color-swatch.selected, .color-swatch:hover { border-color:#1e293b; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-container"></div>
+
+    <main class="main-content" style="padding:0; display:flex; flex-direction:column;">
+      <!-- Topbar -->
+      <div class="topbar" style="padding:0 24px; flex-shrink:0;">
+        <div class="topbar-left">
+          <h1 class="page-title">🛠 Catalogue services</h1>
+        </div>
+        <div class="topbar-right" style="display:flex; gap:10px; align-items:center;">
+          <button class="btn btn-secondary" onclick="openModalCategorie()">＋ Catégorie</button>
+          <button class="btn btn-primary" onclick="openModalService()">＋ Service</button>
+          <div class="topbar-avatar" id="topbar-avatar">U</div>
+        </div>
+      </div>
+
+      <!-- Corps -->
+      <div class="catalogue-layout" style="flex:1; min-height:0;">
+        <!-- Sidebar catégories -->
+        <aside class="catalogue-sidebar" id="sidebar-categories">
+          <div class="cat-item active" data-cat="all" onclick="filterByCategorie(null, this)">
+            <span>📋</span> Tous les services
+            <span class="cat-badge" id="badge-all">0</span>
+          </div>
+          <div id="cat-list"></div>
+        </aside>
+
+        <!-- Grille services -->
+        <section class="catalogue-main">
+          <div class="services-header">
+            <div>
+              <div class="services-title" id="services-title">Tous les services</div>
+              <div class="services-subtitle" id="services-subtitle"></div>
+            </div>
+            <input type="search" class="form-control" placeholder="🔍 Rechercher…"
+              style="width:220px" oninput="onSearch(this.value)">
+          </div>
+          <div class="services-grid" id="services-grid">
+            <div class="empty-state">
+              <div class="es-icon">⏳</div>
+              <div class="es-title">Chargement…</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- ── Modal Catégorie ─────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-categorie">
+    <div class="modal">
+      <div class="modal-title" id="modal-cat-title">Nouvelle catégorie</div>
+      <input type="hidden" id="cat-id">
+      <div class="form-group">
+        <label class="form-label">Nom <span class="req">*</span></label>
+        <input type="text" class="form-control" id="cat-nom" placeholder="Ex : Réparation iPhone">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catégorie parente (optionnel)</label>
+        <select class="form-control" id="cat-parent"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" class="form-control" id="cat-description" placeholder="Description courte">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Couleur</label>
+        <div class="color-grid" id="color-grid"></div>
+        <input type="hidden" id="cat-couleur" value="#6366f1">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-categorie')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveCategorie()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal Service ───────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-service">
+    <div class="modal">
+      <div class="modal-title" id="modal-svc-title">Nouveau service</div>
+      <input type="hidden" id="svc-id">
+      <div class="form-group">
+        <label class="form-label">Nom <span class="req">*</span></label>
+        <input type="text" class="form-control" id="svc-nom" placeholder="Ex : Remplacement écran iPhone 14">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catégorie</label>
+        <select class="form-control" id="svc-categorie"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" id="svc-description" rows="2" placeholder="Détail de la prestation…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Prix HT (€) <span class="req">*</span></label>
+          <input type="number" class="form-control" id="svc-prix" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">TVA (%)</label>
+          <select class="form-control" id="svc-tva">
+            <option value="20">20 %</option>
+            <option value="10">10 %</option>
+            <option value="5.5">5,5 %</option>
+            <option value="0">0 %</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Durée (min)</label>
+          <input type="number" class="form-control" id="svc-duree" min="0" placeholder="Ex : 60">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Garantie (jours)</label>
+          <input type="number" class="form-control" id="svc-garantie" min="0" placeholder="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Référence interne</label>
+        <input type="text" class="form-control" id="svc-reference" placeholder="Ex : SVC-001">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-service')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveService()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/services.js"></script>
+</body>
+</html>
