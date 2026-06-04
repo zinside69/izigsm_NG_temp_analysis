@@ -1,487 +1,493 @@
 # Analyse Comparative — CDC iziGSM vs Implémentation Actuelle
-> **Date de l'analyse** : 1er juin 2026  
-> **Version analysée** : CDC sections (docx) + LISTE_FONCTIONNALITES v2.4.0 vs webapp Cloudflare Pages v1.0.0  
-> **Auteur** : Analyse IA assistée
+
+> **Date de mise à jour** : 4 juin 2026  
+> **Version analysée** : CDC Manus v1.0 (juin 2026) + monatelier_observations.md  
+> **État implémentation** : Sprint 2.4 ✅ — v2.4.0  
+> **Auteur** : Analyse IA assistée (session sprint 2.4)
 
 ---
 
-## 1. Vue d'ensemble des deux projets
+## ⚠️ Note de mise à jour
 
-| Dimension | **CDC izigsm (docs fournis)** | **Implémentation webapp (Cloudflare Pages)** |
-|-----------|-------------------------------|---------------------------------------------|
-| **Architecture cible** | PHP/HTML + Node.js microservices | HTML/JS statique + Hono (Cloudflare Workers) |
-| **Backend** | 6 microservices Node.js (ports 3001-3006) | API unique Hono sur Workers |
-| **Frontend** | PHP BFF + Bootstrap 5.3 (MVC complet) | HTML statique + Tailwind CSS |
-| **Base de données** | PostgreSQL (multi-BDD par service) | Cloudflare D1 (SQLite) — à implémenter |
-| **Stockage fichiers** | MinIO / S3 | Cloudflare R2 — à implémenter |
-| **Cache** | Redis | Cloudflare KV — à implémenter |
-| **Authentification** | JWT + OAuth2 (Google, Facebook) | JWT démo local (no persistence) |
-| **Déploiement** | Docker / VPS (PM2) | Cloudflare Pages (edge) |
-| **Statut docs** | v2.4.0 "Production Ready" | Prototype fonctionnel — pages HTML finies |
+Ce document remplace la version du 1er juin 2026 qui analysait un **prototype sans persistance**.
+Depuis les sprints 2.1 → 2.4, l'implémentation a radicalement évolué :
+- **D1 réel** connecté (10+ migrations appliquées)
+- **JWT sécurisé** (PBKDF2, KV sessions)
+- **NF525** implémenté (SHA-256 factures/avoirs)
+- **Livre de police** conforme (art. 321-7)
+- **Permissions granulaires** (table `permissions`)
+- **Catalogue services** MVC complet (Sprint 2.4)
 
 ---
 
-## 2. Cartographie Fonctionnelle — Comparaison Détaillée
+## 1. Comparatif par Module CDC
 
-### 2.1 Authentification & Autorisation
+### MOD-01 — Tickets / Prises en charge ⚠️ PARTIEL
+**Priorité CDC : CRITIQUE**
 
-| Fonctionnalité | **CDC (LISTE v2.4.0)** | **Webapp actuelle** | **Écart** |
-|----------------|------------------------|---------------------|-----------|
-| Login email/password | ✅ Auth Service :3001 | ✅ `/api/login` (démo) | ⚠️ Démo sans persistance |
-| Inscription | ✅ Formulaire complet | ✅ `/api/register` + OTP | ⚠️ OTP non envoyé réellement |
-| Vérification email (OTP) | ✅ | ✅ `/api/verify-otp` | ⚠️ Démo (OTP retourné en clair) |
-| JWT + Refresh Tokens | ✅ | ⚠️ JWT démo (`demo_timestamp`) | 🔴 JWT réel non implémenté |
-| OAuth2 Google | ✅ | ❌ | 🔴 Absent |
-| OAuth2 Facebook | ✅ | ❌ | 🔴 Absent |
-| RBAC (rôles) | ✅ Admin, Manager, Technicien, Client | ❌ | 🔴 Absent |
-| Permissions granulaires | ✅ | ❌ | 🔴 Absent |
-| CSRF Protection | ✅ | ❌ (non applicable côté Workers) | ⚠️ Architecture différente |
-| Réinitialisation mdp | ✅ | ❌ | 🔴 Absent |
-| Gestion sessions | ✅ PHP sessions | ⚠️ localStorage token | ⚠️ Approche différente |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| CRUD tickets (création, modification) | ✅ | `routes/tickets.ts` + D1 |
+| 8 statuts workflow : INTAKE→DIAGNOSIS→TO_ORDER→ORDERED→PARTS_RECEIVED→IN_REPAIR→READY_TO_RETURN→RETURNED | ⚠️ | **6 statuts implém.** — manque `TO_ORDER`, `ORDERED`, `PARTS_RECEIVED` |
+| Assignation technicien | ✅ | Champ `assigned_to` en base |
+| Indicateurs d'ancienneté (vert/orange/rouge/alerte) | ⚠️ | Calcul côté client uniquement |
+| Lien de suivi client (`tracking_token`) | ⚠️ | Colonne en base, page publique `/suivi.html` **non créée** |
+| Archivage automatique (`archived_at`) | ❌ | Non implémenté |
+| Vue Kanban drag & drop | ❌ | Non implémenté (différenciateur monatelier) |
+| GET /api/tickets/kanban | ❌ | Endpoint absent |
+| Noms de statuts personnalisables par tenant | ❌ | Non implémenté |
+| Mode création rapide / complet | ⚠️ | UI présente, non différenciée côté API |
 
-**Score : 3/11 ✅ | 3/11 ⚠️ | 5/11 ❌**
+**Score : 3✅ / 4⚠️ / 3❌ — Couverture ~45%**
 
----
-
-### 2.2 Gestion des Boutiques
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| CRUD boutiques | ✅ Boutique Service :3002 | ❌ | 🔴 Absent |
-| Multi-boutiques | ✅ | ❌ | 🔴 Absent |
-| Horaires d'ouverture | ✅ | ❌ | 🔴 Absent |
-| Paramètres facturation (TVA, SIRET) | ✅ | ❌ | 🔴 Absent |
-| Paramètres notifications | ✅ | ❌ | 🔴 Absent |
-
-**Score : 0/5 ✅ | 0/5 ⚠️ | 5/5 ❌**
-
-> ⚠️ Module entier manquant dans l'implémentation actuelle. La page `settings.html` existe mais sans backend de boutique.
+**Gaps critiques :**
+- Statuts `TO_ORDER`, `ORDERED`, `PARTS_RECEIVED` indispensables pour le flux commandes (lié MOD-10)
+- Page suivi client publique (`/suivi/:token`) — promesse UX clé
+- Kanban : différenciateur fort vs concurrents
 
 ---
 
-### 2.3 Gestion des Clients
+### MOD-02 — Facturation ✅ COMPLET (fonctionnel)
+**Priorité CDC : CRITIQUE**
 
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| CRUD clients | ✅ Client Service :3003 | ✅ `clients.html` + `clients.js` | ⚠️ UI OK, API démo |
-| Recherche clients | ✅ | ✅ Filtres dans clients.js | ✅ |
-| Profil client | ✅ | ✅ | ⚠️ Données mockées |
-| Historique réparations par client | ✅ | ✅ Modal "tickets client" | ⚠️ Données mockées |
-| Gestion appareils (IMEI, S/N) | ✅ Appareil Service | ❌ Non présent dans clients.js | 🔴 Absent |
-| Adresse de facturation | ✅ | ⚠️ Partiel (champs présents) | ⚠️ Pas de validation |
-| Export CSV | ✅ | ✅ Présent dans clients.js | ✅ |
-| Signature numérique tablette | ✅ CDC | ❌ | 🔴 Absent |
-| Avis clients automatisés | ✅ CDC | ❌ | 🔴 Absent |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| Création factures (brouillon) | ✅ | `routes/facturation.ts` + D1 |
+| Émission avec verrouillage (`locked=1`) | ✅ | Conforme CGI art. 289 |
+| Chaîne SHA-256 NF525 | ✅ | `enregistrerTransaction()` Sprint 2.1 |
+| Numérotation séquentielle sans trou | ✅ | `nextNumero()` atomique |
+| Enregistrement paiements (multi-modes) | ✅ | Table `paiements` |
+| Avoirs (AV-AAAA-XXXXX) | ✅ | Sprint 2.1 complet |
+| Export CSV factures | ✅ | Via `apiBlobGet()` |
+| KPIs (CA, encaissements, retards) | ✅ | `/api/stats` inline `index.tsx` |
+| Numérotation configurable par tenant (préfixe, séparateur, format date) | ❌ | Hard-coded `FA/DEV/AV/LP` — **différenciateur monatelier** |
+| Export PDF factures | ❌ | Sprint 2.10 backlog |
+| Envoi au comptable | ❌ | Non implémenté |
+| Paiement Stripe | ❌ | Non prévu (hors périmètre actuel) |
 
-**Score : 3/9 ✅ | 3/9 ⚠️ | 3/9 ❌**
+**Score : 8✅ / 0⚠️ / 4❌ — Couverture ~67%**
 
----
-
-### 2.4 Gestion des Réparations / Tickets
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Création tickets réparation | ✅ Réparation Service :3004 | ✅ `tickets.html` + `tickets.js` | ⚠️ UI OK, sans persistance |
-| Assignation technicien | ✅ | ⚠️ Champ présent | ⚠️ Non relié |
-| Suivi de statut | ✅ Machine à états | ✅ Statuts visuels | ⚠️ Local seulement |
-| Photos avant/après (upload AJAX) | ✅ + compression | ❌ | 🔴 Absent |
-| Notifications SMS/Email/WhatsApp | ✅ | ❌ | 🔴 Absent |
-| Devis → Facture (conversion) | ✅ | ⚠️ `devis.html` séparé | ⚠️ Flux non relié |
-| Gestion SAV / Garanties | ✅ CDC | ❌ | 🔴 Absent |
-| Prise RDV chatbot IA | ✅ CDC | ❌ | 🔴 Absent (feature avancée) |
-| Diagnostics | ✅ | ⚠️ Partiel | ⚠️ |
-
-**Score : 1/9 ✅ | 4/9 ⚠️ | 4/9 ❌**
+**Note :** La numérotation configurable est une fonctionnalité phare de monatelier.net (onboarding), absente ici.
 
 ---
 
-### 2.5 Gestion des Stocks
+### MOD-03 — Devis ⚠️ PARTIEL
+**Priorité CDC : HAUTE**
 
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| CRUD produits (SKU, prix, fournisseur) | ✅ Stock Service :3005 | ✅ `stock.html` + `stock.js` | ⚠️ UI OK, sans persistance |
-| Catégories hiérarchiques | ✅ | ⚠️ Catégories plates | ⚠️ Hiérarchie absente |
-| Mouvements de stock | ✅ | ✅ Ajustement quantités dans stock.js | ⚠️ Local seulement |
-| Alertes stock bas | ✅ | ✅ KPI + alertes visuelles dans stock.js | ✅ (UI) |
-| Calcul de marge temps réel | ✅ | ⚠️ Non présent dans UI | ⚠️ |
-| Catalogues fournisseurs (Mobilax, Utopya…) | ✅ CDC | ❌ | 🔴 Absent |
-| Scanner codes-barres | ✅ CDC | ❌ | 🔴 Absent |
-| Export CSV stock | ✅ | ✅ Présent dans stock.js | ✅ |
-| Inventaires | ✅ POS | ❌ | 🔴 Absent |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| CRUD devis | ✅ | `routes/facturation.ts` (devis intégrés) |
+| Statuts (DRAFT/SENT/ACCEPTED/REFUSED/EXPIRED) | ⚠️ | Statuts en base, workflow non enforced |
+| Conversion devis → facture | ✅ | Endpoint `/api/devis/:id/convertir` |
+| Page publique signature client (`/quotes/public/:token`) | ❌ | Non implémentée |
+| Signature eIDAS conforme | ❌ | Non implémentée (Sprint futur) |
+| Envoi devis au client (email) | ❌ | Dépend MOD-12 (notifications) |
+| Relance devis expirés | ❌ | Non implémentée |
+| Acceptation/refus en ligne | ❌ | Page publique manquante |
 
-**Score : 2/9 ✅ | 4/9 ⚠️ | 3/9 ❌**
+**Score : 2✅ / 1⚠️ / 5❌ — Couverture ~25%**
 
----
-
-### 2.6 Facturation & Paiements
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Création factures | ✅ Facturation Service :3006 | ✅ `factures.html` + `factures.js` | ⚠️ UI OK, sans persistance |
-| Devis | ✅ | ✅ `devis.html` + `devis.js` | ⚠️ UI OK, sans persistance |
-| Calcul HT/TVA/TTC automatique | ✅ | ⚠️ Partiel côté UI | ⚠️ |
-| Conformité NF525 (SHA-256) | ✅ | ❌ | 🔴 Absent (critique légal) |
-| Paiements Stripe/PayPal | ✅ | ❌ | 🔴 Absent |
-| Multi-modes (CB, espèces, chèque…) | ✅ POS | ❌ | 🔴 Absent |
-| Signature électronique | ✅ | ❌ | 🔴 Absent |
-| Gestion avoirs/retours | ✅ | ❌ | 🔴 Absent |
-| Export PDF factures | ✅ CDC | ❌ | 🔴 Absent |
-
-**Score : 0/9 ✅ | 3/9 ⚠️ | 6/9 ❌**
+**Gap critique :** La signature eIDAS et la page publique d'acceptation sont des fonctionnalités **standard** chez monatelier.net.
 
 ---
 
-### 2.7 Tableau de Bord & Reporting
+### MOD-04 — Stock et Catalogue produits ⚠️ PARTIEL
+**Priorité CDC : CRITIQUE**
 
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| KPI chiffre d'affaires | ✅ | ✅ `dashboard.html` + `dashboard.js` | ⚠️ Données mockées |
-| KPI réparations | ✅ | ✅ | ⚠️ Données mockées |
-| Graphiques performance | ✅ | ✅ Chart.js présent | ⚠️ Données mockées |
-| Reporting par boutique/technicien | ✅ | ❌ | 🔴 Absent |
-| Export Excel/PDF/CSV | ✅ | ⚠️ CSV uniquement | ⚠️ Partiel |
-| Tableaux de bord personnalisables | ✅ CDC | ❌ | 🔴 Absent |
-| Rotation des stocks | ✅ | ⚠️ Partiel dans stock.js | ⚠️ |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| CRUD produits (SKU, prix achat/vente, TVA) | ✅ | `routes/stocks.ts` + D1 |
+| Mouvements de stock (entrées/sorties) | ✅ | Table `mouvements_stock` |
+| Alertes stock bas / ruptures | ✅ | `seuil_alerte` + KPIs |
+| Export CSV stock | ✅ | Via `apiBlobGet()` |
+| Catégories hiérarchiques produits | ⚠️ | Catégories plates uniquement |
+| CUMP (Coût Unitaire Moyen Pondéré) | ❌ | **Absent — Sprint 2.5 prévu** |
+| Liaison stock → réception bon de commande | ❌ | Dépend MOD-10 (fournisseurs) |
+| Valeur stock / marge potentielle / stock dormant | ⚠️ | KPIs partiels sans CUMP |
+| Scanner codes-barres | ❌ | Non prévu |
+| Familles produits (pièce/accessoire/appareil/consommable) | ❌ | Champ `famille` absent |
 
-**Score : 0/7 ✅ | 4/7 ⚠️ | 3/7 ❌**
+**Score : 4✅ / 2⚠️ / 4❌ — Couverture ~45%**
 
----
-
-### 2.8 Personnel & Pointage *(CDC v2.3.0)*
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Profils employés + rôles | ✅ | ❌ | 🔴 Absent |
-| Pointage (4 états : absent/en poste/pause/terminé) | ✅ | ❌ | 🔴 Absent |
-| Machine à états pointage | ✅ | ❌ | 🔴 Absent |
-| Attribution des tâches | ✅ CDC | ❌ | 🔴 Absent |
-| Calcul commissions/primes | ✅ CDC | ❌ | 🔴 Absent |
-| Export présences | ✅ | ❌ | 🔴 Absent |
-| Planning | ✅ CDC | ❌ | 🔴 Absent |
-
-**Score : 0/7 ✅ | 0/7 ⚠️ | 7/7 ❌**
-
-> ⚠️ Module entier absent dans la webapp.
+**Gap bloquant :** CUMP est **requis** pour valoriser correctement le stock et calculer les marges. Sans fournisseurs (MOD-10), le CUMP ne peut pas être calculé.
 
 ---
 
-### 2.9 Intégration Qualirépar
+### MOD-05 — Reconditionnement ❌ ABSENT
+**Priorité CDC : MOYENNE**
 
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Page Qualirépar | ✅ | ✅ `qualirepar.html` + `qualirepar.js` | ⚠️ UI présente |
-| Déclaration bonus réparation API | ✅ | ❌ | 🔴 Absent |
-| Rappels paiement automatisés | ✅ | ❌ | 🔴 Absent |
-| Synchronisation API Qualirépar | ✅ | ❌ | 🔴 Absent |
+| Fonctionnalité CDC | Statut |
+|---|---|
+| Ordres de reconditionnement (lié rachats) | ❌ |
+| Suivi coût de revient (pièces + MO) | ❌ |
+| Passage stock occasion | ❌ |
+| Calcul marge reconditionné | ❌ |
 
-**Score : 0/4 ✅ | 1/4 ⚠️ | 3/4 ❌**
-
----
-
-### 2.10 Services Communs & Intégrations
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Email (SMTP/Mailgun/SendGrid) | ✅ email-service.js | ❌ | 🔴 Absent |
-| SMS (Twilio/OVH) | ✅ sms-service.js | ❌ | 🔴 Absent |
-| WhatsApp Business | ✅ CDC | ❌ | 🔴 Absent |
-| Stockage fichiers (MinIO/S3) | ✅ storage-service.js | ❌ (R2 prévu) | 🔴 Non implémenté |
-| Cache Redis | ✅ cache-service.js | ❌ (KV prévu) | 🔴 Non implémenté |
-| Géolocalisation | ✅ geo-service.js | ❌ | 🔴 Absent |
-| Intégration fournisseurs (Mobilax, Utopya, Phone LCD) | ✅ CDC | ❌ | 🔴 Absent |
-| Paiement Stripe | ✅ payment-service.js | ❌ | 🔴 Absent |
-| OAuth2 Google/Facebook | ✅ oauth-service.js | ❌ | 🔴 Absent |
-
-**Score : 0/9 ✅ | 0/9 ⚠️ | 9/9 ❌**
+**Score : 0/4 — Couverture 0%**  
+**Dépendance :** Requiert MOD-06 (Rachats ✅) + MOD-04 Stock. À planifier après Sprint 2.5.
 
 ---
 
-### 2.11 Marketing & CRM *(CDC)*
+### MOD-06 — Rachats (Livre de police) ✅ COMPLET
+**Priorité CDC : HAUTE**
 
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| Campagnes Email/SMS | ✅ CDC | ❌ | 🔴 Absent |
-| Collecte avis clients automatisée | ✅ CDC | ❌ | 🔴 Absent |
-| Réponses avis via IA (ChatGPT) | ✅ CDC | ❌ | 🔴 Absent |
-| SEO / Google Ads | ✅ CDC | ❌ | 🔴 Hors périmètre app |
-| Boîte de réception unifiée (WhatsApp, SMS, FB, Google) | ✅ CDC | ❌ | 🔴 Absent |
-| Fidélisation clients | ✅ CDC | ❌ | 🔴 Absent |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| Enregistrement rachat (30 champs) | ✅ | Migration 0011 |
+| Numérotation séquentielle `LP-AAAA-XXXXX` | ✅ | `nextNumero('rachat')` |
+| Conformité art. 321-7 Code pénal | ✅ | Validations obligatoires |
+| Doublon IMEI détecté | ✅ | Check avant insertion |
+| Statuts (en_stock / vendu / reconditionne) | ✅ | `PATCH /rachats/:id/statut` |
+| Export CSV livre de police | ✅ | `apiBlobGet()` |
+| KPIs (total, stock, vendu, valeur) | ✅ | `/api/rachats/kpis` |
+| Liaison vers reconditionnement | ❌ | MOD-05 absent |
 
-**Score : 0/6 ✅ | 0/6 ⚠️ | 6/6 ❌**
-
----
-
-### 2.12 Sécurité & Conformité
-
-| Fonctionnalité | **CDC** | **Webapp** | **Écart** |
-|----------------|---------|------------|-----------|
-| HTTPS | ✅ | ✅ Cloudflare natif | ✅ |
-| Chiffrement bcrypt (mots de passe) | ✅ | ❌ (démo) | 🔴 Absent |
-| Protection XSS / SQL Injection | ✅ Helmet.js | ⚠️ Cloudflare WAF (partiel) | ⚠️ |
-| Rate Limiting | ✅ | ⚠️ Cloudflare natif | ⚠️ Partiel |
-| RGPD | ✅ CDC | ⚠️ Mentions légales présentes | ⚠️ Partiel |
-| NF525 (conformité caisse) | ✅ SHA-256 | ❌ | 🔴 **CRITIQUE** — légal |
-| Sauvegardes automatiques PostgreSQL | ✅ | ❌ (D1 géré Cloudflare) | ⚠️ Différent |
-| CORS restreint | ✅ | ⚠️ CORS `*` en dev | ⚠️ À durcir |
-
-**Score : 2/8 ✅ | 4/8 ⚠️ | 2/8 ❌**
+**Score : 7✅ / 0⚠️ / 1❌ — Couverture ~88%**
 
 ---
 
-## 3. Récapitulatif Global — Tableau de Synthèse
+### MOD-07 — Clients (CRM) ⚠️ PARTIEL
+**Priorité CDC : HAUTE**
 
-| Module | Fonctionnalités CDC | ✅ Implémenté | ⚠️ Partiel | ❌ Absent | % Coverage |
-|--------|---------------------|--------------|-----------|----------|------------|
-| Authentification | 11 | 3 | 3 | 5 | **27%** |
-| Boutiques | 5 | 0 | 0 | 5 | **0%** |
-| Clients | 9 | 3 | 3 | 3 | **33%** |
-| Réparations/Tickets | 9 | 1 | 4 | 4 | **11%** |
-| Stocks | 9 | 2 | 4 | 3 | **22%** |
-| Facturation/Paiements | 9 | 0 | 3 | 6 | **0%** |
-| Tableau de bord | 7 | 0 | 4 | 3 | **0%** |
-| Personnel & Pointage | 7 | 0 | 0 | 7 | **0%** |
-| Qualirépar | 4 | 0 | 1 | 3 | **0%** |
-| Services communs | 9 | 0 | 0 | 9 | **0%** |
-| Marketing & CRM | 6 | 0 | 0 | 6 | **0%** |
-| Sécurité | 8 | 2 | 4 | 2 | **25%** |
-| **TOTAL** | **93** | **11** | **26** | **56** | **~12%** |
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| CRUD clients | ✅ | `routes/clients.ts` + D1 |
+| Recherche full-text (nom, société, tél, email) | ✅ | Filtres SQL |
+| Historique tickets par client | ⚠️ | JOIN cross-module (violation P1 backlog) |
+| Export CSV clients | ✅ | Présent |
+| Import CSV/Excel avec mapping | ❌ | Non implémenté — **différenciateur monatelier** |
+| Parrainage (code unique + filleuls) | ❌ | Champs `referral_code`, `referred_by` absents |
+| Historique consolidé (tickets+factures+devis+RDV+SAV) | ❌ | Vue unifiée absente |
+| Adresse structurée (JSONB) | ⚠️ | Champs texte simples |
+| Gestion appareils par client (IMEI, S/N) | ❌ | Non implémenté |
 
-> **Couverture actuelle** : ~12% des fonctionnalités CDC sont pleinement implémentées, ~28% partiellement, ~60% absentes.
+**Score : 3✅ / 2⚠️ / 4❌ — Couverture ~40%**
 
 ---
 
-## 4. Gap Analysis Détaillé — Priorisé
+### MOD-08 — Agenda / Rendez-vous ❌ NON DÉMARRÉ
+**Priorité CDC : MOYENNE**
 
-### 🔴 PRIORITÉ CRITIQUE (P0) — Bloquants légaux et fonctionnels
+| Fonctionnalité CDC | Statut |
+|---|---|
+| CRUD rendez-vous | ❌ |
+| Vues jour/semaine/mois | ❌ |
+| Statuts (PENDING/SCHEDULED/DONE/NO_SHOW/CANCELLED/CONVERTED) | ❌ |
+| Filtres par technicien | ❌ |
+| Conversion RDV → ticket | ❌ |
+| Export iCal/webcal | ❌ |
+| Prise de RDV en ligne (page publique) | ❌ |
 
-| # | Gap | Impact | Effort | Notes |
-|---|-----|--------|--------|-------|
-| G01 | **Conformité NF525** (chaîne SHA-256 factures) | Légal obligatoire | Moyen | Requis pour exploiter un logiciel de caisse en France |
-| G02 | **Persistance des données** (D1 / PostgreSQL) | Fonctionnel bloquant | Élevé | Toutes les pages utilisent des données mockées |
-| G03 | **JWT réel** + refresh tokens | Sécurité critique | Moyen | Actuellement `demo_${Date.now()}` — non sécurisé |
-| G04 | **RBAC** rôles et permissions | Sécurité critique | Moyen | Aucun contrôle d'accès en place |
-
----
-
-### 🟠 PRIORITÉ HAUTE (P1) — Fonctionnalités cœur métier
-
-| # | Gap | Module concerné | Effort |
-|---|-----|-----------------|--------|
-| G05 | Persistance clients en D1 | Clients | Moyen |
-| G06 | Persistance tickets/réparations en D1 | Tickets | Moyen |
-| G07 | Persistance stocks en D1 | Stock | Moyen |
-| G08 | Persistance factures + devis en D1 | Facturation | Moyen |
-| G09 | Calcul HT/TVA/TTC côté API | Facturation | Faible |
-| G10 | Gestion des appareils (IMEI, S/N) par client | Clients | Faible |
-| G11 | Module Boutiques (CRUD + settings) | Boutiques | Moyen |
-| G12 | Upload photos réparation (Cloudflare R2) | Tickets | Élevé |
-| G13 | Notifications email (Resend/SendGrid) | Transversal | Moyen |
+**Score : 0/7 — Couverture 0%** — Sprint 2.6 planifié
 
 ---
 
-### 🟡 PRIORITÉ MOYENNE (P2) — Fonctionnalités différenciantes
+### MOD-09 — SAV et Garanties ❌ ABSENT
+**Priorité CDC : MOYENNE**
 
-| # | Gap | Module concerné | Effort |
-|---|-----|-----------------|--------|
-| G14 | Module Personnel & Pointage | Personnel | Élevé |
-| G15 | API Qualirépar (déclaration bonus) | Qualirépar | Moyen |
-| G16 | OAuth2 Google | Auth | Moyen |
-| G17 | SMS notifications (Twilio) | Transversal | Moyen |
-| G18 | Import catalogues fournisseurs | Stock | Élevé |
-| G19 | Reporting par boutique/technicien | Dashboard | Moyen |
-| G20 | Export PDF factures | Facturation | Moyen |
-| G21 | Multi-boutiques (filtre par boutique) | Transversal | Élevé |
-| G22 | Calcul commissions/primes techniciens | Personnel | Moyen |
+| Fonctionnalité CDC | Statut |
+|---|---|
+| Garanties actives depuis factures | ❌ |
+| Alerte garanties expirant < 30j / < 7j | ❌ |
+| Tickets SAV (workflow identique MOD-01) | ❌ |
+| Retours client (échange/avoir/refus) | ❌ |
+| RMA fournisseurs | ❌ |
 
----
-
-### 🟢 PRIORITÉ BASSE (P3) — Backlog futur
-
-| # | Gap | Notes |
-|---|-----|-------|
-| G23 | WhatsApp Business intégration | API Meta — coûteux |
-| G24 | Chatbot IA prise de RDV | Feature avancée |
-| G25 | Réponses avis IA (ChatGPT) | Intégration OpenAI |
-| G26 | Campagnes marketing Email/SMS | Module CRM dédié |
-| G27 | Application mobile (React Native) | Développement natif |
-| G28 | Mode hors-ligne PWA | Service Worker |
-| G29 | Scanner codes-barres (navigateur) | API BarcodeDetector |
-| G30 | Signature numérique tablette | Canvas + signature pad |
+**Score : 0/5 — Couverture 0%**  
+**Note :** Visible et complet chez monatelier.net. À planifier.
 
 ---
 
-## 5. Analyse des Divergences Architecturales
+### MOD-10 — Achats / Approvisionnement ❌ NON DÉMARRÉ
+**Priorité CDC : HAUTE**
 
-### 5.1 Architecture CDC vs Implémentation
+| Fonctionnalité CDC | Statut |
+|---|---|
+| CRUD fournisseurs | ❌ |
+| Bons de commande (draft/awaiting_delivery/received/cancelled) | ❌ |
+| Vue "À commander" (besoins détectés) | ❌ |
+| Réception commande → MAJ stock + CUMP | ❌ |
+| Notification ticket "pièces reçues" | ❌ |
+| États paiement fournisseur (pending/partial/paid) | ❌ |
 
-| Aspect | CDC (documents) | Webapp Cloudflare |
-|--------|-----------------|-------------------|
-| **Paradigme** | Microservices + BFF PHP | Monolithique edge (Workers) |
-| **Base de données** | PostgreSQL par service | D1 SQLite unique |
-| **Session** | PHP sessions serveur | JWT localStorage côté client |
-| **Rendu** | PHP server-side | HTML statique + JS client-side |
-| **Déploiement** | VPS / Docker | Cloudflare Pages/Workers |
-| **Cache** | Redis | Cloudflare KV |
-| **Fichiers** | MinIO/S3 | Cloudflare R2 |
-
-**Conclusion** : Les deux architectures sont fondamentalement différentes mais compatibles en termes de fonctionnalités. La webapp Cloudflare est une **réinterprétation edge-native** du CDC, avec les adaptations suivantes nécessaires :
-
-- `PostgreSQL` → `Cloudflare D1` (SQLite) ✅ Compatible
-- `Redis` → `Cloudflare KV` ✅ Compatible  
-- `MinIO/S3` → `Cloudflare R2` ✅ Compatible
-- `PHP sessions` → `JWT Worker` ✅ Compatible (plus sécurisé)
-- `Microservices` → `Routes Hono` ⚠️ Simplifié mais fonctionnel pour MVP
-
-### 5.2 Avantages de l'Architecture Cloudflare
-
-| Avantage | Détail |
-|----------|--------|
-| **Coût** | Gratuit jusqu'à 100k req/jour vs VPS dédié |
-| **Performance** | Edge mondial, latence < 50ms |
-| **Scalabilité** | Automatique, pas de config DevOps |
-| **Sécurité** | DDoS, WAF, SSL inclus |
-| **Simplicité ops** | Pas de Docker, PM2, serveurs à gérer |
-
-### 5.3 Limitations vs CDC
-
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| Pas de WebSockets natifs | Notifications temps réel impossibles | Cloudflare Durable Objects |
-| CPU 10ms/requête | Calculs lourds limités | Découper les opérations |
-| Pas de PHP | Réécriture complète BFF | Déjà fait en JS |
-| SQLite D1 (no stored procs) | Logique SQL limitée | Logique métier dans Workers |
+**Score : 0/6 — Couverture 0%** — Sprint 2.5 planifié
 
 ---
 
-## 6. Analyse des Actions Manuelles Restantes
+### MOD-11 — Avoirs et Bons d'achat ✅ COMPLET
+**Priorité CDC : BASSE**
 
-*Source : `ACTIONS_MANUELLES.md`*
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| Avoirs de remboursement (annulation facture) | ✅ | Sprint 2.1 |
+| Numérotation séquentielle AV-AAAA-XXXXX | ✅ | `nextNumero('avoir')` |
+| Chaîne NF525 sur avoirs | ✅ | `enregistrerTransaction()` |
+| Bons d'achat (geste commercial) | ❌ | Non implémenté |
+| Expiration bons d'achat | ❌ | Non implémenté |
 
-Les actions manuelles du CDC PHP/Node.js doivent être **réinterprétées** pour l'environnement Cloudflare :
-
-| Action CDC | Équivalent Cloudflare | Statut |
-|------------|-----------------------|--------|
-| JWT_SECRET dans .env | `wrangler secret put JWT_SECRET` | ❌ À faire |
-| OAuth2 Google credentials | `wrangler secret put GOOGLE_CLIENT_ID` | ❌ À faire |
-| OAuth2 Facebook credentials | `wrangler secret put FACEBOOK_APP_ID` | ❌ À faire |
-| SMTP credentials | `wrangler secret put SMTP_HOST/USER/PASS` | ❌ À faire |
-| Twilio credentials | `wrangler secret put TWILIO_*` | ❌ À faire |
-| Stripe credentials | `wrangler secret put STRIPE_SECRET_KEY` | ❌ À faire |
-| PostgreSQL init (init-db.sh) | Migrations D1 (SQL files) | ❌ À créer |
-| Docker compose up | Rien (Cloudflare gère tout) | ✅ N/A |
-| PM2 ecosystem config | Rien (Workers serverless) | ✅ N/A |
-| Router PHP session validation | Middleware Hono JWT | ❌ À implémenter |
+**Score : 3✅ / 0⚠️ / 2❌ — Couverture ~60%**
 
 ---
 
-## 7. Plan de Développement Recommandé
+### MOD-12 — Communication et Automatisations ❌ ABSENT
+**Priorité CDC : HAUTE**
 
-### Sprint 1 — Fondations (2 semaines)
-> Objectif : Rendre les données persistantes et l'auth réelle
+| Fonctionnalité CDC | Statut |
+|---|---|
+| Email transactionnel (SMTP/provider) | ❌ |
+| SMS Gateway | ❌ |
+| Templates avec variables dynamiques | ❌ |
+| Automatisations (changement statut, anniversaire, tréso...) | ❌ |
+| Notifications réception/pièces/prêt | ❌ |
 
-1. **[G02]** Créer les migrations D1 (tables : users, boutiques, clients, appareils, tickets, produits, stocks, factures, devis)
-2. **[G03]** Implémenter JWT réel avec `hono/jwt` + refresh tokens dans KV
-3. **[G04]** Middleware RBAC (rôles : admin, manager, technicien)
-4. **[G05-G08]** Connecter tous les endpoints API aux tables D1
-5. **[G01]** Implémenter la chaîne NF525 (SHA-256 sur factures)
-
-### Sprint 2 — Fonctionnalités Cœur (3 semaines)
-> Objectif : Modules complets opérationnels
-
-1. **[G11]** Module Boutiques complet (CRUD + settings TVA/SIRET)
-2. **[G10]** Gestion appareils avec IMEI/S/N
-3. **[G12]** Upload photos R2 (tickets réparation)
-4. **[G13]** Service email (Resend API)
-5. **[G09]** Calcul HT/TVA/TTC automatique
-6. **[G20]** Export PDF factures (html-to-pdf côté client)
-
-### Sprint 3 — Intégrations (2 semaines)
-> Objectif : Connecter les services tiers
-
-1. **[G15]** API Qualirépar (déclarations bonus)
-2. **[G16]** OAuth2 Google (Cloudflare OAuth flow)
-3. **[G17]** SMS via Twilio (notifications)
-4. **[G19]** Reporting avancé (graphiques par boutique/tech)
-5. **[G22]** Calcul commissions simples
-
-### Sprint 4 — Personnel & Avancé (3 semaines)
-> Objectif : Module RH + multi-boutiques
-
-1. **[G14]** Module Personnel (profils, pointage, machine à états)
-2. **[G21]** Multi-boutiques (sélecteur global, filtrage données)
-3. **[G18]** Import catalogues fournisseurs (CSV/XML)
-4. Hardening sécurité (CORS restreint, rate limiting API)
+**Score : 0/5 — Couverture 0%**  
+**Note :** Très développé chez monatelier.net (5 automatisations configurées).
 
 ---
 
-## 8. État des Pages HTML Actuelles vs CDC
+### MOD-13 — Caisse POS ❌ NON DÉMARRÉ
+**Priorité CDC : MOYENNE**
 
-| Page HTML | Présente | JS Associé | API Backend | Persistance | CDC couvert |
-|-----------|----------|------------|-------------|-------------|-------------|
-| `index.html` (landing) | ✅ | `home.js` | ❌ | N/A | Vitrine |
-| `login.html` | ✅ | `app.js` | ✅ `/api/login` | ❌ démo | Auth partiel |
-| `register.html` | ✅ | `register.js` | ✅ `/api/register` | ❌ démo | Auth partiel |
-| `verify-email.html` | ✅ | `app.js` | ✅ `/api/verify-otp` | ❌ démo | Auth partiel |
-| `dashboard.html` | ✅ | `dashboard.js` | ❌ | ❌ mock | Dashboard |
-| `clients.html` | ✅ | `clients.js` | ❌ | ❌ mock | Clients |
-| `tickets.html` | ✅ | `tickets.js` | ❌ | ❌ mock | Réparations |
-| `stock.html` | ✅ | `stock.js` | ❌ | ❌ mock | Stocks |
-| `devis.html` | ✅ | `devis.js` | ❌ | ❌ mock | Devis |
-| `factures.html` | ✅ | `factures.js` | ❌ | ❌ mock | Facturation |
-| `qualirepar.html` | ✅ | `qualirepar.js` | ❌ | ❌ mock | Qualirépar |
-| `settings.html` | ✅ | — | ❌ | ❌ | Boutiques |
-| `modules.html` | ✅ | — | ❌ | N/A | Info |
-| `legal.html` | ✅ | — | ❌ | N/A | RGPD |
-| **Personnel** | ❌ **MANQUANT** | ❌ | ❌ | ❌ | Personnel |
-| **Boutiques CRUD** | ❌ **MANQUANT** | ❌ | ❌ | ❌ | Boutiques |
+| Fonctionnalité CDC | Statut |
+|---|---|
+| Interface POS tactile | ❌ |
+| Journal de caisse NF525 | ❌ |
+| Impression QZ Tray (thermique 80mm) | ❌ |
+| Multi-modes paiement avec PIN | ❌ |
+
+**Score : 0/4 — Couverture 0%** — Sprint 2.8 planifié
 
 ---
 
-## 9. Principes Architecturaux — Conformité
+### MOD-14 — Vitrine publique ❌ NON DÉMARRÉ
+**Priorité CDC : MOYENNE**
 
-*Source : `ARCHITECTURAL_PRINCIPLES.md`*
+| Fonctionnalité CDC | Statut |
+|---|---|
+| Page `/pro/:slug` (vitrine atelier) | ❌ |
+| Catalogue public des services | ❌ |
+| Prise de RDV en ligne | ❌ |
+| Dépôt à distance | ❌ |
+| Demande de devis avec photos | ❌ |
 
-| Principe | CDC | Webapp actuelle | Conforme ? |
-|----------|-----|-----------------|------------|
-| Modularité — modules indépendants | ✅ Microservices | ✅ Routes Hono séparées | ✅ |
-| Communication exclusive via APIs | ✅ | ✅ | ✅ |
-| Frontend découplé du backend | ✅ PHP BFF | ✅ HTML + API Workers | ✅ |
-| PHP pour le rendu | ✅ Obligatoire (doc) | ❌ Remplacé par HTML/JS | ⚠️ **Divergence intentionnelle** |
-| MVC | ✅ | ⚠️ Non formalisé | ⚠️ |
-| Documentation code obligatoire | ✅ | ⚠️ Partielle | ⚠️ |
-| Toutes opérations CRUD via API | ✅ | ⚠️ Prévu mais non connecté | ⚠️ |
-
-> **Note importante** : La divergence PHP → HTML/JS est **intentionnelle** et justifiée par le déploiement Cloudflare Pages (impossibilité d'exécuter PHP). L'esprit du principe (découplage BFF) est respecté.
+**Score : 0/5 — Couverture 0%** — Sprint 2.7 planifié
 
 ---
 
-## 10. Conclusions et Recommandations
+### MOD-15 — Catalogue de services ✅ COMPLET (Sprint 2.4)
+**Priorité CDC : HAUTE (implicite)**
 
-### Ce qui est bien fait ✅
-1. **Toutes les pages HTML existent** — l'UI couvre ~90% des écrans nécessaires
-2. **Architecture edge-native** — meilleure performance et coût vs VPS
-3. **Qualirépar présent** — page dédiée avec UI fonctionnelle
-4. **Export CSV** — clients et stocks déjà exportables
-5. **Responsive design** — Tailwind CSS, adapté mobile
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| Catégories hiérarchiques (parent/enfant) | ✅ | `categories_services` + `parent_id` |
+| CRUD services (nom, prix HT, TVA, durée, garantie, ref) | ✅ | `routes/services.ts` Controller pur |
+| Calcul prix TTC automatique | ✅ | Côté API |
+| Catalogue arbre (`getCatalogueArbre`) | ✅ | `servicesService.ts` |
+| Color picker catégories | ✅ | 10 couleurs prédéfinies |
+| Référence interne service | ✅ | Champ `reference` |
+| **Liaison service → modèle appareil** | ❌ | Non implémenté (arbre Domaine>Marque>Modèle CDC) |
+| Prix de revient (coût interne) | ❌ | Absent — calcul marge impossible |
 
-### Blocages critiques à résoudre 🔴
-1. **Aucune persistance des données** — tout est simulé (mockées)
-2. **JWT non sécurisé** — `demo_timestamp` non chiffré
-3. **NF525 absent** — blocage légal pour utilisation en production
-4. **RBAC absent** — n'importe qui peut accéder à n'importe quoi
+**Score : 6✅ / 0⚠️ / 2❌ — Couverture ~75%**
 
-### Features CDC non présentes dans la webapp 🟠
-1. Module **Personnel & Pointage** (page + API)
-2. Module **Boutiques CRUD** (settings.html existe mais incomplet)
-3. **Upload de photos** (réparations avant/après)
-4. **Notifications** (email/SMS)
-5. **Intégration fournisseurs** (Mobilax, Utopya, Phone LCD)
-
-### Recommandation de priorité
-> **Commencer par le Sprint 1 : Migrations D1 + JWT réel + RBAC**  
-> Sans persistance des données, l'application est un prototype non utilisable en production.  
-> La conformité NF525 doit être traitée en parallèle dès le Sprint 1 car c'est une obligation légale française.
+**Note :** Le CDC prévoit une hiérarchie `Domaine > Marque > Modèle > Service`. L'implémentation actuelle fait `Catégorie > Sous-catégorie > Service` — plus simple mais fonctionnel.
 
 ---
 
-*Document généré le 1er juin 2026 — À mettre à jour après chaque sprint*
+### MOD-16 — Réseau et Multi-sites ❌ NON PRÉVU
+**Priorité CDC : MOYENNE**
+
+Non planifié dans les sprints actuels. Dépend de l'existence d'une base clients suffisante.
+
+---
+
+### MOD-17 — Rapports et Exports ⚠️ PARTIEL
+**Priorité CDC : HAUTE**
+
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| Export CSV rachats/factures/stock | ✅ | `apiBlobGet()` présent |
+| KPIs dashboard (CA, tickets, stock) | ⚠️ | `/api/stats` inline dans `index.tsx` — violation backlog |
+| Rapport activité par technicien | ❌ | Non implémenté |
+| Rapport caisse quotidien | ❌ | Dépend MOD-13 |
+| Export Excel / PDF | ❌ | Sprint 2.10 |
+| Filtres (période, type, statut) | ⚠️ | Partiels |
+
+**Score : 1✅ / 3⚠️ / 3❌ — Couverture ~25%**
+
+---
+
+### MOD-18 — Gestion d'équipe ⚠️ PARTIEL
+**Priorité CDC : MOYENNE**
+
+| Fonctionnalité CDC | Statut | Détail |
+|---|---|---|
+| CRUD utilisateurs | ✅ | `routes/users.ts` |
+| Rôles (owner/admin/manager/technicien) | ✅ | Colonne `role` + `requireRole()` |
+| PIN switch rapide (PBKDF2) | ✅ | Sprint 2.3 complet |
+| Sessions KV TTL 15min | ✅ | `pin_session:{userId}` |
+| Permissions granulaires | ✅ | Table `permissions` + `hasPermission()` |
+| Stats utilisateur (JSONB) | ❌ | Non implémenté |
+| OAuth2 Google | ❌ | Non implémenté |
+| Pointage (absent/en poste/pause/terminé) | ❌ | Non prévu |
+
+**Score : 5✅ / 0⚠️ / 3❌ — Couverture ~62%**
+
+---
+
+## 2. Synthèse Globale — Tableau de Couverture
+
+| Module CDC | Priorité | Couverture | Statut |
+|---|---|---|---|
+| MOD-01 Tickets | CRITIQUE | ~45% | ⚠️ Statuts incomplets |
+| MOD-02 Facturation | CRITIQUE | ~67% | ✅ Fonctionnel |
+| MOD-03 Devis | HAUTE | ~25% | ⚠️ Flux incomplet |
+| MOD-04 Stock + CUMP | CRITIQUE | ~45% | ⚠️ CUMP manquant |
+| MOD-05 Reconditionnement | MOYENNE | 0% | ❌ Absent |
+| MOD-06 Rachats | HAUTE | ~88% | ✅ Quasi-complet |
+| MOD-07 CRM Clients | HAUTE | ~40% | ⚠️ Partiel |
+| MOD-08 Agenda/RDV | MOYENNE | 0% | ❌ Sprint 2.6 |
+| MOD-09 SAV/Garanties | MOYENNE | 0% | ❌ Non planifié |
+| MOD-10 Achats/Approv. | HAUTE | 0% | ❌ Sprint 2.5 |
+| MOD-11 Avoirs | BASSE | ~60% | ✅ Bon avancement |
+| MOD-12 Communication | HAUTE | 0% | ❌ Non planifié |
+| MOD-13 Caisse POS | MOYENNE | 0% | ❌ Sprint 2.8 |
+| MOD-14 Vitrine publique | MOYENNE | 0% | ❌ Sprint 2.7 |
+| MOD-15 Catalogue services | HAUTE | ~75% | ✅ Sprint 2.4 |
+| MOD-16 Réseau multi-sites | MOYENNE | 0% | ❌ Non planifié |
+| MOD-17 Rapports/Exports | HAUTE | ~25% | ⚠️ Partiel |
+| MOD-18 Gestion équipe | MOYENNE | ~62% | ✅ Bon avancement |
+
+**Couverture globale estimée : ~35%** (vs ~12% avant sprint 2.1)
+
+---
+
+## 3. Différenciateurs monatelier.net vs iziGSM actuel
+
+| Fonctionnalité monatelier | iziGSM | Priorité pour rattraper |
+|---|---|---|
+| Google OAuth (Sign in with Google) | ❌ | HAUTE — friction login réduite |
+| Essai gratuit 14 jours sans CB | ❌ | HAUTE — conversion SaaS |
+| PWA installable (banner native) | ❌ | Sprint 2.11 planifié |
+| Kanban drag & drop (8 colonnes) | ❌ | HAUTE — UX opérationnelle |
+| Numérotation configurable par tenant | ❌ | HAUTE — onboarding / migration |
+| Types d'appareils configurables par tenant | ❌ | HAUTE — personnalisation |
+| Vue "À commander" dédiée | ❌ | HAUTE — flux opérationnel quotidien |
+| Import CSV clients | ❌ | HAUTE — migration depuis autre logiciel |
+| Parrainage client (code + filleuls) | ❌ | MOYENNE |
+| Notifications automatisées (5 types) | ❌ | HAUTE — rétention client |
+| eIDAS signature devis | ❌ | HAUTE — conformité |
+| SAV & Garanties complet | ❌ | HAUTE — suivi post-vente |
+| Avoirs & Bons d'achat | ⚠️ Avoir ✅, bon d'achat ❌ | MOYENNE |
+| Onboarding guidé (numérotation + types dès dashboard) | ❌ | HAUTE — activation utilisateur |
+| Multi-boutiques (PDV) | ❌ | MOYENNE |
+
+---
+
+## 4. Gaps Critiques à Résoudre (P0 / P1)
+
+### 🔴 P0 — Bloquants fonctionnels majeurs
+
+| # | Gap | Module | Sprint cible |
+|---|---|---|---|
+| G01 | 3 statuts ticket manquants (`TO_ORDER`, `ORDERED`, `PARTS_RECEIVED`) | MOD-01 | **2.5** (lié commandes) |
+| G02 | CUMP non calculé à réception commande | MOD-04 | **2.5** |
+| G03 | Fournisseurs + Bons de commande absents | MOD-10 | **2.5** |
+| G04 | Page suivi client public (`/suivi/:token`) | MOD-01/14 | **2.7** |
+
+### 🟠 P1 — Fonctionnalités cœur manquantes
+
+| # | Gap | Module | Sprint cible |
+|---|---|---|---|
+| G05 | Numérotation configurable par tenant (préfixe, séparateur, date) | MOD-02 | **nouveau sprint** |
+| G06 | Types d'appareils configurables par tenant | MOD-01/18 | **nouveau sprint** |
+| G07 | Kanban tickets avec drag & drop | MOD-01 | **nouveau sprint** |
+| G08 | Notifications automatisées email/SMS | MOD-12 | **futur** |
+| G09 | Import CSV clients | MOD-07 | **2.12** |
+| G10 | eIDAS signature devis (page publique) | MOD-03 | **futur** |
+| G11 | SAV & Garanties | MOD-09 | **nouveau sprint** |
+| G12 | Vue "À commander" (besoins pièces depuis tickets) | MOD-10 | **2.5** |
+
+---
+
+## 5. Proposition de Réordonnancement des Sprints
+
+### Justification
+
+Le plan actuel 2.5→2.12 doit être réajusté selon :
+1. **Priorités CDC** : CRITIQUE > HAUTE > MOYENNE
+2. **Dépendances** : MOD-10 (fournisseurs) débloque CUMP (MOD-04) qui débloque marges (MOD-17)
+3. **Différenciateurs monatelier** : Kanban, numérotation config, SAV
+4. **Flux métier complet** : Ticket → Commande pièces → Réparation → Facture = chaîne critique
+
+### Plan révisé
+
+| Sprint | Contenu | Modules CDC | Priorité |
+|---|---|---|---|
+| **2.5** ✅ planifié | Fournisseurs + Bons commande + CUMP | MOD-10 + MOD-04 | CRITIQUE/HAUTE |
+| **2.6** ✅ planifié | Agenda / RDV + iCal | MOD-08 | MOYENNE |
+| **2.7** ✅ planifié | Vitrine publique + Tracking token | MOD-14 + MOD-01 | MOYENNE |
+| **2.8** 🔄 **modifier** | ~~Caisse POS~~ → **Statuts tickets complets + Kanban** | MOD-01 | **CRITIQUE** |
+| **2.9** 🔄 **modifier** | ~~Flux métier~~ → **Numérotation configurable + Settings tenant** | MOD-02/18 | **HAUTE** |
+| **2.10** 🔄 **modifier** | ~~PDF+Stats~~ → **SAV & Garanties** | MOD-09 | **HAUTE** |
+| **2.11** 🔄 **modifier** | ~~PWA~~ → **Notifications email (Resend) + Automatisations** | MOD-12 | **HAUTE** |
+| **2.12** 🆕 | Caisse POS + Journal NF525 | MOD-13 | MOYENNE |
+| **2.13** 🆕 | Export PDF + Dashboard graphiques réels | MOD-17 | HAUTE |
+| **2.14** 🆕 | PWA manifest + Service Worker | — | MOYENNE |
+| **2.15** 🆕 | CRM étendu (parrainage, import CSV, historique consolidé) | MOD-07 | HAUTE |
+| **2.16** 🆕 | Reconditionnement + Bons d'achat | MOD-05/11 | MOYENNE |
+
+### Raisonnement des changements clés
+
+**Pourquoi avancer Kanban (Sprint 2.8) avant Caisse POS :**
+- Kanban = différenciateur majeur vs monatelier.net
+- Statuts `TO_ORDER`/`ORDERED`/`PARTS_RECEIVED` = prérequis du flux commandes (MOD-10 Sprint 2.5)
+- Sans kanban complet, le flux ticket→commande→réparation n'est pas visualisable
+
+**Pourquoi avancer Numérotation configurable (Sprint 2.9) :**
+- Onboarding : c'est la **première chose** que configure un atelier (vu chez monatelier)
+- Bloque l'adoption par des ateliers migrant depuis un autre logiciel (numéros existants)
+
+**Pourquoi avancer SAV/Garanties (Sprint 2.10) :**
+- MOD-09 priorité MOYENNE mais très visible chez monatelier
+- Dépend de factures ✅ et tickets ✅ — tout est en place
+- Rétention client : suivi garanties = fidélisation
+
+**Pourquoi déplacer Caisse POS à 2.12 :**
+- Priorité CDC MOYENNE
+- Dépend de notifications (MOD-12) pour les tickets de caisse
+- QZ Tray complexité technique non bloquante pour le MVP
+
+---
+
+## 6. Conformité Réglementaire — État
+
+| Réglementation | Exigence | Statut |
+|---|---|---|
+| CGI art. 289 | Verrouillage post-émission (`locked=1`) | ✅ Sprint 2.1 |
+| NF525 | Chaîne SHA-256 factures/avoirs | ✅ Sprint 2.1 |
+| Code pénal art. 321-7 | Livre de police rachats | ✅ Sprint 2.2 |
+| PBKDF2 / Hachage PIN | Format `100000:salt:hash` | ✅ Sprint 2.3 |
+| RGPD | Hébergement UE (Cloudflare EU), mentions légales | ✅ partiel |
+| eIDAS | Signature électronique devis | ❌ Non implémenté |
+| NF525 Journal caisse | Chaîne SHA-256 sessions POS | ❌ Sprint 2.12 |
+
+---
+
+## 7. Architecture — Points de Divergence CDC vs Implémentation
+
+| Aspect | CDC (Manus) | iziGSM Cloudflare | Compatibilité |
+|---|---|---|---|
+| Stack | PHP BFF + PostgreSQL + Redis | Hono TS + D1 + KV | ✅ Équivalent fonctionnel |
+| Auth sessions | PHP sessions serveur | JWT + KV TTL | ✅ Plus sécurisé |
+| Base de données | PostgreSQL 15+ | Cloudflare D1 (SQLite) | ✅ Adapté |
+| Stockage fichiers | S3/MinIO | Cloudflare R2 | ✅ Équivalent |
+| Scalabilité | Load Balancer + replicas | Edge mondial CF | ✅ Supérieur |
+| WebSockets (notifs temps réel) | WebSocket server | Non disponible CF | ⚠️ Durable Objects si besoin |
+| Worker email/SMS async | Queue + workers dédiés | Fetch direct depuis Workers | ⚠️ Synchrone — OK pour MVP |
+| OAuth Google | oauth-service.js | Non implémenté | ❌ À prévoir |
+
+---
+
+*Document mis à jour — 4 juin 2026 — Sprint 2.4 ✅*  
+*Remplace la version du 1er juin 2026 (pré-sprints 2.1-2.4)*

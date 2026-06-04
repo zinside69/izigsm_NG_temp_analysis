@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.4 ✅
+> Dernière mise à jour : Analyse CDC + Réordonnancement sprints — 4 juin 2026
 
 ---
 
@@ -57,62 +57,127 @@
 
 ## Sprints à venir
 
-### Sprint 2.5 🔜 — Fournisseurs + Bons de commande + CUMP
+> ⚠️ **Plan révisé le 4 juin 2026** suite à l'analyse comparative CDC Manus vs monatelier.net.  
+> L'ordre a été ajusté selon : Priorités CDC (CRITIQUE > HAUTE > MOYENNE) + dépendances techniques + différenciateurs concurrentiels.  
+> Voir `docs/ANALYSE_COMPARATIVE_CDC.md` pour le détail.
+
+---
+
+### Sprint 2.5 🔜 — Fournisseurs + Bons de commande + CUMP *(inchangé)*
+**Modules CDC : MOD-10 (HAUTE) + MOD-04 CUMP (CRITIQUE)**
 - [ ] Migration 0014 : table `fournisseurs` + `bons_commande` + `lignes_bon_commande`
 - [ ] `src/services/fournisseursService.ts` (Model)
 - [ ] `src/lib/validators.ts` : `validateFournisseur()`, `validateBonCommande()`
 - [ ] `src/routes/fournisseurs.ts` (Controller pur)
-- [ ] CUMP : calcul Coût Unitaire Moyen Pondéré à la réception
+- [ ] CUMP : calcul `(ancien_stock × ancien_cump + qté × prix) / total_qté` à la réception
+- [ ] Vue "À commander" : besoins pièces depuis tickets (statuts `TO_ORDER`)
 - [ ] `public/fournisseurs.html` + `public/static/js/fournisseurs.js`
-- [ ] Liaison bons de commande → mouvements stock à la réception
+- [ ] Liaison réception → `mouvements_stock` + MAJ CUMP + notification ticket "pièces reçues"
 
-### Sprint 2.6 🔜 — Agenda / RDV + iCal
+### Sprint 2.6 🔜 — Agenda / RDV + iCal *(inchangé)*
+**Modules CDC : MOD-08 (MOYENNE)**
 - [ ] Migration 0015 : table `rendez_vous`
 - [ ] `src/services/agendaService.ts` (Model)
 - [ ] `src/routes/agenda.ts` (Controller pur)
+- [ ] Statuts : PENDING/SCHEDULED/DONE/NO_SHOW/CANCELLED/CONVERTED
 - [ ] Liaison RDV → ticket (durée depuis catalogue services Sprint 2.4)
-- [ ] Export iCal `.ics`
-- [ ] `public/agenda.html` : vue semaine/mois
+- [ ] Export iCal `.ics` (`webcal://izigsm.fr/api/calendar/:tenant/:token.ics`)
+- [ ] `public/agenda.html` : vues jour/semaine/mois
 - [ ] `public/static/js/agenda.js`
 
-### Sprint 2.7 🔜 — Vitrine publique + Tracking token
-- [ ] Page publique `/suivi/:token` (sans auth)
-- [ ] `src/routes/public.ts` : endpoint public `GET /api/public/ticket/:token`
+### Sprint 2.7 🔜 — Vitrine publique + Tracking token *(inchangé)*
+**Modules CDC : MOD-14 (MOYENNE) + MOD-01 tracking**
+- [ ] Page publique `/suivi/:token` (sans auth) — `public/suivi.html`
+- [ ] `src/routes/public.ts` : `GET /api/public/ticket/:token`
 - [ ] QR code sur fiche ticket (tracking_token)
-- [ ] `public/suivi.html` : page status ticket client
+- [ ] Page vitrine `/pro/:slug` (placeholder)
+- [ ] `GET /api/public/catalogue/:slug` : catalogue services public
 
-### Sprint 2.8 🔜 — Caisse POS + Journal NF525
-- [ ] Migration 0016 : table `sessions_caisse` + `journal_caisse`
+### Sprint 2.8 🔜 — Statuts tickets complets + Kanban 🔄 **(RÉVISÉ — était Caisse POS)**
+**Module CDC : MOD-01 (CRITIQUE) — Différenciateur monatelier.net**
+- [ ] 3 statuts manquants : `TO_ORDER`, `ORDERED`, `PARTS_RECEIVED`
+- [ ] Migration 0016 : `ALTER TABLE tickets` + contrainte statuts
+- [ ] Liaison `TO_ORDER` → vue "À commander" (Sprint 2.5)
+- [ ] `GET /api/tickets/kanban` : données groupées par statut
+- [ ] `public/tickets.html` : vue Kanban (8 colonnes, drag & drop JS)
+- [ ] Indicateurs ancienneté : vert (<2j), orange (3–7j), rouge (>7j), alerte (>14j)
+- [ ] Noms de statuts configurables (table `config_tenant`)
+
+### Sprint 2.9 🔜 — Numérotation configurable + Settings tenant 🔄 **(RÉVISÉ — était Flux métier)**
+**Modules CDC : MOD-02 numérotation + MOD-18 settings — Différenciateur monatelier.net**
+- [ ] Migration 0017 : table `config_tenant` (préfixe, séparateur, format_date, nb_chiffres)
+- [ ] `src/services/configService.ts` (Model)
+- [ ] `src/routes/config.ts` (Controller pur)
+- [ ] `nextNumero()` dynamique : utilise `config_tenant` + aperçu temps réel
+- [ ] Types d'appareils configurables (JSONB dans config)
+- [ ] `public/settings.html` : onboarding numérotation + types appareils
+- [ ] Photos R2 sur tickets (upload + stockage)
+- [ ] `src/services/photosService.ts` (Model)
+
+### Sprint 2.10 🔜 — SAV & Garanties 🔄 **(RÉVISÉ — était Export PDF)**
+**Module CDC : MOD-09 (MOYENNE) — Très visible chez monatelier.net**
+- [ ] Migration 0018 : tables `garanties` + `tickets_sav` + `retours_client` + `rma_fournisseurs`
+- [ ] `src/services/savService.ts` (Model)
+- [ ] `src/routes/sav.ts` (Controller pur)
+- [ ] Garanties depuis factures (`garantie_jours` sprint 2.4 est sur services, à lier)
+- [ ] Alertes garanties expirant < 30j / < 7j
+- [ ] Tickets SAV = workflow identique MOD-01
+- [ ] Retours client : échange / avoir / refus
+- [ ] RMA fournisseurs : suivi colis
+- [ ] `public/sav.html` + `public/static/js/sav.js`
+
+### Sprint 2.11 🔜 — Notifications email + Automatisations 🔄 **(RÉVISÉ — était PWA)**
+**Module CDC : MOD-12 (HAUTE) — Différenciateur monatelier.net**
+- [ ] Intégration Resend API (`wrangler secret put RESEND_API_KEY`)
+- [ ] `src/services/notifService.ts` (Model)
+- [ ] Templates email : réception, pièces attendues, prêt à restituer, suivi lien
+- [ ] Automatisations : changement statut ticket → email client
+- [ ] Automatisation : facture émise → email client
+- [ ] Automatisation : anniversaire client (via cron externe ou ticket hebdo)
+- [ ] `public/communications.html` + gestion templates
+
+### Sprint 2.12 🔜 — Caisse POS + Journal NF525 🔄 **(DÉPLACÉ depuis 2.8)**
+**Module CDC : MOD-13 (MOYENNE)**
+- [ ] Migration 0019 : table `sessions_caisse` + `journal_caisse`
 - [ ] `src/services/caisseService.ts` (Model)
 - [ ] `src/routes/caisse.ts` (Controller pur)
-- [ ] Journal NF525 : chaîne SHA-256 continue
+- [ ] Journal NF525 : chaîne SHA-256 continue (même pattern que factures)
 - [ ] `requirePin` sur accès caisse (`acces_caisse`)
+- [ ] Multi-modes paiement (CB, espèces, chèque, virement)
 - [ ] `public/caisse.html` : interface POS tactile
+- [ ] QZ Tray (impression thermique) : optionnel, post-MVP
 
-### Sprint 2.9 🔜 — Flux métier complets + Photos R2
-- [ ] Liaison ticket → service catalogue (Sprint 2.4)
-- [ ] Upload photos R2 sur tickets
-- [ ] `src/services/photosService.ts` (Model)
-- [ ] Signature client sur ticket (canvas)
-
-### Sprint 2.10 🔜 — Export PDF + Dashboard graphiques
-- [ ] Export PDF factures/tickets (HTML → PDF côté client)
-- [ ] `src/routes/stats.ts` : déplacer `/api/stats` hors `index.tsx` (**violation backlog**)
+### Sprint 2.13 🔜 — Export PDF + Dashboard graphiques réels
+**Module CDC : MOD-17 (HAUTE)**
+- [ ] Export PDF factures/tickets (HTML → PDF côté client via `window.print()`)
+- [ ] `src/routes/stats.ts` : déplacer `/api/stats` hors `index.tsx` (**violation backlog 🟡**)
 - [ ] `src/services/statsService.ts` (Model)
-- [ ] Dashboard : Chart.js — CA mensuel, tickets par statut, stock bas
+- [ ] Dashboard : Chart.js — CA mensuel réel, tickets par statut, stock bas, marge
+- [ ] Rapport activité par technicien
+- [ ] Export Excel/CSV rapports avancés
 
-### Sprint 2.11 🔜 — PWA manifest + Service Worker
+### Sprint 2.14 🔜 — PWA manifest + Service Worker
 - [ ] `public/manifest.json`
-- [ ] `public/sw.js` : cache offline assets
+- [ ] `public/sw.js` : cache offline assets statiques
 - [ ] `<link rel="manifest">` dans tous les HTML
-- [ ] Install prompt
+- [ ] Install prompt (banner Android/iOS)
+- [ ] Icônes PWA (192x192, 512x512)
 
-### Sprint 2.12 🔜 — CRM étendu
-- [ ] Historique complet client (tickets + factures + rachats)
-- [ ] Fix `JOIN tickets` cross-module dans `routes/clients.ts` (**violation backlog**)
+### Sprint 2.15 🔜 — CRM étendu
+**Module CDC : MOD-07 (HAUTE)**
+- [ ] Historique consolidé client (tickets + factures + rachats + RDV + SAV)
+- [ ] Fix `JOIN tickets` cross-module dans `routes/clients.ts` (**violation backlog 🟡**)
 - [ ] `src/services/clientService.ts` (Model)
-- [ ] Campagnes SMS/email (via API tierce)
+- [ ] Import CSV clients avec mapping colonnes
+- [ ] Parrainage client (`referral_code`, `referred_by`)
 - [ ] Score fidélité client
+
+### Sprint 2.16 🔜 — Reconditionnement + Bons d'achat
+**Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
+- [ ] Migration : table `ordres_reconditionnement`
+- [ ] Lien rachat → ordre reconditionnement → stock occasion
+- [ ] Calcul coût de revient (pièces + MO)
+- [ ] Bons d'achat (geste commercial, expiration configurable)
 
 ---
 
@@ -120,11 +185,11 @@
 
 | Priorité | Fichier | Violation | Sprint cible |
 |---|---|---|---|
-| 🟡 | `src/index.tsx` | `/api/stats` SQL inline multi-module | Sprint 2.10 |
-| 🟡 | `routes/clients.ts` l.41 | `JOIN tickets` cross-module | Sprint 2.12 |
+| 🟡 | `src/index.tsx` | `/api/stats` SQL inline multi-module | Sprint 2.13 |
+| 🟡 | `routes/clients.ts` l.41 | `JOIN tickets` cross-module | Sprint 2.15 |
 | 🟢 | `routes/*.ts` (anciens) | Documentation fonctions insuffisante | Au fil des sprints |
-| 🟢 | `routes/tickets.ts` | Pas de couche `ticketService.ts` | Sprint 2.9 |
-| 🟢 | `routes/clients.ts` | Pas de couche `clientService.ts` | Sprint 2.12 |
+| 🟢 | `routes/tickets.ts` | Pas de couche `ticketService.ts` | Sprint 2.8 |
+| 🟢 | `routes/clients.ts` | Pas de couche `clientService.ts` | Sprint 2.15 |
 | 🟢 | `routes/stocks.ts` | Pas de couche `stockService.ts` | Sprint 2.9 |
 
 ---
@@ -139,3 +204,17 @@
 | Dernier commit | `eaee586` — Sprint 2.4 |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
+
+---
+
+## Couverture CDC par priorité (état Sprint 2.4)
+
+| Priorité CDC | Modules | Couverture moyenne |
+|---|---|---|
+| CRITIQUE (MOD-01, 02, 04) | Tickets ⚠️, Facturation ✅, Stock ⚠️ | ~52% |
+| HAUTE (MOD-03, 06, 07, 10, 12, 17) | Devis ⚠️, Rachats ✅, CRM ⚠️, Achats ❌, Notifs ❌, Rapports ⚠️ | ~38% |
+| HAUTE (MOD-15, 18) | Catalogue ✅, Équipe ✅ | ~68% |
+| MOYENNE (MOD-05, 08, 09, 13, 14, 16) | Tous ❌ | ~0% |
+| **Global** | **18 modules** | **~35%** |
+
+*Référence : `docs/ANALYSE_COMPARATIVE_CDC.md` pour le détail module par module.*
