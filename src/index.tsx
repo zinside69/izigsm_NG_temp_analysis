@@ -11,7 +11,8 @@ import personnelRoutes  from './routes/personnel'
 import boutiquesRoutes  from './routes/boutiques'
 import rachatsRoutes    from './routes/rachats'
 import usersRoutes      from './routes/users'
-import servicesRoutes   from './routes/services'
+import servicesRoutes      from './routes/services'
+import fournisseursRoutes  from './routes/fournisseurs'
 
 /**
  * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
@@ -58,8 +59,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.3.0',
-    sprint:    '2.3 — PIN PBKDF2 + sessions KV + permissions granulaires',
+    version:   '2.5.0',
+    sprint:    '2.5 — Fournisseurs + Bons de commande + CUMP',
     timestamp: new Date().toISOString(),
   })
 })
@@ -69,7 +70,8 @@ app.get('/api/health', (c) => {
 // doivent venir APRÈS les routes à segments fixes (avoirs, factures, devis…)
 app.route('/api/auth',       authRoutes)
 app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*
-app.route('/api',            rachatsRoutes)     // /api/rachats/*
+app.route('/api',            rachatsRoutes)        // /api/rachats/*
+app.route('/api',            fournisseursRoutes)   // /api/fournisseurs/* + /api/bons-commande/*
 app.route('/api',            usersRoutes)       // /api/users/* (PIN + permissions)
 app.route('/api',            servicesRoutes)    // /api/services/* + /api/services/categories/*
 app.route('/api',            ticketsRoutes)     // /api/tickets/*

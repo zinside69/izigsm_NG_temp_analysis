@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Analyse CDC + Réordonnancement sprints — 4 juin 2026
+> Dernière mise à jour : Sprint 2.5 terminé — 4 juin 2026
 
 ---
 
@@ -63,16 +63,19 @@
 
 ---
 
-### Sprint 2.5 🔜 — Fournisseurs + Bons de commande + CUMP *(inchangé)*
+### Sprint 2.5 ✅ — Fournisseurs + Bons de commande + CUMP
 **Modules CDC : MOD-10 (HAUTE) + MOD-04 CUMP (CRITIQUE)**
-- [ ] Migration 0014 : table `fournisseurs` + `bons_commande` + `lignes_bon_commande`
-- [ ] `src/services/fournisseursService.ts` (Model)
-- [ ] `src/lib/validators.ts` : `validateFournisseur()`, `validateBonCommande()`
-- [ ] `src/routes/fournisseurs.ts` (Controller pur)
-- [ ] CUMP : calcul `(ancien_stock × ancien_cump + qté × prix) / total_qté` à la réception
-- [ ] Vue "À commander" : besoins pièces depuis tickets (statuts `TO_ORDER`)
-- [ ] `public/fournisseurs.html` + `public/static/js/fournisseurs.js`
-- [ ] Liaison réception → `mouvements_stock` + MAJ CUMP + notification ticket "pièces reçues"
+- [x] Migration 0014 : tables `fournisseurs` + `bons_commande` + `lignes_bon_commande` + CUMP sur `produits`
+- [x] `src/services/fournisseursService.ts` (Model) — CRUD fournisseurs, CRUD BC, réception+CUMP, KPIs, À commander
+- [x] `src/lib/validators.ts` : `validateFournisseur()`, `validateBonCommande()` (avec validation par ligne)
+- [x] `src/routes/fournisseurs.ts` (Controller pur — 12 endpoints, 0 SQL)
+- [x] CUMP : `(stock×cump + qty×prix) / (stock+qty)` — calculé à la réception, mouvement `reception_commande`
+- [x] Vue "À commander" : produits dont `stock_actuel ≤ stock_minimum`
+- [x] Numérotation BC : `BC-AAAA-XXXXX` via MAX séquentiel D1
+- [x] `public/fournisseurs.html` : 3 onglets (BC / Fournisseurs / À commander), KPIs, 3 modales
+- [x] `public/static/js/fournisseurs.js` : 650+ lignes, ApiService, pré-remplissage BC depuis À commander
+- [x] Sidebar : entrée Fournisseurs + badge nb produits à commander
+- [x] Build ✅ (118.87 kB, 46 modules) + tests 10/10 ✅
 
 ### Sprint 2.6 🔜 — Agenda / RDV + iCal *(inchangé)*
 **Modules CDC : MOD-08 (MOYENNE)**
@@ -198,10 +201,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.4.0 |
-| Build | `dist/_worker.js` 104.73 kB — 44 modules |
-| Dernière migration | `0013_services.sql` ✅ |
-| Dernier commit | `eaee586` — Sprint 2.4 |
+| Version | 2.5.0 |
+| Build | `dist/_worker.js` 118.87 kB — 46 modules |
+| Dernière migration | `0014_fournisseurs_bons_commande.sql` ✅ |
+| Dernier commit | Sprint 2.5 (pending) |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 
@@ -211,10 +214,10 @@
 
 | Priorité CDC | Modules | Couverture moyenne |
 |---|---|---|
-| CRITIQUE (MOD-01, 02, 04) | Tickets ⚠️, Facturation ✅, Stock ⚠️ | ~52% |
-| HAUTE (MOD-03, 06, 07, 10, 12, 17) | Devis ⚠️, Rachats ✅, CRM ⚠️, Achats ❌, Notifs ❌, Rapports ⚠️ | ~38% |
+| CRITIQUE (MOD-01, 02, 04) | Tickets ⚠️, Facturation ✅, Stock ⚠️ + CUMP ✅ | ~58% |
+| HAUTE (MOD-03, 06, 07, 10, 12, 17) | Devis ⚠️, Rachats ✅, CRM ⚠️, Achats ✅, Notifs ❌, Rapports ⚠️ | ~45% |
 | HAUTE (MOD-15, 18) | Catalogue ✅, Équipe ✅ | ~68% |
 | MOYENNE (MOD-05, 08, 09, 13, 14, 16) | Tous ❌ | ~0% |
-| **Global** | **18 modules** | **~35%** |
+| **Global** | **18 modules** | **~38%** |
 
 *Référence : `docs/ANALYSE_COMPARATIVE_CDC.md` pour le détail module par module.*

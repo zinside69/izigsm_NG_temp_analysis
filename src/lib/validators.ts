@@ -51,6 +51,40 @@ export function validateClient(body: any): string | null {
   return null
 }
 
+// ─── Fournisseurs ─────────────────────────────────────────────────────────────
+
+/**
+ * Valide le corps d'une requête fournisseur.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateFournisseur(body: any): string | null {
+  if (!body.nom?.trim())
+    return 'Nom du fournisseur obligatoire.'
+  if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email))
+    return 'Email invalide.'
+  return null
+}
+
+/**
+ * Valide le corps d'une requête bon de commande.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateBonCommande(body: any): string | null {
+  if (!body.fournisseur_id || isNaN(Number(body.fournisseur_id)))
+    return 'fournisseur_id obligatoire.'
+  if (!Array.isArray(body.lignes) || body.lignes.length === 0)
+    return 'Au moins une ligne de commande obligatoire.'
+  for (const [i, l] of body.lignes.entries()) {
+    if (!l.designation?.trim())
+      return `Ligne ${i + 1} : désignation obligatoire.`
+    if (!l.quantite_commandee || l.quantite_commandee <= 0)
+      return `Ligne ${i + 1} : quantité doit être > 0.`
+    if (l.prix_achat_ht === undefined || l.prix_achat_ht === null || isNaN(Number(l.prix_achat_ht)) || Number(l.prix_achat_ht) < 0)
+      return `Ligne ${i + 1} : prix achat HT obligatoire (≥ 0).`
+  }
+  return null
+}
+
 // ─── Tickets ──────────────────────────────────────────────────────────────────
 
 /**

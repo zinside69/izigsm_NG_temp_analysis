@@ -34,6 +34,7 @@ function buildSidebar(activePage) {
     { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },
     { id:'stock', icon:'📦', label:'Stock', href:'stock.html', section:'gestion', badge: getStockAlert() },
     { id:'services', icon:'🛠', label:'Catalogue services', href:'services.html', section:'gestion', badge: null },
+    { id:'fournisseurs', icon:'🚚', label:'Fournisseurs', href:'fournisseurs.html', section:'gestion', badge: null },
     { id:'rachats', icon:'📒', label:'Livre de police', href:'rachats.html', section:'gestion', badge: null },
     { id:'clients', icon:'👥', label:'Clients', href:'clients.html', section:'gestion', badge: null },
     { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel.html', section:'gestion', badge: null },
