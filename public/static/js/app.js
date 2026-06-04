@@ -509,3 +509,90 @@ function getBoutiqueId() {
   );
   return session?.boutique_id ?? null;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PIN — Modal global (Sprint 2.3)
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _pinCallback = null;
+
+/**
+ * Affiche le modal PIN et appelle callback() si PIN valide.
+ * Si la session PIN est déjà active → callback direct sans modal.
+ */
+async function requirePinAction(callback) {
+  // Vérifier si session PIN déjà active
+  try {
+    const result = await apiGet('/api/users/pin/status', {});
+    if (result.ok && result.data?.session_active) {
+      callback(); return;
+    }
+    // Vérifier si PIN configuré
+    if (result.ok && !result.data?.pin_actif) {
+      // Pas de PIN → demander au manager/admin de configurer
+      showFlash('ℹ️ Aucun PIN configuré. Demandez à votre responsable.', 'info');
+      return;
+    }
+  } catch { /* réseau KO, afficher le modal quand même */ }
+
+  _pinCallback = callback;
+  let modal = document.getElementById('modal-pin-global');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modal-pin-global';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:340px;text-align:center;">
+        <div class="modal-header" style="justify-content:center;">
+          <h2>🔐 Confirmation PIN</h2>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;">
+            Saisissez votre PIN pour confirmer cette action.
+          </p>
+          <input type="password" id="pin-input" inputmode="numeric" maxlength="6"
+            placeholder="● ● ● ●" autocomplete="off"
+            style="width:100%;text-align:center;font-size:1.5rem;letter-spacing:8px;
+                   border:2px solid #e5e7eb;border-radius:12px;padding:12px;font:inherit;"
+            onkeydown="if(event.key==='Enter') confirmPin()">
+          <div id="pin-error" style="color:var(--red);font-size:0.82rem;margin-top:8px;min-height:18px;"></div>
+        </div>
+        <div class="modal-footer" style="justify-content:center;gap:12px;">
+          <button class="btn btn-secondary" onclick="closeModal('modal-pin-global')">Annuler</button>
+          <button class="btn btn-primary" onclick="confirmPin()">✓ Valider</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Reset
+  const inp = document.getElementById('pin-input');
+  const err = document.getElementById('pin-error');
+  if (inp) inp.value = '';
+  if (err) err.textContent = '';
+  openModal('modal-pin-global');
+  setTimeout(() => inp?.focus(), 100);
+}
+
+async function confirmPin() {
+  const pin = document.getElementById('pin-input')?.value?.trim();
+  const err = document.getElementById('pin-error');
+  if (!pin) { if (err) err.textContent = 'PIN requis.'; return; }
+
+  try {
+    const result = await apiPost('/api/users/pin/verify', { pin });
+    if (result.ok) {
+      closeModal('modal-pin-global');
+      if (_pinCallback) { _pinCallback(); _pinCallback = null; }
+    } else {
+      if (err) err.textContent = result.data?.error || 'PIN incorrect.';
+      const inp = document.getElementById('pin-input');
+      if (inp) { inp.value = ''; inp.focus(); }
+    }
+  } catch {
+    if (err) err.textContent = 'Erreur réseau.';
+  }
+}
+
+window.requirePinAction = requirePinAction;
+window.confirmPin       = confirmPin;

@@ -70,6 +70,38 @@ export function requireRole(...roles: string[]) {
   )
 }
 
+// ─── Middleware : vérification session PIN (Sprint 2.3) ───────────────────────
+
+/**
+ * Vérifie qu'une session PIN active existe dans KV pour cet user.
+ * Admin et manager sont exemptés.
+ */
+export const requirePin = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
+  async (c, next) => {
+    const user = c.get('user')
+    if (user.role === 'admin' || user.role === 'manager') { await next(); return }
+    const session = await c.env.KV.get(`pin_session:${user.sub}`)
+    if (!session) {
+      return c.json({ success: false, error: 'Session PIN requise.', pin_required: true }, 403)
+    }
+    await next()
+  }
+)
+
+// ─── Helper : vérifier permission granulaire ──────────────────────────────────
+
+/**
+ * Vérifie si un user a une permission. Défaut = autorisé si aucune règle.
+ */
+export async function hasPermission(
+  db: D1Database, userId: number, boutiqueId: number, action: string
+): Promise<boolean> {
+  const row = await db.prepare(
+    'SELECT autorise FROM permissions WHERE user_id = ? AND boutique_id = ? AND action = ?'
+  ).bind(userId, boutiqueId, action).first<{ autorise: number }>()
+  return !row || row.autorise === 1
+}
+
 // ─── Helper : isolation par boutique ─────────────────────────────────────────
 
 /**

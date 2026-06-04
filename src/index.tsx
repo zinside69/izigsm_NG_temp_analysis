@@ -10,6 +10,7 @@ import facturationRoutes from './routes/facturation'
 import personnelRoutes  from './routes/personnel'
 import boutiquesRoutes  from './routes/boutiques'
 import rachatsRoutes    from './routes/rachats'
+import usersRoutes      from './routes/users'
 
 /**
  * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
@@ -56,7 +57,8 @@ app.use('/api/*', cors({
 // doivent venir APRÈS les routes à segments fixes (avoirs, factures, devis…)
 app.route('/api/auth',       authRoutes)
 app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*
-app.route('/api',            rachatsRoutes)     // /api/rachats/* (livre de police)
+app.route('/api',            rachatsRoutes)     // /api/rachats/*
+app.route('/api',            usersRoutes)       // /api/users/* (PIN + permissions) (livre de police)
 app.route('/api',            ticketsRoutes)     // /api/tickets/*
 app.route('/api',            stocksRoutes)      // /api/produits/* + /api/categories/*
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
