@@ -1,557 +1,604 @@
 /**
- * agenda.js — Frontend Agenda / Rendez-vous
+ * agenda.js — Frontend Agenda / Rendez-vous + iCal
  * Sprint 2.6 — MOD-08
- * Principe 5 : tous les appels API passent par ApiService (app.js)
+ * Principe 5 : tous les appels HTTP via ApiService (app.js)
  */
 
 // ─── État global ──────────────────────────────────────────────────────────────
 
 const AgendaState = {
-  vue:          'semaine',    // 'semaine' | 'liste'
-  weekOffset:   0,            // 0 = semaine courante, -1 = précédente, +1 = suivante
-  rdvMap:       {},           // id → rdv (cache)
-  clients:      [],
-  tickets:      [],
-  listeSearch:  '',
+  vue:          'semaine',      // 'semaine' | 'liste'
+  currentDate:  new Date(),     // date pivot de la semaine affichée
+  rdvCache:     {},             // cache vue semaine { "YYYY-MM-DD": [...] }
+  listeData:    [],             // cache vue liste
   listePage:    1,
+  listeTotal:   0,
+  listeSearch:  '',
   listeStatut:  '',
   listeType:    '',
+  editingId:    null,           // null = création, number = édition
+  clientsCache: [],
+  ticketsCache: [],
 }
 
-// Couleurs par type RDV
-const COULEURS_TYPE = {
-  reparation:  '#3B82F6',
-  restitution: '#10B981',
-  devis:       '#F59E0B',
-  diagnostic:  '#8B5CF6',
-  autre:       '#6B7280',
+// Statut → libellé + couleur CSS
+const STATUT_META = {
+  PENDING:   { label: 'En attente',     css: 'badge-PENDING'   },
+  SCHEDULED: { label: 'Confirmé',       css: 'badge-SCHEDULED' },
+  DONE:      { label: 'Effectué',       css: 'badge-DONE'      },
+  NO_SHOW:   { label: 'Client absent',  css: 'badge-NO_SHOW'   },
+  CANCELLED: { label: 'Annulé',         css: 'badge-CANCELLED' },
+  CONVERTED: { label: 'Converti ticket',css: 'badge-CONVERTED' },
 }
 
-const LABELS_STATUT = {
-  PENDING:   'En attente',
-  SCHEDULED: 'Confirmé',
-  DONE:      'Effectué',
-  NO_SHOW:   'Absent',
-  CANCELLED: 'Annulé',
-  CONVERTED: 'Converti',
+const TYPE_META = {
+  reparation:  { label: 'Réparation',   icon: 'fa-wrench'       },
+  restitution: { label: 'Restitution',  icon: 'fa-box'          },
+  devis:       { label: 'Devis',        icon: 'fa-comment-dots' },
+  diagnostic:  { label: 'Diagnostic',   icon: 'fa-search'       },
+  autre:       { label: 'Autre',        icon: 'fa-clipboard'    },
 }
 
-const ICONS_TYPE = {
-  reparation:  '🔧',
-  restitution: '📦',
-  devis:       '💬',
-  diagnostic:  '🔍',
-  autre:       '📋',
-}
-
-// ─── Initialisation ───────────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
-  await waitForApp()
+  await waitForAuth()
   await Promise.all([
     loadKpis(),
     loadClients(),
     loadTickets(),
-    renderSemaine(),
   ])
+  renderSemaine()
+  setVue('semaine')
 })
-
-function waitForApp() {
-  return new Promise(resolve => {
-    const check = setInterval(() => {
-      if (typeof getBoutiqueId === 'function' && getBoutiqueId()) {
-        clearInterval(check)
-        resolve()
-      }
-    }, 50)
-    setTimeout(() => { clearInterval(check); resolve() }, 3000)
-  })
-}
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
 
 async function loadKpis() {
   try {
-    const res = await apiGet(`/api/agenda/kpis?boutique_id=${getBoutiqueId()}`)
-    if (!res.success) return
-    const d = res.data
-    document.getElementById('kpi-total-val').textContent   = d.total_rdv
-    document.getElementById('kpi-auj-val').textContent     = d.rdv_auj
-    document.getElementById('kpi-semaine-val').textContent = d.rdv_semaine
-    document.getElementById('kpi-attente-val').textContent = d.en_attente
-    document.getElementById('kpi-taux-val').textContent    = d.taux_honore + '%'
-  } catch {}
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/agenda/kpis?boutique_id=${bid}`)
+    if (!r.success) return
+    const k = r.data
+    document.getElementById('kpi-total-val').textContent   = k.total_rdv
+    document.getElementById('kpi-auj-val').textContent     = k.rdv_auj
+    document.getElementById('kpi-semaine-val').textContent = k.rdv_semaine
+    document.getElementById('kpi-attente-val').textContent = k.en_attente
+    document.getElementById('kpi-taux-val').textContent    = k.taux_honore + ' %'
+  } catch (e) { console.error('[kpis]', e) }
 }
 
-// ─── Clients + Tickets (pour selects modale) ──────────────────────────────────
+// ─── Vue Semaine ──────────────────────────────────────────────────────────────
 
-async function loadClients() {
-  try {
-    const res = await apiGet(`/api/clients?boutique_id=${getBoutiqueId()}&limit=200`)
-    AgendaState.clients = res.data ?? []
-    const sel = document.getElementById('rdv-client-id')
-    AgendaState.clients.forEach(c => {
-      const opt = document.createElement('option')
-      opt.value = c.id
-      opt.textContent = `${c.prenom ?? ''} ${c.nom}`.trim() + (c.telephone ? ` — ${c.telephone}` : '')
-      sel.appendChild(opt)
-    })
-  } catch {}
+/**
+ * Calcule le lundi de la semaine contenant `date`.
+ */
+function getMondayOf(date) {
+  const d = new Date(date)
+  const day = d.getDay() || 7   // dim=0→7
+  d.setDate(d.getDate() - day + 1)
+  d.setHours(0, 0, 0, 0)
+  return d
 }
 
-async function loadTickets() {
-  try {
-    const res = await apiGet(`/api/tickets?boutique_id=${getBoutiqueId()}&limit=100&statut=en_attente,en_cours`)
-    AgendaState.tickets = res.data ?? []
-    const sel = document.getElementById('rdv-ticket-id')
-    AgendaState.tickets.forEach(t => {
-      const opt = document.createElement('option')
-      opt.value = t.id
-      opt.textContent = `${t.numero} — ${t.appareil_marque} ${t.appareil_modele}`
-      sel.appendChild(opt)
-    })
-  } catch {}
+function prevWeek() {
+  AgendaState.currentDate.setDate(AgendaState.currentDate.getDate() - 7)
+  renderSemaine()
 }
 
-// ─── Vue switch ───────────────────────────────────────────────────────────────
-
-function setVue(vue) {
-  AgendaState.vue = vue
-  document.getElementById('vue-semaine').classList.toggle('hidden', vue !== 'semaine')
-  document.getElementById('vue-liste').classList.toggle('hidden', vue !== 'liste')
-  document.getElementById('nav-semaine').classList.toggle('hidden', vue === 'liste')
-
-  document.querySelectorAll('.vue-btn').forEach(b => {
-    b.classList.remove('active','bg-blue-50','text-blue-700')
-    b.classList.add('bg-white','text-gray-600')
-  })
-  const active = document.getElementById(`btn-vue-${vue}`)
-  active.classList.add('active','bg-blue-50','text-blue-700')
-  active.classList.remove('bg-white','text-gray-600')
-
-  if (vue === 'semaine') renderSemaine()
-  else loadListe()
+function nextWeek() {
+  AgendaState.currentDate.setDate(AgendaState.currentDate.getDate() + 7)
+  renderSemaine()
 }
 
-// ─── VUE SEMAINE ──────────────────────────────────────────────────────────────
-
-function getWeekDates(offset = 0) {
-  const now = new Date()
-  const day = now.getDay() || 7
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - day + 1 + offset * 7)
-  monday.setHours(0, 0, 0, 0)
-  const days = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    days.push(d)
-  }
-  return days
-}
-
-function isoDate(d) { return d.toISOString().slice(0, 10) }
-function fmtDate(d) {
-  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
+function goToday() {
+  AgendaState.currentDate = new Date()
+  renderSemaine()
 }
 
 async function renderSemaine() {
-  const days     = getWeekDates(AgendaState.weekOffset)
-  const dateDebut = isoDate(days[0]) + ' 00:00:00'
-  const dateFin   = isoDate(days[6]) + ' 23:59:59'
+  const monday = getMondayOf(AgendaState.currentDate)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59)
 
   // Label semaine
   const opts = { day: 'numeric', month: 'long', year: 'numeric' }
   document.getElementById('label-semaine').textContent =
-    `${days[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} – ${days[6].toLocaleDateString('fr-FR', opts)}`
+    `${monday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – ${sunday.toLocaleDateString('fr-FR', opts)}`
 
-  // Headers jours
-  const headers = document.getElementById('day-headers')
-  const today   = isoDate(new Date())
-  headers.innerHTML = days.map(d => {
-    const isToday = isoDate(d) === today
-    return `<div class="week-day p-2 text-center border-r border-gray-100 ${isToday ? 'today bg-blue-50' : ''}">
-      <div class="day-name text-xs font-semibold ${isToday ? 'text-blue-600' : 'text-gray-500'} uppercase">${d.toLocaleDateString('fr-FR',{weekday:'short'})}</div>
-      <div class="text-lg font-bold ${isToday ? 'text-blue-700' : 'text-gray-800'}">${d.getDate()}</div>
+  // Charger données
+  const bid       = getBoutiqueId()
+  const dateDebut = toISOLocal(monday)
+  const dateFin   = toISOLocal(sunday)
+  const statut    = document.getElementById('filter-statut')?.value || ''
+  const typeRdv   = document.getElementById('filter-type')?.value || ''
+
+  let qs = `boutique_id=${bid}&date_debut=${encodeURIComponent(dateDebut)}&date_fin=${encodeURIComponent(dateFin)}`
+  if (statut)  qs += `&statut=${statut}`
+  if (typeRdv) qs += `&type_rdv=${typeRdv}`
+
+  try {
+    const r = await apiGet(`/api/agenda/view?${qs}`)
+    AgendaState.rdvCache = r.success ? r.data : {}
+  } catch (e) {
+    AgendaState.rdvCache = {}
+  }
+
+  buildCalendarDOM(monday)
+}
+
+/**
+ * Construit le DOM calendrier (en-têtes + grille horaire).
+ */
+function buildCalendarDOM(monday) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // En-têtes jours
+  const headersEl = document.getElementById('day-headers')
+  headersEl.innerHTML = ''
+  const jours = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    const isToday = d.getTime() === today.getTime()
+
+    const div = document.createElement('div')
+    div.className = `week-day p-2 text-center border-r border-gray-100 bg-gray-50 ${isToday ? 'today' : ''}`
+    div.innerHTML = `
+      <div class="day-name text-xs font-semibold text-gray-500 uppercase">${jours[i]}</div>
+      <div class="text-lg font-bold ${isToday ? 'text-blue-600' : 'text-gray-800'}">${d.getDate()}</div>
+      <div class="text-xs text-gray-400">${d.toLocaleDateString('fr-FR', { month: 'short' })}</div>`
+    headersEl.appendChild(div)
+  }
+
+  // Corps calendrier : heures 8h-20h
+  const bodyEl = document.getElementById('calendar-body')
+  bodyEl.innerHTML = ''
+
+  for (let h = 8; h < 20; h++) {
+    // Colonne heure
+    const timeEl = document.createElement('div')
+    timeEl.className = 'time-label time-slot border-t border-gray-50'
+    timeEl.textContent = `${h}:00`
+    bodyEl.appendChild(timeEl)
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + i)
+      const dateKey = d.toISOString().slice(0, 10)
+
+      const cell = document.createElement('div')
+      cell.className = 'day-col time-slot border-t border-gray-50 relative'
+      cell.style.cursor = 'pointer'
+      // Clic sur cellule → nouveau RDV pré-rempli
+      cell.addEventListener('click', () => openModalRdvFromSlot(d, h))
+
+      // Placer les RDV de cette heure
+      const rdvs = (AgendaState.rdvCache[dateKey] || []).filter(r => {
+        const rh = new Date(r.debut.replace(' ', 'T')).getHours()
+        return rh === h
+      })
+      rdvs.forEach(rdv => {
+        const block = buildRdvBlock(rdv)
+        cell.appendChild(block)
+      })
+
+      bodyEl.appendChild(cell)
+    }
+  }
+}
+
+/**
+ * Construit un bloc RDV coloré dans la grille.
+ */
+function buildRdvBlock(rdv) {
+  const div = document.createElement('div')
+  div.className = 'rdv-block'
+  div.style.backgroundColor = (rdv.couleur || '#3B82F6') + '22'
+  div.style.borderLeftColor = rdv.couleur || '#3B82F6'
+  div.style.color = rdv.couleur || '#1d4ed8'
+
+  const clientLabel = rdv.client_nom
+    ? `${rdv.client_prenom || ''} ${rdv.client_nom}`.trim()
+    : rdv.nom_client || ''
+
+  const debutH = rdv.debut.slice(11, 16)
+
+  div.innerHTML = `
+    <div class="font-semibold truncate">${debutH} ${escHtml(rdv.titre)}</div>
+    ${clientLabel ? `<div class="truncate opacity-75">${escHtml(clientLabel)}</div>` : ''}
+  `
+  div.addEventListener('click', e => { e.stopPropagation(); openDetailRdv(rdv) })
+  return div
+}
+
+// ─── Vue Liste ────────────────────────────────────────────────────────────────
+
+async function loadListe(page = 1) {
+  const bid = getBoutiqueId()
+  let qs = `boutique_id=${bid}&page=${page}&limit=20`
+  if (AgendaState.listeSearch) qs += `&search=${encodeURIComponent(AgendaState.listeSearch)}`
+  if (AgendaState.listeStatut) qs += `&statut=${AgendaState.listeStatut}`
+  if (AgendaState.listeType)   qs += `&type_rdv=${AgendaState.listeType}`
+
+  try {
+    const r = await apiGet(`/api/agenda?${qs}`)
+    if (!r.success) return
+    AgendaState.listeData  = r.data
+    AgendaState.listeTotal = r.total
+    AgendaState.listePage  = page
+    renderListe()
+  } catch (e) { console.error('[liste]', e) }
+}
+
+function renderListe() {
+  const el = document.getElementById('liste-rdv')
+  if (!AgendaState.listeData.length) {
+    el.innerHTML = `<div class="text-center text-gray-400 py-8">
+      <i class="fas fa-calendar-xmark text-4xl mb-2"></i><p>Aucun rendez-vous trouvé</p></div>`
+    return
+  }
+
+  el.innerHTML = AgendaState.listeData.map(rdv => {
+    const sm = STATUT_META[rdv.statut] || { label: rdv.statut, css: '' }
+    const tm = TYPE_META[rdv.type_rdv] || { label: rdv.type_rdv, icon: 'fa-calendar' }
+    const clientLabel = rdv.client_nom
+      ? `${rdv.client_prenom || ''} ${rdv.client_nom}`.trim()
+      : rdv.nom_client || '—'
+    const dateStr = formatDateTime(rdv.debut)
+    const couleur = rdv.couleur || '#3B82F6'
+
+    return `
+    <div class="rdv-card bg-white rounded-xl border border-gray-100 p-4 flex gap-4 cursor-pointer hover:border-blue-200"
+      onclick='openDetailRdvById(${rdv.id})'>
+      <div class="w-1 rounded-full flex-shrink-0" style="background:${couleur}"></div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <span class="font-semibold text-gray-900">${escHtml(rdv.titre)}</span>
+            <span class="ml-2 text-xs px-2 py-0.5 rounded-full ${sm.css}">${sm.label}</span>
+          </div>
+          <span class="text-xs text-gray-400 flex-shrink-0">${dateStr}</span>
+        </div>
+        <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+          <span><i class="fas ${tm.icon} mr-1"></i>${tm.label}</span>
+          <span><i class="fas fa-user mr-1"></i>${escHtml(clientLabel)}</span>
+          <span><i class="fas fa-clock mr-1"></i>${rdv.duree_minutes} min</span>
+          ${rdv.tech_prenom ? `<span><i class="fas fa-user-tie mr-1"></i>${escHtml(rdv.tech_prenom + ' ' + rdv.tech_nom)}</span>` : ''}
+        </div>
+      </div>
     </div>`
   }).join('')
 
-  // Charger RDV de la semaine
-  const res = await apiGet(
-    `/api/agenda/view?boutique_id=${getBoutiqueId()}&date_debut=${encodeURIComponent(dateDebut)}&date_fin=${encodeURIComponent(dateFin)}`
-  )
-  const grouped = res.success ? (res.data ?? {}) : {}
+  // Pagination
+  renderListePagination()
+}
 
-  // Corps calendrier (8h → 20h, créneaux 30min)
-  const body = document.getElementById('calendar-body')
-  const HOUR_START = 8
-  const HOUR_END   = 20
-  const SLOT_MIN   = 30
-  const slots      = (HOUR_END - HOUR_START) * (60 / SLOT_MIN)
+function renderListePagination() {
+  const el    = document.getElementById('liste-pagination')
+  const pages = Math.ceil(AgendaState.listeTotal / 20)
+  if (pages <= 1) { el.innerHTML = ''; return }
 
-  // Construire la grille : colonne heure + 7 colonnes jours
-  let html = ''
-  for (let s = 0; s < slots; s++) {
-    const totalMin = HOUR_START * 60 + s * SLOT_MIN
-    const h = String(Math.floor(totalMin / 60)).padStart(2, '0')
-    const m = String(totalMin % 60).padStart(2, '0')
-    const showLabel = s % 2 === 0 // toutes les heures
-
-    html += `<div class="time-label border-r border-b border-gray-100 time-slot">${showLabel ? h + ':' + m : ''}</div>`
-    for (const d of days) {
-      html += `<div class="day-col border-b border-gray-100 time-slot" 
-                    data-date="${isoDate(d)}" data-hour="${h}" data-min="${m}"
-                    onclick="clickSlot('${isoDate(d)}','${h}','${m}')"></div>`
-    }
+  const btns = []
+  for (let p = 1; p <= pages; p++) {
+    const active = p === AgendaState.listePage
+    btns.push(`<button onclick="loadListe(${p})"
+      class="px-3 py-1 rounded text-sm ${active ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">${p}</button>`)
   }
-  body.innerHTML = html
-
-  // Positionner les RDV dans la grille
-  Object.entries(grouped).forEach(([dateKey, rdvs]) => {
-    rdvs.forEach(rdv => {
-      const col = body.querySelector(`[data-date="${dateKey}"]`)
-      if (!col) return
-      // Calculer position verticale
-      const debutDate = new Date(rdv.debut.replace(' ','T') + 'Z')
-      const debutMin  = debutDate.getUTCHours() * 60 + debutDate.getUTCMinutes()
-      const finDate   = new Date(rdv.fin.replace(' ','T') + 'Z')
-      const finMin    = finDate.getUTCHours() * 60 + finDate.getUTCMinutes()
-      const topSlot   = (debutMin - HOUR_START * 60) / SLOT_MIN
-      const heightSlots = Math.max(1, (finMin - debutMin) / SLOT_MIN)
-      const topPx     = topSlot * 48
-      const heightPx  = heightSlots * 48 - 2
-
-      const couleur = rdv.couleur || COULEURS_TYPE[rdv.type_rdv] || '#3B82F6'
-      const clientLabel = rdv.client_nom
-        ? `${rdv.client_prenom ?? ''} ${rdv.client_nom}`.trim()
-        : rdv.nom_client ?? ''
-
-      const block = document.createElement('div')
-      block.className = 'rdv-block'
-      block.style.cssText = `top:${topPx}px;height:${heightPx}px;background:${couleur}22;color:${couleur};border-left-color:${couleur}`
-      block.innerHTML = `<div class="font-semibold truncate">${escHtml(rdv.titre)}</div>
-        ${clientLabel ? `<div class="truncate opacity-80">${escHtml(clientLabel)}</div>` : ''}`
-      block.onclick = (e) => { e.stopPropagation(); openDetail(rdv.id) }
-
-      // Injecter dans la bonne colonne (chercher la col du bon jour, première cellule)
-      col.closest('.calendar-grid') || body
-      // on positionne relativement à la 1ère cellule de cette colonne dans la grille
-      // Approche: rendre la colonne du jour relative et y appender
-      // Trouver toutes les cellules de ce jour
-      const allCols = body.querySelectorAll(`[data-date="${dateKey}"]`)
-      if (allCols.length === 0) return
-      // Utiliser la 1ère cellule comme conteneur relatif
-      const firstCol = allCols[0].parentElement || allCols[0]
-      // Créer un wrapper absolu sur toute la colonne du jour
-      // (positionné par rapport au corps entier)
-      const colIndex = Array.from(body.querySelectorAll(`[data-date="${dateKey}"]`)[0].parentElement?.children ?? []).indexOf(allCols[0])
-      // Simpler: on overlay directement dans chaque cellule concernée
-      const targetCells = Array.from(allCols).slice(topSlot, topSlot + Math.ceil(heightSlots))
-      if (targetCells[0]) {
-        targetCells[0].style.position = 'relative'
-        const b2 = block.cloneNode(true)
-        b2.style.top = '0'; b2.style.height = heightPx + 'px'
-        b2.onclick = (e) => { e.stopPropagation(); openDetail(rdv.id) }
-        targetCells[0].appendChild(b2)
-        AgendaState.rdvMap[rdv.id] = rdv
-      }
-    })
-  })
+  el.innerHTML = btns.join('')
 }
 
-function clickSlot(date, h, m) {
-  // Pré-remplir le formulaire avec la date/heure du créneau cliqué
-  const dt = `${date}T${h}:${m}`
-  document.getElementById('rdv-debut').value = dt
-  openModalRdv()
-}
+// ─── Switch vue ───────────────────────────────────────────────────────────────
 
-function prevWeek() { AgendaState.weekOffset--; renderSemaine() }
-function nextWeek() { AgendaState.weekOffset++; renderSemaine() }
-function goToday()  { AgendaState.weekOffset = 0; renderSemaine() }
+function setVue(v) {
+  AgendaState.vue = v
+  document.getElementById('vue-semaine').classList.toggle('hidden', v !== 'semaine')
+  document.getElementById('vue-liste').classList.toggle('hidden', v !== 'liste')
+  document.getElementById('btn-vue-semaine').className =
+    v === 'semaine'
+      ? 'vue-btn active px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700'
+      : 'vue-btn px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50'
+  document.getElementById('btn-vue-liste').className =
+    v === 'liste'
+      ? 'vue-btn active px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700'
+      : 'vue-btn px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50'
+  document.getElementById('nav-semaine').classList.toggle('hidden', v !== 'semaine')
 
-// ─── VUE LISTE ────────────────────────────────────────────────────────────────
-
-let _listeTimeout = null
-function searchListe(v) {
-  AgendaState.listeSearch = v
-  AgendaState.listePage = 1
-  clearTimeout(_listeTimeout)
-  _listeTimeout = setTimeout(loadListe, 300)
+  if (v === 'liste') loadListe(1)
 }
 
 function applyFilters() {
   AgendaState.listeStatut = document.getElementById('filter-statut').value
   AgendaState.listeType   = document.getElementById('filter-type').value
-  AgendaState.listePage   = 1
-  if (AgendaState.vue === 'liste') loadListe()
-  else renderSemaine()
+  if (AgendaState.vue === 'semaine') renderSemaine()
+  else loadListe(1)
 }
 
-async function loadListe() {
-  const params = new URLSearchParams({
-    boutique_id: getBoutiqueId(),
-    page:   AgendaState.listePage,
-    limit:  20,
-  })
-  if (AgendaState.listeSearch)  params.set('search',  AgendaState.listeSearch)
-  if (AgendaState.listeStatut)  params.set('statut',  AgendaState.listeStatut)
-  if (AgendaState.listeType)    params.set('type_rdv', AgendaState.listeType)
-
-  const res = await apiGet('/api/agenda?' + params)
-  const container = document.getElementById('liste-rdv')
-
-  if (!res.success || !res.data?.length) {
-    container.innerHTML = `<div class="text-center text-gray-400 py-10">
-      <i class="fas fa-calendar-xmark text-4xl mb-2"></i><p>Aucun rendez-vous</p></div>`
-    document.getElementById('liste-pagination').innerHTML = ''
-    return
-  }
-
-  container.innerHTML = res.data.map(rdv => rdvCard(rdv)).join('')
-  res.data.forEach(rdv => { AgendaState.rdvMap[rdv.id] = rdv })
-
-  // Pagination
-  const pages = Math.ceil((res.total ?? 0) / 20)
-  renderPagination('liste-pagination', AgendaState.listePage, pages, p => {
-    AgendaState.listePage = p; loadListe()
-  })
+function searchListe(val) {
+  AgendaState.listeSearch = val
+  clearTimeout(AgendaState._searchTimer)
+  AgendaState._searchTimer = setTimeout(() => loadListe(1), 350)
 }
 
-function rdvCard(rdv) {
-  const couleur = rdv.couleur || COULEURS_TYPE[rdv.type_rdv] || '#3B82F6'
-  const client  = rdv.client_nom
-    ? `${rdv.client_prenom ?? ''} ${rdv.client_nom}`.trim()
-    : rdv.nom_client ?? '—'
-  const debutFmt = new Date(rdv.debut.replace(' ','T')+'Z').toLocaleString('fr-FR',{
-    weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'
-  })
+// ─── Modale RDV (création / édition) ─────────────────────────────────────────
 
-  return `<div class="rdv-card bg-white border border-gray-100 rounded-xl p-4 flex items-start gap-4 cursor-pointer hover:border-blue-200"
-               onclick="openDetail(${rdv.id})" style="border-left: 4px solid ${couleur}">
-    <div class="flex-shrink-0 text-2xl">${ICONS_TYPE[rdv.type_rdv] ?? '📋'}</div>
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="font-semibold text-gray-900">${escHtml(rdv.titre)}</span>
-        <span class="badge-small badge-${rdv.statut}">${LABELS_STATUT[rdv.statut] ?? rdv.statut}</span>
-      </div>
-      <div class="text-sm text-gray-500 mt-1">${debutFmt} · ${rdv.duree_minutes} min</div>
-      <div class="text-sm text-gray-600 mt-1"><i class="fas fa-user text-gray-400 mr-1"></i>${escHtml(client)}</div>
-    </div>
-    <div class="flex gap-2 flex-shrink-0">
-      <button onclick="event.stopPropagation();editRdv(${rdv.id})" class="text-gray-400 hover:text-blue-600 p-1" title="Modifier">
-        <i class="fas fa-edit"></i>
-      </button>
-    </div>
-  </div>`
+async function loadClients() {
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/clients?boutique_id=${bid}&limit=200`)
+    if (!r.success) return
+    AgendaState.clientsCache = r.data || []
+    const sel = document.getElementById('rdv-client-id')
+    AgendaState.clientsCache.forEach(c => {
+      const opt = document.createElement('option')
+      opt.value       = c.id
+      opt.textContent = `${c.prenom || ''} ${c.nom} — ${c.telephone || ''}`
+      sel.appendChild(opt)
+    })
+  } catch (e) { console.error('[clients]', e) }
 }
 
-function renderPagination(containerId, current, total, onClick) {
-  const c = document.getElementById(containerId)
-  if (total <= 1) { c.innerHTML = ''; return }
-  let html = ''
-  for (let p = 1; p <= total; p++) {
-    html += `<button onclick="(${onClick.toString()})(${p})"
-      class="w-8 h-8 rounded-lg text-sm ${p === current ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}">${p}</button>`
-  }
-  c.innerHTML = html
+async function loadTickets() {
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/tickets?boutique_id=${bid}&limit=200&statut=RECEIVED,DIAGNOSED,WAITING_PARTS`)
+    if (!r.success) return
+    AgendaState.ticketsCache = r.data || []
+    const sel = document.getElementById('rdv-ticket-id')
+    AgendaState.ticketsCache.forEach(t => {
+      const opt = document.createElement('option')
+      opt.value       = t.id
+      opt.textContent = `${t.numero} — ${t.appareil_marque} ${t.appareil_modele}`
+      sel.appendChild(opt)
+    })
+  } catch (e) { console.error('[tickets]', e) }
 }
 
-// ─── Modale Détail ────────────────────────────────────────────────────────────
+function openModalRdv(rdv = null) {
+  AgendaState.editingId = rdv ? rdv.id : null
+  const isEdit = !!rdv
 
-async function openDetail(id) {
-  let rdv = AgendaState.rdvMap[id]
-  if (!rdv) {
-    const res = await apiGet(`/api/agenda/${id}?boutique_id=${getBoutiqueId()}`)
-    if (!res.success) return
-    rdv = res.data
-    AgendaState.rdvMap[id] = rdv
-  }
+  document.getElementById('modal-rdv-title').textContent = isEdit ? 'Modifier le rendez-vous' : 'Nouveau rendez-vous'
+  document.getElementById('rdv-id').value          = rdv?.id || ''
+  document.getElementById('rdv-titre').value       = rdv?.titre || ''
+  document.getElementById('rdv-type').value        = rdv?.type_rdv || 'reparation'
+  document.getElementById('rdv-description').value = rdv?.description || ''
+  document.getElementById('rdv-nom-client').value  = rdv?.nom_client || ''
+  document.getElementById('rdv-tel-client').value  = rdv?.telephone_client || ''
+  document.getElementById('rdv-client-id').value   = rdv?.client_id || ''
+  document.getElementById('rdv-ticket-id').value   = rdv?.ticket_id || ''
+  document.getElementById('rdv-couleur').value     = rdv?.couleur || '#3B82F6'
+  document.getElementById('rdv-duree').value       = rdv?.duree_minutes || 30
 
-  document.getElementById('detail-titre').textContent = rdv.titre
-  const client = rdv.client_nom
-    ? `${rdv.client_prenom ?? ''} ${rdv.client_nom}`.trim()
-    : rdv.nom_client ?? '—'
-  const debutFmt = new Date((rdv.debut+'').replace(' ','T')+'Z').toLocaleString('fr-FR',{
-    weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'
-  })
-  const finFmt = new Date((rdv.fin+'').replace(' ','T')+'Z').toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-
-  document.getElementById('detail-body').innerHTML = `
-    <div class="flex items-center gap-2">
-      <span class="badge-small badge-${rdv.statut}">${LABELS_STATUT[rdv.statut] ?? rdv.statut}</span>
-      <span class="text-gray-500">${ICONS_TYPE[rdv.type_rdv] ?? '📋'} ${rdv.type_rdv}</span>
-    </div>
-    <div><i class="fas fa-clock text-gray-400 mr-2"></i>${debutFmt} → ${finFmt} <span class="text-gray-400">(${rdv.duree_minutes} min)</span></div>
-    <div><i class="fas fa-user text-gray-400 mr-2"></i>${escHtml(client)}
-      ${rdv.telephone_client ? `<span class="text-gray-500 ml-2">· ${escHtml(rdv.telephone_client)}</span>` : ''}
-      ${rdv.client_tel ? `<span class="text-gray-500 ml-2">· ${escHtml(rdv.client_tel)}</span>` : ''}
-    </div>
-    ${rdv.tech_prenom ? `<div><i class="fas fa-user-tie text-gray-400 mr-2"></i>${escHtml(rdv.tech_prenom+' '+rdv.tech_nom)}</div>` : ''}
-    ${rdv.ticket_numero ? `<div><i class="fas fa-ticket-alt text-gray-400 mr-2"></i>Ticket ${escHtml(rdv.ticket_numero)}</div>` : ''}
-    ${rdv.description ? `<div class="bg-gray-50 rounded-lg p-2 text-gray-600">${escHtml(rdv.description)}</div>` : ''}
-  `
-
-  // Boutons d'action selon statut
-  const actions = document.getElementById('detail-actions')
-  actions.innerHTML = ''
-  const transitionMap = {
-    PENDING:   [{s:'SCHEDULED',label:'✅ Confirmer',cls:'btn-primary'},{s:'CANCELLED',label:'❌ Annuler',cls:'btn-danger-sm'}],
-    SCHEDULED: [{s:'DONE',label:'✅ Effectué',cls:'btn-primary'},{s:'NO_SHOW',label:'👻 Absent',cls:'btn-warning-sm'},{s:'CANCELLED',label:'❌ Annuler',cls:'btn-danger-sm'}],
-    NO_SHOW:   [{s:'SCHEDULED',label:'🔄 Replanifier',cls:'btn-secondary'}],
-  }
-  const transitions = transitionMap[rdv.statut] ?? []
-  transitions.forEach(({s, label, cls}) => {
-    const btn = document.createElement('button')
-    btn.className = cls + ' text-sm'
-    btn.textContent = label
-    btn.onclick = () => changeStatut(id, s, rdv.boutique_id ?? getBoutiqueId())
-    actions.appendChild(btn)
-  })
-
-  // Bouton modifier toujours
-  const btnEdit = document.createElement('button')
-  btnEdit.className = 'btn-secondary text-sm'
-  btnEdit.innerHTML = '<i class="fas fa-edit mr-1"></i>Modifier'
-  btnEdit.onclick = () => { closeModal('modal-detail-rdv'); editRdv(id) }
-  actions.appendChild(btnEdit)
-
-  openModal('modal-detail-rdv')
-}
-
-async function changeStatut(id, statut, boutiqueId) {
-  const res = await apiPatch(`/api/agenda/${id}/statut`, { boutique_id: boutiqueId, statut })
-  if (res.success) {
-    toast('Statut mis à jour.', 'success')
-    closeModal('modal-detail-rdv')
-    delete AgendaState.rdvMap[id]
-    loadKpis()
-    if (AgendaState.vue === 'semaine') renderSemaine()
-    else loadListe()
+  // Début
+  if (rdv?.debut) {
+    const d = new Date(rdv.debut.replace(' ', 'T'))
+    document.getElementById('rdv-debut').value = d.toISOString().slice(0, 16)
   } else {
-    toast(res.error, 'error')
-  }
-}
-
-// ─── Modale Créer/Modifier RDV ────────────────────────────────────────────────
-
-function openModalRdv(prefillDate) {
-  document.getElementById('rdv-id').value = ''
-  document.getElementById('form-rdv').reset()
-  document.getElementById('rdv-couleur').value = '#3B82F6'
-  document.getElementById('modal-rdv-title').textContent = 'Nouveau rendez-vous'
-  document.getElementById('btn-save-rdv').textContent = 'Enregistrer'
-  document.getElementById('statut-wrapper').classList.add('hidden')
-
-  if (prefillDate) document.getElementById('rdv-debut').value = prefillDate
-
-  // Pré-remplir avec maintenant + 30 min si vide
-  if (!document.getElementById('rdv-debut').value) {
+    // Par défaut : prochaine demi-heure
     const now = new Date()
-    now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0)
-    document.getElementById('rdv-debut').value = toDatetimeLocal(now)
+    now.setMinutes(now.getMinutes() >= 30 ? 60 : 30, 0, 0)
+    document.getElementById('rdv-debut').value = now.toISOString().slice(0, 16)
   }
 
-  openModal('modal-rdv')
+  // Statut visible seulement en édition
+  document.getElementById('statut-wrapper').classList.toggle('hidden', !isEdit)
+  if (isEdit && rdv?.statut) document.getElementById('rdv-statut').value = rdv.statut
+
+  document.getElementById('modal-rdv').classList.remove('hidden')
 }
 
-async function editRdv(id) {
-  let rdv = AgendaState.rdvMap[id]
-  if (!rdv) {
-    const res = await apiGet(`/api/agenda/${id}?boutique_id=${getBoutiqueId()}`)
-    if (!res.success) return
-    rdv = res.data
-  }
-
-  document.getElementById('rdv-id').value        = rdv.id
-  document.getElementById('rdv-titre').value     = rdv.titre
-  document.getElementById('rdv-type').value      = rdv.type_rdv
-  document.getElementById('rdv-debut').value     = toDatetimeLocal(new Date((rdv.debut+'').replace(' ','T')+'Z'))
-  document.getElementById('rdv-duree').value     = rdv.duree_minutes
-  document.getElementById('rdv-nom-client').value = rdv.nom_client ?? ''
-  document.getElementById('rdv-tel-client').value = rdv.telephone_client ?? ''
-  document.getElementById('rdv-client-id').value  = rdv.client_id ?? ''
-  document.getElementById('rdv-ticket-id').value  = rdv.ticket_id ?? ''
-  document.getElementById('rdv-description').value = rdv.description ?? ''
-  document.getElementById('rdv-couleur').value    = rdv.couleur ?? '#3B82F6'
-  document.getElementById('rdv-statut').value     = rdv.statut
-
-  document.getElementById('modal-rdv-title').textContent = 'Modifier le rendez-vous'
-  document.getElementById('btn-save-rdv').textContent    = 'Mettre à jour'
-  document.getElementById('statut-wrapper').classList.remove('hidden')
-
-  openModal('modal-rdv')
+function openModalRdvFromSlot(date, heure) {
+  const d = new Date(date)
+  d.setHours(heure, 0, 0, 0)
+  openModalRdv()
+  document.getElementById('rdv-debut').value = d.toISOString().slice(0, 16)
 }
 
 async function saveRdv(e) {
   e.preventDefault()
-  const id = document.getElementById('rdv-id').value
+  const btn = document.getElementById('btn-save-rdv')
+  btn.disabled = true
+
+  const bid   = getBoutiqueId()
+  const id    = AgendaState.editingId
+  const debut = document.getElementById('rdv-debut').value
+
   const payload = {
-    boutique_id:      getBoutiqueId(),
+    boutique_id:      bid,
     titre:            document.getElementById('rdv-titre').value.trim(),
     type_rdv:         document.getElementById('rdv-type').value,
-    debut:            document.getElementById('rdv-debut').value.replace('T', ' '),
+    debut:            debut.replace('T', ' ') + ':00',
     duree_minutes:    Number(document.getElementById('rdv-duree').value),
+    description:      document.getElementById('rdv-description').value.trim() || null,
     nom_client:       document.getElementById('rdv-nom-client').value.trim() || null,
     telephone_client: document.getElementById('rdv-tel-client').value.trim() || null,
     client_id:        document.getElementById('rdv-client-id').value || null,
     ticket_id:        document.getElementById('rdv-ticket-id').value || null,
-    description:      document.getElementById('rdv-description').value.trim() || null,
     couleur:          document.getElementById('rdv-couleur').value,
   }
-
   if (id) {
     payload.statut = document.getElementById('rdv-statut').value
-    const res = await apiPut(`/api/agenda/${id}`, payload)
-    if (res.success) {
-      toast('RDV mis à jour.', 'success')
+  }
+
+  try {
+    let r
+    if (id) {
+      r = await apiPut(`/api/agenda/${id}`, payload)
+    } else {
+      r = await apiPost('/api/agenda', payload)
+    }
+
+    if (r.success) {
+      toast(id ? 'RDV mis à jour ✅' : 'RDV créé ✅', 'green')
       closeModal('modal-rdv')
-      delete AgendaState.rdvMap[id]
-      refresh()
-    } else { toast(res.error, 'error') }
-  } else {
-    const res = await apiPost('/api/agenda', payload)
-    if (res.success) {
-      toast('RDV créé.', 'success')
-      closeModal('modal-rdv')
-      refresh()
-    } else { toast(res.error, 'error') }
+      refreshAll()
+    } else {
+      toast(r.error, 'red')
+    }
+  } catch (err) {
+    toast('Erreur réseau', 'red')
+  } finally {
+    btn.disabled = false
   }
 }
 
-function refresh() {
-  loadKpis()
-  if (AgendaState.vue === 'semaine') renderSemaine()
-  else loadListe()
+// ─── Modale Détail ────────────────────────────────────────────────────────────
+
+async function openDetailRdvById(id) {
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/agenda/${id}?boutique_id=${bid}`)
+    if (r.success) openDetailRdv(r.data)
+  } catch (e) { toast('Erreur chargement RDV', 'red') }
 }
 
-// ─── Export iCal ─────────────────────────────────────────────────────────────
+function openDetailRdv(rdv) {
+  const sm = STATUT_META[rdv.statut] || { label: rdv.statut, css: '' }
+  const tm = TYPE_META[rdv.type_rdv] || { label: rdv.type_rdv, icon: 'fa-calendar' }
+  const clientLabel = rdv.client_nom
+    ? `${rdv.client_prenom || ''} ${rdv.client_nom}`.trim()
+    : rdv.nom_client || '—'
+
+  document.getElementById('detail-titre').textContent = rdv.titre
+
+  document.getElementById('detail-body').innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="text-xs px-2 py-0.5 rounded-full ${sm.css}">${sm.label}</span>
+      <span class="text-xs text-gray-500"><i class="fas ${tm.icon} mr-1"></i>${tm.label}</span>
+    </div>
+    <div class="flex items-center gap-2 text-gray-600">
+      <i class="fas fa-calendar w-4 text-blue-400"></i>
+      <span>${formatDateTime(rdv.debut)} — ${rdv.duree_minutes} min</span>
+    </div>
+    <div class="flex items-center gap-2 text-gray-600">
+      <i class="fas fa-user w-4 text-green-400"></i>
+      <span>${escHtml(clientLabel)}</span>
+      ${rdv.client_tel ? `<a href="tel:${rdv.client_tel}" class="text-blue-500 ml-1">${rdv.client_tel}</a>` : ''}
+    </div>
+    ${rdv.tech_prenom ? `<div class="flex items-center gap-2 text-gray-600">
+      <i class="fas fa-user-tie w-4 text-purple-400"></i>
+      <span>${escHtml(rdv.tech_prenom + ' ' + rdv.tech_nom)}</span>
+    </div>` : ''}
+    ${rdv.ticket_numero ? `<div class="flex items-center gap-2 text-gray-600">
+      <i class="fas fa-ticket w-4 text-orange-400"></i>
+      <span>Ticket ${rdv.ticket_numero}</span>
+    </div>` : ''}
+    ${rdv.description ? `<div class="flex items-start gap-2 text-gray-600">
+      <i class="fas fa-align-left w-4 text-gray-400 mt-0.5"></i>
+      <span>${escHtml(rdv.description)}</span>
+    </div>` : ''}
+  `
+
+  // Boutons d'action selon statut
+  const actions = []
+  const transMap = {
+    PENDING:   [['SCHEDULED','Confirmer','blue'],['CANCELLED','Annuler','red']],
+    SCHEDULED: [['DONE','Marquer effectué','green'],['NO_SHOW','Client absent','orange'],['CANCELLED','Annuler','red']],
+    NO_SHOW:   [['SCHEDULED','Replanifier','blue']],
+  }
+  const transitions = transMap[rdv.statut] || []
+  transitions.forEach(([s, label, color]) => {
+    actions.push(`<button onclick="changeStatut(${rdv.id},${JSON.stringify(getBoutiqueId())},'${s}',event)"
+      class="px-3 py-1.5 text-xs font-medium rounded-lg bg-${color}-50 text-${color}-700 hover:bg-${color}-100 border border-${color}-200">
+      ${label}</button>`)
+  })
+  actions.push(`<button onclick="editRdv(${rdv.id})"
+    class="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200">
+    <i class="fas fa-edit mr-1"></i>Modifier</button>`)
+  actions.push(`<button onclick="deleteRdv(${rdv.id})"
+    class="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200">
+    <i class="fas fa-trash mr-1"></i>Supprimer</button>`)
+
+  document.getElementById('detail-actions').innerHTML = actions.join('')
+  document.getElementById('modal-detail-rdv').classList.remove('hidden')
+}
+
+async function changeStatut(id, boutiqueId, statut, e) {
+  e.stopPropagation()
+  try {
+    const r = await apiPatch(`/api/agenda/${id}/statut`, { boutique_id: boutiqueId, statut })
+    if (r.success) {
+      toast(`Statut → ${statut} ✅`, 'green')
+      closeModal('modal-detail-rdv')
+      refreshAll()
+    } else {
+      toast(r.error, 'red')
+    }
+  } catch (err) { toast('Erreur', 'red') }
+}
+
+async function editRdv(id) {
+  closeModal('modal-detail-rdv')
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/agenda/${id}?boutique_id=${bid}`)
+    if (r.success) openModalRdv(r.data)
+  } catch (e) { toast('Erreur chargement', 'red') }
+}
+
+async function deleteRdv(id) {
+  if (!confirm('Supprimer ce rendez-vous ?')) return
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiDelete(`/api/agenda/${id}?boutique_id=${bid}`)
+    if (r.success) {
+      toast('RDV supprimé', 'green')
+      closeModal('modal-detail-rdv')
+      refreshAll()
+    } else {
+      toast(r.error, 'red')
+    }
+  } catch (e) { toast('Erreur', 'red') }
+}
+
+// ─── Export iCal ──────────────────────────────────────────────────────────────
 
 async function exportIcal() {
-  const res = await apiGet(`/api/agenda/ical-token?boutique_id=${getBoutiqueId()}`)
-  if (!res.success) { toast(res.error, 'error'); return }
+  try {
+    const bid = getBoutiqueId()
+    const r   = await apiGet(`/api/agenda/ical-token?boutique_id=${bid}`)
+    if (!r.success) { toast(r.error, 'red'); return }
 
-  const fullUrl = window.location.origin + res.url
-  document.getElementById('ical-url').textContent = fullUrl
-  const dl = document.getElementById('ical-download')
-  dl.href = res.url
-  openModal('modal-ical')
+    const base = window.location.origin
+    const url  = `${base}/api/calendar/${r.token}.ics`
+    document.getElementById('ical-url').textContent     = url
+    document.getElementById('ical-download').href       = url
+    document.getElementById('modal-ical').classList.remove('hidden')
+  } catch (e) { toast('Erreur iCal', 'red') }
 }
 
-async function copyIcalUrl() {
+function copyIcalUrl() {
   const url = document.getElementById('ical-url').textContent
-  await navigator.clipboard.writeText(url).catch(() => {})
-  toast('URL copiée !', 'success')
+  navigator.clipboard.writeText(url).then(() => toast('URL copiée ✅', 'green'))
 }
 
-// ─── Helpers UI ───────────────────────────────────────────────────────────────
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
 
-function openModal(id)  { document.getElementById(id).classList.remove('hidden') }
-function closeModal(id) { document.getElementById(id).classList.add('hidden') }
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden')
+}
 
-function toDatetimeLocal(date) {
-  const pad = n => String(n).padStart(2,'0')
-  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+function refreshAll() {
+  loadKpis()
+  if (AgendaState.vue === 'semaine') renderSemaine()
+  else loadListe(AgendaState.listePage)
+}
+
+/** Date ISO locale (pas UTC) pour les filtres */
+function toISOLocal(d) {
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
+}
+
+function formatDateTime(str) {
+  if (!str) return '—'
+  const d = new Date(str.replace(' ', 'T'))
+  return d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) +
+    ' ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })
 }
 
 function escHtml(s) {
@@ -559,28 +606,26 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 
-function toast(msg, type = 'info') {
-  const t = document.getElementById('toast')
-  const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600', warning: 'bg-yellow-500' }
-  t.className = `fixed bottom-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-sm ${colors[type] ?? colors.info}`
-  t.textContent = msg
-  t.classList.remove('hidden')
-  clearTimeout(t._timer)
-  t._timer = setTimeout(() => t.classList.add('hidden'), 3500)
+function toast(msg, color = 'blue') {
+  const el = document.getElementById('toast')
+  const map = { green:'bg-green-500', red:'bg-red-500', blue:'bg-blue-500', orange:'bg-orange-500' }
+  el.className = `fixed bottom-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-sm ${map[color] || map.blue}`
+  el.textContent = msg
+  el.classList.remove('hidden')
+  clearTimeout(window._toastTimer)
+  window._toastTimer = setTimeout(() => el.classList.add('hidden'), 3500)
 }
 
-// ─── Styles dynamiques badges ─────────────────────────────────────────────────
+function waitForAuth() {
+  return new Promise(resolve => {
+    const check = () => { if (typeof apiGet === 'function') resolve(); else setTimeout(check, 50) }
+    check()
+  })
+}
 
-const badgeStyle = document.createElement('style')
-badgeStyle.textContent = `
-.badge-small { display:inline-flex;align-items:center;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600; }
-.badge-PENDING   { background:#fef9c3;color:#854d0e; }
-.badge-SCHEDULED { background:#dbeafe;color:#1e40af; }
-.badge-DONE      { background:#dcfce7;color:#166534; }
-.badge-NO_SHOW   { background:#fee2e2;color:#991b1b; }
-.badge-CANCELLED { background:#f3f4f6;color:#6b7280; }
-.badge-CONVERTED { background:#f3e8ff;color:#7e22ce; }
-.btn-warning-sm  { padding:6px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:600;cursor:pointer; }
-.btn-danger-sm   { padding:6px 12px;border-radius:8px;background:#fee2e2;color:#991b1b;font-size:12px;font-weight:600;cursor:pointer; }
-`
-document.head.appendChild(badgeStyle)
+function getBoutiqueId() {
+  try {
+    const u = JSON.parse(localStorage.getItem('user') || '{}')
+    return u.boutique_id || 1
+  } catch { return 1 }
+}
