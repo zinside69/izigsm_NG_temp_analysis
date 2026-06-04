@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suivi de réparation — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+    .card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+    .step-line::after { content:''; position:absolute; top:24px; left:50%; width:100%; height:2px; background:#e5e7eb; z-index:0; }
+    .step-line.done::after { background:#22c55e; }
+    .step-dot { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; position:relative; z-index:1; }
+    .step-done  .step-dot { background:#22c55e; color:white; }
+    .step-active .step-dot { background:#3b82f6; color:white; box-shadow:0 0 0 4px rgba(59,130,246,.3); }
+    .step-pending .step-dot { background:#f3f4f6; color:#9ca3af; border:2px solid #e5e7eb; }
+    @keyframes pulse-ring { 0%{transform:scale(.95);box-shadow:0 0 0 0 rgba(59,130,246,.4)} 70%{transform:scale(1);box-shadow:0 0 0 10px rgba(59,130,246,0)} 100%{transform:scale(.95)} }
+    .pulse { animation: pulse-ring 2s infinite; }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-start py-10 px-4">
+
+  <!-- Logo / Header -->
+  <div class="text-center mb-8">
+    <div class="text-4xl font-black text-white mb-1">iziGSM</div>
+    <div class="text-white/70 text-sm">Suivi de votre réparation</div>
+  </div>
+
+  <!-- Formulaire recherche (si pas de token en URL) -->
+  <div id="search-section" class="card w-full max-w-md p-8 mb-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">
+      <i class="fas fa-search text-blue-500 mr-2"></i>Suivre ma réparation
+    </h2>
+    <p class="text-sm text-gray-500 text-center mb-6">
+      Entrez le lien de suivi reçu par SMS ou email, ou scannez le QR code de votre ticket.
+    </p>
+    <div class="space-y-4">
+      <input id="token-input" type="text" placeholder="Code de suivi (ex: a3f8b2c1…)"
+        class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        onkeydown="if(event.key==='Enter') rechercherTicket()">
+      <button onclick="rechercherTicket()"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors">
+        <i class="fas fa-arrow-right mr-2"></i>Voir le suivi
+      </button>
+    </div>
+    <div id="search-error" class="hidden mt-3 text-center text-sm text-red-500"></div>
+  </div>
+
+  <!-- Résultat suivi -->
+  <div id="result-section" class="hidden w-full max-w-2xl space-y-4">
+
+    <!-- Statut principal -->
+    <div class="card p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <span id="res-boutique" class="text-xs font-semibold text-blue-600 uppercase tracking-wide"></span>
+          <h2 id="res-numero" class="text-2xl font-black text-gray-900 mt-0.5"></h2>
+        </div>
+        <div id="res-emoji" class="text-5xl pulse"></div>
+      </div>
+
+      <!-- Badge statut -->
+      <div id="res-statut-badge" class="inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm mb-4"></div>
+
+      <!-- Description statut -->
+      <p id="res-statut-desc" class="text-gray-600 mb-4"></p>
+
+      <!-- Infos appareil -->
+      <div class="bg-gray-50 rounded-xl p-4 space-y-2">
+        <div class="flex items-center gap-3 text-sm">
+          <i class="fas fa-mobile-alt w-5 text-gray-400"></i>
+          <span id="res-appareil" class="font-medium text-gray-700"></span>
+        </div>
+        <div class="flex items-start gap-3 text-sm">
+          <i class="fas fa-bug w-5 text-gray-400 mt-0.5"></i>
+          <span id="res-panne" class="text-gray-600"></span>
+        </div>
+        <div id="res-diagnostic-row" class="hidden flex items-start gap-3 text-sm">
+          <i class="fas fa-stethoscope w-5 text-blue-400 mt-0.5"></i>
+          <span id="res-diagnostic" class="text-gray-600"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card p-6">
+      <h3 class="font-bold text-gray-800 mb-5">Progression</h3>
+      <div id="timeline" class="flex justify-between gap-2 overflow-x-auto pb-2"></div>
+    </div>
+
+    <!-- Infos pratiques -->
+    <div class="card p-6">
+      <h3 class="font-bold text-gray-800 mb-4">Infos pratiques</h3>
+      <div class="space-y-3" id="infos-pratiques"></div>
+    </div>
+
+    <!-- Prix -->
+    <div id="prix-section" class="hidden card p-6">
+      <h3 class="font-bold text-gray-800 mb-4">Devis / Tarif</h3>
+      <div id="prix-body" class="space-y-2"></div>
+    </div>
+
+    <!-- Contact boutique -->
+    <div class="card p-6">
+      <h3 class="font-bold text-gray-800 mb-3">Votre atelier</h3>
+      <div id="contact-boutique" class="space-y-2"></div>
+    </div>
+
+    <!-- Bouton retour -->
+    <button onclick="resetRecherche()"
+      class="w-full bg-white/20 hover:bg-white/30 text-white font-semibold py-3 rounded-xl border border-white/30 transition-colors">
+      <i class="fas fa-search mr-2"></i>Rechercher un autre ticket
+    </button>
+
+  </div>
+
+  <!-- Erreur 404 -->
+  <div id="error-section" class="hidden card w-full max-w-md p-8 text-center">
+    <div class="text-6xl mb-4">😕</div>
+    <h2 class="text-xl font-bold text-gray-800 mb-2">Ticket introuvable</h2>
+    <p class="text-gray-500 text-sm mb-6" id="error-msg">Ce lien de suivi n'existe pas ou a expiré.</p>
+    <button onclick="resetRecherche()"
+      class="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-medium hover:bg-blue-700">
+      <i class="fas fa-arrow-left mr-1"></i>Réessayer
+    </button>
+  </div>
+
+  <div class="text-white/40 text-xs mt-8 text-center">Propulsé par iziGSM &bull; Votre atelier de réparation</div>
+
+<script>
+// ─── Const ────────────────────────────────────────────────────────────────────
+
+const STEPS = [
+  { key: 'RECEIVED',      label: 'Reçu',       icon: 'fa-inbox' },
+  { key: 'DIAGNOSED',     label: 'Diagnostic', icon: 'fa-stethoscope' },
+  { key: 'WAITING_PARTS', label: 'Pièces',     icon: 'fa-boxes' },
+  { key: 'IN_PROGRESS',   label: 'Réparation', icon: 'fa-wrench' },
+  { key: 'DONE',          label: 'Terminé',    icon: 'fa-check' },
+  { key: 'READY',         label: 'Prêt',       icon: 'fa-bell' },
+  { key: 'DELIVERED',     label: 'Rendu',      icon: 'fa-house' },
+]
+
+const STATUT_COLORS = {
+  RECEIVED:       'bg-blue-100 text-blue-700',
+  DIAGNOSED:      'bg-purple-100 text-purple-700',
+  WAITING_PARTS:  'bg-yellow-100 text-yellow-700',
+  IN_PROGRESS:    'bg-orange-100 text-orange-700',
+  DONE:           'bg-green-100 text-green-700',
+  READY:          'bg-emerald-100 text-emerald-700',
+  DELIVERED:      'bg-gray-100 text-gray-700',
+  CANCELLED:      'bg-red-100 text-red-700',
+  UNREPAIRABLE:   'bg-red-100 text-red-700',
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Extraire token depuis URL : /suivi/:token ou ?token=xxx
+  const path  = window.location.pathname
+  const match = path.match(/\/suivi\/([a-f0-9]{16,64})/)
+  const qs    = new URLSearchParams(window.location.search)
+  const token = match?.[1] || qs.get('token') || ''
+  if (token) {
+    document.getElementById('token-input').value = token
+    chargerTicket(token)
+  }
+})
+
+function rechercherTicket() {
+  const token = document.getElementById('token-input').value.trim()
+  if (!token) { showSearchError('Veuillez entrer un code de suivi.'); return }
+  chargerTicket(token)
+}
+
+// ─── Appel API ────────────────────────────────────────────────────────────────
+
+async function chargerTicket(token) {
+  try {
+    showSection('none')
+    const r = await fetch(`/api/public/ticket/${token}`)
+    const data = await r.json()
+    if (!data.success) {
+      showSection('error')
+      document.getElementById('error-msg').textContent = data.error || 'Ticket introuvable.'
+      return
+    }
+    renderTicket(data.data)
+    showSection('result')
+    // Mettre à jour l'URL sans rechargement
+    window.history.replaceState({}, '', `/suivi/${token}`)
+  } catch (e) {
+    showSection('error')
+    document.getElementById('error-msg').textContent = 'Erreur de connexion. Réessayez.'
+  }
+}
+
+// ─── Rendu ────────────────────────────────────────────────────────────────────
+
+function renderTicket(t) {
+  document.getElementById('res-boutique').textContent = t.boutique.nom
+  document.getElementById('res-numero').textContent   = `Ticket ${t.numero}`
+  document.getElementById('res-emoji').textContent    = t.statut_emoji
+  document.getElementById('res-appareil').textContent = t.appareil
+  document.getElementById('res-panne').textContent    = t.panne
+
+  // Statut badge
+  const badge = document.getElementById('res-statut-badge')
+  badge.className = `inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm mb-4 ${STATUT_COLORS[t.statut] || 'bg-gray-100 text-gray-700'}`
+  badge.textContent = t.statut_label
+
+  document.getElementById('res-statut-desc').textContent = t.statut_desc
+
+  // Diagnostic
+  if (t.diagnostic) {
+    document.getElementById('res-diagnostic-row').classList.remove('hidden')
+    document.getElementById('res-diagnostic').textContent = t.diagnostic
+  }
+
+  // Timeline
+  renderTimeline(t.statut)
+
+  // Infos pratiques
+  const infos = []
+  if (t.date_reception)
+    infos.push(infoRow('fa-calendar-plus','Reçu le', formatDate(t.date_reception)))
+  if (t.date_promesse)
+    infos.push(infoRow('fa-calendar-check','Promesse', formatDate(t.date_promesse)))
+  if (t.date_livraison)
+    infos.push(infoRow('fa-calendar-alt','Rendu le', formatDate(t.date_livraison)))
+  document.getElementById('infos-pratiques').innerHTML = infos.join('') || '<p class="text-sm text-gray-400">Aucune date renseignée.</p>'
+
+  // Prix
+  if (t.prix_final || t.prix_estime) {
+    document.getElementById('prix-section').classList.remove('hidden')
+    const rows = []
+    if (t.prix_estime) rows.push(prixRow('Devis estimé', t.prix_estime))
+    if (t.prix_final)  rows.push(prixRow('Prix final', t.prix_final, true))
+    document.getElementById('prix-body').innerHTML = rows.join('')
+  }
+
+  // Contact boutique
+  const b = t.boutique
+  const contacts = []
+  if (b.telephone) contacts.push(infoRow('fa-phone','Téléphone',`<a href="tel:${b.telephone}" class="text-blue-600">${b.telephone}</a>`))
+  if (b.email)     contacts.push(infoRow('fa-envelope','Email',`<a href="mailto:${b.email}" class="text-blue-600">${b.email}</a>`))
+  if (b.adresse)   contacts.push(infoRow('fa-map-marker-alt','Adresse', `${b.adresse}${b.ville ? ', ' + b.ville : ''}`))
+  document.getElementById('contact-boutique').innerHTML = contacts.join('')
+}
+
+function renderTimeline(statut) {
+  const stepOrder = STEPS.map(s => s.key)
+  const currentIdx = stepOrder.indexOf(statut)
+  const el = document.getElementById('timeline')
+
+  // Statuts terminaux non linéaires
+  if (['CANCELLED','UNREPAIRABLE'].includes(statut)) {
+    el.innerHTML = `<div class="text-center py-4 text-gray-500 w-full">
+      <i class="fas fa-times-circle text-red-400 text-3xl mb-2"></i>
+      <p class="text-sm">${statut === 'CANCELLED' ? 'Réparation annulée' : 'Appareil irréparable'}</p>
+    </div>`
+    return
+  }
+
+  el.innerHTML = STEPS.map((step, i) => {
+    const isDone   = i < currentIdx
+    const isActive = i === currentIdx
+    const cls = isDone ? 'step-done' : isActive ? 'step-active' : 'step-pending'
+    return `
+    <div class="flex flex-col items-center gap-1 flex-1 ${cls}">
+      <div class="step-dot ${isActive ? 'pulse' : ''}">
+        <i class="fas ${step.icon} text-sm"></i>
+      </div>
+      <span class="text-xs font-medium text-center leading-tight
+        ${isDone ? 'text-green-600' : isActive ? 'text-blue-600' : 'text-gray-400'}">${step.label}</span>
+    </div>`
+  }).join('')
+}
+
+// ─── Utilitaires DOM ──────────────────────────────────────────────────────────
+
+function infoRow(icon, label, value) {
+  return `<div class="flex items-center gap-3 text-sm">
+    <i class="fas ${icon} w-5 text-gray-400"></i>
+    <span class="text-gray-500">${label} :</span>
+    <span class="font-medium text-gray-700">${value}</span>
+  </div>`
+}
+
+function prixRow(label, montant, final = false) {
+  return `<div class="flex justify-between items-center py-2 ${final ? 'border-t border-gray-100 font-semibold' : ''}">
+    <span class="text-sm ${final ? 'text-gray-800' : 'text-gray-500'}">${label}</span>
+    <span class="text-sm ${final ? 'text-blue-700 text-base' : 'text-gray-700'}">${Number(montant).toFixed(2)} €</span>
+  </div>`
+}
+
+function formatDate(str) {
+  if (!str) return '—'
+  return new Date(str.replace(' ','T')).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })
+}
+
+function showSection(name) {
+  document.getElementById('search-section').classList.toggle('hidden', name !== 'search')
+  document.getElementById('result-section').classList.toggle('hidden', name !== 'result')
+  document.getElementById('error-section').classList.toggle('hidden',  name !== 'error')
+  document.getElementById('search-error').classList.add('hidden')
+}
+
+function showSearchError(msg) {
+  const el = document.getElementById('search-error')
+  el.textContent = msg
+  el.classList.remove('hidden')
+}
+
+function resetRecherche() {
+  document.getElementById('token-input').value = ''
+  showSection('search')
+  window.history.replaceState({}, '', '/suivi.html')
+}
+
+// Afficher le formulaire par défaut
+showSection('search')
+</script>
+</body>
+</html>

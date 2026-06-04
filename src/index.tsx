@@ -14,6 +14,7 @@ import usersRoutes      from './routes/users'
 import servicesRoutes      from './routes/services'
 import fournisseursRoutes  from './routes/fournisseurs'
 import agendaRoutes        from './routes/agenda'
+import publicRoutes        from './routes/public'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
@@ -61,8 +62,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.6.0',
-    sprint:    '2.6 — Agenda / Rendez-vous + iCal',
+    version:   '2.7.0',
+    sprint:    '2.7 — Vitrine publique + Tracking token',
     timestamp: new Date().toISOString(),
   })
 })
@@ -99,13 +100,14 @@ app.get('/api/calendar/:filename', async (c) => {
 // IMPORTANT : l'ordre est critique — les routes avec params dynamiques (:id)
 // doivent venir APRÈS les routes à segments fixes (avoirs, factures, devis…)
 app.route('/api/auth',       authRoutes)
+app.route('/api/public',     publicRoutes)         // /api/public/* (sans auth) ← AVANT tout router /api avec authMiddleware
 app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*
 app.route('/api',            rachatsRoutes)        // /api/rachats/*
 app.route('/api',            fournisseursRoutes)   // /api/fournisseurs/* + /api/bons-commande/*
-app.route('/api',            agendaRoutes)         // /api/agenda/* + /api/calendar/*.ics (AVANT clients/:id)
+app.route('/api',            agendaRoutes)         // /api/agenda/* + /api/calendar/*.ics
 app.route('/api',            usersRoutes)       // /api/users/* (PIN + permissions)
 app.route('/api',            servicesRoutes)    // /api/services/* + /api/services/categories/*
-app.route('/api',            ticketsRoutes)     // /api/tickets/*
+app.route('/api/tickets',    ticketsRoutes)     // /api/tickets/*
 app.route('/api',            stocksRoutes)      // /api/produits/* + /api/categories/*
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*

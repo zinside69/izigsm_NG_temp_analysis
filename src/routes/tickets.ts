@@ -113,15 +113,19 @@ tickets.post('/', async (c) => {
 
   const numero = await nextNumero(c.env.DB, boutiqueId, 'ticket')
 
+  // Générer un tracking_token unique (32 hex chars) pour le suivi public client
+  const trackingBytes = crypto.getRandomValues(new Uint8Array(16))
+  const trackingToken = Array.from(trackingBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
   const result = await c.env.DB.prepare(`
     INSERT INTO tickets
       (boutique_id, numero, client_id, appareil_id, appareil_marque, appareil_modele,
-       description_panne, technicien_id, prix_estime, date_promesse, notes_internes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(boutiqueId, numero, client_id, appareil_id ?? null, appareil_marque, appareil_modele,
           description_panne, technicien_id ?? null, prix_estime ?? null,
-          date_promesse ?? null, notes_internes ?? null).first<{ id: number }>()
+          date_promesse ?? null, notes_internes ?? null, trackingToken).first<{ id: number }>()
 
   // Enregistrer la création dans l'historique
   await c.env.DB.prepare(`
@@ -131,7 +135,7 @@ tickets.post('/', async (c) => {
 
   await auditLog(c.env.DB, { boutique_id: boutiqueId, user_id: user.sub, action: 'CREATE_TICKET', entite_type: 'ticket', entite_id: result?.id })
 
-  return c.json({ success: true, id: result?.id, numero, message: 'Ticket créé.' }, 201)
+  return c.json({ success: true, id: result?.id, numero, tracking_token: trackingToken, message: 'Ticket créé.' }, 201)
 })
 
 // ── PUT /api/tickets/:id ──────────────────────────────────────────────────────
