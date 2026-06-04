@@ -181,11 +181,10 @@ function verifyOtp() {
   localStorage.setItem('izigsm_session', JSON.stringify(user));
   localStorage.setItem('reg_email', user.email);
 
-  // Appel API pour persister (avec fallback gracieux)
-  fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account: registerState.account, workshop: registerState.workshop }),
+  // Appel API pour persister (sans auth — endpoint public, fallback gracieux)
+  apiPostPublic('/api/register', {
+    account:  registerState.account,
+    workshop: registerState.workshop,
   }).catch(() => {}); // Ignorer les erreurs réseau
 
   // Afficher le succès

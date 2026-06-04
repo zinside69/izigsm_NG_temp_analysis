@@ -440,34 +440,25 @@ async function signalerLitige(id) {
 }
 
 // ─── Export CSV livre de police ───────────────────────────────────────────────
+/**
+ * Exporte le livre de police au format CSV via ApiService (apiBlobGet).
+ * Respecte le Principe 5 : aucun fetch() direct — passe par le wrapper centralisé.
+ */
 async function exportLivrePolice() {
-  const session    = requireAuth();
+  requireAuth();
   const boutiqueId = getBoutiqueId();
   if (!boutiqueId) { showFlash('⚠️ boutique_id requis pour l\'export.', 'error'); return; }
 
-  const debut = document.getElementById('filtre-debut')?.value || '';
-  const fin   = document.getElementById('filtre-fin')?.value   || '';
+  const debut    = document.getElementById('filtre-debut')?.value || '';
+  const fin      = document.getElementById('filtre-fin')?.value   || '';
+  const filename = `livre-police-${new Date().toISOString().slice(0, 10)}.csv`;
 
   let url = `/api/rachats/export?boutique_id=${boutiqueId}`;
   if (debut) url += `&date_debut=${debut}`;
   if (fin)   url += `&date_fin=${fin}`;
 
-  // Téléchargement via <a> temporaire
-  const token = getToken();
-  try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) { showFlash('⚠️ Export impossible.', 'error'); return; }
-    const blob = await res.blob();
-    const burl  = URL.createObjectURL(blob);
-    const a     = document.createElement('a');
-    a.href     = burl;
-    a.download = `livre-police-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(burl);
-    showFlash('✅ Export CSV téléchargé.', 'success');
-  } catch (err) {
-    showFlash('⚠️ Erreur réseau lors de l\'export.', 'error');
-  }
+  const blob = await apiBlobGet(url, filename);
+  if (blob) showFlash('✅ Export CSV téléchargé.', 'success');
 }
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────

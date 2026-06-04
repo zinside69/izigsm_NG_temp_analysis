@@ -344,8 +344,8 @@ async function api(method, url, body = null, opts = {}) {
 
   let res = await fetch(url, options);
 
-  // 401 → tentative de refresh
-  if (res.status === 401 && !opts._retry) {
+  // 401 → tentative de refresh (sauf si skipAuth : appels sans session comme /api/register)
+  if (res.status === 401 && !opts._retry && !opts.skipAuth) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
       return api(method, url, body, { ...opts, _retry: true });
@@ -435,12 +435,46 @@ async function apiDelete(url) {
   return api('DELETE', url);
 }
 
+/**
+ * PATCH helper — mise à jour partielle d'une ressource
+ */
 async function apiPatch(url, body) {
   return api('PATCH', url, body);
 }
 
-async function apiPut(url, body) {
-  return api('PUT', url, body);
+/**
+ * POST helper sans authentification — pour les endpoints publics (register, etc.)
+ * N'effectue pas de redirect 401 si la session est absente.
+ */
+async function apiPostPublic(url, body) {
+  return api('POST', url, body, { skipAuth: true });
+}
+
+/**
+ * Téléchargement d'un fichier binaire (CSV, PDF…) via l'ApiService.
+ * Gère le JWT automatiquement. Retourne un Blob ou null en cas d'erreur.
+ * @param {string} url       - URL de l'endpoint (avec query string si nécessaire)
+ * @param {string} filename  - Nom du fichier proposé au téléchargement
+ */
+async function apiBlobGet(url, filename) {
+  const token = getToken();
+  try {
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) { showFlash('⚠️ Export impossible.', 'error'); return null; }
+    const blob = await res.blob();
+    const burl = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = burl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(burl);
+    return blob;
+  } catch (err) {
+    showFlash('⚠️ Erreur réseau lors du téléchargement.', 'error');
+    return null;
+  }
 }
 
 /**
