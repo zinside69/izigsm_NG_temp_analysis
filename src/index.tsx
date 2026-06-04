@@ -13,6 +13,8 @@ import rachatsRoutes    from './routes/rachats'
 import usersRoutes      from './routes/users'
 import servicesRoutes      from './routes/services'
 import fournisseursRoutes  from './routes/fournisseurs'
+import agendaRoutes        from './routes/agenda'
+import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
  * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
@@ -59,10 +61,38 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.5.0',
-    sprint:    '2.5 — Fournisseurs + Bons de commande + CUMP',
+    version:   '2.6.0',
+    sprint:    '2.6 — Agenda / Rendez-vous + iCal',
     timestamp: new Date().toISOString(),
   })
+})
+
+// ─── Route iCal publique (SANS auth — avant tous les routers avec use('*', authMiddleware)) ──
+// Accessible via webcal:// par les clients de calendrier (Google, Apple, Outlook…)
+app.get('/api/calendar/:filename', async (c) => {
+  try {
+    const filename = c.req.param('filename')
+    const token    = filename.endsWith('.ics') ? filename.slice(0, -4) : filename
+    if (!token || token.length < 10)
+      return c.json({ success: false, error: 'Token iCal invalide.' }, 400)
+
+    const bt = await c.env.DB.prepare(
+      'SELECT boutique_id FROM boutique_ical_tokens WHERE token = ?'
+    ).bind(token).first<{ boutique_id: number }>()
+
+    if (!bt) return c.json({ success: false, error: 'Token iCal invalide.' }, 404)
+
+    const ics = await generateIcal(c.env.DB, bt.boutique_id)
+    return new Response(ics, {
+      headers: {
+        'Content-Type':        'text/calendar; charset=utf-8',
+        'Content-Disposition': 'inline; filename="agenda-izigsm.ics"',
+        'Cache-Control':       'no-cache, no-store',
+      }
+    })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
 })
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -72,6 +102,7 @@ app.route('/api/auth',       authRoutes)
 app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/* + /api/avoirs/*
 app.route('/api',            rachatsRoutes)        // /api/rachats/*
 app.route('/api',            fournisseursRoutes)   // /api/fournisseurs/* + /api/bons-commande/*
+app.route('/api',            agendaRoutes)         // /api/agenda/* + /api/calendar/*.ics (AVANT clients/:id)
 app.route('/api',            usersRoutes)       // /api/users/* (PIN + permissions)
 app.route('/api',            servicesRoutes)    // /api/services/* + /api/services/categories/*
 app.route('/api',            ticketsRoutes)     // /api/tickets/*

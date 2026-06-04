@@ -85,6 +85,35 @@ export function validateBonCommande(body: any): string | null {
   return null
 }
 
+// ─── Agenda ───────────────────────────────────────────────────────────────────
+
+const TYPES_RDV_VALIDES  = ['reparation','restitution','devis','diagnostic','autre']
+const STATUTS_RDV_VALIDES = ['PENDING','SCHEDULED','DONE','NO_SHOW','CANCELLED','CONVERTED']
+
+/**
+ * Valide le corps d'une requête rendez-vous.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateRendezVous(body: any): string | null {
+  if (!body.titre?.trim())
+    return 'Titre du rendez-vous obligatoire.'
+  if (!body.debut)
+    return 'Date/heure de début obligatoire.'
+  if (isNaN(Date.parse(body.debut)))
+    return 'Format date/heure début invalide (ISO 8601 attendu).'
+  if (body.fin && isNaN(Date.parse(body.fin)))
+    return 'Format date/heure fin invalide.'
+  if (body.fin && new Date(body.fin) <= new Date(body.debut))
+    return 'La fin doit être postérieure au début.'
+  if (body.duree_minutes !== undefined && (isNaN(Number(body.duree_minutes)) || Number(body.duree_minutes) <= 0))
+    return 'duree_minutes doit être un entier positif.'
+  if (body.type_rdv && !TYPES_RDV_VALIDES.includes(body.type_rdv))
+    return `type_rdv invalide. Valeurs : ${TYPES_RDV_VALIDES.join(', ')}`
+  if (body.statut && !STATUTS_RDV_VALIDES.includes(body.statut))
+    return `statut invalide. Valeurs : ${STATUTS_RDV_VALIDES.join(', ')}`
+  return null
+}
+
 // ─── Tickets ──────────────────────────────────────────────────────────────────
 
 /**

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agenda — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/style.css" rel="stylesheet">
+  <style>
+    /* ── Calendrier ── */
+    .calendar-grid { display: grid; grid-template-columns: 60px repeat(7,1fr); }
+    .time-slot     { height: 48px; }
+    .rdv-block {
+      position: absolute; left: 2px; right: 2px;
+      border-radius: 4px; padding: 2px 6px; font-size: 11px;
+      overflow: hidden; cursor: pointer; z-index: 10;
+      border-left: 3px solid rgba(0,0,0,.2);
+    }
+    .day-col { position: relative; border-right: 1px solid #e5e7eb; min-height: 48px; }
+    .time-label { font-size: 11px; color: #9ca3af; text-align: right; padding-right: 8px; line-height: 48px; }
+    /* Statuts badge */
+    .badge-PENDING    { background:#fef9c3;color:#854d0e; }
+    .badge-SCHEDULED  { background:#dbeafe;color:#1e40af; }
+    .badge-DONE       { background:#dcfce7;color:#166534; }
+    .badge-NO_SHOW    { background:#fee2e2;color:#991b1b; }
+    .badge-CANCELLED  { background:#f3f4f6;color:#6b7280; }
+    .badge-CONVERTED  { background:#f3e8ff;color:#7e22ce; }
+    /* Vue liste */
+    .rdv-card { transition: box-shadow .15s; }
+    .rdv-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+    /* Nav semaine */
+    .week-day.today { background: #eff6ff; border-color: #3b82f6; }
+    .week-day.today .day-name { color: #2563eb; font-weight: 700; }
+    /* Modale */
+    .modal-backdrop { backdrop-filter: blur(2px); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ── Sidebar (commune) ── -->
+<div id="sidebar-placeholder"></div>
+
+<!-- ── Contenu principal ── -->
+<div class="ml-64 p-6">
+
+  <!-- En-tête -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-calendar-alt text-blue-500 mr-2"></i>Agenda</h1>
+      <p class="text-sm text-gray-500 mt-1">Gestion des rendez-vous clients</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="exportIcal()" class="btn-secondary text-sm">
+        <i class="fas fa-calendar-download mr-1"></i>Export iCal
+      </button>
+      <button onclick="openModalRdv()" class="btn-primary text-sm">
+        <i class="fas fa-plus mr-1"></i>Nouveau RDV
+      </button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6" id="kpis-section">
+    <div class="kpi-card" id="kpi-total">
+      <div class="kpi-icon bg-blue-100 text-blue-600"><i class="fas fa-calendar-check"></i></div>
+      <div><div class="kpi-value" id="kpi-total-val">—</div><div class="kpi-label">Total RDV</div></div>
+    </div>
+    <div class="kpi-card" id="kpi-auj">
+      <div class="kpi-icon bg-green-100 text-green-600"><i class="fas fa-clock"></i></div>
+      <div><div class="kpi-value" id="kpi-auj-val">—</div><div class="kpi-label">Aujourd'hui</div></div>
+    </div>
+    <div class="kpi-card" id="kpi-semaine">
+      <div class="kpi-icon bg-purple-100 text-purple-600"><i class="fas fa-calendar-week"></i></div>
+      <div><div class="kpi-value" id="kpi-semaine-val">—</div><div class="kpi-label">Cette semaine</div></div>
+    </div>
+    <div class="kpi-card" id="kpi-attente">
+      <div class="kpi-icon bg-yellow-100 text-yellow-600"><i class="fas fa-hourglass-half"></i></div>
+      <div><div class="kpi-value" id="kpi-attente-val">—</div><div class="kpi-label">En attente</div></div>
+    </div>
+    <div class="kpi-card" id="kpi-taux">
+      <div class="kpi-icon bg-emerald-100 text-emerald-600"><i class="fas fa-percent"></i></div>
+      <div><div class="kpi-value" id="kpi-taux-val">—</div><div class="kpi-label">Taux honoré</div></div>
+    </div>
+  </div>
+
+  <!-- Barre navigation vue + semaine -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+
+      <!-- Switch vue -->
+      <div class="flex rounded-lg overflow-hidden border border-gray-200">
+        <button id="btn-vue-semaine" onclick="setVue('semaine')"
+          class="vue-btn active px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700">
+          <i class="fas fa-calendar-week mr-1"></i>Semaine
+        </button>
+        <button id="btn-vue-liste" onclick="setVue('liste')"
+          class="vue-btn px-4 py-2 text-sm font-medium bg-white text-gray-600 hover:bg-gray-50">
+          <i class="fas fa-list mr-1"></i>Liste
+        </button>
+      </div>
+
+      <!-- Nav semaine -->
+      <div class="flex items-center gap-3" id="nav-semaine">
+        <button onclick="prevWeek()" class="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+          <i class="fas fa-chevron-left text-gray-500"></i>
+        </button>
+        <span id="label-semaine" class="text-sm font-semibold text-gray-700 min-w-[200px] text-center">—</span>
+        <button onclick="nextWeek()" class="p-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+          <i class="fas fa-chevron-right text-gray-500"></i>
+        </button>
+        <button onclick="goToday()" class="px-3 py-2 text-xs font-medium bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">
+          Aujourd'hui
+        </button>
+      </div>
+
+      <!-- Filtres rapides -->
+      <div class="flex items-center gap-2">
+        <select id="filter-statut" onchange="applyFilters()" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+          <option value="">Tous les statuts</option>
+          <option value="PENDING">En attente</option>
+          <option value="SCHEDULED">Confirmé</option>
+          <option value="DONE">Effectué</option>
+          <option value="NO_SHOW">Absent</option>
+          <option value="CANCELLED">Annulé</option>
+          <option value="CONVERTED">Converti</option>
+        </select>
+        <select id="filter-type" onchange="applyFilters()" class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white">
+          <option value="">Tous les types</option>
+          <option value="reparation">Réparation</option>
+          <option value="restitution">Restitution</option>
+          <option value="devis">Devis</option>
+          <option value="diagnostic">Diagnostic</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vue Semaine -->
+  <div id="vue-semaine" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <!-- En-têtes jours -->
+    <div class="calendar-grid border-b border-gray-100">
+      <div class="p-2 bg-gray-50 border-r border-gray-100"></div>
+      <div id="day-headers" class="contents"></div>
+    </div>
+    <!-- Corps heures × jours -->
+    <div class="overflow-y-auto" style="max-height:580px">
+      <div class="calendar-grid" id="calendar-body">
+        <!-- généré par JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Vue Liste -->
+  <div id="vue-liste" class="hidden space-y-3">
+    <!-- Barre de recherche liste -->
+    <div class="flex gap-2">
+      <input id="search-liste" type="text" placeholder="Rechercher un RDV…"
+        oninput="searchListe(this.value)"
+        class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
+    </div>
+    <div id="liste-rdv" class="space-y-2">
+      <div class="text-center text-gray-400 py-8"><i class="fas fa-calendar-xmark text-4xl mb-2"></i><p>Aucun rendez-vous</p></div>
+    </div>
+    <div id="liste-pagination" class="flex justify-center gap-2 mt-4"></div>
+  </div>
+
+</div><!-- /ml-64 -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALE — Créer / Modifier RDV
+═══════════════════════════════════════════════════════════════ -->
+<div id="modal-rdv" class="hidden fixed inset-0 bg-black/40 modal-backdrop z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-lg font-bold text-gray-900" id="modal-rdv-title">Nouveau rendez-vous</h2>
+        <button onclick="closeModal('modal-rdv')" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+
+      <form id="form-rdv" onsubmit="saveRdv(event)" class="space-y-4">
+        <input type="hidden" id="rdv-id">
+
+        <!-- Titre -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
+          <input id="rdv-titre" type="text" placeholder="Ex: Réparation iPhone 13"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" required>
+        </div>
+
+        <!-- Type RDV -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+          <select id="rdv-type" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="reparation">🔧 Réparation</option>
+            <option value="restitution">📦 Restitution appareil</option>
+            <option value="devis">💬 Devis sur place</option>
+            <option value="diagnostic">🔍 Diagnostic</option>
+            <option value="autre">📋 Autre</option>
+          </select>
+        </div>
+
+        <!-- Date/Heure + Durée -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Début *</label>
+            <input id="rdv-debut" type="datetime-local"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Durée (min)</label>
+            <select id="rdv-duree" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="15">15 min</option>
+              <option value="30" selected>30 min</option>
+              <option value="45">45 min</option>
+              <option value="60">1 h</option>
+              <option value="90">1 h 30</option>
+              <option value="120">2 h</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Client -->
+        <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Client</label>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <input id="rdv-nom-client" type="text" placeholder="Nom"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
+            </div>
+            <div>
+              <input id="rdv-tel-client" type="tel" placeholder="Téléphone"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
+            </div>
+          </div>
+          <div class="mt-2">
+            <select id="rdv-client-id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">— Lier à un client existant (optionnel) —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Ticket lié -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Ticket lié (optionnel)</label>
+          <select id="rdv-ticket-id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">— Aucun ticket lié —</option>
+          </select>
+        </div>
+
+        <!-- Description + Notes -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea id="rdv-description" rows="2" placeholder="Détails de l'intervention…"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"></textarea>
+        </div>
+
+        <!-- Couleur + Statut (édition) -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Couleur</label>
+            <input id="rdv-couleur" type="color" value="#3B82F6"
+              class="w-full h-10 border border-gray-200 rounded-lg px-1 py-1 cursor-pointer">
+          </div>
+          <div id="statut-wrapper" class="hidden">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Statut</label>
+            <select id="rdv-statut" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="PENDING">En attente</option>
+              <option value="SCHEDULED">Confirmé</option>
+              <option value="DONE">Effectué</option>
+              <option value="NO_SHOW">Client absent</option>
+              <option value="CANCELLED">Annulé</option>
+              <option value="CONVERTED">Converti ticket</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button type="button" onclick="closeModal('modal-rdv')"
+            class="flex-1 btn-secondary">Annuler</button>
+          <button type="submit" id="btn-save-rdv"
+            class="flex-1 btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALE — Détail / Actions RDV
+═══════════════════════════════════════════════════════════════ -->
+<div id="modal-detail-rdv" class="hidden fixed inset-0 bg-black/40 modal-backdrop z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold text-gray-900" id="detail-titre">—</h2>
+        <button onclick="closeModal('modal-detail-rdv')" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div id="detail-body" class="space-y-3 text-sm text-gray-700 mb-5"></div>
+      <div class="flex flex-wrap gap-2" id="detail-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALE — Export iCal
+═══════════════════════════════════════════════════════════════ -->
+<div id="modal-ical" class="hidden fixed inset-0 bg-black/40 modal-backdrop z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-calendar-download text-blue-500 mr-2"></i>Export iCal</h2>
+      <button onclick="closeModal('modal-ical')" class="text-gray-400 hover:text-gray-600">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">
+      Abonnez-vous à ce calendrier depuis votre application (Google Calendar, Apple Calendar, Outlook…).
+    </p>
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+      <p class="text-xs font-medium text-gray-500 mb-1">URL d'abonnement :</p>
+      <div class="flex gap-2 items-center">
+        <code id="ical-url" class="text-xs text-blue-700 break-all flex-1">Chargement…</code>
+        <button onclick="copyIcalUrl()" class="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Copier">
+          <i class="fas fa-copy"></i>
+        </button>
+      </div>
+    </div>
+    <a id="ical-download" href="#" download="agenda-izigsm.ics"
+      class="btn-primary w-full text-center block">
+      <i class="fas fa-download mr-1"></i>Télécharger .ics
+    </a>
+  </div>
+</div>
+
+<!-- ── Notification toast ── -->
+<div id="toast" class="hidden fixed bottom-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-sm"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/agenda.js"></script>
+</body>
+</html>

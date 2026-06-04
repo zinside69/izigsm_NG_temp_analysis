@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.5 terminé — 4 juin 2026
+> Dernière mise à jour : Sprint 2.6 terminé — 4 juin 2026
 
 ---
 
@@ -77,16 +77,22 @@
 - [x] Sidebar : entrée Fournisseurs + badge nb produits à commander
 - [x] Build ✅ (118.87 kB, 46 modules) + tests 10/10 ✅
 
-### Sprint 2.6 🔜 — Agenda / RDV + iCal *(inchangé)*
+### Sprint 2.6 ✅ — Agenda / RDV + iCal
 **Modules CDC : MOD-08 (MOYENNE)**
-- [ ] Migration 0015 : table `rendez_vous`
-- [ ] `src/services/agendaService.ts` (Model)
-- [ ] `src/routes/agenda.ts` (Controller pur)
-- [ ] Statuts : PENDING/SCHEDULED/DONE/NO_SHOW/CANCELLED/CONVERTED
-- [ ] Liaison RDV → ticket (durée depuis catalogue services Sprint 2.4)
-- [ ] Export iCal `.ics` (`webcal://izigsm.fr/api/calendar/:tenant/:token.ics`)
-- [ ] `public/agenda.html` : vues jour/semaine/mois
-- [ ] `public/static/js/agenda.js`
+- [x] Migration 0015 : tables `rendez_vous` + `boutique_ical_tokens`
+- [x] `src/services/agendaService.ts` (Model) — CRUD, vue calendrier, KPIs, iCal
+- [x] `src/routes/agenda.ts` (Controller pur — 9 endpoints + iCal)
+- [x] Statuts : PENDING/SCHEDULED/DONE/NO_SHOW/CANCELLED/CONVERTED + machine à états
+- [x] Types : réparation/restitution/devis/diagnostic/autre
+- [x] Vue calendrier groupée par date (`GET /api/agenda/view`)
+- [x] Export iCal RFC 5545 `GET /api/calendar/:token.ics` — public, sans auth
+- [x] Token iCal stable par boutique (`boutique_ical_tokens`)
+- [x] Fin auto-calculée depuis début + durée si non fournie
+- [x] `public/agenda.html` : vues semaine (grille horaire) + liste + 3 modales
+- [x] `public/static/js/agenda.js` : navigation semaine, KPIs, détail+actions
+- [x] Sidebar : entrée Agenda
+- [x] Fix route iCal : montée dans `index.tsx` avant routers avec `use('*', authMiddleware)`
+- [x] Build ✅ (133.00 kB, 48 modules) + tests 11/11 ✅
 
 ### Sprint 2.7 🔜 — Vitrine publique + Tracking token *(inchangé)*
 **Modules CDC : MOD-14 (MOYENNE) + MOD-01 tracking**
@@ -201,10 +207,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.5.0 |
-| Build | `dist/_worker.js` 118.87 kB — 46 modules |
-| Dernière migration | `0014_fournisseurs_bons_commande.sql` ✅ |
-| Dernier commit | Sprint 2.5 (pending) |
+| Version | 2.6.0 |
+| Build | `dist/_worker.js` 133.00 kB — 48 modules |
+| Dernière migration | `0015_agenda.sql` ✅ |
+| Dernier commit | Sprint 2.6 (pending) |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 
