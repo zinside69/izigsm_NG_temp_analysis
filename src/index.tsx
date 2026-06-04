@@ -52,6 +52,17 @@ app.use('/api/*', cors({
   credentials: true,
 }))
 
+// ─── Health check (AVANT les routes avec :id dynamiques) ─────────────────────
+app.get('/api/health', (c) => {
+  return c.json({
+    status:    'ok',
+    app:       'iziGSM',
+    version:   '2.3.0',
+    sprint:    '2.3 — PIN PBKDF2 + sessions KV + permissions granulaires',
+    timestamp: new Date().toISOString(),
+  })
+})
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 // IMPORTANT : l'ordre est critique — les routes avec params dynamiques (:id)
 // doivent venir APRÈS les routes à segments fixes (avoirs, factures, devis…)
@@ -64,17 +75,6 @@ app.route('/api',            stocksRoutes)      // /api/produits/* + /api/catego
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
 app.route('/api/boutiques',  boutiquesRoutes)
-
-// ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (c) => {
-  return c.json({
-    status:    'ok',
-    app:       'iziGSM',
-    version:   '2.0.0',
-    sprint:    '1 — D1 + JWT + NF525 + Personnel',
-    timestamp: new Date().toISOString(),
-  })
-})
 
 // ─── Dashboard stats (données réelles D1) ────────────────────────────────────
 app.get('/api/stats', async (c) => {

@@ -97,7 +97,7 @@ function mapApiFacture(f) {
 // ─── Chargement principal ─────────────────────────────────────────────────────
 async function loadFactures() {
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   if (!boutiqueId) {
     facturesUseApi = false;
@@ -283,7 +283,7 @@ function filterFactureStatus(val) { renderFactures('', val); }
 // ─── Chargement clients (select modal) ────────────────────────────────────────
 async function loadClientsForFactures() {
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   try {
     const result = await apiGet('/api/clients', { limit: 500, boutique_id: boutiqueId });
@@ -322,7 +322,7 @@ function populateFactureClients() {
 // ─── Chargement devis acceptés (select source) ───────────────────────────────
 async function loadDevisAcceptesForSelect() {
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   try {
     const result = await apiGet('/api/devis', {
@@ -460,7 +460,7 @@ async function saveFacture(statusLabel) {
 
   const statut     = STATUT_LABEL_TO_API[statusLabel] || 'brouillon';
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   const payload = {
     client_id:    clientId,

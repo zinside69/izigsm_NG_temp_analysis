@@ -205,15 +205,6 @@ users.get('/users', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(adminUser, query.boutique_id)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const rows = await c.env.DB.prepare(`
-    SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.actif,
-           u.pin_actif, r.nom as role, u.boutique_id, u.created_at
-    FROM   users u
-    JOIN   roles r ON r.id = u.role_id
-    WHERE  u.boutique_id = ? OR (? = 1 AND ? = 1)
-    ORDER  BY u.created_at ASC
-  `).bind(boutiqueId, adminUser.role === 'admin' ? 1 : 0, 1).all()
-
   // Pour admin : tous les users
   let result
   if (adminUser.role === 'admin') {

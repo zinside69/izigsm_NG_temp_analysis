@@ -36,7 +36,7 @@ function updateTopbarAvatar(session) {
 // ─── Chargement principal ─────────────────────────────────────────────────────
 async function loadRachats() {
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   if (!boutiqueId) {
     rachatsUseApi = false;
@@ -250,7 +250,7 @@ async function saveRachat() {
   if (prix === null || prix < 0) { showFlash('⚠️ Prix de rachat obligatoire (≥ 0).', 'error'); document.getElementById('r-prix')?.focus(); return; }
 
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
 
   const payload = {
     boutique_id:        boutiqueId,
@@ -442,7 +442,7 @@ async function signalerLitige(id) {
 // ─── Export CSV livre de police ───────────────────────────────────────────────
 async function exportLivrePolice() {
   const session    = requireAuth();
-  const boutiqueId = getBoutiqueId ? getBoutiqueId() : (session?.boutique_id ?? null);
+  const boutiqueId = getBoutiqueId();
   if (!boutiqueId) { showFlash('⚠️ boutique_id requis pour l\'export.', 'error'); return; }
 
   const debut = document.getElementById('filtre-debut')?.value || '';
