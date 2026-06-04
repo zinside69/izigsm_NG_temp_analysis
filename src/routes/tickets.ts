@@ -1,9 +1,15 @@
 /**
  * routes/tickets.ts — CRUD Tickets de réparation + machine à états
  *
- * Machine à états des statuts :
- * recu → diagnostic → en_reparation → termine → livre
- *                                              → annule (depuis n'importe quel état sauf livre)
+ * Machine à états des statuts (Sprint 2.8) :
+ * recu → en_diagnostic → attente_accord → a_commander → commande → pieces_recues → en_reparation → termine → livre
+ *                       ↘ en_reparation (réparation directe sans pièces)
+ *                                                                                ↗
+ *  Depuis tout état sauf livre/annule → annule
+ *
+ * Kanban 8 colonnes actives :
+ *   recu | en_diagnostic | attente_accord | a_commander | commande | pieces_recues | en_reparation | termine
+ * + colonnes terminales : livre | annule
  */
 
 import { Hono } from 'hono'
@@ -15,12 +21,30 @@ type Variables = { user: any }
 
 // Transitions autorisées (statut_avant → [statuts_suivants_possibles])
 const TRANSITIONS: Record<string, string[]> = {
-  recu:          ['diagnostic', 'en_reparation', 'annule'],
-  diagnostic:    ['en_reparation', 'annule'],
-  en_reparation: ['termine', 'annule'],
-  termine:       ['livre'],
-  livre:         [],      // état terminal
-  annule:        [],      // état terminal
+  recu:           ['en_diagnostic', 'attente_accord', 'en_reparation', 'annule'],
+  en_diagnostic:  ['attente_accord', 'a_commander', 'en_reparation', 'annule'],
+  attente_accord: ['a_commander', 'en_reparation', 'annule'],
+  a_commander:    ['commande', 'en_reparation', 'annule'],
+  commande:       ['pieces_recues', 'annule'],
+  pieces_recues:  ['en_reparation', 'annule'],
+  en_reparation:  ['termine', 'annule'],
+  termine:        ['livre'],
+  livre:          [],      // état terminal
+  annule:         [],      // état terminal
+}
+
+// Labels affichés dans le Kanban
+const STATUT_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
+  recu:           { label: 'Reçu',               emoji: '📋', color: 'blue' },
+  en_diagnostic:  { label: 'En diagnostic',      emoji: '🔍', color: 'purple' },
+  attente_accord: { label: 'Attente accord',     emoji: '⏳', color: 'yellow' },
+  a_commander:    { label: 'À commander',        emoji: '🛒', color: 'orange' },
+  commande:       { label: 'Commandé',           emoji: '📦', color: 'indigo' },
+  pieces_recues:  { label: 'Pièces reçues',      emoji: '✅', color: 'teal' },
+  en_reparation:  { label: 'En réparation',      emoji: '🔧', color: 'cyan' },
+  termine:        { label: 'Terminé',            emoji: '🎉', color: 'green' },
+  livre:          { label: 'Livré',              emoji: '🚀', color: 'gray' },
+  annule:         { label: 'Annulé',             emoji: '❌', color: 'red' },
 }
 
 const tickets = new Hono<{ Bindings: Bindings; Variables: Variables }>()
