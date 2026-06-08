@@ -942,12 +942,198 @@ async function confirmAvoir() {
   }
 }
 
-// ─── Impression / PDF ─────────────────────────────────────────────────────────
-function printFacture(id) {
-  const f = allFacturesCache.find(x => x.id == id);
-  if (!f) return;
-  // Sprint 2 : génération PDF via html2canvas + jsPDF
-  showFlash(`🖨 PDF pour facture ${esc(f.number)} — disponible au Sprint 2 (export PDF côté client).`, 'info');
+// ─── Impression / PDF (Sprint 2.13) ──────────────────────────────────────────
+async function printFacture(id) {
+  try {
+    // Récupérer le détail complet depuis l'API (lignes + paiements)
+    const boutiqueId = getBoutiqueId();
+    const r = await apiGet(`/api/factures/${id}`, boutiqueId ? { boutique_id: boutiqueId } : {});
+    if (!r.ok) {
+      showFlash('⚠️ Impossible de récupérer la facture.', 'error');
+      return;
+    }
+    const f   = r.data?.data || r.data || {};
+    const raw = f._raw || f;
+
+    // Récupérer le profil boutique depuis les settings
+    let boutique = { nom: 'iziGSM', adresse: '', siret: '', telephone: '', email: '' };
+    try {
+      const bs = await apiGet('/api/boutiques');
+      const b  = (bs.data?.data || bs.data || [])[0] || {};
+      boutique = {
+        nom:        b.nom       || b.name   || 'iziGSM',
+        adresse:    b.adresse   || b.address || '',
+        siret:      b.siret     || '',
+        telephone:  b.telephone || b.phone  || '',
+        email:      b.email     || '',
+      };
+    } catch {}
+
+    const lignes    = raw.lignes   || f.lignes   || [];
+    const paiements = raw.paiements || f.paiements || [];
+
+    const totalHT  = parseFloat(raw.total_ht  || f.totalHT  || f.subtotalHT || 0);
+    const totalTVA = parseFloat(raw.total_tva || f.tva      || 0);
+    const totalTTC = parseFloat(raw.total_ttc || f.totalTTC || 0);
+    const paye     = paiements.reduce((s, p) => s + parseFloat(p.montant||0), 0);
+    const reste    = Math.max(0, totalTTC - paye);
+
+    const numero  = raw.numero  || f.number  || f.numero  || ('FAC-' + id);
+    const dateEm  = raw.date_emission || f.createdAt || new Date().toISOString();
+    const dateEch = raw.date_echeance || '';
+    const statut  = raw.statut  || f._statut || f.status || 'brouillon';
+    const notes   = raw.notes   || f.description || '';
+    const clientNom    = raw.client_nom    || f.clientName || '—';
+    const clientEmail  = raw.client_email  || '';
+    const clientTel    = raw.client_telephone || raw.client_tel || '';
+    const clientAdresse = raw.client_adresse || '';
+
+    const badgeCls = { payee:'print-badge-paid', brouillon:'print-badge-draft', emise:'print-badge-sent', annulee:'print-badge-cancel' }[statut] || 'print-badge-draft';
+    const badgeLbl = { payee:'Payée', brouillon:'Brouillon', emise:'Émise', annulee:'Annulée' }[statut] || statut;
+
+    const html = `
+      <div id="print-root">
+        <!-- CSS impression injecté inline pour robustesse -->
+        <link rel="stylesheet" href="/static/css/print.css">
+
+        <div class="print-header print-no-break">
+          <div class="print-logo">
+            <div class="print-logo-mark">i</div>
+            <div class="print-logo-name">iziGSM</div>
+          </div>
+          <div class="print-boutique-info">
+            <strong>${esc(boutique.nom)}</strong><br>
+            ${boutique.adresse ? esc(boutique.adresse) + '<br>' : ''}
+            ${boutique.siret   ? 'SIRET : ' + esc(boutique.siret) + '<br>' : ''}
+            ${boutique.telephone ? esc(boutique.telephone) + '<br>' : ''}
+            ${boutique.email   ? esc(boutique.email) : ''}
+          </div>
+        </div>
+
+        <div class="print-doc-title print-no-break">
+          <div>
+            <div class="print-doc-type">Facture</div>
+            <div class="print-doc-numero">${esc(numero)} &nbsp; <span class="print-badge ${badgeCls}">${badgeLbl}</span></div>
+          </div>
+          <div class="print-doc-meta">
+            <strong>Date d'émission :</strong> ${_fmtDate(dateEm)}<br>
+            ${dateEch ? '<strong>Échéance :</strong> ' + _fmtDate(dateEch) + '<br>' : ''}
+            ${raw.hash_nf525 ? '<span style="font-size:7pt;color:#aaa;">NF525 ✓</span>' : ''}
+          </div>
+        </div>
+
+        <div class="print-parties print-no-break">
+          <div class="print-party-box">
+            <div class="print-party-label">Émetteur</div>
+            <div class="print-party-name">${esc(boutique.nom)}</div>
+            <div class="print-party-detail">${boutique.adresse ? esc(boutique.adresse) + '<br>' : ''}${boutique.siret ? 'SIRET : ' + esc(boutique.siret) : ''}</div>
+          </div>
+          <div class="print-party-box">
+            <div class="print-party-label">Facturé à</div>
+            <div class="print-party-name">${esc(clientNom)}</div>
+            <div class="print-party-detail">
+              ${clientEmail   ? esc(clientEmail)  + '<br>' : ''}
+              ${clientTel     ? esc(clientTel)    + '<br>' : ''}
+              ${clientAdresse ? esc(clientAdresse)        : ''}
+            </div>
+          </div>
+        </div>
+
+        <table class="print-table print-no-break">
+          <thead>
+            <tr>
+              <th style="width:45%">Description</th>
+              <th class="text-center" style="width:10%">Qté</th>
+              <th class="text-right" style="width:15%">P.U. HT</th>
+              <th class="text-right" style="width:10%">TVA</th>
+              <th class="text-right" style="width:20%">Total TTC</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lignes.length ? lignes.map(l => `
+              <tr>
+                <td>${esc(l.description || l.designation || '—')}</td>
+                <td class="text-center">${parseFloat(l.quantite||1).toLocaleString('fr-FR')}</td>
+                <td class="text-right">${_money(l.prix_unitaire_ht)}</td>
+                <td class="text-center">${parseFloat(l.tva_taux||20)}%</td>
+                <td class="text-right"><strong>${_money(l.total_ttc)}</strong></td>
+              </tr>`).join('') :
+              `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:8px;">Aucune ligne</td></tr>`
+            }
+          </tbody>
+        </table>
+
+        <div class="print-totaux">
+          <table class="print-totaux-table">
+            <tr><td>Sous-total HT</td><td>${_money(totalHT)}</td></tr>
+            <tr class="total-ht"><td>TVA</td><td>${_money(totalTVA)}</td></tr>
+            <tr class="total-ttc"><td>TOTAL TTC</td><td>${_money(totalTTC)}</td></tr>
+          </table>
+        </div>
+
+        ${paiements.length ? `
+        <div class="print-paiements print-no-break">
+          <div class="print-paiements-title">Règlements enregistrés</div>
+          ${paiements.map(p => `
+            <div class="print-paiement-row">
+              <span>${_fmtDate(p.date_paiement)} — ${esc(p.mode_paiement||'—')}</span>
+              <span>${_money(p.montant)}</span>
+            </div>`).join('')}
+          <div class="print-solde">
+            <span>Reste à payer</span>
+            <span style="color:${reste<=0?'#22c55e':'#ef4444'};">${_money(reste)}</span>
+          </div>
+        </div>` : ''}
+
+        ${notes ? `<div class="print-notes print-no-break"><div class="print-notes-label">Notes</div>${esc(notes)}</div>` : ''}
+
+        <div class="print-footer">
+          <div>${esc(boutique.nom)} ${boutique.siret ? '— SIRET : ' + esc(boutique.siret) : ''}</div>
+          <div class="print-footer-legal">Document généré par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
+          <div>Page 1</div>
+        </div>
+      </div>`;
+
+    // Injecter le HTML dans le DOM, masquer l'app, imprimer, puis nettoyer
+    let printDiv = document.getElementById('print-root');
+    if (printDiv) printDiv.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper.firstElementChild);
+
+    // Masquer le layout app et afficher print-root
+    const style = document.createElement('style');
+    style.id = '_print_style_override';
+    style.media = 'print';
+    style.textContent = `
+      body > .app-layout { display: none !important; }
+      #print-root { display: block !important; }
+    `;
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+      window.print();
+      // Nettoyage après impression
+      setTimeout(() => {
+        document.getElementById('print-root')?.remove();
+        document.getElementById('_print_style_override')?.remove();
+      }, 500);
+    }, 200);
+
+  } catch (err) {
+    console.error('[printFacture]', err);
+    showFlash('⚠️ Erreur lors de la génération PDF.', 'error');
+  }
+}
+
+function _money(n) {
+  return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR' }).format(parseFloat(n)||0);
+}
+
+function _fmtDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' }); }
+  catch { return iso; }
 }
 
 // ─── Gestion des lignes ───────────────────────────────────────────────────────

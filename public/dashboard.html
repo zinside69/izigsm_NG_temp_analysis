@@ -5,202 +5,231 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — iziGSM</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ─── Grille KPIs enrichie ─── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .kpi-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: box-shadow .15s;
+    }
+    .kpi-card:hover { box-shadow: 0 4px 16px rgba(99,102,241,.10); }
+    .kpi-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .kpi-icon { font-size: 1.5rem; }
+    .kpi-badge { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .kpi-badge.up   { background:#dcfce7; color:#166534; }
+    .kpi-badge.down { background:#fee2e2; color:#991b1b; }
+    .kpi-badge.warn { background:#fef9c3; color:#854d0e; }
+    .kpi-value { font-size: 1.8rem; font-weight: 800; color: #1e1b4b; line-height: 1; }
+    .kpi-label { font-size: .82rem; color: #6b7280; font-weight: 500; }
+    .kpi-delta { font-size: .78rem; color: #9ca3af; }
+    /* ─── Grille charts ─── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    .chart-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .chart-title {
+      font-size: .88rem;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .chart-title .chart-sub { font-size: .78rem; color: #9ca3af; font-weight: 400; text-transform: none; }
+    .chart-wrap { position: relative; height: 220px; }
+    /* ─── Grille bas ─── */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 18px;
+    }
+    /* ─── Tableau techniciens ─── */
+    .tech-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+    .tech-row:last-child { border-bottom: none; }
+    .tech-avatar { width: 34px; height: 34px; border-radius: 50%; background: #ede9ff; color: #6366f1; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+    .tech-info { flex: 1; min-width: 0; }
+    .tech-name { font-size: .88rem; font-weight: 600; color: #1e1b4b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tech-sub  { font-size: .76rem; color: #9ca3af; }
+    .tech-bar-wrap { width: 80px; }
+    .tech-bar { height: 6px; background: #e5e7eb; border-radius: 99px; overflow: hidden; }
+    .tech-bar-fill { height: 100%; background: #6366f1; border-radius: 99px; transition: width .4s; }
+    .tech-count { font-size: .85rem; font-weight: 700; color: #374151; min-width: 28px; text-align: right; }
+    /* ─── Activité ─── */
+    .activity-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f3f4f6; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
+    .activity-body { flex: 1; min-width: 0; }
+    .activity-text { font-size: .83rem; font-weight: 600; color: #1e1b4b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .activity-time { font-size: .76rem; color: #9ca3af; margin-top: 1px; }
+    /* ─── Alertes rapides ─── */
+    .alert-strip { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+    .alert-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: opacity .15s; border: 1px solid transparent; }
+    .alert-chip:hover { opacity: .85; }
+    .alert-chip.warn  { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+    .alert-chip.error { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .alert-chip.info  { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    .alert-chip.none  { background: #f3f4f6; color: #6b7280; }
+    /* ─── Responsive ─── */
+    @media(max-width:1100px) {
+      .kpi-grid { grid-template-columns: repeat(2,1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+    @media(max-width:640px) {
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
-    <!-- ===== SIDEBAR ===== -->
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-logo">
-        <span class="s-mark">i</span>
-        <span class="s-name">iziGSM</span>
-        <span class="s-plan">Essai</span>
-      </div>
+    <!-- SIDEBAR générée par app.js -->
+    <nav class="sidebar" id="sidebar"></nav>
 
-      <div class="sidebar-nav">
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Principal</div>
-          <a class="nav-item active" href="dashboard.html" data-page="dashboard">
-            <span class="nav-icon">🏠</span> Tableau de bord
-          </a>
-          <a class="nav-item" href="tickets.html" data-page="tickets">
-            <span class="nav-icon">🔧</span> Prises en charge
-            <span class="nav-badge" id="badge-tickets">3</span>
-          </a>
-          <a class="nav-item" href="devis.html" data-page="devis">
-            <span class="nav-icon">📋</span> Devis
-          </a>
-          <a class="nav-item" href="factures.html" data-page="factures">
-            <span class="nav-icon">💶</span> Factures
-          </a>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Subvention</div>
-          <a class="nav-item" href="qualirepar.html" data-page="qualirepar">
-            <span class="nav-icon">🌿</span> QualiRépar
-            <span class="nav-badge" style="background:#059669;">2</span>
-          </a>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Gestion</div>
-          <a class="nav-item" href="stock.html" data-page="stock">
-            <span class="nav-icon">📦</span> Stock
-          </a>
-          <a class="nav-item" href="clients.html" data-page="clients">
-            <span class="nav-icon">👥</span> Clients
-          </a>
-          <a class="nav-item" href="personnel.html" data-page="personnel">
-            <span class="nav-icon">🕐</span> Personnel
-          </a>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Configuration</div>
-          <a class="nav-item" href="settings.html" data-page="settings">
-            <span class="nav-icon">⚙️</span> Paramètres
-          </a>
-          <a class="nav-item" href="modules.html" data-page="modules">
-            <span class="nav-icon">🧩</span> Modules
-          </a>
-        </div>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="sidebar-user" onclick="window.location.href='settings.html'">
-          <div class="user-avatar" id="sidebar-avatar">JD</div>
-          <div class="user-info">
-            <div class="u-name" id="sidebar-name">Jean Dupont</div>
-            <div class="u-role">Administrateur</div>
-          </div>
-          <span class="user-chevron">›</span>
-        </div>
-        <a class="nav-item" href="#" onclick="logout()" style="margin-top:4px;">
-          <span class="nav-icon">🚪</span> Se déconnecter
-        </a>
-      </div>
-    </nav>
-
-    <!-- ===== CONTENU PRINCIPAL ===== -->
     <div class="main-content">
-      <!-- Topbar -->
       <header class="dash-topbar">
         <div class="topbar-left">
           <div class="topbar-title">Tableau de bord</div>
+          <div class="topbar-sub" id="topbar-date" style="font-size:.82rem;color:#9ca3af;margin-left:10px;"></div>
         </div>
         <div class="topbar-right">
-          <div class="topbar-notif" title="Notifications">
-            🔔 <span class="notif-dot"></span>
-          </div>
+          <button class="btn btn-ghost btn-sm" onclick="DashApp.refresh()" title="Actualiser">
+            🔄 <span id="refresh-label">Actualiser</span>
+          </button>
           <div class="topbar-avatar" id="topbar-avatar">JD</div>
         </div>
       </header>
 
-      <!-- Page content -->
       <main class="page-content">
-        <!-- KPI Cards -->
-        <div class="kpi-grid">
+
+        <!-- ── Alertes rapides ──────────────────────────────────────────────── -->
+        <div class="alert-strip" id="alert-strip">
+          <!-- Rempli par JS -->
+        </div>
+
+        <!-- ── KPIs ────────────────────────────────────────────────────────── -->
+        <div class="kpi-grid" id="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-icon" style="background:#ede9ff;">🔧</div>
-            <div class="kpi-label">Prises en charge</div>
-            <div class="kpi-value" id="kpi-tickets">12</div>
-            <div class="kpi-delta up">↑ 3 cette semaine</div>
+            <div class="kpi-top">
+              <span class="kpi-icon">🔧</span>
+              <span class="kpi-badge warn" id="kpi-badge-tickets">…</span>
+            </div>
+            <div class="kpi-value" id="kpi-tickets">—</div>
+            <div class="kpi-label">Tickets en cours</div>
+            <div class="kpi-delta" id="kpi-delta-tickets">Aujourd'hui : —</div>
           </div>
+
           <div class="kpi-card">
-            <div class="kpi-icon" style="background:#e0f2fe;">💶</div>
+            <div class="kpi-top">
+              <span class="kpi-icon">💶</span>
+              <span class="kpi-badge up" id="kpi-badge-ca">…</span>
+            </div>
+            <div class="kpi-value" id="kpi-ca">—</div>
             <div class="kpi-label">CA ce mois</div>
-            <div class="kpi-value" id="kpi-revenue">3 240 €</div>
-            <div class="kpi-delta up">↑ +12% vs mois dernier</div>
+            <div class="kpi-delta" id="kpi-delta-ca">vs mois dernier</div>
           </div>
+
           <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fef9c3;">📋</div>
-            <div class="kpi-label">Devis en attente</div>
-            <div class="kpi-value" id="kpi-devis">5</div>
-            <div class="kpi-delta down">↓ 2 expirés</div>
+            <div class="kpi-top">
+              <span class="kpi-icon">👥</span>
+              <span class="kpi-badge info" id="kpi-badge-clients"></span>
+            </div>
+            <div class="kpi-value" id="kpi-clients">—</div>
+            <div class="kpi-label">Clients actifs</div>
+            <div class="kpi-delta" id="kpi-delta-clients">RDV aujourd'hui : —</div>
           </div>
+
           <div class="kpi-card">
-            <div class="kpi-icon" style="background:#ecfdf3;">🌿</div>
-            <div class="kpi-label">Dossiers QualiRépar</div>
-            <div class="kpi-value" id="kpi-qr">7</div>
-            <div class="kpi-delta up">↑ 2 soumis ce mois</div>
+            <div class="kpi-top">
+              <span class="kpi-icon">📦</span>
+              <span class="kpi-badge warn" id="kpi-badge-stock"></span>
+            </div>
+            <div class="kpi-value" id="kpi-stock">—</div>
+            <div class="kpi-label">Produits stock bas</div>
+            <div class="kpi-delta" id="kpi-delta-stock">Factures en retard : —</div>
           </div>
         </div>
 
-        <!-- Tickets récents + Activité -->
-        <div style="display:grid;grid-template-columns:1fr 360px;gap:22px;">
-          <!-- Tableau des tickets récents -->
-          <div class="table-card">
-            <div class="table-header">
-              <h3>Prises en charge récentes</h3>
-              <div class="table-actions">
-                <a class="btn btn-primary btn-sm" href="tickets.html">Voir tout →</a>
-              </div>
+        <!-- ── Graphiques ───────────────────────────────────────────────────── -->
+        <div class="charts-grid">
+          <!-- Chart CA mensuel -->
+          <div class="chart-card">
+            <div class="chart-title">
+              Chiffre d'affaires mensuel
+              <span class="chart-sub" id="chart-ca-total">12 mois glissants</span>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Client</th>
-                  <th>Appareil</th>
-                  <th>Statut</th>
-                  <th>Date</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="recent-tickets">
-                <!-- rempli par JS -->
-              </tbody>
-            </table>
+            <div class="chart-wrap">
+              <canvas id="chart-ca"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart Tickets par statut -->
+          <div class="chart-card">
+            <div class="chart-title">
+              Tickets par statut
+              <span class="chart-sub" id="chart-tickets-total"></span>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="chart-statuts"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Bas de page : Techniciens + Activité ──────────────────────── -->
+        <div class="bottom-grid">
+          <!-- Top techniciens -->
+          <div class="chart-card">
+            <div class="chart-title" style="margin-bottom:12px;">
+              Performance équipe
+              <a href="stats.html" class="btn btn-ghost btn-sm" style="font-size:.78rem;">Rapport complet →</a>
+            </div>
+            <div id="tech-list">
+              <div style="text-align:center;padding:30px;color:#9ca3af;font-size:.88rem;">Chargement…</div>
+            </div>
+
+            <!-- Top produits vendus -->
+            <div class="chart-title" style="margin-top:22px;margin-bottom:12px;border-top:1px solid #f3f4f6;padding-top:14px;">
+              Top produits — 30 jours
+              <span class="chart-sub" id="top-produits-sub"></span>
+            </div>
+            <div id="top-produits-list">
+              <div style="text-align:center;padding:20px;color:#9ca3af;font-size:.88rem;">Chargement…</div>
+            </div>
           </div>
 
           <!-- Activité récente -->
-          <div class="table-card" style="padding:0;">
-            <div class="table-header">
-              <h3>Activité récente</h3>
+          <div class="chart-card" style="padding:16px 18px;">
+            <div class="chart-title" style="margin-bottom:12px;">
+              Activité récente
             </div>
-            <div style="padding:18px;display:grid;gap:14px;" id="activity-feed">
-              <!-- rempli par JS -->
-            </div>
-          </div>
-        </div>
-
-        <!-- Statistiques rapides -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px;">
-          <div class="table-card" style="padding:20px;">
-            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">TAUX DE RÉPARATION</h4>
-            <div style="font-size:2.2rem;font-weight:800;color:var(--primary);">87%</div>
-            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Sur les 30 derniers jours</div>
-            <div style="height:6px;background:#e5e7eb;border-radius:999px;margin-top:14px;">
-              <div style="width:87%;height:100%;background:var(--primary);border-radius:999px;"></div>
-            </div>
-          </div>
-          <div class="table-card" style="padding:20px;">
-            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">DÉLAI MOYEN</h4>
-            <div style="font-size:2.2rem;font-weight:800;color:var(--accent-strong);">2,3 j</div>
-            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Entre dépôt et rendu</div>
-            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-              <span class="chip" style="background:#fff8e1;border-color:#fde68a;color:#b45309;">iPhone: 1,8j</span>
-              <span class="chip" style="background:#ede9ff;border-color:#c4b5fd;color:var(--primary);">Android: 2,8j</span>
-            </div>
-          </div>
-          <div class="table-card" style="padding:20px;">
-            <h4 style="margin:0 0 16px;font-size:0.92rem;color:var(--muted);">QualiRépar CE MOIS</h4>
-            <div style="font-size:2.2rem;font-weight:800;color:#059669;">240 €</div>
-            <div style="color:var(--muted);font-size:0.88rem;margin-top:6px;">Subventions accordées</div>
-            <div style="margin-top:14px;">
-              <span class="status-badge status-done">2 dossiers validés</span>
+            <div id="activity-feed">
+              <div style="text-align:center;padding:30px;color:#9ca3af;font-size:.88rem;">Chargement…</div>
             </div>
           </div>
         </div>
 
-        <!-- Bannière essai gratuit -->
-        <div style="margin-top:22px;background:linear-gradient(135deg,var(--primary),#9b77ff);border-radius:16px;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;color:#fff;">
-          <div>
-            <h3 style="margin:0 0 6px;font-size:1.1rem;">🎉 Essai gratuit — 14 jours restants</h3>
-            <p style="margin:0;opacity:0.85;font-size:0.9rem;">Profitez de toutes les fonctionnalités premium sans limitation. Aucune carte bancaire requise.</p>
-          </div>
-          <button class="btn btn-secondary" style="flex-shrink:0;">Passer à Pro →</button>
-        </div>
       </main>
     </div>
   </div>

@@ -1,0 +1,413 @@
+/**
+ * print.css — Feuille d'impression iziGSM
+ * Sprint 2.13 — Export PDF via window.print()
+ * Usage : <link rel="stylesheet" href="/static/css/print.css" media="print">
+ *         ou injecté dynamiquement dans le DOM pour impression sélective
+ */
+
+/* ─── Reset impression ──────────────────────────────────────────────────────── */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Arial', sans-serif;
+    font-size: 11pt;
+    color: #111;
+    background: #fff;
+  }
+
+  /* Masquer tout sauf le contenu à imprimer */
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+
+  #print-root {
+    display: block !important;
+    width: 100%;
+  }
+
+  /* Pas de saut de page dans les blocs critiques */
+  .print-no-break {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Saut de page forcé */
+  .print-page-break {
+    page-break-before: always;
+    break-before: always;
+  }
+}
+
+/* ─── Layout document imprimable ─────────────────────────────────────────────── */
+#print-root {
+  display: none; /* Caché par défaut, affiché seulement lors de l'impression */
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm 14mm;
+  background: #fff;
+  color: #111;
+  font-family: Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+}
+
+/* ─── En-tête document ──────────────────────────────────────────────────────── */
+.print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8mm;
+  padding-bottom: 5mm;
+  border-bottom: 2px solid #6366f1;
+}
+
+.print-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-logo-mark {
+  width: 36px;
+  height: 36px;
+  background: #6366f1;
+  color: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18pt;
+  font-weight: 900;
+}
+
+.print-logo-name {
+  font-size: 18pt;
+  font-weight: 800;
+  color: #1e1b4b;
+}
+
+.print-boutique-info {
+  text-align: right;
+  font-size: 9pt;
+  color: #555;
+  line-height: 1.6;
+}
+
+.print-boutique-info strong {
+  color: #111;
+  font-size: 10pt;
+}
+
+/* ─── Titre document ─────────────────────────────────────────────────────────── */
+.print-doc-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 7mm;
+}
+
+.print-doc-type {
+  font-size: 20pt;
+  font-weight: 800;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.print-doc-numero {
+  font-size: 12pt;
+  color: #444;
+  margin-top: 2px;
+}
+
+.print-doc-meta {
+  text-align: right;
+  font-size: 9pt;
+  color: #555;
+  line-height: 1.8;
+}
+
+.print-doc-meta strong {
+  color: #111;
+}
+
+/* ─── Bloc client ────────────────────────────────────────────────────────────── */
+.print-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8mm;
+  margin-bottom: 7mm;
+}
+
+.print-party-box {
+  background: #f9f9f9;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4mm 5mm;
+}
+
+.print-party-label {
+  font-size: 7pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #999;
+  margin-bottom: 2mm;
+}
+
+.print-party-name {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.print-party-detail {
+  font-size: 9pt;
+  color: #555;
+  line-height: 1.6;
+  margin-top: 1mm;
+}
+
+/* ─── Tableau lignes ─────────────────────────────────────────────────────────── */
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6mm;
+  font-size: 9.5pt;
+}
+
+.print-table thead tr {
+  background: #6366f1;
+  color: #fff;
+}
+
+.print-table thead th {
+  padding: 3mm 3mm;
+  text-align: left;
+  font-weight: 700;
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.print-table thead th.text-right,
+.print-table tbody td.text-right {
+  text-align: right;
+}
+
+.print-table thead th.text-center,
+.print-table tbody td.text-center {
+  text-align: center;
+}
+
+.print-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.print-table tbody tr:nth-child(even) {
+  background: #f8f8ff;
+}
+
+.print-table tbody td {
+  padding: 2.5mm 3mm;
+  vertical-align: top;
+}
+
+.print-table tbody td .prod-desc {
+  font-size: 8pt;
+  color: #777;
+  margin-top: 1px;
+}
+
+/* ─── Totaux ─────────────────────────────────────────────────────────────────── */
+.print-totaux {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6mm;
+}
+
+.print-totaux-table {
+  width: 70mm;
+  font-size: 9.5pt;
+}
+
+.print-totaux-table tr td {
+  padding: 1.5mm 2mm;
+}
+
+.print-totaux-table tr td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+.print-totaux-table .total-ht td {
+  border-top: 1px solid #e5e7eb;
+}
+
+.print-totaux-table .total-ttc td {
+  background: #6366f1;
+  color: #fff;
+  font-size: 11pt;
+  font-weight: 800;
+  border-radius: 4px;
+}
+
+/* ─── Paiements ──────────────────────────────────────────────────────────────── */
+.print-paiements {
+  margin-bottom: 6mm;
+  font-size: 9pt;
+}
+
+.print-paiements-title {
+  font-weight: 700;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #999;
+  margin-bottom: 2mm;
+}
+
+.print-paiement-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1.5mm 0;
+  border-bottom: 1px dashed #e5e7eb;
+  color: #333;
+}
+
+.print-solde {
+  display: flex;
+  justify-content: space-between;
+  padding: 2mm 0;
+  font-weight: 700;
+  font-size: 10pt;
+  color: #22c55e;
+}
+
+/* ─── Notes ──────────────────────────────────────────────────────────────────── */
+.print-notes {
+  font-size: 9pt;
+  color: #555;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 3mm;
+  margin-bottom: 5mm;
+  background: #fffbf0;
+}
+
+.print-notes-label {
+  font-size: 7.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #999;
+  margin-bottom: 1mm;
+}
+
+/* ─── Pied de page ───────────────────────────────────────────────────────────── */
+.print-footer {
+  position: fixed;
+  bottom: 8mm;
+  left: 14mm;
+  right: 14mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 7.5pt;
+  color: #999;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 2mm;
+}
+
+.print-footer-legal {
+  text-align: center;
+  font-size: 7pt;
+  line-height: 1.4;
+}
+
+/* ─── Ticket de caisse (format 80mm thermique) ───────────────────────────────── */
+.print-ticket {
+  width: 72mm;
+  margin: 0 auto;
+  font-family: 'Courier New', monospace;
+  font-size: 9pt;
+  color: #000;
+  background: #fff;
+}
+
+.print-ticket-header {
+  text-align: center;
+  border-bottom: 1px dashed #000;
+  padding-bottom: 3mm;
+  margin-bottom: 3mm;
+}
+
+.print-ticket-header .shop-name {
+  font-size: 12pt;
+  font-weight: 700;
+}
+
+.print-ticket-header .shop-sub {
+  font-size: 8pt;
+  color: #444;
+}
+
+.print-ticket-lines {
+  width: 100%;
+  font-size: 8.5pt;
+}
+
+.print-ticket-lines td {
+  padding: 0.5mm 0;
+}
+
+.print-ticket-lines .txt-right {
+  text-align: right;
+}
+
+.print-ticket-sep {
+  border: none;
+  border-top: 1px dashed #000;
+  margin: 3mm 0;
+}
+
+.print-ticket-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12pt;
+  font-weight: 700;
+  border-top: 2px solid #000;
+  padding-top: 2mm;
+  margin-top: 2mm;
+}
+
+.print-ticket-footer {
+  text-align: center;
+  font-size: 7.5pt;
+  color: #555;
+  margin-top: 4mm;
+  border-top: 1px dashed #000;
+  padding-top: 3mm;
+}
+
+/* ─── Badge statut ───────────────────────────────────────────────────────────── */
+.print-badge {
+  display: inline-block;
+  padding: 1mm 3mm;
+  border-radius: 3px;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.print-badge-paid    { background: #dcfce7; color: #166534; }
+.print-badge-draft   { background: #fef9c3; color: #854d0e; }
+.print-badge-sent    { background: #dbeafe; color: #1e40af; }
+.print-badge-cancel  { background: #fee2e2; color: #991b1b; }

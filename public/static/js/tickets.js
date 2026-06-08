@@ -209,8 +209,177 @@ function viewTicket(id) {
       </div>
     </div>
   `;
+  window._currentTicketId = id;
   openModal('modal-ticket-detail');
 }
+
+// ─── Impression fiche ticket (Sprint 2.13) ────────────────────────────────────
+async function printTicket(id) {
+  if (!id) return;
+  try {
+    const boutiqueId = getBoutiqueId();
+    const r = await apiGet(`/api/tickets/${id}`, boutiqueId ? { boutique_id: boutiqueId } : {});
+    if (!r.ok) { showFlash('⚠️ Impossible de récupérer le ticket.', 'error'); return; }
+    const t = r.data?.data || r.data || {};
+
+    let boutique = { nom: 'iziGSM', adresse: '', telephone: '', email: '' };
+    try {
+      const bs = await apiGet('/api/boutiques');
+      const b  = (bs.data?.data || bs.data || [])[0] || {};
+      boutique = { nom: b.nom || b.name || 'iziGSM', adresse: b.adresse || '', telephone: b.telephone || '', email: b.email || '' };
+    } catch {}
+
+    const numero    = t.numero   || ('#' + id);
+    const statut    = t.statut   || 'recu';
+    const client    = t.client_nom ? (t.client_nom + (t.client_prenom ? ' ' + t.client_prenom : '')) : (t.clientName || '—');
+    const tel       = t.client_telephone || t.client_tel || t.phone || '';
+    const email     = t.client_email || t.email || '';
+    const marque    = t.marque   || t.deviceType  || '';
+    const modele    = t.modele   || t.deviceModel || '';
+    const imei      = t.imei     || '';
+    const panne     = t.description || t.panne_declaree || '';
+    const notes     = t.notes_internes || t.notes || '';
+    const prix      = parseFloat(t.prix_estime || t.prix_reparation || 0);
+    const dateEm    = t.created_at || new Date().toISOString();
+    const technicien = t.technicien_nom || t.technician || '—';
+    const priorite  = t.priorite || t.priority || 'normale';
+    const tracking  = t.tracking_token || '';
+
+    const statutLabel = {
+      recu:'Reçu', diagnostic:'En diagnostic', en_reparation:'En réparation',
+      to_order:'À commander', ordered:'Commandé', parts_received:'Pièces reçues',
+      termine:'Terminé', livre:'Livré', annule:'Annulé'
+    }[statut] || statut;
+
+    const prioColor = { haute:'#ef4444', urgente:'#dc2626', normale:'#6366f1', basse:'#6b7280' }[priorite] || '#6366f1';
+
+    const html = `
+      <div id="print-root">
+        <link rel="stylesheet" href="/static/css/print.css">
+        <div class="print-header print-no-break">
+          <div class="print-logo">
+            <div class="print-logo-mark">i</div>
+            <div class="print-logo-name">iziGSM</div>
+          </div>
+          <div class="print-boutique-info">
+            <strong>${esc(boutique.nom)}</strong><br>
+            ${boutique.adresse   ? esc(boutique.adresse)   + '<br>' : ''}
+            ${boutique.telephone ? esc(boutique.telephone) + '<br>' : ''}
+            ${boutique.email     ? esc(boutique.email)            : ''}
+          </div>
+        </div>
+
+        <div class="print-doc-title print-no-break">
+          <div>
+            <div class="print-doc-type">Fiche de prise en charge</div>
+            <div class="print-doc-numero">${esc(numero)}</div>
+          </div>
+          <div class="print-doc-meta">
+            <strong>Date :</strong> ${_fmtDateTk(dateEm)}<br>
+            <strong>Statut :</strong> ${esc(statutLabel)}<br>
+            <strong>Priorité :</strong> <span style="color:${prioColor};font-weight:700;">${esc(priorite)}</span>
+          </div>
+        </div>
+
+        <div class="print-parties print-no-break">
+          <div class="print-party-box">
+            <div class="print-party-label">Client</div>
+            <div class="print-party-name">${esc(client)}</div>
+            <div class="print-party-detail">
+              ${tel   ? '📞 ' + esc(tel)   + '<br>' : ''}
+              ${email ? '✉ '  + esc(email)          : ''}
+            </div>
+          </div>
+          <div class="print-party-box">
+            <div class="print-party-label">Appareil</div>
+            <div class="print-party-name">${esc(marque)} ${esc(modele)}</div>
+            <div class="print-party-detail">
+              ${imei ? 'IMEI / S.N. : <strong>' + esc(imei) + '</strong><br>' : ''}
+              <strong>Technicien :</strong> ${esc(technicien)}
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:6mm;" class="print-no-break">
+          <div class="print-notes-label" style="margin-bottom:2mm;">Panne déclarée</div>
+          <div class="print-notes">${esc(panne) || '<em style="color:#aaa;">Non renseignée</em>'}</div>
+        </div>
+
+        ${notes ? `<div style="margin-bottom:6mm;" class="print-no-break">
+          <div class="print-notes-label" style="margin-bottom:2mm;">Notes internes</div>
+          <div class="print-notes" style="background:#fff9ec;border-color:#ffe0a1;">${esc(notes)}</div>
+        </div>` : ''}
+
+        <table class="print-table print-no-break" style="margin-bottom:4mm;">
+          <thead>
+            <tr>
+              <th>Intervention</th>
+              <th class="text-right" style="width:25%">Montant estimé</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${esc(panne) || 'Diagnostic + réparation'}</td>
+              <td class="text-right"><strong>${prix > 0 ? new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(prix) : 'Sur devis'}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Zone signature client -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
+          <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+            <div class="print-notes-label" style="margin-bottom:2mm;">Signature du client</div>
+            <div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>
+          </div>
+          <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+            <div class="print-notes-label" style="margin-bottom:2mm;">Signature du technicien</div>
+          </div>
+        </div>
+
+        ${tracking ? `<div style="margin-top:6mm;text-align:center;font-size:8pt;color:#aaa;" class="print-no-break">
+          Suivi en ligne : ${window.location.origin}/suivi/${esc(tracking)}
+        </div>` : ''}
+
+        <div class="print-footer">
+          <div>${esc(boutique.nom)}</div>
+          <div class="print-footer-legal">Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
+          <div>${esc(numero)}</div>
+        </div>
+      </div>`;
+
+    let prev = document.getElementById('print-root');
+    if (prev) prev.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper.firstElementChild);
+
+    const style = document.createElement('style');
+    style.id = '_print_style_override';
+    style.media = 'print';
+    style.textContent = `body > .app-layout { display:none !important; } #print-root { display:block !important; }`;
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.getElementById('print-root')?.remove();
+        document.getElementById('_print_style_override')?.remove();
+      }, 500);
+    }, 200);
+
+  } catch (err) {
+    console.error('[printTicket]', err);
+    showFlash('⚠️ Erreur lors de la génération de la fiche.', 'error');
+  }
+}
+
+function _fmtDateTk(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  catch { return iso; }
+}
+
+window.printTicket = printTicket;
 
 async function changeStatus(id, status) {
   // Mapper statut legacy vers statut API

@@ -18,6 +18,7 @@ import publicRoutes        from './routes/public'
 import savRoutes           from './routes/sav'
 import notificationsRoutes from './routes/notifications'
 import caisseRoutes        from './routes/caisse'
+import statsRoutes         from './routes/stats'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
@@ -40,7 +41,7 @@ import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
  *   /api/employes/*     → CRUD employés
  *   /api/pointage/*     → Pointage (machine à états) + rapports
  *   /api/boutiques/*    → CRUD boutiques + NF525 verify/cloture
- *   /api/stats          → KPIs dashboard (depuis D1)
+ *   /api/stats          → KPIs + graphiques dashboard (statsService.ts)
  *   /api/health         → Health check
  */
 
@@ -65,8 +66,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.12.0',
-    sprint:    '2.12 — Caisse POS + Journal NF525',
+    version:   '2.13.0',
+    sprint:    '2.13 — Export PDF + Dashboard graphiques',
     timestamp: new Date().toISOString(),
   })
 })
@@ -115,55 +116,10 @@ app.route('/api',            stocksRoutes)      // /api/produits/* + /api/catego
 app.route('/api',            savRoutes)         // /api/garanties/* + /api/sav/* ← AVANT clients (évite capture par /:id)
 app.route('/api',            notificationsRoutes) // /api/notifications/*
 app.route('/api',            caisseRoutes)       // /api/caisse/* (POS + NF525)
+app.route('/api',            statsRoutes)        // /api/stats/* (KPIs + graphiques) ← extraction violation backlog
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
 app.route('/api/boutiques',  boutiquesRoutes)
-
-// ─── Dashboard stats (données réelles D1) ────────────────────────────────────
-app.get('/api/stats', async (c) => {
-  // Récupérer le JWT pour connaître la boutique
-  const authHeader = c.req.header('Authorization')
-  if (!authHeader) return c.json({ success: false, error: 'Non authentifié.' }, 401)
-
-  const token = authHeader.slice(7)
-  // Décoder le payload sans vérification (la vérification est dans authMiddleware)
-  try {
-    const [, payloadB64] = token.split('.')
-    const pad = payloadB64.length % 4 === 0 ? '' : '='.repeat(4 - payloadB64.length % 4)
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/') + pad))
-    const boutiqueId = payload.boutique_id ?? 1
-
-    const [clients, tickets_en_cours, tickets_today, ca_mois, stock_bas, employes_en_poste] =
-      await Promise.all([
-        c.env.DB.prepare('SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1')
-          .bind(boutiqueId).first<{ cnt: number }>(),
-        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1")
-          .bind(boutiqueId).first<{ cnt: number }>(),
-        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND DATE(created_at) = DATE('now') AND actif = 1")
-          .bind(boutiqueId).first<{ cnt: number }>(),
-        c.env.DB.prepare("SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')")
-          .bind(boutiqueId).first<{ ca: number }>(),
-        c.env.DB.prepare('SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1')
-          .bind(boutiqueId).first<{ cnt: number }>(),
-        c.env.DB.prepare("SELECT COUNT(*) as cnt FROM employes WHERE boutique_id = ? AND statut_pointage = 'en_poste' AND actif = 1")
-          .bind(boutiqueId).first<{ cnt: number }>(),
-      ])
-
-    return c.json({
-      success: true,
-      data: {
-        nb_clients:          clients?.cnt           ?? 0,
-        tickets_en_cours:    tickets_en_cours?.cnt  ?? 0,
-        tickets_aujourd_hui: tickets_today?.cnt     ?? 0,
-        ca_mois:             ca_mois?.ca            ?? 0,
-        stock_bas:           stock_bas?.cnt         ?? 0,
-        employes_en_poste:   employes_en_poste?.cnt ?? 0,
-      }
-    })
-  } catch {
-    return c.json({ success: false, error: 'Erreur token.' }, 401)
-  }
-})
 
 // ─── 404 fallback API ─────────────────────────────────────────────────────────
 app.notFound((c) => {
