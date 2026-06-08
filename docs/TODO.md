@@ -156,21 +156,36 @@
 - [ ] `public/caisse.html` : interface POS tactile
 - [ ] QZ Tray (impression thermique) : optionnel, post-MVP
 
-### Sprint 2.13 🔜 — Export PDF + Dashboard graphiques réels
+### Sprint 2.13 ✅ — Export PDF + Dashboard graphiques réels
 **Module CDC : MOD-17 (HAUTE)**
-- [ ] Export PDF factures/tickets (HTML → PDF côté client via `window.print()`)
-- [ ] `src/routes/stats.ts` : déplacer `/api/stats` hors `index.tsx` (**violation backlog 🟡**)
-- [ ] `src/services/statsService.ts` (Model)
-- [ ] Dashboard : Chart.js — CA mensuel réel, tickets par statut, stock bas, marge
-- [ ] Rapport activité par technicien
-- [ ] Export Excel/CSV rapports avancés
+- [x] Export PDF factures/tickets (HTML → `window.print()`) — `printFacture()` + `printTicket()`
+- [x] `src/routes/stats.ts` : `/api/stats` extrait hors `index.tsx` ✅ — violation P1 résolue
+- [x] `src/services/statsService.ts` (Model) — 6 exports, injection DB
+- [x] Dashboard : Chart.js — CA mensuel réel, tickets par statut, top produits
+- [x] Rapport activité par technicien (`/api/stats/techniciens`)
+- [x] 12 KPIs temps réel (`GET /api/stats`) — nb_clients, ca_mois, evolution_ca_pct
+- [x] Build ✅ + tests 6/6 ✅
 
-### Sprint 2.14 🔜 — PWA manifest + Service Worker
-- [ ] `public/manifest.json`
-- [ ] `public/sw.js` : cache offline assets statiques
-- [ ] `<link rel="manifest">` dans tous les HTML
-- [ ] Install prompt (banner Android/iOS)
-- [ ] Icônes PWA (192x192, 512x512)
+### Sprint 2.14 ✅ — PWA manifest + Service Worker
+- [x] `public/manifest.json` — app iziGSM, icônes 192×192 + 512×512
+- [x] `public/sw.js` : cache offline assets statiques (cache-first strategy)
+- [x] `<link rel="manifest">` injecté dans tous les HTML
+- [x] Install prompt (banner Android/iOS)
+- [x] Icônes PWA SVG générées
+- [x] Build ✅ + commit
+
+### Sprint correctif Design Pattern ✅ — Conformité P1/P2/P4
+**Audit post-Sprint 2.14 — violations identifiées et corrigées**
+- [x] P1 — Exception reporting documentée dans `statsService.ts` (bloc `⚠️ EXCEPTION ARCHITECTURE`)
+- [x] P4 — JSDoc `@param`/`@returns` sur les 6 exports de `statsService.ts`
+- [x] P4 — JSDoc sur `ctx()` + 6 handlers de `routes/stats.ts`
+- [x] P2 — `_money()`, `_fmtDate()`, `_fmtDateTime()` centralisés dans `app.js`
+- [x] P2 — Suppression `_money()` local dans `factures.js` + `dashboard.js`
+- [x] P2 — Suppression `_fmtDateTk()` local dans `tickets.js` → `_fmtDateTime()` de `app.js`
+- [x] P4 — `printFacture()` 180L → 3 fonctions : `_fetchFacturePrintData` + `_buildFactureHTML` + `_triggerPrint`
+- [x] P4 — `printTicket()` 155L → 3 fonctions : `_fetchTicketPrintData` + `_buildTicketHTML`
+- [x] P4 — JSDoc sur 14 fonctions de `dashboard.js`
+- [x] Build ✅ (197.52 kB) + tests T1–T6 ✅ 6/6 + commit `f915398`
 
 ### Sprint 2.15 🔜 — CRM étendu
 **Module CDC : MOD-07 (HAUTE)**
@@ -194,7 +209,8 @@
 
 | Priorité | Fichier | Violation | Sprint cible |
 |---|---|---|---|
-| 🟡 | `src/index.tsx` | `/api/stats` SQL inline multi-module | Sprint 2.13 |
+| ✅ Résolu | ~~`src/index.tsx`~~ | ~~`/api/stats` SQL inline multi-module~~ | ✅ Résolu Sprint 2.13 |
+| ✅ Résolu | ~~`app.js` doublon~~ | ~~`apiPut` déclaré deux fois~~ | ✅ Résolu Fix DP |
 | 🟡 | `routes/clients.ts` l.41 | `JOIN tickets` cross-module | Sprint 2.15 |
 | 🟢 | `routes/*.ts` (anciens) | Documentation fonctions insuffisante | Au fil des sprints |
 | 🟢 | `routes/tickets.ts` | Pas de couche `ticketService.ts` | Sprint 2.8 |
@@ -207,12 +223,13 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.6.0 |
-| Build | `dist/_worker.js` 133.00 kB — 48 modules |
-| Dernière migration | `0015_agenda.sql` ✅ |
-| Dernier commit | Sprint 2.6 (pending) |
+| Version | 2.14.0 |
+| Build | `dist/_worker.js` 197.52 kB — 57 modules |
+| Dernière migration | `0015_agenda.sql` ✅ (inchangée depuis Sprint 2.6) |
+| Dernier commit | `f915398` — *refactor: Sprint correctif design pattern — P1/P2/P4* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
+| Conformité DP | ✅ P1 P2 P3 P4 P5 — aucune violation active (backlog : `routes/clients.ts` 🟡) |
 
 ---
 

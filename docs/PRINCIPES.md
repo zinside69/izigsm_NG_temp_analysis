@@ -31,8 +31,10 @@ Déploiement : wrangler pages dev --d1 --local (dev) / wrangler pages deploy (pr
 ### ❌ Violations existantes à corriger
 | Fichier | Violation | Correction |
 |---|---|---|
-| `routes/clients.ts` l.41 | `LEFT JOIN tickets` — module clients lit directement la table tickets | Créer `ticketService.countByClient(db, clientId)` |
-| `src/index.tsx` `/api/stats` | Agrège clients + tickets + factures + produits + employes inline | Déplacer dans `routes/stats.ts` + `services/statsService.ts` |
+| `routes/clients.ts` l.41 | `LEFT JOIN tickets` — module clients lit directement la table tickets | Créer `ticketService.countByClient(db, clientId)` — Sprint 2.15 |
+| ~~`src/index.tsx` `/api/stats`~~ | ✅ **Résolu Sprint 2.13** — déplacé dans `routes/stats.ts` + `services/statsService.ts` | |
+
+> **Note** : `statsService.ts` est le seul service autorisé à agréger plusieurs modules (rôle analytique exclusif, lecture seule). Cette exception est documentée dans le fichier par un bloc `⚠️ EXCEPTION ARCHITECTURE`.
 
 ---
 
@@ -62,9 +64,16 @@ apiDelete(url)            // DELETE
 ### ❌ Violations existantes à corriger
 | Fichier | Ligne | Violation | Correction |
 |---|---|---|---|
-| `register.js` | 185 | `fetch('/api/register', ...)` direct | Utiliser `apiPost('/api/register', ...)` |
-| `rachats.js` | 458 | `fetch(url, { headers: ... })` pour export CSV | Utiliser `apiGet('/api/rachats/export', params)` avec gestion blob |
-| `app.js` | 427+442 | `function apiPut` déclaré **deux fois** | Supprimer le doublon (garder l. 427) |
+| ~~`register.js`~~ | ~~185~~ | ✅ **Résolu Fix DP** — `fetch()` direct remplacé par `apiPostPublic()` | |
+| ~~`rachats.js`~~ | ~~458~~ | ✅ **Résolu Fix DP** — `fetch()` export CSV remplacé par `apiBlobGet()` | |
+| ~~`app.js`~~ | ~~427+442~~ | ✅ **Résolu Fix DP** — doublon `apiPut` supprimé | |
+
+**Helpers centralisés ajoutés dans `app.js` (Sprint correctif DP) :**
+- `_money(n, symbol)` — alias formatMoney pour templates print
+- `_fmtDate(iso)` — date dd/mm/yyyy fr-FR
+- `_fmtDateTime(iso)` — date + heure fr-FR
+
+Tous les fichiers modules (`factures.js`, `tickets.js`, `dashboard.js`) utilisent ces helpers globaux — aucun helper local dupliqué.
 
 ---
 
@@ -166,12 +175,21 @@ src/
 ```
 
 ### ❌ Violations existantes
-| Fichier | Violation |
-|---|---|
-| `routes/tickets.ts` | 1 seul `/** */` pour 200 lignes — fonctions individuelles non documentées |
-| `routes/rachats.ts` | Idem |
-| `routes/users.ts` | Idem |
-| `app.js` | `function apiPut` déclarée deux fois (l. 427 et l. 442) |
+| Fichier | Violation | État |
+|---|---|---|
+| `routes/tickets.ts` | 1 seul `/** */` pour 200 lignes — fonctions individuelles non documentées | 🟡 Backlog Sprint 2.8 |
+| `routes/rachats.ts` | Idem | 🟡 Backlog |
+| `routes/users.ts` | Idem | 🟡 Backlog |
+| ~~`app.js`~~ | ~~`apiPut` déclarée deux fois (l. 427 et l. 442)~~ | ✅ Résolu Fix DP |
+| ~~`factures.js` `dashboard.js`~~ | ~~`_money()` dupliqué localement~~ | ✅ Résolu Sprint correctif DP |
+| ~~`tickets.js`~~ | ~~`_fmtDateTk()` dupliqué localement~~ | ✅ Résolu Sprint correctif DP |
+| ~~`printFacture()` / `printTicket()`~~ | ~~Fonctions > 150L, imbrication > 3 niveaux~~ | ✅ Résolu — refactorisées en 3 fonctions chacune |
+| ~~`statsService.ts` `routes/stats.ts`~~ | ~~JSDoc absent~~ | ✅ Résolu Sprint correctif DP |
+
+**Avancée Sprint correctif DP (commit `f915398`) :**
+- `dashboard.js` : JSDoc ajouté sur 14 fonctions (`init`, `refresh`, `_setDate`, `_setUser`, `_loadKpis`, `_buildAlerts`, `_loadCaMensuel`, `_loadTicketsStatut`, `_loadTopProduits`, `_loadActivite`, `_loadTechniciens`, `_setText`, `_esc`, `_ago`)
+- `factures.js` : `printFacture()` → `_fetchFacturePrintData` + `_buildFactureHTML` + `_triggerPrint`
+- `tickets.js` : `printTicket()` → `_fetchTicketPrintData` + `_buildTicketHTML` + appel `_triggerPrint` (défini dans `factures.js`)
 
 ---
 
@@ -212,10 +230,10 @@ return c.json({ success: false, error: 'Ressource introuvable.' }, 404)
 - Format `{ success, data, error, message }` respecté dans tous les modules.
 
 ### ❌ Violations existantes à corriger
-| Fichier | Violation |
-|---|---|
-| `register.js` l.185 | `fetch()` direct |
-| `rachats.js` l.458 | `fetch()` direct (export CSV) |
+| Fichier | Violation | État |
+|---|---|---|
+| ~~`register.js` l.185~~ | ~~`fetch()` direct~~ | ✅ Résolu Fix DP |
+| ~~`rachats.js` l.458~~ | ~~`fetch()` direct (export CSV)~~ | ✅ Résolu Fix DP |
 
 ---
 
@@ -238,12 +256,23 @@ return c.json({ success: false, error: 'Ressource introuvable.' }, 404)
 
 ## Violations connues à corriger (backlog)
 
+> Mis à jour au 8 juin 2026 — après Sprint 2.13 + Sprint 2.14 + Sprint correctif DP (commit `f915398`).
+
 | Priorité | Fichier | Violation | Sprint cible |
 |---|---|---|---|
-| 🔴 | `app.js` l.442 | `apiPut` dupliqué | Prochain fix |
-| 🔴 | `register.js` l.185 | `fetch()` direct | Prochain fix |
-| 🔴 | `rachats.js` l.458 | `fetch()` direct export | Prochain fix |
-| 🟡 | `src/index.tsx` | `/api/stats` SQL inline multi-module | Sprint 2.10 (Dashboard) |
-| 🟡 | `routes/clients.ts` l.41 | `JOIN tickets` cross-module | Sprint 2.12 (CRM) |
-| 🟢 | `routes/*.ts` | Documentation fonctions insuffisante | Au fil des sprints |
-| 🟢 | `src/` | Pas de couche `services/` ni `validators.ts` | Sprint 2.4+ |
+| ✅ Résolu | ~~`app.js` l.442~~ | ~~`apiPut` dupliqué~~ | Fix DP |
+| ✅ Résolu | ~~`register.js` l.185~~ | ~~`fetch()` direct~~ | Fix DP |
+| ✅ Résolu | ~~`rachats.js` l.458~~ | ~~`fetch()` direct export~~ | Fix DP |
+| ✅ Résolu | ~~`src/index.tsx` `/api/stats`~~ | ~~SQL inline multi-module~~ | Sprint 2.13 |
+| ✅ Résolu | ~~`factures.js` `dashboard.js` `tickets.js`~~ | ~~Helpers `_money`/`_fmtDate` dupliqués~~ | Sprint correctif DP |
+| ✅ Résolu | ~~`statsService.ts` `routes/stats.ts`~~ | ~~JSDoc absent~~ | Sprint correctif DP |
+| ✅ Résolu | ~~`src/`~~ | ~~Pas de couche `services/` ni `validators.ts`~~ | Sprint 2.4+ |
+| 🟡 Actif | `routes/clients.ts` l.41 | `JOIN tickets` cross-module (P1) | Sprint 2.15 |
+| 🟢 Actif | `routes/tickets.ts` `routes/rachats.ts` `routes/users.ts` | Documentation fonctions insuffisante (P4) | Au fil des sprints |
+
+**État de conformité au 8 juin 2026 :**
+- P1 Modularité : ⚠️ 1 violation résiduelle (`routes/clients.ts` — sprint 2.15 planifié)
+- P2 Découplage : ✅ Aucune violation active
+- P3 BFF Hono : ✅ Aucune violation active
+- P4 Lisibilité : ⚠️ Routes anciens modules (tickets, rachats, users) sans JSDoc complet
+- P5 Format API : ✅ Aucune violation active
