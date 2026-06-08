@@ -92,14 +92,15 @@ export async function createGarantieFromTicket(
     diagnostic: string | null
   }>()
 
+  // Calcul date_fin côté JS (évite le bug datetime binding D1 avec paramètre dynamique)
+  const dateFin = new Date(Date.now() + garantieJours * 24 * 60 * 60 * 1000).toISOString()
+
   const result = await db.prepare(`
     INSERT INTO garanties
       (boutique_id, ticket_id, client_id, appareil_marque, appareil_modele,
        description_reparation, date_debut, date_fin, garantie_jours, statut)
     VALUES (?, ?, ?, ?, ?, ?,
-            CURRENT_TIMESTAMP,
-            datetime('now', ? || ' days'),
-            ?, 'active')
+            CURRENT_TIMESTAMP, ?, ?, 'active')
     RETURNING *
   `).bind(
     boutiqueId,
@@ -108,7 +109,7 @@ export async function createGarantieFromTicket(
     ticket?.appareil_marque ?? null,
     ticket?.appareil_modele ?? null,
     ticket?.diagnostic   ?? null,
-    `+${garantieJours}`,
+    dateFin,
     garantieJours
   ).first<GarantieRow>()
 
@@ -133,18 +134,18 @@ export async function createGarantie(
 ): Promise<GarantieRow> {
   const garantieJours = data.garantie_jours ?? 90
 
-  // ticket_id est NOT NULL en base — utiliser 0 comme sentinelle pour les garanties manuelles
-  // (créées sans ticket associé)
-  const ticketId = data.ticket_id ?? 0
+  // ticket_id est nullable depuis migration 0019 — NULL pour les garanties manuelles sans ticket
+  const ticketId = data.ticket_id ?? null
+
+  // Calcul date_fin côté JS (corrige le bug FK — datetime binding D1 avec paramètre dynamique)
+  const dateFin = new Date(Date.now() + garantieJours * 24 * 60 * 60 * 1000).toISOString()
 
   const result = await db.prepare(`
     INSERT INTO garanties
       (boutique_id, ticket_id, client_id, appareil_marque, appareil_modele,
        description_reparation, date_debut, date_fin, garantie_jours, statut)
     VALUES (?, ?, ?, ?, ?, ?,
-            CURRENT_TIMESTAMP,
-            datetime('now', ? || ' days'),
-            ?, 'active')
+            CURRENT_TIMESTAMP, ?, ?, 'active')
     RETURNING *
   `).bind(
     boutiqueId,
@@ -153,7 +154,7 @@ export async function createGarantie(
     data.appareil_marque        ?? null,
     data.appareil_modele        ?? null,
     data.description_reparation ?? null,
-    `+${garantieJours}`,
+    dateFin,
     garantieJours
   ).first<GarantieRow>()
 
