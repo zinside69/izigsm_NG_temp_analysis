@@ -33,6 +33,7 @@ function buildSidebar(activePage) {
     { id:'sav', icon:'🛡️', label:'SAV & Garanties', href:'sav.html', section:'principal', badge: null },
     { id:'devis', icon:'📋', label:'Devis', href:'devis.html', section:'principal', badge: null },
     { id:'factures', icon:'💶', label:'Factures', href:'factures.html', section:'principal', badge: null },
+    { id:'caisse', icon:'🏧', label:'Caisse POS', href:'caisse.html', section:'principal', badge: null },
     { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },
     { id:'stock', icon:'📦', label:'Stock', href:'stock.html', section:'gestion', badge: getStockAlert() },
     { id:'services', icon:'🛠', label:'Catalogue services', href:'services.html', section:'gestion', badge: null },

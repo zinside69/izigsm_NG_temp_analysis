@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caisse POS — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/style.css" rel="stylesheet">
+  <style>
+    /* ── Caisse POS styles ── */
+    .ligne-row:hover { background: #f0f9ff; }
+    .btn-mode { transition: all .15s; }
+    .btn-mode.active { @apply ring-2 ring-blue-500 bg-blue-50; }
+    .kpi-card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1; }
+    .tab-btn { @apply px-4 py-2 rounded-lg text-sm font-medium transition-colors; }
+    .tab-btn.active { @apply bg-blue-600 text-white; }
+    .tab-btn:not(.active) { @apply bg-gray-100 text-gray-600 hover:bg-gray-200; }
+    .journal-row { @apply grid grid-cols-6 gap-2 px-3 py-2 border-b border-gray-50 text-sm hover:bg-gray-50; }
+    #rendu-monnaie-zone { transition: all .2s; }
+    .badge-type { @apply text-xs font-semibold px-2 py-0.5 rounded-full; }
+    .badge-vente { @apply bg-green-100 text-green-700; }
+    .badge-encaissement { @apply bg-blue-100 text-blue-700; }
+    .badge-remboursement { @apply bg-red-100 text-red-700; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Sidebar injectée par app.js -->
+<div id="app-sidebar"></div>
+
+<main class="ml-64 p-6">
+
+  <!-- ── En-tête ── -->
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        <i class="fas fa-cash-register text-blue-600"></i>
+        Caisse POS
+      </h1>
+      <p class="text-sm text-gray-500 mt-0.5">Point de vente · Journal NF525</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="CaisseApp.refreshKpis()" class="btn-secondary text-sm">
+        <i class="fas fa-sync-alt mr-1"></i>Actualiser
+      </button>
+      <button onclick="CaisseApp.openNouvelleVente()" class="btn-primary text-sm">
+        <i class="fas fa-plus mr-1"></i>Nouvelle vente
+      </button>
+    </div>
+  </header>
+
+  <!-- ── KPIs du jour ── -->
+  <section id="kpis-zone" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="kpi-card">
+      <span class="text-xs text-gray-500 uppercase tracking-wide">Transactions aujourd'hui</span>
+      <span id="kpi-nb-tx" class="text-2xl font-bold text-gray-800">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="text-xs text-gray-500 uppercase tracking-wide">CA du jour (TTC)</span>
+      <span id="kpi-ca-jour" class="text-2xl font-bold text-blue-600">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="text-xs text-gray-500 uppercase tracking-wide">CA du mois (TTC)</span>
+      <span id="kpi-ca-mois" class="text-2xl font-bold text-gray-800">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="text-xs text-gray-500 uppercase tracking-wide">Statut journée</span>
+      <span id="kpi-statut-journee" class="text-sm font-semibold mt-1">—</span>
+    </div>
+  </section>
+
+  <!-- ── Tabs ── -->
+  <nav class="flex gap-2 mb-4">
+    <button class="tab-btn active" id="tab-btn-journal"  onclick="CaisseApp.switchTab('journal')">
+      <i class="fas fa-list-alt mr-1"></i>Journal du jour
+    </button>
+    <button class="tab-btn" id="tab-btn-clotures" onclick="CaisseApp.switchTab('clotures')">
+      <i class="fas fa-lock mr-1"></i>Clôtures
+    </button>
+    <button class="tab-btn" id="tab-btn-integrite" onclick="CaisseApp.switchTab('integrite')">
+      <i class="fas fa-shield-alt mr-1"></i>Intégrité NF525
+    </button>
+  </nav>
+
+  <!-- ── Tab : Journal ── -->
+  <section id="tab-journal" class="bg-white rounded-xl shadow-sm border border-gray-100">
+    <!-- Filtre date -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600 font-medium">Date :</label>
+        <input type="date" id="filtre-date-journal" class="input-field text-sm py-1.5 px-3 w-40"
+               onchange="CaisseApp.refreshJournal()">
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="journal-cloture-badge" class="hidden text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700">
+          <i class="fas fa-check-circle mr-1"></i>Journée clôturée
+        </span>
+        <button id="btn-cloture" onclick="CaisseApp.cloturerJournee()"
+                class="btn-danger text-sm hidden">
+          <i class="fas fa-lock mr-1"></i>Clôturer la journée
+        </button>
+      </div>
+    </div>
+
+    <!-- Totaux du jour -->
+    <div id="totaux-jour" class="grid grid-cols-3 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-100 text-sm hidden">
+      <div class="text-center">
+        <div class="text-gray-500">Total HT</div>
+        <div id="total-ht-jour" class="font-bold text-gray-800">0,00 €</div>
+      </div>
+      <div class="text-center">
+        <div class="text-gray-500">TVA</div>
+        <div id="total-tva-jour" class="font-bold text-orange-600">0,00 €</div>
+      </div>
+      <div class="text-center border-l border-gray-200">
+        <div class="text-gray-500">Total TTC</div>
+        <div id="total-ttc-jour" class="font-bold text-blue-600 text-base">0,00 €</div>
+      </div>
+    </div>
+
+    <!-- En-tête colonnes journal -->
+    <div class="journal-row bg-gray-50 font-medium text-gray-600 text-xs uppercase tracking-wide">
+      <span>Heure</span>
+      <span>Type</span>
+      <span>Référence</span>
+      <span>Client</span>
+      <span class="text-right">Montant HT</span>
+      <span class="text-right">Montant TTC</span>
+    </div>
+
+    <div id="journal-list">
+      <div class="px-4 py-8 text-center text-gray-400 text-sm">
+        <i class="fas fa-receipt text-2xl mb-2 block"></i>
+        Aucune transaction aujourd'hui
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tab : Clôtures ── -->
+  <section id="tab-clotures" class="bg-white rounded-xl shadow-sm border border-gray-100 hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-700">Historique des clôtures journalières</h2>
+      <span class="text-xs text-gray-400">30 dernières</span>
+    </div>
+    <!-- En-tête colonnes -->
+    <div class="grid grid-cols-6 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500 uppercase tracking-wide">
+      <span>Date</span>
+      <span class="text-center">Transactions</span>
+      <span class="text-right">Total HT</span>
+      <span class="text-right">TVA</span>
+      <span class="text-right">Total TTC</span>
+      <span class="text-center">Caissier</span>
+    </div>
+    <div id="clotures-list">
+      <div class="px-4 py-8 text-center text-gray-400 text-sm">
+        <i class="fas fa-lock text-2xl mb-2 block"></i>Aucune clôture enregistrée
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tab : Intégrité NF525 ── -->
+  <section id="tab-integrite" class="bg-white rounded-xl shadow-sm border border-gray-100 hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-700">Vérification intégrité chaîne NF525</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Recalcule chaque hash SHA-256 et détecte toute altération.</p>
+    </div>
+    <div class="px-4 py-4">
+      <div class="flex items-end gap-3">
+        <div>
+          <label class="text-xs font-medium text-gray-600">Date début</label>
+          <input type="date" id="integrite-debut" class="input-field text-sm py-1.5 px-3 w-40 block mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-600">Date fin</label>
+          <input type="date" id="integrite-fin" class="input-field text-sm py-1.5 px-3 w-40 block mt-1">
+        </div>
+        <button onclick="CaisseApp.verifierIntegrite()" class="btn-primary text-sm">
+          <i class="fas fa-search mr-1"></i>Vérifier
+        </button>
+      </div>
+
+      <div id="integrite-result" class="mt-4 hidden">
+        <!-- Résultat injecté -->
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- Modal : Nouvelle vente POS                                                 -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="modal-vente" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="CaisseApp.closeModal()"></div>
+  <div class="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
+    <!-- Header modal -->
+    <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+      <div>
+        <h2 class="text-lg font-semibold"><i class="fas fa-cash-register mr-2"></i>Nouvelle vente</h2>
+        <p class="text-xs text-blue-200">Caisse POS — NF525</p>
+      </div>
+      <button onclick="CaisseApp.closeModal()" class="text-blue-200 hover:text-white text-xl">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Contenu scrollable -->
+    <div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+
+      <!-- Client (optionnel) -->
+      <div>
+        <label class="label-field">Client (optionnel)</label>
+        <div class="flex gap-2">
+          <input type="text" id="vente-client-search" placeholder="Rechercher un client…"
+                 class="input-field flex-1 text-sm" oninput="CaisseApp.debouncedSearchClient()">
+          <button onclick="CaisseApp.clearClient()" class="btn-secondary text-sm px-3">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div id="vente-client-results" class="hidden mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-36 overflow-y-auto z-10 relative"></div>
+        <div id="vente-client-selected" class="hidden mt-1 flex items-center gap-2 p-2 bg-blue-50 rounded-lg text-sm text-blue-700">
+          <i class="fas fa-user"></i>
+          <span id="vente-client-nom"></span>
+        </div>
+      </div>
+
+      <!-- Lignes de vente -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="label-field mb-0">Articles / Prestations</label>
+          <button onclick="CaisseApp.ajouterLigne()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+            <i class="fas fa-plus mr-1"></i>Ajouter une ligne
+          </button>
+        </div>
+
+        <!-- En-têtes colonnes lignes -->
+        <div class="grid grid-cols-12 gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 px-1">
+          <span class="col-span-4">Désignation</span>
+          <span class="col-span-2 text-center">Qté</span>
+          <span class="col-span-2 text-right">P.U. HT</span>
+          <span class="col-span-1 text-center">TVA%</span>
+          <span class="col-span-1 text-center">Rem%</span>
+          <span class="col-span-1 text-right">Total TTC</span>
+          <span class="col-span-1"></span>
+        </div>
+
+        <div id="lignes-container" class="space-y-1.5"></div>
+
+        <!-- Totaux lignes -->
+        <div id="totaux-vente" class="mt-3 pt-3 border-t border-gray-200 space-y-1 text-sm">
+          <div class="flex justify-between text-gray-600">
+            <span>Total HT</span>
+            <span id="total-ht-vente" class="font-medium">0,00 €</span>
+          </div>
+          <div class="flex justify-between text-gray-600">
+            <span>TVA</span>
+            <span id="total-tva-vente" class="font-medium text-orange-600">0,00 €</span>
+          </div>
+          <div class="flex justify-between text-gray-800 font-bold text-base border-t border-gray-200 pt-1 mt-1">
+            <span>Total TTC</span>
+            <span id="total-ttc-vente" class="text-blue-600">0,00 €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode de paiement -->
+      <div>
+        <label class="label-field">Mode de paiement</label>
+        <div class="grid grid-cols-4 gap-2">
+          <button class="btn-mode active flex flex-col items-center gap-1 p-3 border-2 border-blue-500 rounded-xl bg-blue-50"
+                  data-mode="especes" onclick="CaisseApp.selectMode('especes')">
+            <i class="fas fa-money-bill-wave text-green-600 text-lg"></i>
+            <span class="text-xs font-medium text-gray-700">Espèces</span>
+          </button>
+          <button class="btn-mode flex flex-col items-center gap-1 p-3 border-2 border-gray-200 rounded-xl hover:border-blue-300"
+                  data-mode="cb" onclick="CaisseApp.selectMode('cb')">
+            <i class="fas fa-credit-card text-blue-600 text-lg"></i>
+            <span class="text-xs font-medium text-gray-700">CB</span>
+          </button>
+          <button class="btn-mode flex flex-col items-center gap-1 p-3 border-2 border-gray-200 rounded-xl hover:border-blue-300"
+                  data-mode="cheque" onclick="CaisseApp.selectMode('cheque')">
+            <i class="fas fa-file-alt text-gray-600 text-lg"></i>
+            <span class="text-xs font-medium text-gray-700">Chèque</span>
+          </button>
+          <button class="btn-mode flex flex-col items-center gap-1 p-3 border-2 border-gray-200 rounded-xl hover:border-blue-300"
+                  data-mode="mixte" onclick="CaisseApp.selectMode('mixte')">
+            <i class="fas fa-layer-group text-purple-600 text-lg"></i>
+            <span class="text-xs font-medium text-gray-700">Mixte</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Rendu monnaie (espèces) -->
+      <div id="rendu-monnaie-zone" class="space-y-2">
+        <label class="label-field">Montant remis par le client</label>
+        <div class="flex items-center gap-3">
+          <input type="number" id="montant-remis" min="0" step="0.01"
+                 placeholder="0,00" class="input-field w-36 text-right text-lg font-bold"
+                 oninput="CaisseApp.calcRendu()">
+          <span class="text-gray-400">€</span>
+          <div id="rendu-display" class="flex-1 text-right">
+            <span class="text-xs text-gray-500">Rendu :</span>
+            <span id="rendu-montant" class="ml-2 text-xl font-bold text-green-600">0,00 €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Note -->
+      <div>
+        <label class="label-field">Note (optionnel)</label>
+        <input type="text" id="vente-note" placeholder="Ex: Client régulier, numéro IMEI…"
+               class="input-field text-sm">
+      </div>
+
+    </div><!-- /scrollable -->
+
+    <!-- Footer modal -->
+    <div class="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50">
+      <button onclick="CaisseApp.closeModal()" class="btn-secondary flex-1">Annuler</button>
+      <button onclick="CaisseApp.submitVente()" id="btn-submit-vente"
+              class="btn-primary flex-1 text-base font-semibold">
+        <i class="fas fa-check mr-2"></i>Valider la vente
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal : Encaissement facture -->
+<div id="modal-encaissement" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="CaisseApp.closeModalEnc()"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div class="px-6 py-4 border-b border-gray-100">
+        <h2 class="text-lg font-semibold text-gray-800">Encaisser une facture</h2>
+      </div>
+      <div class="px-6 py-4 space-y-4">
+        <div>
+          <label class="label-field">Numéro de facture</label>
+          <input type="text" id="enc-facture-search" placeholder="FAC-2026-00001"
+                 class="input-field" oninput="CaisseApp.debouncedSearchFacture()">
+          <div id="enc-facture-result" class="mt-2 hidden text-sm p-3 bg-gray-50 rounded-lg">
+            <!-- Détail facture -->
+          </div>
+        </div>
+        <div>
+          <label class="label-field">Mode de paiement</label>
+          <select id="enc-mode-paiement" class="input-field">
+            <option value="especes">Espèces</option>
+            <option value="cb">Carte bancaire</option>
+            <option value="cheque">Chèque</option>
+            <option value="virement">Virement</option>
+          </select>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 flex gap-3">
+        <button onclick="CaisseApp.closeModalEnc()" class="btn-secondary flex-1">Annuler</button>
+        <button onclick="CaisseApp.submitEncaissement()" class="btn-primary flex-1">
+          <i class="fas fa-check mr-1"></i>Encaisser
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" class="fixed bottom-6 right-6 z-[100] hidden">
+  <div id="toast-inner" class="px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 max-w-sm"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/caisse.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.App) App.init('caisse')
+    CaisseApp.init()
+  })
+</script>
+</body>
+</html>
