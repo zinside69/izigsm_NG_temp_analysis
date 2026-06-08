@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Réparations — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --sidebar-w: 240px; }
+    body { display: flex; min-height: 100vh; background: #f1f5f9; font-family: 'Inter', sans-serif; }
+    #sidebar { width: var(--sidebar-w); flex-shrink: 0; }
+    #main    { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+    /* Kanban scroll horizontal */
+    #kanban-board {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 16px;
+      flex: 1;
+      align-items: flex-start;
+    }
+    #kanban-board::-webkit-scrollbar { height: 8px; }
+    #kanban-board::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+    #kanban-board::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+
+    .kanban-col {
+      min-width: 240px;
+      max-width: 240px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 180px);
+    }
+    .kanban-col-header {
+      padding: 12px 14px 10px;
+      border-radius: 12px 12px 0 0;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid rgba(0,0,0,.06);
+    }
+    .kanban-col-body {
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .kanban-col-body::-webkit-scrollbar { width: 4px; }
+    .kanban-col-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+    .ticket-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: box-shadow .15s, transform .1s;
+      position: relative;
+    }
+    .ticket-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); transform: translateY(-1px); }
+    .ticket-card.dragging { opacity: .5; }
+
+    /* Barre ancienneté */
+    .age-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 8px 0 0 8px; }
+    .age-green  { background: #22c55e; }
+    .age-orange { background: #f97316; }
+    .age-red    { background: #ef4444; }
+    .age-black  { background: #1e1b4b; }
+
+    /* Priorité badge */
+    .prio-urgente { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .prio-haute   { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+    .prio-normale { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .prio-basse   { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+
+    /* Couleurs colonnes */
+    .col-recu           { background: #dbeafe; }
+    .col-en_diagnostic  { background: #ede9fe; }
+    .col-attente_accord { background: #fef9c3; }
+    .col-a_commander    { background: #ffedd5; }
+    .col-commande       { background: #e0e7ff; }
+    .col-pieces_recues  { background: #ccfbf1; }
+    .col-en_reparation  { background: #cffafe; }
+    .col-termine        { background: #dcfce7; }
+    .col-livre          { background: #f1f5f9; opacity: .85; }
+    .col-annule         { background: #fef2f2; opacity: .85; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .modal-box { background: #fff; border-radius: 16px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px rgba(0,0,0,.3); }
+
+    /* Drag-over */
+    .kanban-col.drag-over .kanban-col-body { background: #eff6ff; border-radius: 0 0 12px 12px; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar"></div>
+
+<!-- MAIN -->
+<div id="main">
+  <!-- Topbar -->
+  <header class="bg-white shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <i class="fas fa-columns text-blue-600 text-xl"></i>
+      <h1 class="text-xl font-bold text-gray-800">Kanban Réparations</h1>
+    </div>
+    <div class="flex items-center gap-3">
+      <!-- Stats globales -->
+      <div id="stat-actifs"  class="hidden text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold"></div>
+      <div id="stat-urgents" class="hidden text-sm bg-red-50 text-red-600 px-3 py-1 rounded-full font-semibold"></div>
+      <div id="stat-retard"  class="hidden text-sm bg-orange-50 text-orange-600 px-3 py-1 rounded-full font-semibold"></div>
+      <button onclick="KanbanApp.refresh()"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <i class="fas fa-sync-alt mr-1"></i> Actualiser
+      </button>
+      <a href="/tickets.html"
+        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <i class="fas fa-plus mr-1"></i> Nouveau ticket
+      </a>
+    </div>
+  </header>
+
+  <!-- Filtres -->
+  <div class="bg-white border-b px-6 py-3 flex items-center gap-4 text-sm">
+    <label class="text-gray-600 font-medium">Filtre :</label>
+    <select id="filter-priorite" onchange="KanbanApp.applyFilter()" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+      <option value="">Toutes priorités</option>
+      <option value="urgente">🔴 Urgente</option>
+      <option value="haute">🟠 Haute</option>
+      <option value="normale">🟢 Normale</option>
+      <option value="basse">⚪ Basse</option>
+    </select>
+    <select id="filter-age" onchange="KanbanApp.applyFilter()" class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+      <option value="">Tous</option>
+      <option value="orange">En attente (3-7j)</option>
+      <option value="red">En retard (7-14j)</option>
+      <option value="black">Critique (+14j)</option>
+    </select>
+    <input id="filter-search" type="text" placeholder="Rechercher numéro / appareil…"
+      oninput="KanbanApp.applyFilter()"
+      class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-56">
+    <button onclick="KanbanApp.clearFilters()" class="text-gray-400 hover:text-gray-600 text-sm">
+      <i class="fas fa-times mr-1"></i>Effacer
+    </button>
+    <!-- Colonnes terminales toggle -->
+    <label class="ml-auto flex items-center gap-2 text-gray-600 cursor-pointer">
+      <input type="checkbox" id="show-terminal" onchange="KanbanApp.toggleTerminal()" class="rounded">
+      Afficher Livré/Annulé
+    </label>
+  </div>
+
+  <!-- Board Kanban -->
+  <div id="kanban-board">
+    <div class="text-gray-400 text-center py-20 w-full">
+      <i class="fas fa-spinner fa-spin text-3xl mb-3"></i>
+      <p>Chargement du Kanban…</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ticket Détail / Changement Statut -->
+<div id="modal-ticket" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="p-6 border-b flex items-center justify-between">
+      <h2 class="text-lg font-bold text-gray-800" id="modal-title">Ticket</h2>
+      <button onclick="KanbanApp.closeModal()" class="text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="modal-body" class="p-6"></div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/kanban.js"></script>
+</body>
+</html>
