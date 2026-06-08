@@ -4,247 +4,483 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Paramètres — iziGSM</title>
-  <link rel="stylesheet" href="/static/css/main.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --sidebar-w: 240px; }
+    body { display: flex; min-height: 100vh; background: #f1f5f9; }
+    #sidebar { width: var(--sidebar-w); flex-shrink: 0; }
+    #main    { flex: 1; min-width: 0; }
+    .tab-btn.active { background: #2563eb; color: #fff; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 12px;
+      font-size: 14px; outline: none; transition: border-color .15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.07); padding: 24px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; padding: 12px 20px; border-radius: 12px; color: #fff; font-weight: 600; font-size: 14px; transition: all .3s; }
+  </style>
 </head>
 <body>
-  <div class="app-layout">
-    <div id="sidebar-placeholder"></div>
-    <div class="main-content">
-      <header class="dash-topbar">
-        <div class="topbar-left"><div class="topbar-title">Paramètres</div></div>
-        <div class="topbar-right">
-          <div class="topbar-notif">🔔</div>
-          <div class="topbar-avatar" id="topbar-avatar">JD</div>
-        </div>
-      </header>
-      <main class="page-content">
-        <div class="page-header">
-          <div><h1>Paramètres du compte</h1><p>Gérez votre profil et les informations de votre atelier</p></div>
-        </div>
 
-        <div style="display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start;">
-          <!-- Menu paramètres -->
-          <div class="table-card" style="padding:12px;">
-            <button class="nav-item active" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('profil')">
-              <span class="nav-icon" style="color:inherit;">👤</span> Profil
-            </button>
-            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('atelier')">
-              <span class="nav-icon" style="color:inherit;">🔧</span> Atelier
-            </button>
-            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('facturation')">
-              <span class="nav-icon" style="color:inherit;">💶</span> Facturation
-            </button>
-            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('securite')">
-              <span class="nav-icon" style="color:inherit;">🔒</span> Sécurité
-            </button>
-            <button class="nav-item" style="width:100%;justify-content:flex-start;" onclick="showSettingsTab('abonnement')">
-              <span class="nav-icon" style="color:inherit;">⭐</span> Abonnement
-            </button>
-          </div>
+<div id="sidebar"></div>
 
-          <!-- Contenu onglets -->
-          <div>
-            <!-- Onglet Profil -->
-            <div class="table-card" id="settings-profil" style="padding:26px;">
-              <h3 style="margin:0 0 20px;">Mon profil</h3>
-              <div class="form-grid">
-                <div class="form-field">
-                  <label>Prénom</label>
-                  <input type="text" id="s-first" value="Jean">
-                </div>
-                <div class="form-field">
-                  <label>Nom</label>
-                  <input type="text" id="s-last" value="Dupont">
-                </div>
-                <div class="form-field full">
-                  <label>Email professionnel</label>
-                  <input type="email" id="s-email" value="jean@monatelier.fr">
-                </div>
-                <div class="form-field full">
-                  <label>Téléphone</label>
-                  <input type="tel" id="s-phone" value="+33 6 12 34 56 78">
-                </div>
-              </div>
-              <div style="margin-top:20px;">
-                <button class="btn btn-primary" onclick="saveSettings('profil')">Enregistrer les modifications</button>
-              </div>
-            </div>
-
-            <!-- Onglet Atelier -->
-            <div class="table-card hidden" id="settings-atelier" style="padding:26px;">
-              <h3 style="margin:0 0 20px;">Mon atelier</h3>
-              <div class="form-grid">
-                <div class="form-field full">
-                  <label>Nom de l'entreprise</label>
-                  <input type="text" id="s-company" value="Mon Atelier SARL">
-                </div>
-                <div class="form-field">
-                  <label>SIRET</label>
-                  <input type="text" id="s-siret" value="12345678900012">
-                </div>
-                <div class="form-field">
-                  <label>N° TVA</label>
-                  <input type="text" id="s-vat" placeholder="FR 12 123456789">
-                </div>
-                <div class="form-field full">
-                  <label>Adresse</label>
-                  <input type="text" id="s-address" value="12 Rue de la Paix, 75001 Paris">
-                </div>
-                <div class="form-field">
-                  <label>Zone TVA</label>
-                  <select id="s-vat-zone">
-                    <option selected>France métropolitaine — TVA 20%</option>
-                    <option>DOM — TVA 8,5%</option>
-                    <option>Belgique — TVA 21%</option>
-                  </select>
-                </div>
-                <div class="form-field">
-                  <label>Forme juridique</label>
-                  <select id="s-legal">
-                    <option>SARL</option>
-                    <option>SAS</option>
-                    <option>EI</option>
-                    <option>Auto-entrepreneur</option>
-                  </select>
-                </div>
-                <div class="form-field full">
-                  <label>Logo (URL ou upload)</label>
-                  <input type="text" id="s-logo" placeholder="https://...">
-                </div>
-              </div>
-              <div style="margin-top:20px;">
-                <button class="btn btn-primary" onclick="saveSettings('atelier')">Enregistrer</button>
-              </div>
-            </div>
-
-            <!-- Onglet Facturation -->
-            <div class="table-card hidden" id="settings-facturation" style="padding:26px;">
-              <h3 style="margin:0 0 20px;">Paramètres de facturation</h3>
-              <div class="form-grid">
-                <div class="form-field">
-                  <label>Préfixe de numérotation</label>
-                  <input type="text" id="s-prefix" value="FAC-2026-" placeholder="FAC-2026-">
-                </div>
-                <div class="form-field">
-                  <label>Prochain numéro</label>
-                  <input type="number" id="s-next-num" value="0014" min="1">
-                </div>
-                <div class="form-field">
-                  <label>Délai de paiement par défaut</label>
-                  <select id="s-payment-delay">
-                    <option>À réception</option>
-                    <option>15 jours</option>
-                    <option selected>30 jours</option>
-                    <option>60 jours</option>
-                  </select>
-                </div>
-                <div class="form-field">
-                  <label>Mode de paiement préféré</label>
-                  <select id="s-payment-method">
-                    <option>Virement bancaire</option>
-                    <option>Carte bancaire</option>
-                    <option>Espèces</option>
-                  </select>
-                </div>
-                <div class="form-field full">
-                  <label>Mentions légales bas de facture</label>
-                  <textarea id="s-legal-mention" rows="3" placeholder="Ex : TVA non applicable selon article 293B CGI...">En cas de retard de paiement, une pénalité de 3 fois le taux d'intérêt légal sera appliquée, ainsi qu'une indemnité forfaitaire de 40€.</textarea>
-                </div>
-                <div class="form-field full">
-                  <label>IBAN (pour mentions sur factures)</label>
-                  <input type="text" id="s-iban" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
-                </div>
-              </div>
-              <div style="margin-top:20px;">
-                <button class="btn btn-primary" onclick="saveSettings('facturation')">Enregistrer</button>
-              </div>
-            </div>
-
-            <!-- Onglet Sécurité -->
-            <div class="table-card hidden" id="settings-securite" style="padding:26px;">
-              <h3 style="margin:0 0 20px;">Sécurité du compte</h3>
-              <div class="form-grid">
-                <div class="form-field full">
-                  <label>Mot de passe actuel</label>
-                  <input type="password" id="s-pass-current" placeholder="••••••••">
-                </div>
-                <div class="form-field">
-                  <label>Nouveau mot de passe</label>
-                  <input type="password" id="s-pass-new" placeholder="••••••••">
-                </div>
-                <div class="form-field">
-                  <label>Confirmer le nouveau mot de passe</label>
-                  <input type="password" id="s-pass-confirm" placeholder="••••••••">
-                </div>
-              </div>
-              <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
-                <button class="btn btn-primary" onclick="saveSettings('securite')">Changer le mot de passe</button>
-                <button class="btn btn-secondary" onclick="alert('2FA simulé — fonctionnalité disponible dans la V2 complète')">Activer la double authentification</button>
-              </div>
-            </div>
-
-            <!-- Onglet Abonnement -->
-            <div class="table-card hidden" id="settings-abonnement" style="padding:26px;">
-              <h3 style="margin:0 0 20px;">Mon abonnement</h3>
-              <div style="background:linear-gradient(135deg,var(--primary-light),#f0ecff);border:1px solid #c4b5fd;border-radius:16px;padding:22px;margin-bottom:20px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-                  <div>
-                    <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary);margin-bottom:6px;">Plan actuel</div>
-                    <div style="font-size:1.4rem;font-weight:800;color:var(--navy);">Essai gratuit</div>
-                    <div style="color:var(--muted);font-size:0.9rem;margin-top:4px;">14 jours restants · Aucune carte requise</div>
-                  </div>
-                  <button class="btn btn-primary">Passer à Pro 39€/mois →</button>
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">
-                  <div style="font-weight:700;margin-bottom:8px;">Plan Pro — 39€/mois</div>
-                  <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:0.9rem;line-height:1.8;">
-                    <li>Tickets illimités</li>
-                    <li>Devis & factures illimités</li>
-                    <li>Module QualiRépar</li>
-                    <li>Multi-techniciens (5 comptes)</li>
-                    <li>Export PDF & comptable</li>
-                    <li>Support prioritaire</li>
-                  </ul>
-                </div>
-                <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">
-                  <div style="font-weight:700;margin-bottom:8px;">Plan Entreprise — 89€/mois</div>
-                  <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:0.9rem;line-height:1.8;">
-                    <li>Tout le plan Pro</li>
-                    <li>Multi-ateliers</li>
-                    <li>Comptes illimités</li>
-                    <li>API d'intégration</li>
-                    <li>Account manager dédié</li>
-                    <li>SLA 99,9%</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
+<div id="main">
+  <header class="bg-white shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <i class="fas fa-cog text-blue-600 text-xl"></i>
+      <h1 class="text-xl font-bold text-gray-800">Paramètres</h1>
     </div>
+  </header>
+
+  <div class="p-6">
+    <!-- Onglets -->
+    <div class="flex gap-2 mb-6 border-b border-gray-200 pb-2 flex-wrap">
+      <button class="tab-btn active px-4 py-2 rounded-lg text-sm font-semibold transition-colors" data-tab="general" onclick="Settings.switchTab('general')">
+        <i class="fas fa-store mr-1"></i>Boutique
+      </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="numerotation" onclick="Settings.switchTab('numerotation')">
+        <i class="fas fa-hashtag mr-1"></i>Numérotation
+      </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="facturation" onclick="Settings.switchTab('facturation')">
+        <i class="fas fa-file-invoice mr-1"></i>Facturation
+      </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="paiements" onclick="Settings.switchTab('paiements')">
+        <i class="fas fa-credit-card mr-1"></i>Paiements
+      </button>
+    </div>
+
+    <!-- TAB: Boutique -->
+    <div id="tab-general" class="tab-content active">
+      <form id="form-general" onsubmit="Settings.saveGeneral(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-store text-blue-600 mr-2"></i>Informations générales</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group col-span-2">
+              <label>Nom de la boutique *</label>
+              <input type="text" id="nom" required placeholder="Ex: iziGSM Paris 11">
+            </div>
+            <div class="form-group">
+              <label>SIRET</label>
+              <input type="text" id="siret" placeholder="12345678900001" maxlength="14">
+            </div>
+            <div class="form-group">
+              <label>N° TVA</label>
+              <input type="text" id="tva_numero" placeholder="FR00123456789">
+            </div>
+            <div class="form-group col-span-2">
+              <label>Adresse</label>
+              <input type="text" id="adresse" placeholder="1 rue de la Paix">
+            </div>
+            <div class="form-group">
+              <label>Code postal</label>
+              <input type="text" id="code_postal" placeholder="75001" maxlength="5">
+            </div>
+            <div class="form-group">
+              <label>Ville</label>
+              <input type="text" id="ville" placeholder="Paris">
+            </div>
+            <div class="form-group">
+              <label>Téléphone</label>
+              <input type="tel" id="telephone" placeholder="0601020304">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="email" placeholder="contact@boutique.fr">
+            </div>
+            <div class="form-group col-span-2">
+              <label>Site web</label>
+              <input type="url" id="site_web" placeholder="https://www.boutique.fr">
+            </div>
+            <div class="form-group col-span-2">
+              <label>Slug (URL publique)</label>
+              <input type="text" id="slug" placeholder="izigsm-paris-11" pattern="[a-z0-9\-]+">
+              <p class="text-xs text-gray-400 mt-1">Lettres minuscules, chiffres et tirets uniquement. Utilisé pour la vitrine publique.</p>
+            </div>
+            <div class="form-group col-span-2">
+              <label>Description publique</label>
+              <textarea id="description" rows="2" placeholder="Spécialiste réparation smartphone toutes marques…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Réseaux sociaux -->
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-share-alt text-blue-600 mr-2"></i>Réseaux sociaux</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group">
+              <label><i class="fab fa-facebook text-blue-600 mr-1"></i>Facebook</label>
+              <input type="url" id="facebook_url" placeholder="https://facebook.com/…">
+            </div>
+            <div class="form-group">
+              <label><i class="fab fa-instagram text-pink-500 mr-1"></i>Instagram</label>
+              <input type="url" id="instagram_url" placeholder="https://instagram.com/…">
+            </div>
+            <div class="form-group col-span-2">
+              <label><i class="fab fa-google text-red-500 mr-1"></i>Google Maps</label>
+              <input type="url" id="google_maps_url" placeholder="https://maps.google.com/…">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: Numérotation -->
+    <div id="tab-numerotation" class="tab-content">
+      <form id="form-numerotation" onsubmit="Settings.saveNumerotation(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-2"><i class="fas fa-hashtag text-blue-600 mr-2"></i>Format des numéros</h3>
+          <p class="text-sm text-gray-500 mb-4">Personnalisez le format des numéros générés automatiquement pour chaque type de document.</p>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group">
+              <label>Format</label>
+              <select id="format_numero">
+                <option value="annee">Avec année — PREFIX-2026-00001</option>
+                <option value="simple">Simple — PREFIX-00001</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Longueur séquence</label>
+              <select id="padding_numero">
+                <option value="3">3 chiffres — 001</option>
+                <option value="4">4 chiffres — 0001</option>
+                <option value="5" selected>5 chiffres — 00001</option>
+                <option value="6">6 chiffres — 000001</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Préfixes -->
+          <div class="mt-4">
+            <h4 class="text-sm font-bold text-gray-700 mb-3">Préfixes personnalisés</h4>
+            <div class="grid grid-cols-3 gap-3">
+              <div class="form-group">
+                <label>Tickets réparation</label>
+                <input type="text" id="prefix_ticket" placeholder="TKT" maxlength="8">
+              </div>
+              <div class="form-group">
+                <label>Factures</label>
+                <input type="text" id="prefix_facture" placeholder="FAC" maxlength="8">
+              </div>
+              <div class="form-group">
+                <label>Devis</label>
+                <input type="text" id="prefix_devis" placeholder="DEV" maxlength="8">
+              </div>
+              <div class="form-group">
+                <label>Avoirs</label>
+                <input type="text" id="prefix_avoir" placeholder="AV" maxlength="8">
+              </div>
+              <div class="form-group">
+                <label>Rachats (Livre police)</label>
+                <input type="text" id="prefix_rachat" placeholder="LP" maxlength="8">
+              </div>
+            </div>
+          </div>
+
+          <!-- Aperçu -->
+          <div class="mt-4 bg-blue-50 rounded-xl p-4">
+            <p class="text-xs font-bold text-blue-700 mb-2 uppercase tracking-wider">Aperçu en temps réel</p>
+            <div id="preview-numeros" class="grid grid-cols-3 gap-2 text-sm font-mono text-blue-800"></div>
+          </div>
+        </div>
+
+        <!-- Délais -->
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-clock text-blue-600 mr-2"></i>Délais par défaut</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group">
+              <label>Garantie réparation (jours)</label>
+              <input type="number" id="garantie_defaut_jours" min="0" max="365" placeholder="90">
+            </div>
+            <div class="form-group">
+              <label>Délai relance client (jours)</label>
+              <input type="number" id="delai_relance_jours" min="0" max="30" placeholder="3">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: Facturation -->
+    <div id="tab-facturation" class="tab-content">
+      <form id="form-facturation" onsubmit="Settings.saveFacturation(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-file-invoice text-blue-600 mr-2"></i>Paramètres de facturation</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group">
+              <label>TVA par défaut (%)</label>
+              <select id="tva_taux_defaut">
+                <option value="0">0% — Exonéré</option>
+                <option value="5.5">5.5% — Taux réduit</option>
+                <option value="10">10% — Taux intermédiaire</option>
+                <option value="20" selected>20% — Taux normal</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Monnaie</label>
+              <select id="monnaie">
+                <option value="EUR">EUR (€)</option>
+                <option value="CHF">CHF (CHF)</option>
+              </select>
+            </div>
+            <div class="form-group col-span-2">
+              <label>Mention sur factures</label>
+              <textarea id="mention_facture" rows="2" placeholder="Ex: TVA non applicable, article 293 B du CGI"></textarea>
+            </div>
+            <div class="form-group col-span-2">
+              <label>Pied de page factures</label>
+              <textarea id="pied_de_page" rows="2" placeholder="Ex: Toute réclamation doit être faite dans les 48h suivant la livraison."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: Paiements -->
+    <div id="tab-paiements" class="tab-content">
+      <form id="form-paiements" onsubmit="Settings.savePaiements(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-credit-card text-blue-600 mr-2"></i>Moyens de paiement acceptés</h3>
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="paiement_especes" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-money-bill-wave text-green-500 mr-2"></i>Espèces</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="paiement_cb" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-credit-card text-blue-500 mr-2"></i>Carte bancaire</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="paiement_cheque" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-money-check text-purple-500 mr-2"></i>Chèque</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="paiement_virement" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-exchange-alt text-orange-500 mr-2"></i>Virement bancaire</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-4"><i class="fas fa-bell text-blue-600 mr-2"></i>Notifications</h3>
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="notif_email_actif" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-envelope text-blue-500 mr-2"></i>Notifications email clients</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="notif_sms_actif" class="w-4 h-4 rounded accent-blue-600">
+              <span class="font-medium text-gray-700"><i class="fas fa-sms text-green-500 mr-2"></i>Notifications SMS clients</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
   </div>
-  <script src="/static/js/app.js"></script>
-  <script>
-    function showSettingsTab(name) {
-      document.querySelectorAll('[id^="settings-"]').forEach(el => el.classList.add('hidden'));
-      document.getElementById('settings-' + name).classList.remove('hidden');
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+<script src="/static/js/app.js"></script>
+<script>
+const Settings = (() => {
+  let _boutiqueId = null;
+  let _settings   = {};
+
+  async function init() {
+    if (typeof ApiService === 'undefined') { setTimeout(init, 100); return; }
+    const user = ApiService.getUser();
+    if (!user) { window.location.href = '/index.html'; return; }
+    _boutiqueId = user.boutique_id;
+    if (!_boutiqueId) {
+      document.querySelector('#main > div.p-6').innerHTML =
+        '<div class="card text-center py-12 text-gray-400"><i class="fas fa-exclamation-triangle text-3xl mb-3"></i><p>Compte admin global — sélectionnez une boutique.</p></div>';
+      return;
     }
-    function saveSettings(tab) {
-      showFlash('✓ Paramètres enregistrés avec succès !', 'success');
+    await loadSettings();
+    // Aperçu numéros en temps réel
+    ['prefix_ticket','prefix_facture','prefix_devis','prefix_avoir','prefix_rachat','format_numero','padding_numero']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updatePreview);
+      });
+  }
+
+  async function loadSettings() {
+    try {
+      const r = await ApiService.get(`/api/boutiques/${_boutiqueId}`);
+      if (!r.success) throw new Error(r.error);
+      const b = r.data;
+      _settings = b.settings || {};
+
+      // Onglet boutique
+      ['nom','siret','tva_numero','adresse','code_postal','ville',
+       'telephone','email','site_web','slug','description',
+       'facebook_url','instagram_url','google_maps_url'].forEach(f => {
+        const el = document.getElementById(f);
+        if (el && b[f] != null) el.value = b[f];
+      });
+
+      // Onglet numérotation
+      ['prefix_ticket','prefix_facture','prefix_devis','prefix_avoir','prefix_rachat',
+       'garantie_defaut_jours','delai_relance_jours'].forEach(f => {
+        const el = document.getElementById(f);
+        if (el && _settings[f] != null) el.value = _settings[f];
+      });
+      if (_settings.format_numero)  document.getElementById('format_numero').value  = _settings.format_numero;
+      if (_settings.padding_numero) document.getElementById('padding_numero').value  = _settings.padding_numero;
+
+      // Onglet facturation
+      if (_settings.tva_taux_defaut != null)  document.getElementById('tva_taux_defaut').value  = _settings.tva_taux_defaut;
+      if (_settings.monnaie)                  document.getElementById('monnaie').value           = _settings.monnaie;
+      if (_settings.mention_facture)          document.getElementById('mention_facture').value   = _settings.mention_facture;
+      if (_settings.pied_de_page)             document.getElementById('pied_de_page').value      = _settings.pied_de_page;
+
+      // Onglet paiements
+      ['paiement_especes','paiement_cb','paiement_cheque','paiement_virement',
+       'notif_email_actif','notif_sms_actif'].forEach(f => {
+        const el = document.getElementById(f);
+        if (el) el.checked = !!_settings[f];
+      });
+
+      updatePreview();
+    } catch (e) {
+      showToast('❌ Erreur chargement : ' + e.message, 'error');
     }
-    function showFlash(msg, type) {
-      const f = document.createElement('div');
-      f.className = 'flash ' + type;
-      f.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;min-width:300px;';
-      f.textContent = msg;
-      document.body.appendChild(f);
-      setTimeout(() => f.remove(), 3000);
-    }
-  </script>
+  }
+
+  function updatePreview() {
+    const format  = document.getElementById('format_numero')?.value || 'annee';
+    const padding = parseInt(document.getElementById('padding_numero')?.value || '5');
+    const annee   = new Date().getFullYear();
+    const TYPES   = ['ticket','facture','devis','avoir','rachat'];
+    const DEFAUT  = { ticket:'TKT', facture:'FAC', devis:'DEV', avoir:'AV', rachat:'LP' };
+
+    const html = TYPES.map(t => {
+      const prefix = (document.getElementById(`prefix_${t}`)?.value || DEFAUT[t]).toUpperCase();
+      const num    = '1'.padStart(padding, '0');
+      const exemple = format === 'simple' ? `${prefix}-${num}` : `${prefix}-${annee}-${num}`;
+      return `<div class="bg-white rounded px-2 py-1 text-xs font-mono">${exemple}</div>`;
+    }).join('');
+    const el = document.getElementById('preview-numeros');
+    if (el) el.innerHTML = html;
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('active','bg-blue-600','text-white');
+      b.classList.add('bg-gray-100','text-gray-600');
+    });
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const btn = document.querySelector(`[data-tab="${tab}"]`);
+    if (btn) { btn.classList.add('active'); btn.classList.remove('bg-gray-100','text-gray-600'); }
+    document.getElementById(`tab-${tab}`)?.classList.add('active');
+    if (tab === 'numerotation') updatePreview();
+  }
+
+  async function saveGeneral(e) {
+    e.preventDefault();
+    const body = {};
+    ['nom','siret','tva_numero','adresse','code_postal','ville',
+     'telephone','email','site_web','slug','description',
+     'facebook_url','instagram_url','google_maps_url'].forEach(f => {
+      body[f] = document.getElementById(f)?.value?.trim() || null;
+    });
+    try {
+      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}`, body);
+      r.success ? showToast('✅ Boutique mise à jour') : showToast('❌ ' + r.error, 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  async function saveNumerotation(e) {
+    e.preventDefault();
+    const body = {
+      prefix_ticket:  document.getElementById('prefix_ticket')?.value?.trim().toUpperCase() || null,
+      prefix_facture: document.getElementById('prefix_facture')?.value?.trim().toUpperCase() || null,
+      prefix_devis:   document.getElementById('prefix_devis')?.value?.trim().toUpperCase() || null,
+      prefix_avoir:   document.getElementById('prefix_avoir')?.value?.trim().toUpperCase() || null,
+      prefix_rachat:  document.getElementById('prefix_rachat')?.value?.trim().toUpperCase() || null,
+      format_numero:  document.getElementById('format_numero')?.value,
+      padding_numero: parseInt(document.getElementById('padding_numero')?.value || '5'),
+      garantie_defaut_jours: parseInt(document.getElementById('garantie_defaut_jours')?.value || '90'),
+      delai_relance_jours:   parseInt(document.getElementById('delai_relance_jours')?.value || '3'),
+    };
+    try {
+      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      r.success ? showToast('✅ Numérotation mise à jour') : showToast('❌ ' + r.error, 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  async function saveFacturation(e) {
+    e.preventDefault();
+    const body = {
+      tva_taux_defaut: parseFloat(document.getElementById('tva_taux_defaut')?.value || '20'),
+      monnaie:         document.getElementById('monnaie')?.value,
+      mention_facture: document.getElementById('mention_facture')?.value?.trim() || null,
+      pied_de_page:    document.getElementById('pied_de_page')?.value?.trim() || null,
+    };
+    try {
+      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      r.success ? showToast('✅ Facturation mise à jour') : showToast('❌ ' + r.error, 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  async function savePaiements(e) {
+    e.preventDefault();
+    const body = {
+      paiement_especes:  document.getElementById('paiement_especes')?.checked  ? 1 : 0,
+      paiement_cb:       document.getElementById('paiement_cb')?.checked       ? 1 : 0,
+      paiement_cheque:   document.getElementById('paiement_cheque')?.checked   ? 1 : 0,
+      paiement_virement: document.getElementById('paiement_virement')?.checked ? 1 : 0,
+      notif_email_actif: document.getElementById('notif_email_actif')?.checked ? 1 : 0,
+      notif_sms_actif:   document.getElementById('notif_sms_actif')?.checked   ? 1 : 0,
+    };
+    try {
+      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      r.success ? showToast('✅ Paramètres mis à jour') : showToast('❌ ' + r.error, 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  function showToast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  return { init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements };
+})();
+
+document.addEventListener('DOMContentLoaded', Settings.init);
+</script>
 </body>
 </html>

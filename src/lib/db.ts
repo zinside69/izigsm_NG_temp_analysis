@@ -6,8 +6,10 @@
 
 /**
  * Génère le prochain numéro séquentiel pour une boutique.
- * Format : PREFIX-ANNÉE-XXXXX (ex: TKT-2026-00001)
- * Utilise la table `sequences` avec un verrou optimiste.
+ * Format configurable via boutique_settings :
+ *   - format_numero='annee'  → PREFIX-ANNÉE-XXXXX (ex: TKT-2026-00001)
+ *   - format_numero='simple' → PREFIX-XXXXX       (ex: TKT-00001)
+ * Les préfixes sont personnalisables (prefix_ticket, prefix_facture…)
  */
 export async function nextNumero(
   db: D1Database,
@@ -16,7 +18,33 @@ export async function nextNumero(
 ): Promise<string> {
   const annee = new Date().getFullYear()
 
-  // Upsert la séquence et incrémenter
+  // Lire la config de numérotation de la boutique (avec fallback)
+  const settings = await db.prepare(`
+    SELECT prefix_ticket, prefix_facture, prefix_devis, prefix_avoir, prefix_rachat,
+           format_numero, padding_numero
+    FROM   boutique_settings
+    WHERE  boutique_id = ?
+  `).bind(boutique_id).first<{
+    prefix_ticket:  string; prefix_facture: string; prefix_devis: string
+    prefix_avoir:   string; prefix_rachat:  string
+    format_numero:  string; padding_numero: number
+  }>()
+
+  const PREFIXES_DEFAUT: Record<string, string> = {
+    ticket:  'TKT', facture: 'FAC', devis: 'DEV', avoir: 'AV', rachat: 'LP',
+  }
+  const PREFIXES_SETTINGS: Record<string, string | undefined> = {
+    ticket:  settings?.prefix_ticket,
+    facture: settings?.prefix_facture,
+    devis:   settings?.prefix_devis,
+    avoir:   settings?.prefix_avoir,
+    rachat:  settings?.prefix_rachat,
+  }
+  const prefix  = PREFIXES_SETTINGS[type] || PREFIXES_DEFAUT[type]
+  const format  = settings?.format_numero  ?? 'annee'
+  const padding = settings?.padding_numero ?? 5
+
+  // Upsert séquence
   await db.prepare(`
     INSERT INTO sequences (boutique_id, type, annee, dernier_num)
     VALUES (?, ?, ?, 1)
@@ -29,15 +57,12 @@ export async function nextNumero(
     WHERE boutique_id = ? AND type = ? AND annee = ?
   `).bind(boutique_id, type, annee).first<{ dernier_num: number }>()
 
-  const num = row?.dernier_num ?? 1
-  const prefix: Record<string, string> = {
-    ticket:  'TKT',
-    facture: 'FAC',
-    devis:   'DEV',
-    avoir:   'AV',    // Avoirs NF525 (Sprint 2.1)
-    rachat:  'LP',    // Livre de police rachats (Sprint 2.2)
-  }
-  return `${prefix[type]}-${annee}-${String(num).padStart(5, '0')}`
+  const num     = row?.dernier_num ?? 1
+  const numStr  = String(num).padStart(padding, '0')
+
+  return format === 'simple'
+    ? `${prefix}-${numStr}`
+    : `${prefix}-${annee}-${numStr}`
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

@@ -62,12 +62,24 @@ boutiques.put('/:id', requireRole('admin', 'manager'), async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const { nom, siret, tva_numero, adresse, code_postal, ville, telephone, email } = await c.req.json()
+  const { nom, siret, tva_numero, adresse, code_postal, ville, telephone, email,
+          site_web, slug, description, facebook_url, instagram_url, google_maps_url } = await c.req.json()
 
   await c.env.DB.prepare(`
-    UPDATE boutiques SET nom=?, siret=?, tva_numero=?, adresse=?, code_postal=?, ville=?, telephone=?, email=?, updated_at=CURRENT_TIMESTAMP
+    UPDATE boutiques SET
+      nom=COALESCE(?,nom), siret=COALESCE(?,siret), tva_numero=COALESCE(?,tva_numero),
+      adresse=COALESCE(?,adresse), code_postal=COALESCE(?,code_postal), ville=COALESCE(?,ville),
+      telephone=COALESCE(?,telephone), email=COALESCE(?,email), site_web=COALESCE(?,site_web),
+      slug=COALESCE(?,slug), description=COALESCE(?,description),
+      facebook_url=COALESCE(?,facebook_url), instagram_url=COALESCE(?,instagram_url),
+      google_maps_url=COALESCE(?,google_maps_url),
+      updated_at=CURRENT_TIMESTAMP
     WHERE id=?
-  `).bind(nom, siret ?? null, tva_numero ?? null, adresse ?? null, code_postal ?? null, ville ?? null, telephone ?? null, email ?? null, id).run()
+  `).bind(nom ?? null, siret ?? null, tva_numero ?? null,
+          adresse ?? null, code_postal ?? null, ville ?? null,
+          telephone ?? null, email ?? null, site_web ?? null,
+          slug ?? null, description ?? null,
+          facebook_url ?? null, instagram_url ?? null, google_maps_url ?? null, id).run()
 
   return c.json({ success: true, message: 'Boutique mise à jour.' })
 })
@@ -79,19 +91,48 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const { tva_taux_defaut, horaires, notif_email_actif, notif_sms_actif,
-          paiement_especes, paiement_cb, paiement_cheque, paiement_virement } = await c.req.json()
+  const {
+    tva_taux_defaut, horaires, notif_email_actif, notif_sms_actif,
+    paiement_especes, paiement_cb, paiement_cheque, paiement_virement,
+    // Numérotation configurable (Sprint 2.9)
+    prefix_ticket, prefix_facture, prefix_devis, prefix_avoir, prefix_rachat,
+    format_numero, padding_numero,
+    // Paramètres métier
+    garantie_defaut_jours, delai_relance_jours, mention_facture, pied_de_page,
+  } = await c.req.json()
+
+  // Validations numérotation
+  const FORMATS_VALIDES = ['annee', 'simple']
+  if (format_numero && !FORMATS_VALIDES.includes(format_numero))
+    return c.json({ success: false, error: `format_numero invalide. Valeurs : ${FORMATS_VALIDES.join(', ')}.` }, 422)
+  if (padding_numero && (padding_numero < 3 || padding_numero > 8))
+    return c.json({ success: false, error: 'padding_numero doit être entre 3 et 8.' }, 422)
 
   await c.env.DB.prepare(`
     UPDATE boutique_settings SET
       tva_taux_defaut=?, horaires=?, notif_email_actif=?, notif_sms_actif=?,
       paiement_especes=?, paiement_cb=?, paiement_cheque=?, paiement_virement=?,
+      prefix_ticket=COALESCE(?,prefix_ticket), prefix_facture=COALESCE(?,prefix_facture),
+      prefix_devis=COALESCE(?,prefix_devis),   prefix_avoir=COALESCE(?,prefix_avoir),
+      prefix_rachat=COALESCE(?,prefix_rachat),
+      format_numero=COALESCE(?,format_numero),  padding_numero=COALESCE(?,padding_numero),
+      garantie_defaut_jours=COALESCE(?,garantie_defaut_jours),
+      delai_relance_jours=COALESCE(?,delai_relance_jours),
+      mention_facture=COALESCE(?,mention_facture),
+      pied_de_page=COALESCE(?,pied_de_page),
       updated_at=CURRENT_TIMESTAMP
     WHERE boutique_id=?
-  `).bind(tva_taux_defaut ?? 20, horaires ? JSON.stringify(horaires) : null,
-          notif_email_actif ? 1 : 0, notif_sms_actif ? 1 : 0,
-          paiement_especes ? 1 : 0, paiement_cb ? 1 : 0,
-          paiement_cheque ? 1 : 0, paiement_virement ? 1 : 0, id).run()
+  `).bind(
+    tva_taux_defaut ?? 20, horaires ? JSON.stringify(horaires) : null,
+    notif_email_actif ? 1 : 0, notif_sms_actif ? 1 : 0,
+    paiement_especes ? 1 : 0, paiement_cb ? 1 : 0, paiement_cheque ? 1 : 0, paiement_virement ? 1 : 0,
+    prefix_ticket  ?? null, prefix_facture ?? null,
+    prefix_devis   ?? null, prefix_avoir   ?? null, prefix_rachat  ?? null,
+    format_numero  ?? null, padding_numero ?? null,
+    garantie_defaut_jours ?? null, delai_relance_jours ?? null,
+    mention_facture ?? null, pied_de_page ?? null,
+    id
+  ).run()
 
   return c.json({ success: true, message: 'Paramètres mis à jour.' })
 })

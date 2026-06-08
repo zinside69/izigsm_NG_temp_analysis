@@ -62,8 +62,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.8.0',
-    sprint:    '2.8 — Kanban + statuts pièces + priorité',
+    version:   '2.9.0',
+    sprint:    '2.9 — Numérotation configurable + Settings tenant',
     timestamp: new Date().toISOString(),
   })
 })
