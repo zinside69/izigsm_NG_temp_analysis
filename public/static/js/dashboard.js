@@ -1,8 +1,22 @@
 /**
  * dashboard.js — Module DashApp
  * Sprint 2.13 — Dashboard graphiques réels (Chart.js)
- * Endpoints : /api/stats, /api/stats/ca-mensuel, /api/stats/tickets-statut,
- *             /api/stats/top-produits, /api/stats/activite, /api/stats/techniciens
+ *
+ * Principe P2 : utilise exclusivement apiGet() de app.js — aucun fetch() direct.
+ * Principe P4 : fonctions publiques documentées, helpers privés préfixés _.
+ * _money() centralisé dans app.js (P2).
+ *
+ * API consommées :
+ *   GET /api/stats                — KPIs temps réel
+ *   GET /api/stats/ca-mensuel     — CA 12 mois (barchart)
+ *   GET /api/stats/tickets-statut — Répartition statuts (doughnut)
+ *   GET /api/stats/top-produits   — Top ventes 30 j
+ *   GET /api/stats/activite       — Fil d'activité
+ *   GET /api/stats/techniciens    — Rapport équipe
+ *
+ * Interface publique exposée via window.DashApp :
+ *   init()    — Initialisation complète au chargement de la page
+ *   refresh() — Rechargement de toutes les données (bouton + auto-refresh 5 min)
  */
 
 window.DashApp = (() => {
@@ -13,6 +27,13 @@ window.DashApp = (() => {
   let chartStatuts = null
 
   // ─── Init ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Initialise le dashboard : sidebar, date topbar, avatar, puis charge les données.
+   * Appelé automatiquement sur DOMContentLoaded.
+   *
+   * @returns {void}
+   */
   function init() {
     buildSidebar('dashboard')
     _setDate()
@@ -20,6 +41,12 @@ window.DashApp = (() => {
     refresh()
   }
 
+  /**
+   * Recharge toutes les sections du dashboard en parallèle.
+   * Exposé publiquement pour le bouton « Actualiser » et l'auto-refresh.
+   *
+   * @returns {Promise<void>}
+   */
   async function refresh() {
     const label = document.getElementById('refresh-label')
     if (label) label.textContent = '…'
@@ -35,6 +62,13 @@ window.DashApp = (() => {
   }
 
   // ─── Date topbar ──────────────────────────────────────────────────────────
+
+  /**
+   * Affiche la date longue fr-FR dans l'élément #topbar-date.
+   * Exemple : « Dimanche 8 juin 2026 ».
+   *
+   * @returns {void}
+   */
   function _setDate() {
     const el = document.getElementById('topbar-date')
     if (!el) return
@@ -45,6 +79,13 @@ window.DashApp = (() => {
   }
 
   // ─── Utilisateur sidebar ──────────────────────────────────────────────────
+
+  /**
+   * Décrypte le JWT en localStorage et affiche les initiales dans #topbar-avatar.
+   * Silencieux si token absent ou invalide.
+   *
+   * @returns {void}
+   */
   function _setUser() {
     try {
       const tok = localStorage.getItem('access_token')
@@ -58,6 +99,13 @@ window.DashApp = (() => {
   }
 
   // ─── KPIs ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Charge les KPIs depuis GET /api/stats et met à jour les 4 cards
+   * ainsi que les badges évolution CA et le strip d'alertes.
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadKpis() {
     try {
       const r = await apiGet('/api/stats')
@@ -112,6 +160,14 @@ window.DashApp = (() => {
   }
 
   // ─── Alertes rapides ──────────────────────────────────────────────────────
+
+  /**
+   * Construit le strip d'alertes contextuelles à partir des KPIs.
+   * Affiche un chip « Tout est en ordre » si aucune alerte active.
+   *
+   * @param {object} d - Objet KPIs retourné par getKpisDashboard
+   * @returns {void}
+   */
   function _buildAlerts(d) {
     const strip = document.getElementById('alert-strip')
     if (!strip) return
@@ -138,6 +194,14 @@ window.DashApp = (() => {
   }
 
   // ─── Chart CA mensuel ─────────────────────────────────────────────────────
+
+  /**
+   * Charge le CA mensuel depuis GET /api/stats/ca-mensuel et dessine
+   * un barchart Chart.js avec ligne de moyenne en overlay.
+   * Détruit l'instance précédente avant de recréer (gestion mémoire).
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadCaMensuel() {
     try {
       const r = await apiGet('/api/stats/ca-mensuel')
@@ -208,6 +272,14 @@ window.DashApp = (() => {
   }
 
   // ─── Chart tickets par statut ─────────────────────────────────────────────
+
+  /**
+   * Charge la répartition des tickets depuis GET /api/stats/tickets-statut
+   * et dessine un graphique doughnut Chart.js.
+   * Affiche uniquement les statuts avec au moins 1 ticket.
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadTicketsStatut() {
     try {
       const r = await apiGet('/api/stats/tickets-statut')
@@ -265,6 +337,14 @@ window.DashApp = (() => {
   }
 
   // ─── Top produits ─────────────────────────────────────────────────────────
+
+  /**
+   * Charge le top 5 des produits vendus (30 j) et affiche une liste
+   * avec barre de progression relative au premier.
+   * Badge marge coloré : vert si marge > 20 %, orange sinon.
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadTopProduits() {
     const el = document.getElementById('top-produits-list')
     const sub = document.getElementById('top-produits-sub')
@@ -300,6 +380,13 @@ window.DashApp = (() => {
   }
 
   // ─── Activité récente ─────────────────────────────────────────────────────
+
+  /**
+   * Charge le fil d'activité multi-modules depuis GET /api/stats/activite
+   * et affiche chaque item avec icône, référence, label client et horodatage relatif.
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadActivite() {
     const el = document.getElementById('activity-feed')
     if (!el) return
@@ -333,6 +420,14 @@ window.DashApp = (() => {
   }
 
   // ─── Techniciens ─────────────────────────────────────────────────────────
+
+  /**
+   * Charge le rapport technicien depuis GET /api/stats/techniciens
+   * et affiche la liste avec barre de charge relative et taux de clôture.
+   * Silencieux si l'utilisateur n'a pas le rôle requis (erreur API ignorée).
+   *
+   * @returns {Promise<void>}
+   */
   async function _loadTechniciens() {
     const el = document.getElementById('tech-list')
     if (!el) return
@@ -372,26 +467,40 @@ window.DashApp = (() => {
     }
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // ─── Helpers privés ─────────────────────────────────────────────────────────
+
+  /**
+   * Met à jour le textContent d'un élément DOM par son id.
+   * No-op silencieux si l'élément est absent.
+   *
+   * @param {string} id  - Id de l'élément cible
+   * @param {string|number} val - Valeur à afficher
+   * @returns {void}
+   */
   function _setText(id, val) {
     const el = document.getElementById(id)
     if (el) el.textContent = val
   }
 
-  function _money(n, symbol = true) {
-    const v = parseFloat(n) || 0
-    return new Intl.NumberFormat('fr-FR', {
-      style: symbol ? 'currency' : 'decimal',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(v)
-  }
+  // _money() est défini dans app.js (Principe P2 — centralisation)
 
+  /**
+   * Échappe les caractères HTML dangereux pour une insertion sécurisée en innerHTML.
+   *
+   * @param {*} s - Valeur à échapper (convertie en string si besoin)
+   * @returns {string} Chaîne sécurisée, &amp;, &lt;, &gt; encodés
+   */
   function _esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   }
 
+  /**
+   * Retourne une durée relative lisible depuis une date ISO (ex: « il y a 3h »).
+   * Affiche la date courte fr-FR pour les événements > 7 jours.
+   *
+   * @param {string} isoDate - Date ISO 8601
+   * @returns {string} Durée relative ou date courte, '—' si isoDate est falsy
+   */
   function _ago(isoDate) {
     if (!isoDate) return '—'
     const diff = Date.now() - new Date(isoDate).getTime()

@@ -223,6 +223,15 @@ function switchTab(tabId) {
 }
 
 // ======================== UTILS ========================
+
+/**
+ * Formate une date ISO en chaîne lisible fr-FR (jj/mm/aaaa ou jj/mm/aa).
+ * Alias sémantique de `_fmtDate` — utiliser `formatDate` dans les vues HTML.
+ *
+ * @param {string}  isoStr - Date au format ISO 8601 (ou toute chaîne parseable par Date)
+ * @param {boolean} short  - Si true, année sur 2 chiffres (défaut false)
+ * @returns {string} Date formatée, ex. "08/06/2026", ou '—' si isoStr est falsy
+ */
 function formatDate(isoStr, short = false) {
   if (!isoStr) return '—';
   const d = new Date(isoStr);
@@ -230,8 +239,68 @@ function formatDate(isoStr, short = false) {
   return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
+/**
+ * Formate un montant numérique en devise euros fr-FR avec symbole.
+ * Alias sémantique de `_money` — utiliser `formatMoney` dans les vues HTML.
+ *
+ * @param {number} val - Montant à formater (null/undefined accepté → 0)
+ * @returns {string} Montant formaté, ex. "1 234,56 €"
+ */
 function formatMoney(val) {
   return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR' }).format(val || 0);
+}
+
+/**
+ * Alias court de `formatMoney` — usage exclusif dans les templates print
+ * et les modules qui ne peuvent pas appeler `formatMoney` directement.
+ * Accepte un second paramètre `symbol` pour désactiver le symbole €
+ * (utile pour les axes Chart.js où l'unité est déjà dans le label).
+ *
+ * @param {number}  n      - Montant à formater
+ * @param {boolean} symbol - Inclure le symbole € (défaut true)
+ * @returns {string} Montant formaté fr-FR
+ */
+function _money(n, symbol = true) {
+  const v = parseFloat(n) || 0;
+  return new Intl.NumberFormat('fr-FR', {
+    style:                symbol ? 'currency' : 'decimal',
+    currency:             'EUR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(v);
+}
+
+/**
+ * Alias court de `formatDate` avec heure — usage exclusif dans les templates print
+ * et les modules de tickets qui affichent la date + heure de prise en charge.
+ *
+ * @param {string} iso - Date ISO 8601
+ * @returns {string} Date + heure formatées fr-FR, ex. "08/06/2026 à 14:30", ou '—'
+ */
+function _fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+  } catch { return iso; }
+}
+
+/**
+ * Variante de `_fmtDate` incluant l'heure — utilisé dans les fiches ticket
+ * pour horodater la prise en charge avec précision minute.
+ *
+ * @param {string} iso - Date ISO 8601
+ * @returns {string} Date + heure fr-FR, ex. "08/06/2026 14:30", ou '—'
+ */
+function _fmtDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
 }
 
 function statusBadge(status) {

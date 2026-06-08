@@ -2,16 +2,35 @@
  * statsService.ts — Model layer pour statistiques & KPIs dashboard
  * Sprint 2.13 — Extraction depuis index.tsx (violation archi résolue)
  *
+ * ⚠️  EXCEPTION ARCHITECTURE — Principe 1 (Modularité)
+ * Ce service est le seul autorisé à agréger plusieurs modules métier
+ * (tickets, factures, produits, rachats, rendez_vous, users, clients).
+ * Justification : rôle exclusivement analytique — lecture seule, aucun write.
+ * Cette exception est volontaire et documentée. Toute autre route CRUD
+ * doit rester strictement mono-module (P1 sans dérogation).
+ * Décision validée Sprint 2.13 — voir .architecture/PRINCIPES.md §Exception-Reporting
+ *
  * Fonctions exportées :
- *   getKpisDashboard(db, boutiqueId)       — KPIs temps réel
- *   getCaMensuel(db, boutiqueId, mois?)    — CA 12 derniers mois (Chart.js)
- *   getTicketsParStatut(db, boutiqueId)    — Répartition statuts tickets
- *   getTopProduits(db, boutiqueId, limit?) — Top produits vendus (marges)
- *   getActiviteRecente(db, boutiqueId)     — Flux activité multi-modules
- *   getRapportTechnicien(db, boutiqueId)   — Tickets par technicien
+ *   getKpisDashboard(db, boutiqueId)           — 12 KPIs temps réel
+ *   getCaMensuel(db, boutiqueId)               — CA 12 mois glissants (Chart.js)
+ *   getTicketsParStatut(db, boutiqueId)        — Répartition statuts tickets
+ *   getTopProduits(db, boutiqueId, limit?)     — Top produits vendus 30 j + marge
+ *   getActiviteRecente(db, boutiqueId, limit?) — Flux activité multi-modules
+ *   getRapportTechnicien(db, boutiqueId)       — Tickets par technicien
  */
 
 // ─── KPIs dashboard ───────────────────────────────────────────────────────────
+
+/**
+ * Calcule les 12 indicateurs clés de performance en temps réel.
+ * Exécute 12 requêtes en parallèle (Promise.all) pour minimiser la latence.
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @returns Objet KPIs : nb_clients, tickets_en_cours, ca_mois, evolution_ca_pct,
+ *          stock_bas, employes_en_poste, devis_en_attente, garanties_expirent,
+ *          factures_en_retard, rachats_mois, rdv_today
+ */
 export async function getKpisDashboard(db: D1Database, boutiqueId: number) {
   const [
     clients,
@@ -117,8 +136,17 @@ export async function getKpisDashboard(db: D1Database, boutiqueId: number) {
 }
 
 // ─── CA 12 derniers mois (données Chart.js) ───────────────────────────────────
+
+/**
+ * Retourne le chiffre d'affaires TTC des 12 derniers mois glissants,
+ * avec remplissage des mois sans vente à 0 pour garantir un graphique continu.
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @returns { mois: Array<{mois, label, ca_ttc, ca_ht, nb_factures}>,
+ *            total_12_mois: number, moyenne_mensuelle: number }
+ */
 export async function getCaMensuel(db: D1Database, boutiqueId: number) {
-  // Génère les 12 derniers mois côté SQL (mois courant inclus)
   const rows = await db.prepare(
     `SELECT
        strftime('%Y-%m', date_emission) as mois,
@@ -158,6 +186,15 @@ export async function getCaMensuel(db: D1Database, boutiqueId: number) {
 }
 
 // ─── Tickets par statut ───────────────────────────────────────────────────────
+
+/**
+ * Retourne la répartition des tickets par statut, avec couleurs Chart.js pré-assignées.
+ * Les statuts absents en base sont retournés avec cnt=0 (liste exhaustive garantie).
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @returns Tableau de 9 statuts : { key, label, color, cnt }
+ */
 export async function getTicketsParStatut(db: D1Database, boutiqueId: number) {
   const rows = await db.prepare(
     `SELECT statut, COUNT(*) as cnt
@@ -185,6 +222,17 @@ export async function getTicketsParStatut(db: D1Database, boutiqueId: number) {
 }
 
 // ─── Top produits vendus ──────────────────────────────────────────────────────
+
+/**
+ * Retourne les N produits les plus vendus sur les 30 derniers jours,
+ * avec CA total, quantité vendue et marge brute calculée.
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @param limit      - Nombre maximum de produits retournés (défaut : 10)
+ * @returns Tableau de produits : { nom, reference, prix_vente_ttc, cump,
+ *          nb_ventes, qte_vendue, ca_total, marge_brute, marge_pct }
+ */
 export async function getTopProduits(db: D1Database, boutiqueId: number, limit = 10) {
   const rows = await db.prepare(
     `SELECT
@@ -218,7 +266,18 @@ export async function getTopProduits(db: D1Database, boutiqueId: number, limit =
   }))
 }
 
-// ─── Activité récente (multi-modules) ────────────────────────────────────────
+// ─── Activité récente (multi-modules — cf. exception P1 en en-tête) ──────────
+
+/**
+ * Agrège les derniers événements de 4 modules (tickets, factures, rachats, rdv)
+ * et les retourne triés par date décroissante.
+ * Chaque item expose : { type, ref, label, detail, date }.
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @param limit      - Nombre maximum d'items retournés après tri (défaut : 15)
+ * @returns Tableau d'activités triées par date DESC, tronqué à `limit`
+ */
 export async function getActiviteRecente(db: D1Database, boutiqueId: number, limit = 15) {
   const [tickets, factures, rachats, rdv] = await Promise.all([
     db.prepare(
@@ -272,6 +331,18 @@ export async function getActiviteRecente(db: D1Database, boutiqueId: number, lim
 }
 
 // ─── Rapport activité par technicien ─────────────────────────────────────────
+
+/**
+ * Calcule les indicateurs de performance par technicien :
+ * volume de tickets, taux de clôture, délai moyen de résolution.
+ * Filtre sur les rôles admin/gérant/technicien pour exclure les comptes
+ * purement commerciaux.
+ *
+ * @param db         - Instance D1Database injectée par le contexte Hono
+ * @param boutiqueId - ID de la boutique courante (multi-tenant)
+ * @returns Tableau trié par total_tickets DESC :
+ *          { id, technicien, total_tickets, termines, en_cours, delai_moyen_jours }
+ */
 export async function getRapportTechnicien(db: D1Database, boutiqueId: number) {
   const rows = await db.prepare(
     `SELECT

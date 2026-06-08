@@ -214,170 +214,204 @@ function viewTicket(id) {
 }
 
 // ─── Impression fiche ticket (Sprint 2.13) ────────────────────────────────────
+// ─── Impression / PDF fiche ticket (Sprint 2.13) ─────────────────────────────
+// Principe P4 : fonction principale déléguant à 3 sous-fonctions spécialisées.
+// _triggerPrint() est défini dans factures.js (chargé avant tickets.js).
+// _money() et _fmtDateTime() proviennent de app.js (Principe P2 — centralisation).
+
+/**
+ * Point d'entrée public pour l'impression d'une fiche de prise en charge ticket.
+ * Orchestre les 3 étapes : récupération API → construction HTML → déclenchement print.
+ *
+ * @param {number} id - ID du ticket à imprimer
+ * @returns {Promise<void>}
+ */
 async function printTicket(id) {
   if (!id) return;
   try {
-    const boutiqueId = getBoutiqueId();
-    const r = await apiGet(`/api/tickets/${id}`, boutiqueId ? { boutique_id: boutiqueId } : {});
-    if (!r.ok) { showFlash('⚠️ Impossible de récupérer le ticket.', 'error'); return; }
-    const t = r.data?.data || r.data || {};
-
-    let boutique = { nom: 'iziGSM', adresse: '', telephone: '', email: '' };
-    try {
-      const bs = await apiGet('/api/boutiques');
-      const b  = (bs.data?.data || bs.data || [])[0] || {};
-      boutique = { nom: b.nom || b.name || 'iziGSM', adresse: b.adresse || '', telephone: b.telephone || '', email: b.email || '' };
-    } catch {}
-
-    const numero    = t.numero   || ('#' + id);
-    const statut    = t.statut   || 'recu';
-    const client    = t.client_nom ? (t.client_nom + (t.client_prenom ? ' ' + t.client_prenom : '')) : (t.clientName || '—');
-    const tel       = t.client_telephone || t.client_tel || t.phone || '';
-    const email     = t.client_email || t.email || '';
-    const marque    = t.marque   || t.deviceType  || '';
-    const modele    = t.modele   || t.deviceModel || '';
-    const imei      = t.imei     || '';
-    const panne     = t.description || t.panne_declaree || '';
-    const notes     = t.notes_internes || t.notes || '';
-    const prix      = parseFloat(t.prix_estime || t.prix_reparation || 0);
-    const dateEm    = t.created_at || new Date().toISOString();
-    const technicien = t.technicien_nom || t.technician || '—';
-    const priorite  = t.priorite || t.priority || 'normale';
-    const tracking  = t.tracking_token || '';
-
-    const statutLabel = {
-      recu:'Reçu', diagnostic:'En diagnostic', en_reparation:'En réparation',
-      to_order:'À commander', ordered:'Commandé', parts_received:'Pièces reçues',
-      termine:'Terminé', livre:'Livré', annule:'Annulé'
-    }[statut] || statut;
-
-    const prioColor = { haute:'#ef4444', urgente:'#dc2626', normale:'#6366f1', basse:'#6b7280' }[priorite] || '#6366f1';
-
-    const html = `
-      <div id="print-root">
-        <link rel="stylesheet" href="/static/css/print.css">
-        <div class="print-header print-no-break">
-          <div class="print-logo">
-            <div class="print-logo-mark">i</div>
-            <div class="print-logo-name">iziGSM</div>
-          </div>
-          <div class="print-boutique-info">
-            <strong>${esc(boutique.nom)}</strong><br>
-            ${boutique.adresse   ? esc(boutique.adresse)   + '<br>' : ''}
-            ${boutique.telephone ? esc(boutique.telephone) + '<br>' : ''}
-            ${boutique.email     ? esc(boutique.email)            : ''}
-          </div>
-        </div>
-
-        <div class="print-doc-title print-no-break">
-          <div>
-            <div class="print-doc-type">Fiche de prise en charge</div>
-            <div class="print-doc-numero">${esc(numero)}</div>
-          </div>
-          <div class="print-doc-meta">
-            <strong>Date :</strong> ${_fmtDateTk(dateEm)}<br>
-            <strong>Statut :</strong> ${esc(statutLabel)}<br>
-            <strong>Priorité :</strong> <span style="color:${prioColor};font-weight:700;">${esc(priorite)}</span>
-          </div>
-        </div>
-
-        <div class="print-parties print-no-break">
-          <div class="print-party-box">
-            <div class="print-party-label">Client</div>
-            <div class="print-party-name">${esc(client)}</div>
-            <div class="print-party-detail">
-              ${tel   ? '📞 ' + esc(tel)   + '<br>' : ''}
-              ${email ? '✉ '  + esc(email)          : ''}
-            </div>
-          </div>
-          <div class="print-party-box">
-            <div class="print-party-label">Appareil</div>
-            <div class="print-party-name">${esc(marque)} ${esc(modele)}</div>
-            <div class="print-party-detail">
-              ${imei ? 'IMEI / S.N. : <strong>' + esc(imei) + '</strong><br>' : ''}
-              <strong>Technicien :</strong> ${esc(technicien)}
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-bottom:6mm;" class="print-no-break">
-          <div class="print-notes-label" style="margin-bottom:2mm;">Panne déclarée</div>
-          <div class="print-notes">${esc(panne) || '<em style="color:#aaa;">Non renseignée</em>'}</div>
-        </div>
-
-        ${notes ? `<div style="margin-bottom:6mm;" class="print-no-break">
-          <div class="print-notes-label" style="margin-bottom:2mm;">Notes internes</div>
-          <div class="print-notes" style="background:#fff9ec;border-color:#ffe0a1;">${esc(notes)}</div>
-        </div>` : ''}
-
-        <table class="print-table print-no-break" style="margin-bottom:4mm;">
-          <thead>
-            <tr>
-              <th>Intervention</th>
-              <th class="text-right" style="width:25%">Montant estimé</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${esc(panne) || 'Diagnostic + réparation'}</td>
-              <td class="text-right"><strong>${prix > 0 ? new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(prix) : 'Sur devis'}</strong></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <!-- Zone signature client -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
-          <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
-            <div class="print-notes-label" style="margin-bottom:2mm;">Signature du client</div>
-            <div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>
-          </div>
-          <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
-            <div class="print-notes-label" style="margin-bottom:2mm;">Signature du technicien</div>
-          </div>
-        </div>
-
-        ${tracking ? `<div style="margin-top:6mm;text-align:center;font-size:8pt;color:#aaa;" class="print-no-break">
-          Suivi en ligne : ${window.location.origin}/suivi/${esc(tracking)}
-        </div>` : ''}
-
-        <div class="print-footer">
-          <div>${esc(boutique.nom)}</div>
-          <div class="print-footer-legal">Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
-          <div>${esc(numero)}</div>
-        </div>
-      </div>`;
-
-    let prev = document.getElementById('print-root');
-    if (prev) prev.remove();
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    document.body.appendChild(wrapper.firstElementChild);
-
-    const style = document.createElement('style');
-    style.id = '_print_style_override';
-    style.media = 'print';
-    style.textContent = `body > .app-layout { display:none !important; } #print-root { display:block !important; }`;
-    document.head.appendChild(style);
-
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => {
-        document.getElementById('print-root')?.remove();
-        document.getElementById('_print_style_override')?.remove();
-      }, 500);
-    }, 200);
-
+    const data = await _fetchTicketPrintData(id);
+    if (!data) return;
+    const html = _buildTicketHTML(data);
+    _triggerPrint(html);
   } catch (err) {
     console.error('[printTicket]', err);
     showFlash('⚠️ Erreur lors de la génération de la fiche.', 'error');
   }
 }
 
-function _fmtDateTk(iso) {
-  if (!iso) return '—';
-  try { return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
-  catch { return iso; }
+/**
+ * Récupère et normalise les données nécessaires à l'impression d'une fiche ticket :
+ * détail ticket + profil boutique.
+ *
+ * @param {number} id - ID du ticket
+ * @returns {Promise<object|null>} Objet normalisé prêt pour `_buildTicketHTML`,
+ *          ou null si l'API retourne une erreur (flash affiché)
+ */
+async function _fetchTicketPrintData(id) {
+  const boutiqueId = getBoutiqueId();
+  const r = await apiGet(`/api/tickets/${id}`, boutiqueId ? { boutique_id: boutiqueId } : {});
+  if (!r.ok) {
+    showFlash('⚠️ Impossible de récupérer le ticket.', 'error');
+    return null;
+  }
+  const t = r.data?.data || r.data || {};
+
+  // Profil boutique (non bloquant — valeurs par défaut si API KO)
+  let boutique = { nom: 'iziGSM', adresse: '', telephone: '', email: '' };
+  try {
+    const bs = await apiGet('/api/boutiques');
+    const b  = (bs.data?.data || bs.data || [])[0] || {};
+    boutique = {
+      nom:       b.nom       || b.name || 'iziGSM',
+      adresse:   b.adresse   || '',
+      telephone: b.telephone || '',
+      email:     b.email     || '',
+    };
+  } catch {}
+
+  return {
+    boutique,
+    numero:     t.numero    || ('#' + id),
+    statut:     t.statut    || 'recu',
+    client:     t.client_nom
+                  ? (t.client_nom + (t.client_prenom ? ' ' + t.client_prenom : ''))
+                  : (t.clientName || '—'),
+    tel:        t.client_telephone || t.client_tel || t.phone || '',
+    email:      t.client_email     || t.email      || '',
+    marque:     t.marque    || t.deviceType  || '',
+    modele:     t.modele    || t.deviceModel || '',
+    imei:       t.imei      || '',
+    panne:      t.description      || t.panne_declaree || '',
+    notes:      t.notes_internes   || t.notes          || '',
+    prix:       parseFloat(t.prix_estime || t.prix_reparation || 0),
+    dateEm:     t.created_at       || new Date().toISOString(),
+    technicien: t.technicien_nom   || t.technician     || '—',
+    priorite:   t.priorite         || t.priority       || 'normale',
+    tracking:   t.tracking_token   || '',
+  };
 }
+
+/**
+ * Construit le HTML complet de la fiche de prise en charge ticket pour impression.
+ * Inclut zones de signature client/technicien et lien de suivi si token présent.
+ *
+ * @param {object} d - Données normalisées retournées par `_fetchTicketPrintData`
+ * @returns {string} HTML complet prêt à être injecté dans #print-root
+ */
+function _buildTicketHTML(d) {
+  const STATUT_LABELS = {
+    recu:'Reçu', diagnostic:'En diagnostic', en_reparation:'En réparation',
+    to_order:'À commander', ordered:'Commandé', parts_received:'Pièces reçues',
+    termine:'Terminé', livre:'Livré', annule:'Annulé',
+  };
+  const PRIO_COLORS = {
+    haute:'#ef4444', urgente:'#dc2626', normale:'#6366f1', basse:'#6b7280',
+  };
+
+  const statutLabel = STATUT_LABELS[d.statut]  || d.statut;
+  const prioColor   = PRIO_COLORS[d.priorite]  || '#6366f1';
+  const prixHTML    = d.prix > 0
+    ? _money(d.prix)
+    : 'Sur devis';
+
+  return `
+    <div id="print-root">
+      <link rel="stylesheet" href="/static/css/print.css">
+
+      <div class="print-header print-no-break">
+        <div class="print-logo">
+          <div class="print-logo-mark">i</div>
+          <div class="print-logo-name">iziGSM</div>
+        </div>
+        <div class="print-boutique-info">
+          <strong>${esc(d.boutique.nom)}</strong><br>
+          ${d.boutique.adresse   ? esc(d.boutique.adresse)   + '<br>' : ''}
+          ${d.boutique.telephone ? esc(d.boutique.telephone) + '<br>' : ''}
+          ${d.boutique.email     ? esc(d.boutique.email)             : ''}
+        </div>
+      </div>
+
+      <div class="print-doc-title print-no-break">
+        <div>
+          <div class="print-doc-type">Fiche de prise en charge</div>
+          <div class="print-doc-numero">${esc(d.numero)}</div>
+        </div>
+        <div class="print-doc-meta">
+          <strong>Date :</strong> ${_fmtDateTime(d.dateEm)}<br>
+          <strong>Statut :</strong> ${esc(statutLabel)}<br>
+          <strong>Priorité :</strong> <span style="color:${prioColor};font-weight:700;">${esc(d.priorite)}</span>
+        </div>
+      </div>
+
+      <div class="print-parties print-no-break">
+        <div class="print-party-box">
+          <div class="print-party-label">Client</div>
+          <div class="print-party-name">${esc(d.client)}</div>
+          <div class="print-party-detail">
+            ${d.tel   ? '📞 ' + esc(d.tel)   + '<br>' : ''}
+            ${d.email ? '✉ '  + esc(d.email)          : ''}
+          </div>
+        </div>
+        <div class="print-party-box">
+          <div class="print-party-label">Appareil</div>
+          <div class="print-party-name">${esc(d.marque)} ${esc(d.modele)}</div>
+          <div class="print-party-detail">
+            ${d.imei ? 'IMEI / S.N. : <strong>' + esc(d.imei) + '</strong><br>' : ''}
+            <strong>Technicien :</strong> ${esc(d.technicien)}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:6mm;" class="print-no-break">
+        <div class="print-notes-label" style="margin-bottom:2mm;">Panne déclarée</div>
+        <div class="print-notes">${esc(d.panne) || '<em style="color:#aaa;">Non renseignée</em>'}</div>
+      </div>
+
+      ${d.notes ? `
+      <div style="margin-bottom:6mm;" class="print-no-break">
+        <div class="print-notes-label" style="margin-bottom:2mm;">Notes internes</div>
+        <div class="print-notes" style="background:#fff9ec;border-color:#ffe0a1;">${esc(d.notes)}</div>
+      </div>` : ''}
+
+      <table class="print-table print-no-break" style="margin-bottom:4mm;">
+        <thead>
+          <tr>
+            <th>Intervention</th>
+            <th class="text-right" style="width:25%">Montant estimé</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${esc(d.panne) || 'Diagnostic + réparation'}</td>
+            <td class="text-right"><strong>${prixHTML}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+          <div class="print-notes-label" style="margin-bottom:2mm;">Signature du client</div>
+          <div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+          <div class="print-notes-label" style="margin-bottom:2mm;">Signature du technicien</div>
+        </div>
+      </div>
+
+      ${d.tracking ? `
+      <div style="margin-top:6mm;text-align:center;font-size:8pt;color:#aaa;" class="print-no-break">
+        Suivi en ligne : ${window.location.origin}/suivi/${esc(d.tracking)}
+      </div>` : ''}
+
+      <div class="print-footer">
+        <div>${esc(d.boutique.nom)}</div>
+        <div class="print-footer-legal">Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
+        <div>${esc(d.numero)}</div>
+      </div>
+    </div>`;
+}
+
+// _fmtDateTime() (avec heure) est défini dans app.js (Principe P2 — centralisation)
 
 window.printTicket = printTicket;
 
