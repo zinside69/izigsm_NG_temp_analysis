@@ -99,6 +99,10 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
     format_numero, padding_numero,
     // Paramètres métier
     garantie_defaut_jours, delai_relance_jours, mention_facture, pied_de_page,
+    // Email notifications (Sprint 2.11)
+    email_provider, email_api_key, email_from,
+    email_notif_ticket_cree, email_notif_ticket_termine,
+    email_notif_sav_ouvert,  email_notif_relance,
   } = await c.req.json()
 
   // Validations numérotation
@@ -120,6 +124,13 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
       delai_relance_jours=COALESCE(?,delai_relance_jours),
       mention_facture=COALESCE(?,mention_facture),
       pied_de_page=COALESCE(?,pied_de_page),
+      email_provider=COALESCE(?,email_provider),
+      email_api_key=COALESCE(?,email_api_key),
+      email_from=COALESCE(?,email_from),
+      email_notif_ticket_cree=COALESCE(?,email_notif_ticket_cree),
+      email_notif_ticket_termine=COALESCE(?,email_notif_ticket_termine),
+      email_notif_sav_ouvert=COALESCE(?,email_notif_sav_ouvert),
+      email_notif_relance=COALESCE(?,email_notif_relance),
       updated_at=CURRENT_TIMESTAMP
     WHERE boutique_id=?
   `).bind(
@@ -131,6 +142,11 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
     format_numero  ?? null, padding_numero ?? null,
     garantie_defaut_jours ?? null, delai_relance_jours ?? null,
     mention_facture ?? null, pied_de_page ?? null,
+    email_provider  ?? null, email_api_key ?? null, email_from ?? null,
+    email_notif_ticket_cree    != null ? (email_notif_ticket_cree    ? 1 : 0) : null,
+    email_notif_ticket_termine != null ? (email_notif_ticket_termine ? 1 : 0) : null,
+    email_notif_sav_ouvert     != null ? (email_notif_sav_ouvert     ? 1 : 0) : null,
+    email_notif_relance        != null ? (email_notif_relance        ? 1 : 0) : null,
     id
   ).run()
 

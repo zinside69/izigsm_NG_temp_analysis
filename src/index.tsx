@@ -16,6 +16,7 @@ import fournisseursRoutes  from './routes/fournisseurs'
 import agendaRoutes        from './routes/agenda'
 import publicRoutes        from './routes/public'
 import savRoutes           from './routes/sav'
+import notificationsRoutes from './routes/notifications'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
@@ -63,8 +64,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.10.0',
-    sprint:    '2.10 — SAV & Garanties',
+    version:   '2.11.0',
+    sprint:    '2.11 — Notifications email',
     timestamp: new Date().toISOString(),
   })
 })
@@ -111,6 +112,7 @@ app.route('/api',            servicesRoutes)    // /api/services/* + /api/servic
 app.route('/api/tickets',    ticketsRoutes)     // /api/tickets/*
 app.route('/api',            stocksRoutes)      // /api/produits/* + /api/categories/*
 app.route('/api',            savRoutes)         // /api/garanties/* + /api/sav/* ← AVANT clients (évite capture par /:id)
+app.route('/api',            notificationsRoutes) // /api/notifications/*
 app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
 app.route('/api/boutiques',  boutiquesRoutes)

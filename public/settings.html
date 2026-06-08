@@ -51,6 +51,9 @@
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="paiements" onclick="Settings.switchTab('paiements')">
         <i class="fas fa-credit-card mr-1"></i>Paiements
       </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="email" onclick="Settings.switchTab('email')">
+        <i class="fas fa-envelope mr-1"></i>Emails
+      </button>
     </div>
 
     <!-- TAB: Boutique -->
@@ -305,6 +308,73 @@
       </form>
     </div>
 
+    <!-- TAB: Email -->
+    <div id="tab-email" class="tab-content">
+      <form id="form-email" onsubmit="Settings.saveEmail(event)" class="space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-server mr-2 text-indigo-500"></i>Configuration SMTP / Provider</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Provider</label>
+              <select id="email_provider" class="w-full border rounded-lg px-3 py-2 text-sm">
+                <option value="resend">Resend</option>
+                <option value="mailgun">Mailgun</option>
+                <option value="sendgrid">SendGrid</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Clé API</label>
+              <input type="password" id="email_api_key" placeholder="re_xxxxxxxx…" class="w-full border rounded-lg px-3 py-2 text-sm">
+              <p class="text-xs text-gray-400 mt-1">Laissez vide pour conserver la clé existante</p>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Adresse expéditeur</label>
+              <input type="text" id="email_from" placeholder="iziGSM &lt;noreply@votredomaine.fr&gt;" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-bell mr-2 text-indigo-500"></i>Notifications activées</h3>
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="email_notif_ticket_cree" class="rounded w-4 h-4">
+              <span class="text-sm text-gray-700">📋 <strong>Confirmation de dépôt</strong> — envoyé au client à la création d'un ticket</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="email_notif_ticket_termine" class="rounded w-4 h-4">
+              <span class="text-sm text-gray-700">🎉 <strong>Appareil prêt</strong> — envoyé au client quand le ticket passe en « Terminé »</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="email_notif_sav_ouvert" class="rounded w-4 h-4">
+              <span class="text-sm text-gray-700">🛡️ <strong>Ouverture SAV</strong> — envoyé au client lors de l'ouverture d'un dossier SAV</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="email_notif_relance" class="rounded w-4 h-4">
+              <span class="text-sm text-gray-700">⏰ <strong>Relances automatiques</strong> — tickets en attente depuis N jours (configurable ci-dessus)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-paper-plane mr-2 text-indigo-500"></i>Email de test</h3>
+          <div class="flex gap-3">
+            <input type="email" id="email_test_to" placeholder="votre@email.fr" class="flex-1 border rounded-lg px-3 py-2 text-sm">
+            <button type="button" onclick="Settings.sendTestEmail()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              <i class="fas fa-paper-plane mr-1"></i> Envoyer test
+            </button>
+          </div>
+          <div id="email-test-result" class="mt-2 text-sm hidden"></div>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-semibold">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
   </div>
 </div>
 
@@ -369,6 +439,16 @@ const Settings = (() => {
        'notif_email_actif','notif_sms_actif'].forEach(f => {
         const el = document.getElementById(f);
         if (el) el.checked = !!_settings[f];
+      });
+
+      // Onglet email (Sprint 2.11)
+      if (_settings.email_provider) document.getElementById('email_provider').value = _settings.email_provider;
+      if (_settings.email_from)     document.getElementById('email_from').value     = _settings.email_from;
+      // Jamais pré-remplir email_api_key (sécurité)
+      ['email_notif_ticket_cree','email_notif_ticket_termine',
+       'email_notif_sav_ouvert','email_notif_relance'].forEach(f => {
+        const el = document.getElementById(f);
+        if (el) el.checked = _settings[f] !== 0;  // default true (1 = activé)
       });
 
       updatePreview();
@@ -477,7 +557,45 @@ const Settings = (() => {
     setTimeout(() => el.remove(), 3000);
   }
 
-  return { init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements };
+  async function saveEmail(e) {
+    e.preventDefault();
+    const apiKey = document.getElementById('email_api_key').value.trim();
+    const payload = {
+      email_provider:             document.getElementById('email_provider').value,
+      email_from:                 document.getElementById('email_from').value.trim() || undefined,
+      email_notif_ticket_cree:    document.getElementById('email_notif_ticket_cree').checked,
+      email_notif_ticket_termine: document.getElementById('email_notif_ticket_termine').checked,
+      email_notif_sav_ouvert:     document.getElementById('email_notif_sav_ouvert').checked,
+      email_notif_relance:        document.getElementById('email_notif_relance').checked,
+    };
+    if (apiKey) payload.email_api_key = apiKey;  // seulement si modifiée
+    try {
+      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, payload);
+      if (r.success) showToast('Configuration email enregistrée.');
+      else showToast(r.error || 'Erreur.', 'error');
+    } catch { showToast('Erreur réseau.', 'error'); }
+  }
+
+  async function sendTestEmail() {
+    const to = document.getElementById('email_test_to').value.trim();
+    if (!to) { showToast('Adresse email obligatoire.', 'error'); return; }
+    const res = document.getElementById('email-test-result');
+    res.className = 'mt-2 text-sm text-gray-500';
+    res.textContent = 'Envoi en cours…';
+    res.classList.remove('hidden');
+    try {
+      const r = await ApiService.post(`/api/notifications/test?boutique_id=${_boutiqueId}`, { to });
+      if (r.success) {
+        res.className = 'mt-2 text-sm text-green-600';
+        res.textContent = r.simulated ? '⚠️ Mode simulé — aucune clé API configurée.' : '✅ Email envoyé avec succès !';
+      } else {
+        res.className = 'mt-2 text-sm text-red-600';
+        res.textContent = '❌ ' + (r.error || 'Échec d\'envoi.');
+      }
+    } catch { res.className = 'mt-2 text-sm text-red-600'; res.textContent = '❌ Erreur réseau.'; }
+  }
+
+  return { init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements, saveEmail, sendTestEmail };
 })();
 
 document.addEventListener('DOMContentLoaded', Settings.init);

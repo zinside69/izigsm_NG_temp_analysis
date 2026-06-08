@@ -31,6 +31,7 @@ import {
   getKpisSav,
 } from '../services/garantiesService'
 import { validateSav, validateSavStatut, validateGarantie } from '../lib/validators'
+import { sendSavOuvert } from '../services/emailService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 
@@ -171,6 +172,23 @@ sav.post('/sav', async (c) => {
     if (err)     return c.json({ success: false, error: err }, 422)
 
     const dossier = await createSav(c.env.DB, boutiqueId, userId, body)
+
+    // Hook Sprint 2.11 : email confirmation SAV ouvert
+    try {
+      const clientRow = await c.env.DB.prepare(
+        'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
+      ).bind(dossier.client_id).first<{ email: string | null; prenom: string }>()
+      if (clientRow?.email) {
+        sendSavOuvert(c.env.DB, boutiqueId, {
+          id:            dossier.id,
+          numero:        dossier.numero,
+          client_email:  clientRow.email,
+          client_prenom: clientRow.prenom ?? 'Client',
+          motif:         dossier.motif,
+        }).catch(() => {})
+      }
+    } catch { /* non bloquant */ }
+
     return c.json({ success: true, data: dossier, message: `Dossier SAV ${dossier.numero} ouvert.` }, 201)
   } catch (e: any) {
     const status = e.message.includes('Garantie') ? 422 : 500

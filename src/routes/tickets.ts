@@ -16,6 +16,7 @@ import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
 import { createGarantieFromTicket } from '../services/garantiesService'
+import { sendTicketCree, sendTicketTermine } from '../services/emailService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -243,6 +244,22 @@ tickets.post('/', async (c) => {
 
   await auditLog(c.env.DB, { boutique_id: boutiqueId, user_id: user.sub, action: 'CREATE_TICKET', entite_type: 'ticket', entite_id: result?.id })
 
+  // ── Hook Sprint 2.11 : email de confirmation de dépôt ───────────────────────
+  if (result?.id) {
+    const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
+    const clientRow = await c.env.DB.prepare(
+      'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
+    ).bind(client_id).first<{ email: string | null; prenom: string }>()
+    if (clientRow?.email) {
+      sendTicketCree(c.env.DB, boutiqueId, {
+        id: result.id, numero, tracking_token: trackingToken,
+        client_email:    clientRow.email,
+        client_prenom:   clientRow.prenom ?? 'Client',
+        appareil_marque, appareil_modele, description_panne,
+      }, frontendUrl).catch(() => {})   // non bloquant
+    }
+  }
+
   return c.json({ success: true, id: result?.id, numero, tracking_token: trackingToken, message: 'Ticket créé.' }, 201)
 })
 
@@ -312,16 +329,29 @@ tickets.put('/:id/statut', async (c) => {
     WHERE  id = ?
   `).bind(statut, id).run()
 
-  // ── Hook Sprint 2.10 : création automatique de garantie à la clôture ────────
+  // ── Hooks Sprint 2.10/2.11 : garantie + email à la clôture ─────────────────
   let garantieCreee: any = null
   if (statut === 'termine') {
-    try {
-      const boutiqueHook = getBoutiqueId(user, ticket.boutique_id?.toString())
-      if (boutiqueHook) {
+    const boutiqueHook = getBoutiqueId(user, ticket.boutique_id?.toString())
+    if (boutiqueHook) {
+      try {
         garantieCreee = await createGarantieFromTicket(c.env.DB, id, boutiqueHook)
-      }
-    } catch {
-      // Non bloquant : la garantie peut être créée manuellement via POST /api/garanties
+      } catch { /* non bloquant */ }
+
+      // Email notification Sprint 2.11
+      try {
+        const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
+        const tFull = await c.env.DB.prepare(`
+          SELECT t.numero, t.tracking_token, t.prix_final, t.diagnostic,
+                 t.appareil_marque, t.appareil_modele,
+                 c.email AS client_email, c.prenom AS client_prenom
+          FROM tickets t JOIN clients c ON c.id = t.client_id
+          WHERE t.id = ? LIMIT 1
+        `).bind(id).first<any>()
+        if (tFull?.client_email) {
+          sendTicketTermine(c.env.DB, boutiqueHook, tFull, garantieCreee, frontendUrl).catch(() => {})
+        }
+      } catch { /* non bloquant */ }
     }
   }
 
