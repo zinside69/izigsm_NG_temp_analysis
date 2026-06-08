@@ -14,7 +14,7 @@
 export async function nextNumero(
   db: D1Database,
   boutique_id: number,
-  type: 'ticket' | 'facture' | 'devis' | 'avoir' | 'rachat'
+  type: 'ticket' | 'facture' | 'devis' | 'avoir' | 'rachat' | 'sav'
 ): Promise<string> {
   const annee = new Date().getFullYear()
 
@@ -31,7 +31,7 @@ export async function nextNumero(
   }>()
 
   const PREFIXES_DEFAUT: Record<string, string> = {
-    ticket:  'TKT', facture: 'FAC', devis: 'DEV', avoir: 'AV', rachat: 'LP',
+    ticket:  'TKT', facture: 'FAC', devis: 'DEV', avoir: 'AV', rachat: 'LP', sav: 'SAV',
   }
   const PREFIXES_SETTINGS: Record<string, string | undefined> = {
     ticket:  settings?.prefix_ticket,

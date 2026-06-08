@@ -15,6 +15,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
+import { createGarantieFromTicket } from '../services/garantiesService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -286,7 +287,7 @@ tickets.put('/:id/statut', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const { statut, commentaire } = await c.req.json()
 
-  const ticket = await c.env.DB.prepare('SELECT id, statut FROM tickets WHERE id = ? AND actif = 1').bind(id).first<{ id: number; statut: string }>()
+  const ticket = await c.env.DB.prepare('SELECT id, statut, boutique_id FROM tickets WHERE id = ? AND actif = 1').bind(id).first<{ id: number; statut: string; boutique_id: number }>()
   if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
   // Vérifier la transition
@@ -311,6 +312,19 @@ tickets.put('/:id/statut', async (c) => {
     WHERE  id = ?
   `).bind(statut, id).run()
 
+  // ── Hook Sprint 2.10 : création automatique de garantie à la clôture ────────
+  let garantieCreee: any = null
+  if (statut === 'termine') {
+    try {
+      const boutiqueHook = getBoutiqueId(user, ticket.boutique_id?.toString())
+      if (boutiqueHook) {
+        garantieCreee = await createGarantieFromTicket(c.env.DB, id, boutiqueHook)
+      }
+    } catch {
+      // Non bloquant : la garantie peut être créée manuellement via POST /api/garanties
+    }
+  }
+
   // Enregistrer dans l'historique
   await c.env.DB.prepare(`
     INSERT INTO tickets_statuts_historique (ticket_id, statut_ancien, statut_nouveau, user_id, commentaire)
@@ -319,7 +333,12 @@ tickets.put('/:id/statut', async (c) => {
 
   await auditLog(c.env.DB, { user_id: user.sub, action: 'CHANGE_STATUT_TICKET', entite_type: 'ticket', entite_id: id, avant: { statut: ticket.statut }, apres: { statut } })
 
-  return c.json({ success: true, message: `Statut changé : ${ticket.statut} → ${statut}.`, statut })
+  return c.json({
+    success: true,
+    message: `Statut changé : ${ticket.statut} → ${statut}.`,
+    statut,
+    ...(garantieCreee ? { garantie: { id: garantieCreee.id, date_fin: garantieCreee.date_fin, garantie_jours: garantieCreee.garantie_jours } } : {}),
+  })
 })
 
 // ── DELETE /api/tickets/:id ───────────────────────────────────────────────────

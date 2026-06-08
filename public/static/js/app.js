@@ -30,6 +30,7 @@ function buildSidebar(activePage) {
     { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard.html', section:'principal', badge: null },
     { id:'tickets', icon:'🔧', label:'Prises en charge', href:'tickets.html', section:'principal', badge: getTicketBadge() },
     { id:'kanban', icon:'📊', label:'Kanban', href:'kanban.html', section:'principal', badge: null },
+    { id:'sav', icon:'🛡️', label:'SAV & Garanties', href:'sav.html', section:'principal', badge: null },
     { id:'devis', icon:'📋', label:'Devis', href:'devis.html', section:'principal', badge: null },
     { id:'factures', icon:'💶', label:'Factures', href:'factures.html', section:'principal', badge: null },
     { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },

@@ -131,3 +131,46 @@ export function validateTicket(body: any): string | null {
     return 'Description de la panne obligatoire.'
   return null
 }
+
+// ─── SAV & Garanties ──────────────────────────────────────────────────────────
+
+const STATUTS_SAV_VALIDES = ['ouvert', 'en_traitement', 'resolu', 'refuse', 'clos']
+
+/**
+ * Valide le corps d'une requête d'ouverture de dossier SAV.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateSav(body: any): string | null {
+  if (!body.motif?.trim())
+    return 'Motif du SAV obligatoire.'
+  if (body.garantie_id !== undefined && body.garantie_id !== null && isNaN(Number(body.garantie_id)))
+    return 'garantie_id invalide.'
+  if (body.client_id !== undefined && body.client_id !== null && isNaN(Number(body.client_id)))
+    return 'client_id invalide.'
+  return null
+}
+
+/**
+ * Valide un changement de statut SAV.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateSavStatut(body: any): string | null {
+  if (!body.statut?.trim())
+    return 'statut obligatoire.'
+  if (!STATUTS_SAV_VALIDES.includes(body.statut))
+    return `statut invalide. Valeurs : ${STATUTS_SAV_VALIDES.join(', ')}`
+  return null
+}
+
+/**
+ * Valide le corps d'une requête de création manuelle de garantie.
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateGarantie(body: any): string | null {
+  if (body.garantie_jours !== undefined &&
+      (isNaN(Number(body.garantie_jours)) || Number(body.garantie_jours) < 1 || Number(body.garantie_jours) > 3650))
+    return 'garantie_jours invalide (1–3650 jours).'
+  if (body.ticket_id !== undefined && body.ticket_id !== null && isNaN(Number(body.ticket_id)))
+    return 'ticket_id invalide.'
+  return null
+}

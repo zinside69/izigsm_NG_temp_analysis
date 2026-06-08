@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAV & Garanties — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="/static/style.css" rel="stylesheet">
+  <style>
+    /* ── Badges statut ────────────────────────────── */
+    .badge { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium; }
+    .badge-active    { background:#dcfce7; color:#166534; }
+    .badge-expiree   { background:#fef9c3; color:#854d0e; }
+    .badge-consommee { background:#fee2e2; color:#991b1b; }
+    .badge-ouvert        { background:#dbeafe; color:#1e40af; }
+    .badge-en_traitement { background:#f3e8ff; color:#6b21a8; }
+    .badge-resolu        { background:#dcfce7; color:#166534; }
+    .badge-refuse        { background:#fee2e2; color:#991b1b; }
+    .badge-clos          { background:#f3f4f6; color:#374151; }
+
+    /* ── Jours restants ───────────────────────────── */
+    .jours-ok      { color:#16a34a; font-weight:600; }
+    .jours-warning { color:#d97706; font-weight:600; }
+    .jours-danger  { color:#dc2626; font-weight:600; }
+
+    /* ── Modal ────────────────────────────────────── */
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:40; display:flex; align-items:center; justify-content:center; }
+    .modal-box      { background:#fff; border-radius:12px; padding:28px; width:min(560px,95vw); max-height:90vh; overflow-y:auto; position:relative; z-index:50; }
+
+    /* ── Tabs ─────────────────────────────────────── */
+    .tab-btn { @apply px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors cursor-pointer; }
+    .tab-btn.active { @apply border-indigo-600 text-indigo-600 bg-indigo-50; }
+    .tab-btn:not(.active) { @apply border-transparent text-gray-500 hover:text-gray-700; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Sidebar injectée par app.js -->
+<div id="sidebar-container"></div>
+
+<!-- Contenu principal -->
+<main class="ml-64 p-6" id="main-content">
+
+  <!-- En-tête + KPIs -->
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">🛡️ SAV &amp; Garanties</h1>
+      <p class="text-sm text-gray-500 mt-1">Suivi des garanties &amp; dossiers de retour</p>
+    </div>
+    <button onclick="SavApp.openNewSav()"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow">
+      <i class="fas fa-plus mr-1"></i> Nouveau dossier SAV
+    </button>
+  </div>
+
+  <!-- KPIs -->
+  <div id="kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center" id="kpi-actives">
+      <div class="text-2xl font-bold text-green-600" id="kv-actives">—</div>
+      <div class="text-xs text-gray-500 mt-1">Garanties actives</div>
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center" id="kpi-expire-soon">
+      <div class="text-2xl font-bold text-yellow-500" id="kv-expire-soon">—</div>
+      <div class="text-xs text-gray-500 mt-1">Expirent dans 7j</div>
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+      <div class="text-2xl font-bold text-blue-600" id="kv-sav-ouverts">—</div>
+      <div class="text-xs text-gray-500 mt-1">SAV ouverts</div>
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+      <div class="text-2xl font-bold text-purple-600" id="kv-taux-retour">—</div>
+      <div class="text-xs text-gray-500 mt-1">Taux retour %</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-0 border-b border-gray-200">
+    <button class="tab-btn active" id="tab-garanties" onclick="SavApp.switchTab('garanties')">
+      <i class="fas fa-shield-halved mr-1"></i> Garanties
+    </button>
+    <button class="tab-btn" id="tab-sav" onclick="SavApp.switchTab('sav')">
+      <i class="fas fa-rotate-left mr-1"></i> Dossiers SAV
+    </button>
+  </div>
+
+  <!-- Panel Garanties -->
+  <section id="panel-garanties" class="bg-white rounded-b-xl rounded-tr-xl shadow-sm border border-t-0 border-gray-100 p-4">
+    <!-- Filtres garanties -->
+    <div class="flex flex-wrap gap-3 mb-4">
+      <input type="text" id="g-search" placeholder="🔍 Marque, modèle, client…"
+             class="border rounded-lg px-3 py-1.5 text-sm w-56 focus:ring-2 focus:ring-indigo-300 outline-none"
+             oninput="SavApp.debouncedRefreshGaranties()">
+      <select id="g-statut" class="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-300 outline-none"
+              onchange="SavApp.refreshGaranties()">
+        <option value="">Tous statuts</option>
+        <option value="active">Actives</option>
+        <option value="expiree">Expirées</option>
+        <option value="consommee">Consommées</option>
+      </select>
+      <label class="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+        <input type="checkbox" id="g-expires-soon" class="rounded" onchange="SavApp.refreshGaranties()">
+        Expire dans 7j
+      </label>
+      <button onclick="SavApp.expireGaranties()"
+              class="ml-auto text-xs text-orange-600 border border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
+              title="Marquer automatiquement les garanties périmées comme expirées">
+        <i class="fas fa-clock-rotate-left mr-1"></i> Expirer périmées
+      </button>
+    </div>
+
+    <!-- Tableau garanties -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+          <tr>
+            <th class="px-3 py-2 text-left">Client</th>
+            <th class="px-3 py-2 text-left">Appareil</th>
+            <th class="px-3 py-2 text-left">Ticket</th>
+            <th class="px-3 py-2 text-center">Durée</th>
+            <th class="px-3 py-2 text-center">Expire le</th>
+            <th class="px-3 py-2 text-center">Jours restants</th>
+            <th class="px-3 py-2 text-center">Statut</th>
+            <th class="px-3 py-2 text-center">SAV</th>
+          </tr>
+        </thead>
+        <tbody id="garanties-body" class="divide-y divide-gray-100">
+          <tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="garanties-pagination" class="mt-4 flex items-center justify-between text-sm text-gray-500"></div>
+  </section>
+
+  <!-- Panel SAV -->
+  <section id="panel-sav" class="hidden bg-white rounded-b-xl rounded-tr-xl shadow-sm border border-t-0 border-gray-100 p-4">
+    <!-- Filtres SAV -->
+    <div class="flex flex-wrap gap-3 mb-4">
+      <input type="text" id="s-search" placeholder="🔍 Numéro, motif, client…"
+             class="border rounded-lg px-3 py-1.5 text-sm w-56 focus:ring-2 focus:ring-indigo-300 outline-none"
+             oninput="SavApp.debouncedRefreshSav()">
+      <select id="s-statut" class="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-300 outline-none"
+              onchange="SavApp.refreshSav()">
+        <option value="">Tous statuts</option>
+        <option value="ouvert">Ouvert</option>
+        <option value="en_traitement">En traitement</option>
+        <option value="resolu">Résolu</option>
+        <option value="refuse">Refusé</option>
+        <option value="clos">Clos</option>
+      </select>
+    </div>
+
+    <!-- Tableau SAV -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+          <tr>
+            <th class="px-3 py-2 text-left">N° SAV</th>
+            <th class="px-3 py-2 text-left">Client</th>
+            <th class="px-3 py-2 text-left">Motif</th>
+            <th class="px-3 py-2 text-center">Ticket origine</th>
+            <th class="px-3 py-2 text-center">Ticket SAV</th>
+            <th class="px-3 py-2 text-center">Ouverture</th>
+            <th class="px-3 py-2 text-center">Statut</th>
+            <th class="px-3 py-2 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sav-body" class="divide-y divide-gray-100">
+          <tr><td colspan="8" class="text-center text-gray-400 py-8">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="sav-pagination" class="mt-4 flex items-center justify-between text-sm text-gray-500"></div>
+  </section>
+
+</main>
+
+<!-- ════════════════════════════════════════════════════
+     Modal : Nouveau dossier SAV
+════════════════════════════════════════════════════ -->
+<div id="modal-sav" class="modal-backdrop hidden" onclick="if(event.target===this)SavApp.closeModal('modal-sav')">
+  <div class="modal-box">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-bold text-gray-800">🛡️ Ouvrir un dossier SAV</h2>
+      <button onclick="SavApp.closeModal('modal-sav')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+
+    <form id="form-sav" onsubmit="SavApp.submitSav(event)" class="space-y-4">
+      <!-- Recherche garantie -->
+      <div>
+        <label class="block text-xs font-medium text-gray-700 mb-1">
+          N° de garantie <span class="text-gray-400">(optionnel — laisser vide si hors garantie)</span>
+        </label>
+        <div class="flex gap-2">
+          <input type="number" id="sav-garantie-id" placeholder="ID garantie…"
+                 class="border rounded-lg px-3 py-2 text-sm flex-1 focus:ring-2 focus:ring-indigo-300 outline-none"
+                 oninput="SavApp.previewGarantie()">
+        </div>
+        <div id="garantie-preview" class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-2 hidden"></div>
+      </div>
+
+      <!-- Client (si hors garantie) -->
+      <div id="sav-client-row">
+        <label class="block text-xs font-medium text-gray-700 mb-1">Client (ID)</label>
+        <input type="number" id="sav-client-id" placeholder="ID client…"
+               class="border rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-indigo-300 outline-none">
+      </div>
+
+      <!-- Motif -->
+      <div>
+        <label class="block text-xs font-medium text-gray-700 mb-1">Motif <span class="text-red-500">*</span></label>
+        <input type="text" id="sav-motif" required placeholder="Ex: Même panne réapparue, écran défectueux…"
+               class="border rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-indigo-300 outline-none">
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label class="block text-xs font-medium text-gray-700 mb-1">Description complémentaire</label>
+        <textarea id="sav-description" rows="3" placeholder="Détails du problème signalé par le client…"
+                  class="border rounded-lg px-3 py-2 text-sm w-full focus:ring-2 focus:ring-indigo-300 outline-none resize-none"></textarea>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="SavApp.closeModal('modal-sav')"
+                class="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+          Annuler
+        </button>
+        <button type="submit"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-medium">
+          <i class="fas fa-plus mr-1"></i> Ouvrir le dossier
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     Modal : Détail / Changement statut SAV
+════════════════════════════════════════════════════ -->
+<div id="modal-sav-detail" class="modal-backdrop hidden" onclick="if(event.target===this)SavApp.closeModal('modal-sav-detail')">
+  <div class="modal-box">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-bold text-gray-800" id="detail-titre">Dossier SAV</h2>
+      <button onclick="SavApp.closeModal('modal-sav-detail')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+    <div id="detail-body" class="text-sm text-gray-700 space-y-3">Chargement…</div>
+
+    <!-- Changement statut -->
+    <div id="detail-statut-form" class="mt-5 pt-4 border-t border-gray-100 hidden">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Mettre à jour le statut</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nouveau statut</label>
+          <select id="detail-statut-select" class="border rounded-lg px-3 py-2 text-sm w-full">
+            <option value="">— Choisir —</option>
+          </select>
+        </div>
+        <div id="resolution-row" class="hidden">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Résolution / commentaire</label>
+          <textarea id="detail-resolution" rows="2"
+                    class="border rounded-lg px-3 py-2 text-sm w-full resize-none focus:ring-2 focus:ring-indigo-300 outline-none"
+                    placeholder="Décrire la résolution ou le motif de refus…"></textarea>
+        </div>
+        <button onclick="SavApp.submitStatutChange()"
+                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-medium">
+          Valider le changement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notification toast -->
+<div id="toast" class="fixed bottom-4 right-4 z-50 hidden transition-all">
+  <div id="toast-inner" class="px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white max-w-xs"></div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script src="/static/js/sav.js"></script>
+</body>
+</html>
