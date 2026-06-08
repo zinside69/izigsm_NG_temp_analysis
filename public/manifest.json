@@ -1,0 +1,107 @@
+{
+  "name": "iziGSM — Gestion atelier réparation",
+  "short_name": "iziGSM",
+  "description": "Logiciel de gestion pour ateliers de réparation smartphone & informatique. Tickets, facturation NF525, caisse POS, stock, SAV.",
+  "start_url": "/dashboard.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "lang": "fr",
+  "categories": ["business", "productivity", "utilities"],
+
+  "icons": [
+    {
+      "src": "/static/img/icon-72.svg",
+      "sizes": "72x72",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-96.svg",
+      "sizes": "96x96",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-128.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-144.svg",
+      "sizes": "144x144",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-152.svg",
+      "sizes": "152x152",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/img/icon-maskable-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/img/icon-384.svg",
+      "sizes": "384x384",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/static/img/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/img/icon-maskable-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+
+  "screenshots": [
+    {
+      "src": "/static/img/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "Tableau de bord iziGSM"
+    }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "Nouveau ticket",
+      "short_name": "Ticket",
+      "description": "Créer une nouvelle prise en charge",
+      "url": "/tickets.html",
+      "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Caisse POS",
+      "short_name": "Caisse",
+      "description": "Ouvrir la caisse",
+      "url": "/caisse.html",
+      "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Agenda",
+      "short_name": "Agenda",
+      "description": "Voir les rendez-vous",
+      "url": "/agenda.html",
+      "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
+    }
+  ],
+
+  "related_applications": [],
+  "prefer_related_applications": false
+}
