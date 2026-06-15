@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.15 terminé — 15 juin 2026
+> Dernière mise à jour : Sprint 2.16 terminé — 15 juin 2026
 
 ---
 
@@ -200,12 +200,16 @@
 - [x] `public/static/js/clients.js` : viewHistorique, doImportCsv, JSDoc P4 complet, CSV_FIELD_MAP 9 colonnes
 - [x] Build ✅ (201.22 kB, 58 modules) + tests 7/7 ✅ + commit `f621703`
 
-### Sprint 2.16 🔜 — Reconditionnement + Bons d'achat
+### Sprint 2.16 ✅ — Reconditionnement + Bons d'achat
 **Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
-- [ ] Migration : table `ordres_reconditionnement`
-- [ ] Lien rachat → ordre reconditionnement → stock occasion
-- [ ] Calcul coût de revient (pièces + MO)
-- [ ] Bons d'achat (geste commercial, expiration configurable)
+- [x] Migration `0021` : table `ordres_reconditionnement` (colonne `cout_revient` générée) + table `bons_achat` (code BA-XXXXXXXX, expiration, machine statuts)
+- [x] `src/services/reconditionnementService.ts` (Model) — 14 fonctions : ordres (listOrdres, getOrdre, createOrdre, updateOrdre, updateStatutOrdre, terminerOrdre → crée produit occasion, getKpisReconditionnement) + bons (listBonsAchat, getBonAchat, createBonAchat, verifierBonAchat, consommerBonAchat partiel/total, annulerBonAchat)
+- [x] `src/routes/reconditionnement.ts` : **2 routers séparés** — `reconditionnementRoutes` (/api/reconditionnement, 7 endpoints) + `bonsAchatRoutes` (/api/bons-achat, 6 endpoints). Séparation évite collision `/:id` vs `/bons-achat/*`.
+- [x] `src/index.tsx` : montages explicites `app.route('/api/reconditionnement')` + `app.route('/api/bons-achat')` — version 2.16.0
+- [x] `public/reconditionnement.html` : 2 onglets (ordres + bons), 4 KPIs, modal CRUD ordre, modal terminer (prix + grade → produit créé), modal bon, modal vérification code caisse
+- [x] `public/static/js/reconditionnement.js` : View JSDoc P4 complet — switchTab, CRUD ordres, terminerOrdre, émission bon, verifierBon, annulerBon
+- [x] `public/static/js/app.js` sidebar : entrée « Reconditionnement » ajoutée
+- [x] Build ✅ (220.29 kB, 60 modules) + tests 8/8 ✅ + commit `81b00fa`
 
 ---
 
@@ -227,13 +231,13 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.15.0 |
-| Build | `dist/_worker.js` 201.22 kB — 58 modules |
-| Dernière migration | `0015_agenda.sql` ✅ (inchangée depuis Sprint 2.6) |
-| Dernier commit | `f621703` — *feat: Sprint 2.15 — CRM étendu (clientService + historique + import-csv)* |
+| Version | 2.16.0 |
+| Build | `dist/_worker.js` 220.29 kB — 60 modules |
+| Dernière migration | `0021_reconditionnement_bons_achat.sql` ✅ Sprint 2.16 |
+| Dernier commit | `81b00fa` — *feat: Sprint 2.16 — Reconditionnement + Bons d'achat* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
-| Conformité DP | ✅ P1 P2 P3 P4 P5 — violation P1 clients résolue. Backlog : `routes/tickets.ts` 🟢 |
+| Conformité DP | ✅ P1 P2 P3 P4 P5 — tous respectés. Backlog résiduel : `routes/tickets.ts` 🟢 (pas de ticketService) |}
 
 ---
 

@@ -32,6 +32,7 @@
 | [2.14](#sprint-214) | PWA manifest + Service Worker | `0d7cdf6` |
 | [Correctif DP](#sprint-correctif-design-pattern) | Conformité design pattern P1/P2/P4 | `f915398` |
 | [2.15](#sprint-215) | CRM étendu — clientService + historique + import-csv | `f621703` |
+| [2.16](#sprint-216) | Reconditionnement + Bons d'achat | `81b00fa` |
 
 ---
 
@@ -498,4 +499,44 @@
 | T5 | `PUT /api/clients/:id` | ✅ |
 | T6 | `POST /api/clients/:id/appareils` | ✅ id: 7 |
 | T7 | `DELETE /api/clients/:id` | ✅ |
+
+---
+
+## Sprint 2.16
+
+**Thème** : Reconditionnement + Bons d'achat  
+**Commit** : `81b00fa`  
+**Date** : 15 juin 2026  
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0021_reconditionnement_bons_achat.sql` | 🆕 créé | Tables `ordres_reconditionnement` (colonne `cout_revient GENERATED ALWAYS AS (prix_rachat + cout_main_oeuvre + cout_pieces) STORED`, machine états `brouillon→en_cours→termine|abandonne`, grade A–D) + `bons_achat` (code `BA-XXXXXXXX` unique sans I/O/1/0, statuts `actif→utilise|expire|annule`, expiration) |
+| `src/services/reconditionnementService.ts` | 🆕 créé | Model layer 14 fonctions exportées avec JSDoc P4 complet : ordres (`listOrdres`, `getOrdre`, `createOrdre`, `updateOrdre`, `updateStatutOrdre`, `terminerOrdre` → crée produit occasion en stock, `getKpisReconditionnement`) + bons (`listBonsAchat`, `getBonAchat`, `createBonAchat`, `verifierBonAchat` lecture seule caisse, `consommerBonAchat` partiel/total, `annulerBonAchat`). Helpers privés : `genererCodeBon()` + `genererCodeUnique()` 5 tentatives. |
+| `src/routes/reconditionnement.ts` | 🆕 créé | **2 routers distincts** (P1) : `reconditionnementRoutes` (7 endpoints `/api/reconditionnement`) + `bonsAchatRoutes` (6 endpoints `/api/bons-achat`). Séparation évite collision `/:id` vs `/bons-achat/*`. Pattern `ctx()` helper identique aux autres controllers. 0 SQL inline (P3). |
+| `src/index.tsx` | ✏️ modifié | Import 2 routers + montages explicites `app.route('/api/reconditionnement', reconditionnementRoutes)` + `app.route('/api/bons-achat', bonsAchatRoutes)`. Version `2.16.0`. |
+| `public/reconditionnement.html` | 🆕 créé | 2 onglets (Ordres de reconditionnement / Bons d'achat), 4 KPIs (ordres actifs, terminés ce mois, bons actifs, CA généré), modal CRUD ordre, modal terminer (prix vente + grade → création produit), modal création bon, modal vérification code caisse. Pattern HTML identique aux autres pages (manifest, topbar, sidebar-placeholder, data-table, modal-dialog). |
+| `public/static/js/reconditionnement.js` | 🆕 créé | View JSDoc P4 : `switchTab`, `loadKpis`, `loadOrdres`, `loadBons`, `openNewOrdre`, `openEditOrdre`, `updateCoutRevient` (calcul temps réel), `submitOrdre`, `changerStatutOrdre`, `openTerminerOrdre`, `submitTerminer`, `openNewBon`, `submitBon`, `doVerifierBon`, `annulerBon`. 0 `fetch` direct (P2) — 100% via `apiGet`/`apiPost`/`apiPut`/`apiPatch` de `app.js`. |
+| `public/static/js/app.js` | ✏️ modifié | Entrée sidebar `{ id:'reconditionnement', icon:'🔄', label:'Reconditionnement', href:'reconditionnement.html', section:'gestion' }` ajoutée entre rachats et clients. |
+
+### Décisions architecturales
+
+- **2 routers séparés** : un router unique avec routes `/bons-achat/*` montées via `app.route('/api')` causait que `GET /api/bons-achat` était capturé par le handler `GET /:id` (interprétait `"bons-achat"` comme valeur de paramètre). Solution définitive : `reconditionnementRoutes` monté sur `/api/reconditionnement` + `bonsAchatRoutes` monté sur `/api/bons-achat`.
+- **Colonne générée** : `cout_revient REAL GENERATED ALWAYS AS (prix_rachat + cout_main_oeuvre + cout_pieces) STORED` — calcul garanti en DB, jamais recalculé côté JS, cohérence absolue.
+- **`terminerOrdre`** crée automatiquement un produit occasion dans le catalogue avec `SKU = OCC-{numero}`, `prix_achat_ht = cout_revient`, `stock_actuel = 1`. Si `produit_id_existant` fourni, incrémente le stock existant sans créer de doublon.
+- **`verifierBonAchat`** = lecture seule (ne consomme pas) — utilisé en caisse avant encaissement pour afficher le solde disponible sans l'engager.
+- **`genererCodeBon()`** exclut les caractères I, O, 1, 0 pour éviter toute ambiguïté visuelle lors de la saisie manuelle en caisse.
+
+### Tests Sprint 2.16
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/reconditionnement?boutique_id=1` | ✅ liste OK |
+| T2 | `GET /api/reconditionnement/kpis?boutique_id=1` | ✅ 4 KPIs |
+| T3 | `POST /api/reconditionnement` | ✅ RC-2026-00003, `cout_revient=90` |
+| T4 | `PATCH /api/reconditionnement/:id/statut` | ✅ `brouillon→en_cours` |
+| T5 | `POST /api/reconditionnement/:id/terminer` | ✅ `statut=termine`, `produit_id=10` créé |
+| T5b | `GET /api/bons-achat?boutique_id=1` | ✅ après correction routing (2 routers) |
+| T6 | `POST /api/bons-achat` | ✅ code `BA-N9MWGRT6`, `montant=30` |
+| T7 | `POST /api/bons-achat/verifier` | ✅ `valide=true`, `solde=30` |
+| T8 | `GET /api/bons-achat/:id` | ✅ détail complet |
 
