@@ -64,36 +64,54 @@
   </div>
 
   <script>
-    // Credentials demo
-    const DEMO_USERS = [
-      { email: 'demo@izigsm.fr', password: 'Demo1234', name: 'Demo', company: 'Atelier Demo' },
-      { email: 'admin@izigsm.fr', password: 'Admin1234', name: 'Admin', company: 'iziGSM HQ' },
-    ];
-
-    document.getElementById('login-form').addEventListener('submit', function(e) {
+    /**
+     * Soumission du formulaire de connexion.
+     * Appelle POST /api/auth/login et stocke le token JWT dans localStorage.
+     */
+    document.getElementById('login-form').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const email = document.getElementById('login-email').value.trim();
+
+      const email    = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
-      const flash = document.getElementById('flash-area');
+      const flash    = document.getElementById('flash-area');
+      const btn      = this.querySelector('button[type="submit"]');
 
-      // Vérifier les données demo ou localStorage
-      const stored = JSON.parse(localStorage.getItem('izigsm_user') || 'null');
-      const demoUser = DEMO_USERS.find(u => u.email === email);
+      // Feedback visuel
+      btn.disabled    = true;
+      btn.textContent = 'Connexion…';
+      flash.style.display = 'none';
 
-      let user = null;
-      if (demoUser && demoUser.password === password) {
-        user = demoUser;
-      } else if (stored && stored.email === email) {
-        // En vrai on vérifierait le hash, ici on accepte n'importe quel mdp pour la démo
-        user = stored;
-      }
+      try {
+        const res  = await fetch('/api/auth/login', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
 
-      if (user) {
-        localStorage.setItem('izigsm_session', JSON.stringify({ ...user, loggedAt: Date.now() }));
-        window.location.href = '/dashboard.html';
-      } else {
-        flash.style.display = 'grid';
-        flash.innerHTML = '<div class="flash error">❌ Email ou mot de passe incorrect. <br><small>Comptes démo : demo@izigsm.fr / Demo1234</small></div>';
+        if (data.success && data.accessToken) {
+          // Stocker token + session au format attendu par app.js
+          const user = data.user;
+          const session = {
+            name:         `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+            email:        user.email,
+            role:         user.role,
+            boutique_id:  user.boutique_id,
+            boutique_name: user.boutique_name || 'Mon Atelier',
+            company:      user.boutique_name  || 'Mon Atelier',
+          };
+          localStorage.setItem('izigsm_token',         data.accessToken);
+          localStorage.setItem('izigsm_refresh_token', data.refreshToken);
+          localStorage.setItem('izigsm_session',       JSON.stringify(session));
+          window.location.href = '/dashboard.html';
+        } else {
+          throw new Error(data.error || 'Email ou mot de passe incorrect.');
+        }
+      } catch (err) {
+        flash.style.display = 'block';
+        flash.innerHTML = `<div class="flash error">❌ ${err.message}</div>`;
+        btn.disabled    = false;
+        btn.textContent = 'Se connecter';
       }
     });
   </script>
