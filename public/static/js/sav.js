@@ -420,7 +420,7 @@ const SavApp = (() => {
   // ── Init ─────────────────────────────────────────────────────
   function init() {
     // Vérif auth
-    if (!getToken()) { window.location.href = '/login.html'; return }
+    if (!getToken()) { window.location.href = '/login'; return }
     // Charger KPIs + données initiales
     loadKpis()
     refreshGaranties()

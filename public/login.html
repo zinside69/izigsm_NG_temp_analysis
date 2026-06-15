@@ -103,7 +103,7 @@
           localStorage.setItem('izigsm_token',         data.accessToken);
           localStorage.setItem('izigsm_refresh_token', data.refreshToken);
           localStorage.setItem('izigsm_session',       JSON.stringify(session));
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         } else {
           throw new Error(data.error || 'Email ou mot de passe incorrect.');
         }

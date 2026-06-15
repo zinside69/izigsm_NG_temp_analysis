@@ -106,7 +106,7 @@ function logout() {
   localStorage.removeItem('izigsm_token');
   localStorage.removeItem('izigsm_session');
   sessionStorage.removeItem('izigsm_token');
-  window.location.href = '/login.html';
+  window.location.href = '/login';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -139,7 +139,7 @@ async function loadEmployes() {
 
     if (code === 401) {
       toast('Session expirée. Reconnectez-vous.', 'error');
-      setTimeout(() => { window.location.href = '/login.html'; }, 1500);
+      setTimeout(() => { window.location.href = '/login'; }, 1500);
       return;
     }
 

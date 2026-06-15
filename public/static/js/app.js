@@ -7,7 +7,7 @@
 function requireAuth() {
   const session = JSON.parse(localStorage.getItem('izigsm_session') || 'null');
   if (!session) {
-    window.location.href = '/login.html';
+    window.location.href = '/login';
     return null;
   }
   return session;
@@ -15,7 +15,7 @@ function requireAuth() {
 
 function logout() {
   localStorage.removeItem('izigsm_session');
-  window.location.href = '/login.html';
+  window.location.href = '/login';
 }
 
 // ======================== SIDEBAR ========================
@@ -431,7 +431,7 @@ async function api(method, url, body = null, opts = {}) {
     localStorage.removeItem('izigsm_session');
     sessionStorage.removeItem('izigsm_token');
     sessionStorage.removeItem('izigsm_session');
-    window.location.href = '/login.html';
+    window.location.href = '/login';
     return { ok: false, status: 401, error: 'Session expirée' };
   }
 
@@ -573,7 +573,7 @@ async function logout() {
   sessionStorage.removeItem('izigsm_token');
   sessionStorage.removeItem('izigsm_refresh_token');
   sessionStorage.removeItem('izigsm_session');
-  window.location.href = '/login.html';
+  window.location.href = '/login';
 }
 
 /**
@@ -589,7 +589,7 @@ function requireAuth() {
   );
 
   if (!token && !session) {
-    window.location.href = '/login.html';
+    window.location.href = '/login';
     return null;
   }
   return session;
