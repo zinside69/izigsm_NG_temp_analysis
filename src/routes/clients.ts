@@ -1,175 +1,294 @@
 /**
- * routes/clients.ts — CRUD Clients & Appareils
+ * routes/clients.ts — Controller CRUD Clients & Appareils
+ * Sprint 2.15 — Refactoring complet : 0 SQL inline, délégation à clientService
+ *
+ * Rôle architectural : Controller pur (P3 BFF Hono).
+ * Toute logique métier et accès DB délégués à src/services/clientService.ts.
+ * Violation P1 (JOIN tickets inline) résolue — voir clientService.listClients().
+ *
+ * Endpoints exposés :
+ *   GET    /api/clients                    — Liste paginée + filtres
+ *   GET    /api/clients/:id                — Fiche client + appareils
+ *   GET    /api/clients/:id/historique     — Historique consolidé CRM ★ nouveau
+ *   POST   /api/clients                    — Création client
+ *   POST   /api/clients/import-csv         — Import batch CSV ★ nouveau
+ *   POST   /api/clients/:id/appareils      — Ajout appareil
+ *   PUT    /api/clients/:id                — Mise à jour client
+ *   DELETE /api/clients/:id                — Soft delete
  */
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
-import { parsePagination, validateEmail, auditLog } from '../lib/db'
+import { parsePagination, validateEmail, auditLog }   from '../lib/db'
+import {
+  listClients,
+  getClientById,
+  createClient,
+  updateClient,
+  deleteClient,
+  addAppareil,
+  getHistoriqueClient,
+  importClients,
+} from '../services/clientService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings  = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
 
 const clients = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 clients.use('*', authMiddleware)
 
-// ── GET /api/clients ──────────────────────────────────────────────────────────
+// ─── Helpers locaux ───────────────────────────────────────────────────────────
+
+/**
+ * Extrait user + db depuis le contexte Hono.
+ * boutiqueId est résolu séparément selon la source (query param ou body).
+ * @param c - Contexte Hono
+ * @returns { user, db, queryBoutiqueId }
+ */
+function ctx(c: any) {
+  const user = c.get('user')
+  const queryBoutiqueId = c.req.query('boutique_id') ?? undefined
+  return { user, db: c.env.DB as D1Database, queryBoutiqueId }
+}
+
+/**
+ * Vérifie que le client appartient à la boutique de l'utilisateur.
+ * @param user    - Payload JWT (role, boutique_id)
+ * @param client  - Ligne client depuis la DB (doit avoir boutique_id)
+ * @param boutiqueId - Boutique courante de l'utilisateur
+ * @returns true si accès autorisé
+ */
+function canAccessClient(user: any, client: any, boutiqueId: number | null): boolean {
+  if (user.role === 'admin') return true
+  return client.boutique_id === boutiqueId
+}
+
+// ─── GET /api/clients ─────────────────────────────────────────────────────────
+
+/**
+ * Retourne la liste paginée des clients d'une boutique.
+ * @query boutique_id - (admin) boutique cible
+ * @query search      - Recherche nom / email / téléphone
+ * @query page, limit - Pagination
+ * @returns { success, data, pagination }
+ */
 clients.get('/', async (c) => {
-  const user      = c.get('user')
-  const query     = c.req.query()
-  const { limit, offset, page } = parsePagination(query)
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const search = query.search ? `%${query.search}%` : null
+  const query = c.req.query()
+  const { limit, offset, page } = parsePagination(query)
 
-  const whereClause = search
-    ? 'WHERE c.boutique_id = ? AND (c.nom LIKE ? OR c.prenom LIKE ? OR c.email LIKE ? OR c.telephone LIKE ?) AND c.actif = 1'
-    : 'WHERE c.boutique_id = ? AND c.actif = 1'
-
-  const bindings = search
-    ? [boutiqueId, search, search, search, search]
-    : [boutiqueId]
-
-  const total = await c.env.DB.prepare(
-    `SELECT COUNT(*) as cnt FROM clients c ${whereClause}`
-  ).bind(...bindings).first<{ cnt: number }>()
-
-  const rows = await c.env.DB.prepare(`
-    SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.ville, c.created_at,
-           COUNT(t.id) as nb_tickets
-    FROM   clients c
-    LEFT JOIN tickets t ON t.client_id = c.id AND t.actif = 1
-    ${whereClause}
-    GROUP BY c.id
-    ORDER BY c.created_at DESC
-    LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  const result = await listClients(db, boutiqueId, {
+    search: query.search ?? null,
+    limit,
+    offset,
+    page,
+  })
 
   return c.json({
     success: true,
-    data: rows.results,
-    pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) }
+    data: result.data,
+    pagination: { page: result.page, limit: result.limit, total: result.total, pages: result.pages },
   })
 })
 
-// ── GET /api/clients/:id ──────────────────────────────────────────────────────
+// ─── GET /api/clients/:id ─────────────────────────────────────────────────────
+
+/**
+ * Retourne la fiche complète d'un client avec ses appareils.
+ * @param id - ID du client
+ * @returns { success, data: { client + appareils } }
+ */
 clients.get('/:id', async (c) => {
-  const user = c.get('user')
-  const id   = parseInt(c.req.param('id'), 10)
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+  const id = parseInt(c.req.param('id'), 10)
 
-  const client = await c.env.DB.prepare(`
-    SELECT c.*, b.nom as boutique_nom
-    FROM   clients c
-    JOIN   boutiques b ON b.id = c.boutique_id
-    WHERE  c.id = ? AND c.actif = 1
-  `).bind(id).first()
-
+  const client = await getClientById(db, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
-
-  const boutiqueId = getBoutiqueId(user, undefined)
-  if (user.role !== 'admin' && (client as any).boutique_id !== boutiqueId)
+  if (!canAccessClient(user, client, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const appareils = await c.env.DB.prepare(
-    'SELECT * FROM appareils WHERE client_id = ? ORDER BY created_at DESC'
-  ).bind(id).all()
-
-  const tickets = await c.env.DB.prepare(`
-    SELECT t.id, t.numero, t.statut, t.description_panne, t.appareil_marque, t.appareil_modele,
-           t.prix_final, t.created_at
-    FROM   tickets t
-    WHERE  t.client_id = ? AND t.actif = 1
-    ORDER  BY t.created_at DESC
-    LIMIT  10
-  `).bind(id).all()
-
-  return c.json({ success: true, data: { ...client, appareils: appareils.results, tickets: tickets.results } })
+  return c.json({ success: true, data: client })
 })
 
-// ── POST /api/clients ─────────────────────────────────────────────────────────
-clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const user = c.get('user')
-  const body = await c.req.json()
-  const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = body
+// ─── GET /api/clients/:id/historique ─────────────────────────────────────────
 
-  if (!prenom || !nom) return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
-  if (email && !validateEmail(email)) return c.json({ success: false, error: 'Email invalide.' }, 400)
-
-  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
+/**
+ * Retourne l'historique CRM consolidé d'un client :
+ * tickets + factures + rachats + rendez-vous + KPIs synthèse.
+ *
+ * @param id          - ID du client
+ * @query boutique_id - Boutique courante
+ * @returns { success, data: { tickets, factures, rachats, rendez_vous, kpis } }
+ */
+clients.get('/:id/historique', async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await c.env.DB.prepare(`
-    INSERT INTO clients (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(boutiqueId, prenom, nom, email ?? null, telephone ?? null,
-          adresse ?? null, code_postal ?? null, ville ?? null,
-          pays ?? 'France', notes ?? null).first<{ id: number }>()
+  const id = parseInt(c.req.param('id'), 10)
 
-  await auditLog(c.env.DB, { boutique_id: boutiqueId, user_id: user.sub, action: 'CREATE_CLIENT', entite_type: 'client', entite_id: result?.id, apres: body })
-
-  return c.json({ success: true, id: result?.id, message: 'Client créé.' }, 201)
-})
-
-// ── PUT /api/clients/:id ──────────────────────────────────────────────────────
-clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const user = c.get('user')
-  const id   = parseInt(c.req.param('id'), 10)
-  const body = await c.req.json()
-  const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = body
-
-  if (!prenom || !nom) return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
-  if (email && !validateEmail(email)) return c.json({ success: false, error: 'Email invalide.' }, 400)
-
-  const existing = await c.env.DB.prepare('SELECT id, boutique_id FROM clients WHERE id = ? AND actif = 1').bind(id).first<any>()
-  if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
-  const boutiqueId = getBoutiqueId(user, undefined)
-  if (user.role !== 'admin' && existing.boutique_id !== boutiqueId)
+  // Vérification accès client
+  const client = await getClientById(db, id)
+  if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+  if (!canAccessClient(user, client, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  await c.env.DB.prepare(`
-    UPDATE clients SET prenom=?, nom=?, email=?, telephone=?, adresse=?, code_postal=?, ville=?, pays=?, notes=?, updated_at=CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).bind(prenom, nom, email ?? null, telephone ?? null, adresse ?? null, code_postal ?? null, ville ?? null, pays ?? 'France', notes ?? null, id).run()
+  const historique = await getHistoriqueClient(db, id, boutiqueId)
+  return c.json({ success: true, data: historique })
+})
 
-  await auditLog(c.env.DB, { boutique_id: existing.boutique_id, user_id: user.sub, action: 'UPDATE_CLIENT', entite_type: 'client', entite_id: id, apres: body })
+// ─── POST /api/clients ────────────────────────────────────────────────────────
+
+/**
+ * Crée un nouveau client.
+ * @body prenom, nom* (obligatoires), email, telephone, adresse, code_postal, ville, pays, notes
+ * @returns { success, id, message }
+ */
+clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const body = await c.req.json()
+  const { prenom, nom, email } = body
+  // boutique_id peut venir du body (POST) ou du query param
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  if (!prenom || !nom)
+    return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
+  if (email && !validateEmail(email))
+    return c.json({ success: false, error: 'Email invalide.' }, 400)
+
+  const result = await createClient(db, boutiqueId, body)
+  await auditLog(db, {
+    boutique_id: boutiqueId, user_id: user.sub,
+    action: 'CREATE_CLIENT', entite_type: 'client', entite_id: result.id, apres: body,
+  })
+
+  return c.json({ success: true, id: result.id, message: 'Client créé.' }, 201)
+})
+
+// ─── POST /api/clients/import-csv ────────────────────────────────────────────
+
+/**
+ * Importe un lot de clients depuis un tableau JSON (parsé côté frontend depuis CSV).
+ * Chaque ligne doit avoir au minimum un nom ou un prénom.
+ * Les doublons email sont ignorés silencieusement (skipped).
+ *
+ * @body { rows: ImportClientRow[] }
+ * @returns { success, inserted, skipped, errors }
+ */
+clients.post('/import-csv', requireRole('admin', 'manager'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const body = await c.req.json()
+  const rows = body.rows
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  if (!Array.isArray(rows) || rows.length === 0)
+    return c.json({ success: false, error: 'Tableau rows vide ou invalide.' }, 400)
+  if (rows.length > 500)
+    return c.json({ success: false, error: 'Import limité à 500 lignes par lot.' }, 400)
+
+  const result = await importClients(db, boutiqueId, rows)
+
+  await auditLog(db, {
+    boutique_id: boutiqueId, user_id: user.sub,
+    action: 'IMPORT_CLIENTS_CSV', entite_type: 'client', entite_id: null,
+    apres: { nb_lignes: rows.length, ...result },
+  })
+
+  return c.json({
+    success: true,
+    message: `${result.inserted} client(s) importé(s), ${result.skipped} ignoré(s).`,
+    ...result,
+  })
+})
+
+// ─── PUT /api/clients/:id ─────────────────────────────────────────────────────
+
+/**
+ * Met à jour les informations d'un client.
+ * @param id - ID du client
+ * @body prenom, nom* (obligatoires), + champs optionnels
+ * @returns { success, message }
+ */
+clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const id   = parseInt(c.req.param('id'), 10)
+  const body = await c.req.json()
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
+  const { prenom, nom, email } = body
+
+  if (!prenom || !nom)
+    return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
+  if (email && !validateEmail(email))
+    return c.json({ success: false, error: 'Email invalide.' }, 400)
+
+  const existing = await getClientById(db, id)
+  if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+  if (!canAccessClient(user, existing, boutiqueId))
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  await updateClient(db, id, body)
+  await auditLog(db, {
+    boutique_id: existing.boutique_id, user_id: user.sub,
+    action: 'UPDATE_CLIENT', entite_type: 'client', entite_id: id, apres: body,
+  })
+
   return c.json({ success: true, message: 'Client mis à jour.' })
 })
 
-// ── DELETE /api/clients/:id ───────────────────────────────────────────────────
-clients.delete('/:id', requireRole('admin', 'manager'), async (c) => {
-  const user = c.get('user')
-  const id   = parseInt(c.req.param('id'), 10)
+// ─── DELETE /api/clients/:id ──────────────────────────────────────────────────
 
-  const existing = await c.env.DB.prepare('SELECT id, boutique_id FROM clients WHERE id = ? AND actif = 1').bind(id).first<any>()
+/**
+ * Désactive un client (soft delete).
+ * @param id - ID du client
+ * @returns { success, message }
+ */
+clients.delete('/:id', requireRole('admin', 'manager'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+  const id = parseInt(c.req.param('id'), 10)
+
+  const existing = await getClientById(db, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
-  const boutiqueId = getBoutiqueId(user, undefined)
-  if (user.role !== 'admin' && existing.boutique_id !== boutiqueId)
+  if (!canAccessClient(user, existing, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  await c.env.DB.prepare('UPDATE clients SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(id).run()
-  await auditLog(c.env.DB, { boutique_id: existing.boutique_id, user_id: user.sub, action: 'DELETE_CLIENT', entite_type: 'client', entite_id: id })
+  await deleteClient(db, id)
+  await auditLog(db, {
+    boutique_id: existing.boutique_id, user_id: user.sub,
+    action: 'DELETE_CLIENT', entite_type: 'client', entite_id: id,
+  })
+
   return c.json({ success: true, message: 'Client supprimé.' })
 })
 
-// ── POST /api/clients/:id/appareils ───────────────────────────────────────────
+// ─── POST /api/clients/:id/appareils ──────────────────────────────────────────
+
+/**
+ * Ajoute un appareil à un client.
+ * @param id  - ID du client propriétaire
+ * @body marque*, modele*, type, imei, numero_serie, couleur, notes
+ * @returns { success, id, message }
+ */
 clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const id   = parseInt(c.req.param('id'), 10)
+  const { db } = ctx(c)
+  const id = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
-  const { marque, modele, type, imei, numero_serie, couleur, notes } = body
+  const { marque, modele } = body
 
-  if (!marque || !modele) return c.json({ success: false, error: 'Marque et modèle obligatoires.' }, 400)
+  if (!marque || !modele)
+    return c.json({ success: false, error: 'Marque et modèle obligatoires.' }, 400)
 
-  const client = await c.env.DB.prepare('SELECT id FROM clients WHERE id = ? AND actif = 1').bind(id).first()
+  const client = await getClientById(db, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
 
-  const result = await c.env.DB.prepare(`
-    INSERT INTO appareils (client_id, marque, modele, type, imei, numero_serie, couleur, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(id, marque, modele, type ?? 'smartphone', imei ?? null, numero_serie ?? null, couleur ?? null, notes ?? null).first<{ id: number }>()
-
-  return c.json({ success: true, id: result?.id, message: 'Appareil ajouté.' }, 201)
+  const result = await addAppareil(db, id, body)
+  return c.json({ success: true, id: result.id, message: 'Appareil ajouté.' }, 201)
 })
 
 export default clients

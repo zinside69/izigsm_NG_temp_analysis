@@ -117,7 +117,7 @@ app.route('/api',            savRoutes)         // /api/garanties/* + /api/sav/*
 app.route('/api',            notificationsRoutes) // /api/notifications/*
 app.route('/api',            caisseRoutes)       // /api/caisse/* (POS + NF525)
 app.route('/api',            statsRoutes)        // /api/stats/* (KPIs + graphiques) ← extraction violation backlog
-app.route('/api',            clientsRoutes)     // /api/clients/* + /api/clients/:id  ← après routes fixes
+app.route('/api/clients',    clientsRoutes)     // /api/clients/* + /api/clients/:id
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
 app.route('/api/boutiques',  boutiquesRoutes)
 

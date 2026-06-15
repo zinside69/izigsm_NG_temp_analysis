@@ -9,99 +9,314 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Clients — iziGSM</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    /* ── KPIs clients ── */
+    .clients-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi-card-sm {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .kpi-card-sm .kpi-label { font-size: .75rem; color: var(--text-muted); }
+    .kpi-card-sm .kpi-value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+
+    /* ── Avatar ── */
+    .avatar-circle {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .8rem; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+
+    /* ── Onglets modal historique ── */
+    .hist-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .hist-tab {
+      padding: 8px 16px; cursor: pointer; font-size: .85rem;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      color: var(--text-muted); transition: color .15s;
+    }
+    .hist-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .hist-tab-panel { display: none; }
+    .hist-tab-panel.active { display: block; }
+
+    /* ── Import CSV ── */
+    .csv-drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .csv-drop-zone.drag-over { border-color: var(--primary); background: rgba(99,102,241,.06); }
+    .csv-drop-zone input[type=file] { display: none; }
+    .csv-preview-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: 12px; }
+    .csv-preview-table th { background: var(--surface-2); padding: 6px 8px; text-align: left; }
+    .csv-preview-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .csv-mapping { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+    .csv-mapping label { font-size: .8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; }
+    .csv-mapping select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: .8rem; }
+  </style>
 </head>
 <body>
-  <div class="app-layout">
-    <div id="sidebar-placeholder"></div>
-    <div class="main-content">
-      <header class="dash-topbar">
-        <div class="topbar-left"><div class="topbar-title">Clients</div></div>
-        <div class="topbar-right">
-          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
-          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+
+    <!-- ── Topbar ── -->
+    <header class="dash-topbar">
+      <div class="topbar-left"><div class="topbar-title">Clients</div></div>
+      <div class="topbar-right">
+        <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+        <div class="topbar-avatar" id="topbar-avatar">JD</div>
+      </div>
+    </header>
+
+    <main class="page-content">
+
+      <!-- ── En-tête page ── -->
+      <div class="page-header">
+        <div>
+          <h1>Clients</h1>
+          <p>Base clients — <span id="clients-count">—</span></p>
         </div>
-      </header>
-      <main class="page-content">
-        <div class="page-header">
-          <div><h1>Clients</h1><p>Gérez votre base clients</p></div>
-          <div class="page-header-actions">
-            <button class="btn btn-secondary btn-sm">📥 Importer CSV</button>
-            <button class="btn btn-primary" onclick="openNewClient()">+ Nouveau client</button>
-          </div>
+        <div class="page-header-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openImportCsv()">
+            <i class="fas fa-file-import"></i> Importer CSV
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="exportClients()">
+            <i class="fas fa-download"></i> Exporter CSV
+          </button>
+          <button class="btn btn-primary" onclick="openNewClient()">
+            <i class="fas fa-plus"></i> Nouveau client
+          </button>
         </div>
-        <div style="display:flex;gap:12px;margin-bottom:20px;">
-          <div class="search-input" style="flex:1;max-width:320px;">
-            <span class="search-icon">🔍</span>
-            <input type="text" placeholder="Rechercher un client…" oninput="filterClients(this.value)">
-          </div>
+      </div>
+
+      <!-- ── KPIs ── -->
+      <div class="clients-kpis" id="clients-kpis">
+        <div class="kpi-card-sm">
+          <span class="kpi-label">Total clients</span>
+          <span class="kpi-value" id="kpi-total">—</span>
         </div>
-        <div class="table-card">
-          <table>
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Email</th>
-                <th>Téléphone</th>
-                <th>Tickets</th>
-                <th>CA total</th>
-                <th>Depuis</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="clients-table"></tbody>
-          </table>
-          <div id="clients-empty" class="empty-state hidden">
-            <div class="empty-icon">👥</div>
-            <h3>Aucun client</h3>
-            <p>Vos clients apparaîtront ici à mesure que vous créerez des tickets.</p>
-          </div>
+        <div class="kpi-card-sm">
+          <span class="kpi-label">Nouveaux ce mois</span>
+          <span class="kpi-value" id="kpi-new">—</span>
         </div>
-      </main>
+        <div class="kpi-card-sm">
+          <span class="kpi-label">Avec ticket ouvert</span>
+          <span class="kpi-value" id="kpi-actif">—</span>
+        </div>
+        <div class="kpi-card-sm">
+          <span class="kpi-label">CA moyen / client</span>
+          <span class="kpi-value" id="kpi-ca-moyen">—</span>
+        </div>
+      </div>
+
+      <!-- ── Barre recherche + filtres ── -->
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <div class="search-input" style="flex:1;min-width:220px;max-width:340px;">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="search-client" placeholder="Rechercher un client…" oninput="applyFilters()">
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-secondary active" data-filter-client="all" onclick="setFilter(this,'all')">Tous</button>
+          <button class="btn btn-sm btn-secondary" data-filter-client="actif" onclick="setFilter(this,'actif')">Avec tickets</button>
+          <button class="btn btn-sm btn-secondary" data-filter-client="nouveau" onclick="setFilter(this,'nouveau')">Ce mois</button>
+        </div>
+      </div>
+
+      <!-- ── Tableau ── -->
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th>Email</th>
+              <th>Téléphone</th>
+              <th>Ville</th>
+              <th>Tickets</th>
+              <th>CA total</th>
+              <th>Depuis</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clients-tbody"></tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ── Modal Nouveau / Édition client ── -->
+<div class="modal-overlay" id="modal-client">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-client-title">Nouveau client</h2>
+      <button class="modal-close" onclick="closeModal('modal-client')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="client-id">
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Prénom</label>
+          <input type="text" id="c-prenom" placeholder="Jean">
+        </div>
+        <div class="form-field">
+          <label>Nom *</label>
+          <input type="text" id="c-nom" placeholder="Dupont" required>
+        </div>
+        <div class="form-field">
+          <label>Email</label>
+          <input type="email" id="c-email" placeholder="jean@email.com">
+        </div>
+        <div class="form-field">
+          <label>Téléphone</label>
+          <input type="tel" id="c-telephone" placeholder="+33 6 12 34 56 78">
+        </div>
+        <div class="form-field">
+          <label>Adresse</label>
+          <input type="text" id="c-adresse" placeholder="12 rue de la Paix">
+        </div>
+        <div class="form-field">
+          <label>Code postal</label>
+          <input type="text" id="c-code-postal" placeholder="75001">
+        </div>
+        <div class="form-field">
+          <label>Ville</label>
+          <input type="text" id="c-ville" placeholder="Paris">
+        </div>
+        <div class="form-field">
+          <label>Pays</label>
+          <input type="text" id="c-pays" value="France">
+        </div>
+        <div class="form-field full">
+          <label>Notes</label>
+          <textarea id="c-notes" rows="2" placeholder="Notes internes…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-client')">Annuler</button>
+      <button class="btn btn-primary" id="btn-save-client" onclick="saveClient()">Enregistrer</button>
     </div>
   </div>
-  <!-- Modal client -->
-  <div class="modal-overlay" id="modal-client">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Nouveau client</h2>
-        <button class="modal-close" onclick="closeModal('modal-client')">✕</button>
+</div>
+
+<!-- ── Modal Historique client ── -->
+<div class="modal-overlay" id="modal-historique">
+  <div class="modal" style="max-width:780px;">
+    <div class="modal-header">
+      <div>
+        <h2 id="hist-title">Historique client</h2>
+        <p id="hist-subtitle" style="font-size:.8rem;color:var(--text-muted);margin-top:2px;"></p>
       </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-field">
-            <label>Prénom</label>
-            <input type="text" id="c-first" placeholder="Jean">
-          </div>
-          <div class="form-field">
-            <label>Nom *</label>
-            <input type="text" id="c-last" placeholder="Dupont" required>
-          </div>
-          <div class="form-field">
-            <label>Email</label>
-            <input type="email" id="c-email" placeholder="jean@email.com">
-          </div>
-          <div class="form-field">
-            <label>Téléphone</label>
-            <input type="tel" id="c-phone" placeholder="+33 6 12 34 56 78">
-          </div>
-          <div class="form-field full">
-            <label>Adresse</label>
-            <input type="text" id="c-address" placeholder="12 rue de la Paix, 75001 Paris">
-          </div>
-          <div class="form-field full">
-            <label>Notes</label>
-            <textarea id="c-notes" rows="2" placeholder="Notes sur ce client..."></textarea>
-          </div>
+      <button class="modal-close" onclick="closeModal('modal-historique')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- KPIs synthèse -->
+      <div id="hist-kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"></div>
+      <!-- Onglets -->
+      <div class="hist-tabs">
+        <div class="hist-tab active" onclick="switchHistTab(this,'hist-tickets')">
+          <i class="fas fa-clipboard-list"></i> Tickets <span id="hist-badge-tickets" class="badge badge-info" style="margin-left:4px;"></span>
+        </div>
+        <div class="hist-tab" onclick="switchHistTab(this,'hist-factures')">
+          <i class="fas fa-file-invoice"></i> Factures <span id="hist-badge-factures" class="badge badge-info" style="margin-left:4px;"></span>
+        </div>
+        <div class="hist-tab" onclick="switchHistTab(this,'hist-rachats')">
+          <i class="fas fa-recycle"></i> Rachats <span id="hist-badge-rachats" class="badge badge-info" style="margin-left:4px;"></span>
+        </div>
+        <div class="hist-tab" onclick="switchHistTab(this,'hist-rdv')">
+          <i class="fas fa-calendar-alt"></i> RDV <span id="hist-badge-rdv" class="badge badge-info" style="margin-left:4px;"></span>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('modal-client')">Annuler</button>
-        <button class="btn btn-primary" onclick="saveClient()">Enregistrer</button>
+      <!-- Panneaux -->
+      <div id="hist-tickets" class="hist-tab-panel active"></div>
+      <div id="hist-factures" class="hist-tab-panel"></div>
+      <div id="hist-rachats" class="hist-tab-panel"></div>
+      <div id="hist-rdv" class="hist-tab-panel"></div>
+      <div id="hist-loader" style="text-align:center;padding:32px;display:none;">
+        <i class="fas fa-spinner fa-spin" style="font-size:1.4rem;color:var(--primary)"></i>
       </div>
     </div>
   </div>
-  <script src="/static/js/app.js"></script>
-  <script src="/static/js/clients.js"></script>
-  <script src="/static/js/pwa.js"></script>
+</div>
+
+<!-- ── Modal Import CSV ── -->
+<div class="modal-overlay" id="modal-import-csv">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <h2>Importer des clients (CSV)</h2>
+      <button class="modal-close" onclick="closeModal('modal-import-csv')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Étape 1 : dépôt fichier -->
+      <div id="csv-step-1">
+        <div class="csv-drop-zone" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()">
+          <input type="file" id="csv-file-input" accept=".csv,.txt" onchange="onCsvFileSelect(this.files[0])">
+          <i class="fas fa-cloud-upload-alt" style="font-size:2rem;color:var(--primary);margin-bottom:8px;display:block;"></i>
+          <p style="margin:0;font-weight:600;">Glissez votre fichier CSV ici</p>
+          <p style="margin:4px 0 0;font-size:.8rem;color:var(--text-muted);">ou cliquez pour sélectionner</p>
+          <p style="margin:8px 0 0;font-size:.75rem;color:var(--text-muted);">Format : CSV UTF-8, séparateur virgule ou point-virgule. Max 500 lignes.</p>
+        </div>
+        <div style="margin-top:12px;font-size:.8rem;color:var(--text-muted);">
+          <strong>Colonnes reconnues automatiquement :</strong>
+          prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes
+        </div>
+      </div>
+
+      <!-- Étape 2 : mapping + prévisualisation -->
+      <div id="csv-step-2" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span id="csv-file-name" style="font-size:.85rem;font-weight:600;"></span>
+          <button class="btn btn-sm btn-secondary" onclick="resetCsvImport()">↩ Changer de fichier</button>
+        </div>
+        <div id="csv-mapping-area" class="csv-mapping"></div>
+        <div style="margin:10px 0;font-size:.8rem;color:var(--text-muted);">
+          Prévisualisation — 5 premières lignes :
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="csv-preview-table" id="csv-preview-table"></table>
+        </div>
+        <div id="csv-stats" style="margin-top:10px;font-size:.8rem;color:var(--text-muted);"></div>
+      </div>
+
+      <!-- Résultat import -->
+      <div id="csv-step-3" style="display:none;text-align:center;padding:16px 0;">
+        <div id="csv-result-icon" style="font-size:2.5rem;margin-bottom:8px;"></div>
+        <div id="csv-result-msg" style="font-weight:600;font-size:1rem;"></div>
+        <div id="csv-result-detail" style="font-size:.8rem;color:var(--text-muted);margin-top:6px;"></div>
+        <div id="csv-result-errors" style="margin-top:10px;font-size:.75rem;color:var(--danger);text-align:left;max-height:100px;overflow-y:auto;"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-import-csv')">Fermer</button>
+      <button class="btn btn-primary" id="btn-import-csv" onclick="doImportCsv()" style="display:none;">
+        <i class="fas fa-file-import"></i> Importer <span id="btn-import-count"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script src="/static/js/clients.js"></script>
+<script src="/static/js/pwa.js"></script>
 </body>
 </html>
