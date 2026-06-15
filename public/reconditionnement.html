@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.svg">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconditionnement — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div id="sidebar-placeholder"></div>
+    <div class="main-content">
+
+      <header class="dash-topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Reconditionnement &amp; Bons d'achat</div>
+        </div>
+        <div class="topbar-right">
+          <div class="topbar-notif">🔔 <span class="notif-dot"></span></div>
+          <div class="topbar-avatar" id="topbar-avatar">JD</div>
+        </div>
+      </header>
+
+      <main class="page-content">
+
+        <!-- En-tête page avec onglets -->
+        <div class="page-header">
+          <div>
+            <h1>🔄 Reconditionnement &amp; Bons d'achat</h1>
+            <p>Transformez les rachats en stock occasion — gérez les gestes commerciaux clients</p>
+          </div>
+          <div class="page-header-actions" id="page-actions">
+            <!-- Actions injectées dynamiquement selon l'onglet actif -->
+          </div>
+        </div>
+
+        <!-- Onglets de navigation -->
+        <nav class="tabs-nav" role="tablist" aria-label="Modules reconditionnement">
+          <button class="tab-btn tab-active" role="tab" aria-selected="true"
+                  aria-controls="panel-ordres" id="tab-ordres"
+                  onclick="switchTab('ordres')">
+            ♻️ Ordres de reconditionnement
+          </button>
+          <button class="tab-btn" role="tab" aria-selected="false"
+                  aria-controls="panel-bons" id="tab-bons"
+                  onclick="switchTab('bons')">
+            🎁 Bons d'achat
+          </button>
+        </nav>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             PANNEAU 1 — ORDRES DE RECONDITIONNEMENT
+        ═══════════════════════════════════════════════════════════════════ -->
+        <section id="panel-ordres" role="tabpanel" aria-labelledby="tab-ordres">
+
+          <!-- KPIs reconditionnement -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;">
+            <div class="kpi-card">
+              <div class="kpi-label">En cours</div>
+              <div class="kpi-value" id="kpi-en-cours">—</div>
+              <div class="kpi-delta">Appareils en traitement</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Terminés</div>
+              <div class="kpi-value" style="color:var(--green);" id="kpi-termines">—</div>
+              <div class="kpi-delta up">Mis en stock occasion</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Coût de revient total</div>
+              <div class="kpi-value" id="kpi-cout-revient">—</div>
+              <div class="kpi-delta">Tous ordres terminés</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Marge estimée</div>
+              <div class="kpi-value" style="color:var(--indigo);" id="kpi-marge">—</div>
+              <div class="kpi-delta">CA − coût de revient</div>
+            </div>
+          </div>
+
+          <!-- Filtres ordres -->
+          <div class="filter-bar" style="margin-bottom:16px;">
+            <input type="text" id="search-ordres" class="input-search"
+                   placeholder="🔍 Numéro, marque, modèle, IMEI…"
+                   oninput="debounceSearchOrdres()">
+            <select id="filter-statut-ordre" onchange="loadOrdres()" class="select-sm">
+              <option value="">Tous statuts</option>
+              <option value="brouillon">Brouillon</option>
+              <option value="en_cours">En cours</option>
+              <option value="termine">Terminé</option>
+              <option value="abandonne">Abandonné</option>
+            </select>
+            <select id="filter-grade" onchange="loadOrdres()" class="select-sm">
+              <option value="">Tous grades</option>
+              <option value="A">Grade A — Comme neuf</option>
+              <option value="B">Grade B — Bon état</option>
+              <option value="C">Grade C — Correct</option>
+              <option value="D">Grade D — Fonctionnel</option>
+            </select>
+          </div>
+
+          <!-- Table ordres -->
+          <div class="table-wrapper">
+            <table class="data-table" id="table-ordres">
+              <thead>
+                <tr>
+                  <th>Numéro</th>
+                  <th>Appareil</th>
+                  <th>IMEI</th>
+                  <th>Statut</th>
+                  <th>Grade</th>
+                  <th>Coût revient</th>
+                  <th>Prix revente HT</th>
+                  <th>Rachat source</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ordres">
+                <tr><td colspan="9" class="empty-row">Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="pagination-ordres" class="pagination-bar"></div>
+
+        </section><!-- fin panel-ordres -->
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             PANNEAU 2 — BONS D'ACHAT
+        ═══════════════════════════════════════════════════════════════════ -->
+        <section id="panel-bons" role="tabpanel" aria-labelledby="tab-bons" hidden>
+
+          <!-- Barre de recherche bons -->
+          <div class="filter-bar" style="margin-bottom:16px;">
+            <input type="text" id="search-bons" class="input-search"
+                   placeholder="🔍 Code, client, motif…"
+                   oninput="debounceSearchBons()">
+            <select id="filter-statut-bon" onchange="loadBons()" class="select-sm">
+              <option value="">Tous statuts</option>
+              <option value="actif">Actif</option>
+              <option value="utilise">Utilisé</option>
+              <option value="expire">Expiré</option>
+              <option value="annule">Annulé</option>
+            </select>
+          </div>
+
+          <!-- Table bons d'achat -->
+          <div class="table-wrapper">
+            <table class="data-table" id="table-bons">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Client</th>
+                  <th>Montant</th>
+                  <th>Restant</th>
+                  <th>Statut</th>
+                  <th>Expiration</th>
+                  <th>Motif</th>
+                  <th>Émis le</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-bons">
+                <tr><td colspan="9" class="empty-row">Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="pagination-bons" class="pagination-bar"></div>
+
+        </section><!-- fin panel-bons -->
+
+      </main>
+    </div><!-- .main-content -->
+  </div><!-- .app-layout -->
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODAL — Ordre de reconditionnement (création + modification)
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <dialog id="modal-ordre" class="modal-dialog" aria-modal="true" aria-labelledby="modal-ordre-title">
+    <div class="modal-content modal-lg">
+      <header class="modal-header">
+        <h2 id="modal-ordre-title">Nouvel ordre de reconditionnement</h2>
+        <button class="modal-close" onclick="closeModalOrdre()" aria-label="Fermer">✕</button>
+      </header>
+      <form id="form-ordre" onsubmit="submitOrdre(event)">
+        <div class="modal-body">
+
+          <!-- Rachat source (optionnel) -->
+          <fieldset class="form-section">
+            <legend>Source</legend>
+            <div class="form-row">
+              <label for="ordre-rachat-id">Rachat source (optionnel)</label>
+              <input type="number" id="ordre-rachat-id" name="rachat_id"
+                     placeholder="ID du rachat — laissez vide pour un ordre manuel">
+              <small class="form-hint">Si renseigné, les informations de l'appareil sont pré-remplies depuis le rachat.</small>
+            </div>
+          </fieldset>
+
+          <!-- Appareil -->
+          <fieldset class="form-section">
+            <legend>Appareil</legend>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="ordre-marque">Marque <span class="required">*</span></label>
+                <input type="text" id="ordre-marque" name="appareil_marque"
+                       placeholder="Apple, Samsung…" required>
+              </div>
+              <div class="form-row">
+                <label for="ordre-modele">Modèle <span class="required">*</span></label>
+                <input type="text" id="ordre-modele" name="appareil_modele"
+                       placeholder="iPhone 13, Galaxy S22…" required>
+              </div>
+              <div class="form-row">
+                <label for="ordre-imei">IMEI</label>
+                <input type="text" id="ordre-imei" name="imei"
+                       placeholder="15 chiffres" maxlength="15">
+              </div>
+              <div class="form-row">
+                <label for="ordre-couleur">Couleur</label>
+                <input type="text" id="ordre-couleur" name="couleur"
+                       placeholder="Noir, Blanc, Bleu…">
+              </div>
+              <div class="form-row">
+                <label for="ordre-capacite">Capacité</label>
+                <input type="text" id="ordre-capacite" name="capacite"
+                       placeholder="128 Go, 256 Go…">
+              </div>
+              <div class="form-row">
+                <label for="ordre-grade">Grade qualité</label>
+                <select id="ordre-grade" name="grade">
+                  <option value="">— Non défini —</option>
+                  <option value="A">A — Comme neuf (aucune trace)</option>
+                  <option value="B">B — Bon état (légères traces d'usage)</option>
+                  <option value="C">C — Correct (traces visibles)</option>
+                  <option value="D">D — Fonctionnel (traces importantes)</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Coûts -->
+          <fieldset class="form-section">
+            <legend>Coûts</legend>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="ordre-prix-rachat">Prix de rachat (€)</label>
+                <input type="number" id="ordre-prix-rachat" name="prix_rachat"
+                       min="0" step="0.01" placeholder="0.00"
+                       oninput="updateCoutRevient()">
+              </div>
+              <div class="form-row">
+                <label for="ordre-cout-mo">Main d'œuvre (€)</label>
+                <input type="number" id="ordre-cout-mo" name="cout_main_oeuvre"
+                       min="0" step="0.01" placeholder="0.00"
+                       oninput="updateCoutRevient()">
+              </div>
+              <div class="form-row">
+                <label for="ordre-cout-pieces">Pièces détachées (€)</label>
+                <input type="number" id="ordre-cout-pieces" name="cout_pieces"
+                       min="0" step="0.01" placeholder="0.00"
+                       oninput="updateCoutRevient()">
+              </div>
+              <div class="form-row">
+                <label>Coût de revient calculé</label>
+                <div class="computed-value" id="display-cout-revient" style="font-weight:600;font-size:1.1rem;">0,00 €</div>
+              </div>
+              <div class="form-row">
+                <label for="ordre-prix-revente">Prix de revente HT (€)</label>
+                <input type="number" id="ordre-prix-revente" name="prix_revente_ht"
+                       min="0" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Description travaux -->
+          <div class="form-row">
+            <label for="ordre-travaux">Description des travaux</label>
+            <textarea id="ordre-travaux" name="description_travaux" rows="3"
+                      placeholder="Nettoyage, remplacement batterie, remplacement vitre…"></textarea>
+          </div>
+
+          <input type="hidden" id="ordre-id" name="id">
+
+        </div><!-- .modal-body -->
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModalOrdre()">Annuler</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-ordre">Créer l'ordre</button>
+        </footer>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODAL — Clôturer un ordre (terminer + créer produit stock)
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <dialog id="modal-terminer" class="modal-dialog" aria-modal="true" aria-labelledby="modal-terminer-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-terminer-title">Clôturer l'ordre de reconditionnement</h2>
+        <button class="modal-close" onclick="closeModalTerminer()" aria-label="Fermer">✕</button>
+      </header>
+      <form id="form-terminer" onsubmit="submitTerminer(event)">
+        <div class="modal-body">
+          <p id="terminer-resume" style="background:#f1f5f9;border-radius:8px;padding:12px;margin-bottom:16px;font-size:0.9rem;"></p>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="terminer-prix">Prix de revente HT (€) <span class="required">*</span></label>
+              <input type="number" id="terminer-prix" name="prix_revente_ht"
+                     min="0" step="0.01" required>
+            </div>
+            <div class="form-row">
+              <label for="terminer-grade">Grade final <span class="required">*</span></label>
+              <select id="terminer-grade" name="grade" required>
+                <option value="">— Choisir —</option>
+                <option value="A">A — Comme neuf</option>
+                <option value="B">B — Bon état</option>
+                <option value="C">C — Correct</option>
+                <option value="D">D — Fonctionnel</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="terminer-travaux">Description travaux (optionnel)</label>
+            <textarea id="terminer-travaux" name="description_travaux" rows="2"
+                      placeholder="Résumé des interventions réalisées…"></textarea>
+          </div>
+          <input type="hidden" id="terminer-id">
+        </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModalTerminer()">Annuler</button>
+          <button type="submit" class="btn btn-success">✅ Clôturer et créer le produit</button>
+        </footer>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODAL — Bon d'achat (création)
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <dialog id="modal-bon" class="modal-dialog" aria-modal="true" aria-labelledby="modal-bon-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-bon-title">Émettre un bon d'achat</h2>
+        <button class="modal-close" onclick="closeModalBon()" aria-label="Fermer">✕</button>
+      </header>
+      <form id="form-bon" onsubmit="submitBon(event)">
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="bon-montant">Montant (€) <span class="required">*</span></label>
+              <input type="number" id="bon-montant" name="montant"
+                     min="0.01" step="0.01" required placeholder="ex : 15.00">
+            </div>
+            <div class="form-row">
+              <label for="bon-client-id">Client bénéficiaire</label>
+              <input type="number" id="bon-client-id" name="client_id"
+                     placeholder="ID client (optionnel)">
+            </div>
+            <div class="form-row">
+              <label for="bon-expiration">Date d'expiration</label>
+              <input type="date" id="bon-expiration" name="date_expiration">
+            </div>
+            <div class="form-row">
+              <label for="bon-source-type">Type de geste</label>
+              <select id="bon-source-type" name="source_type">
+                <option value="manuel">Manuel (geste libre)</option>
+                <option value="ticket">Lié à un ticket SAV</option>
+                <option value="facture">Lié à une facture</option>
+                <option value="sav">Lié à un dossier SAV</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="bon-motif">Motif (note interne)</label>
+            <input type="text" id="bon-motif" name="motif"
+                   placeholder="Ex : Geste commercial suite à délai de réparation…">
+          </div>
+        </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModalBon()">Annuler</button>
+          <button type="submit" class="btn btn-primary">🎁 Émettre le bon</button>
+        </footer>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       MODAL — Vérifier un bon en caisse
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <dialog id="modal-verifier" class="modal-dialog" aria-modal="true" aria-labelledby="modal-verifier-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-verifier-title">Vérifier un code bon d'achat</h2>
+        <button class="modal-close" onclick="closeModalVerifier()" aria-label="Fermer">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="form-row">
+          <label for="verifier-code">Code bon d'achat</label>
+          <input type="text" id="verifier-code" placeholder="Ex : BA-K3X9PQ2W"
+                 style="text-transform:uppercase;letter-spacing:2px;font-size:1.1rem;font-family:monospace;"
+                 oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <button class="btn btn-primary" style="margin-top:8px;" onclick="doVerifierBon()">🔍 Vérifier</button>
+        <!-- Résultat vérification -->
+        <div id="verifier-result" style="margin-top:16px;display:none;"></div>
+      </div>
+      <footer class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModalVerifier()">Fermer</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- Scripts -->
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/reconditionnement.js"></script>
+</body>
+</html>

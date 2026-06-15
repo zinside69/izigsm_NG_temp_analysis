@@ -18,7 +18,8 @@ import publicRoutes        from './routes/public'
 import savRoutes           from './routes/sav'
 import notificationsRoutes from './routes/notifications'
 import caisseRoutes        from './routes/caisse'
-import statsRoutes         from './routes/stats'
+import statsRoutes                from './routes/stats'
+import { reconditionnementRoutes, bonsAchatRoutes } from './routes/reconditionnement'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
@@ -41,8 +42,10 @@ import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
  *   /api/employes/*     → CRUD employés
  *   /api/pointage/*     → Pointage (machine à états) + rapports
  *   /api/boutiques/*    → CRUD boutiques + NF525 verify/cloture
- *   /api/stats          → KPIs + graphiques dashboard (statsService.ts)
- *   /api/health         → Health check
+ *   /api/stats                   → KPIs + graphiques dashboard (statsService.ts)
+ *   /api/reconditionnement/*      → Ordres de reconditionnement (Sprint 2.16)
+ *   /api/bons-achat/*             → Bons d'achat geste commercial (Sprint 2.16)
+ *   /api/health                   → Health check
  */
 
 type Bindings = {
@@ -66,8 +69,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.13.0',
-    sprint:    '2.13 — Export PDF + Dashboard graphiques',
+    version:   '2.16.0',
+    sprint:    '2.16 — Reconditionnement + Bons d\'achat',
     timestamp: new Date().toISOString(),
   })
 })
@@ -120,6 +123,9 @@ app.route('/api',            statsRoutes)        // /api/stats/* (KPIs + graphiq
 app.route('/api/clients',    clientsRoutes)     // /api/clients/* + /api/clients/:id
 app.route('/api',            personnelRoutes)   // /api/employes/* + /api/pointage/*
 app.route('/api/boutiques',  boutiquesRoutes)
+// Sprint 2.16 — Deux routers séparés pour éviter la collision /:id vs /bons-achat/*
+app.route('/api/reconditionnement', reconditionnementRoutes)  // ordres de reconditionnement
+app.route('/api/bons-achat',        bonsAchatRoutes)          // bons d'achat geste commercial
 
 // ─── 404 fallback API ─────────────────────────────────────────────────────────
 app.notFound((c) => {
