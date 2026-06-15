@@ -92,13 +92,36 @@
         if (data.success && data.accessToken) {
           // Stocker token + session au format attendu par app.js
           const user = data.user;
+
+          // ─── Auto-sélection boutique pour l'admin ────────────────────────────
+          // L'admin n'est rattaché à aucune boutique (boutique_id: null en base).
+          // On récupère la première boutique disponible pour pré-renseigner la
+          // session et permettre aux KPIs dashboard de charger correctement.
+          let boutiqueId   = user.boutique_id   ?? null;
+          let boutiqueName = user.boutique_name ?? null;
+
+          if (!boutiqueId) {
+            try {
+              const bRes  = await fetch('/api/boutiques', {
+                headers: { Authorization: `Bearer ${data.accessToken}` },
+              });
+              const bData = await bRes.json();
+              if (bData.success && Array.isArray(bData.data) && bData.data.length > 0) {
+                boutiqueId   = bData.data[0].id;
+                boutiqueName = bData.data[0].nom;
+              }
+            } catch (_) {
+              // non bloquant — le dashboard gèrera l'absence de boutique
+            }
+          }
+
           const session = {
             name:         `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
             email:        user.email,
             role:         user.role,
-            boutique_id:  user.boutique_id,
-            boutique_name: user.boutique_name || 'Mon Atelier',
-            company:      user.boutique_name  || 'Mon Atelier',
+            boutique_id:  boutiqueId,
+            boutique_name: boutiqueName || 'Mon Atelier',
+            company:      boutiqueName  || 'Mon Atelier',
           };
           localStorage.setItem('izigsm_token',         data.accessToken);
           localStorage.setItem('izigsm_refresh_token', data.refreshToken);

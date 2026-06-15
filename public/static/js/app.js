@@ -484,6 +484,11 @@ async function tryRefreshToken() {
  * GET helper
  */
 async function apiGet(url, params = {}) {
+  // Injecter boutique_id automatiquement si non déjà présent dans params ou dans l'URL
+  if (!params.boutique_id && !url.includes('boutique_id=')) {
+    const bid = getBoutiqueId();
+    if (bid) params = { boutique_id: bid, ...params };
+  }
   const qs = Object.keys(params).length
     ? '?' + new URLSearchParams(params).toString()
     : '';

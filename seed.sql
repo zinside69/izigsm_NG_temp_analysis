@@ -12,13 +12,13 @@ INSERT OR IGNORE INTO boutique_settings (boutique_id, tva_taux_defaut, horaires)
   (1, 20.0, '{"lun":"09:00-19:00","mar":"09:00-19:00","mer":"09:00-19:00","jeu":"09:00-19:00","ven":"09:00-19:00","sam":"10:00-18:00","dim":"ferme"}');
 
 -- ── Utilisateurs ─────────────────────────────────────────
--- Mots de passe : "Admin@2026!" hashé en bcrypt (hash fictif pour seed)
--- En prod : remplacer par un vrai hash bcrypt
+-- Mots de passe : "Admin@2026!" — PBKDF2-SHA256, 100 000 itérations
+-- Format : 100000:salt_hex(32):hash_hex(64)  (généré par src/lib/auth.ts hashPassword)
 INSERT OR IGNORE INTO users (id, email, password_hash, prenom, nom, telephone, role_id, boutique_id, actif, email_verifie) VALUES
-  (1, 'admin@izigsm.fr',      '$2b$12$SEED_ADMIN_HASH_PLACEHOLDER',   'Admin',   'iziGSM',  '06 00 00 00 01', 1, NULL, 1, 1),
-  (2, 'manager@izigsm.fr',    '$2b$12$SEED_MANAGER_HASH_PLACEHOLDER', 'Sophie',  'Martin',  '06 00 00 00 02', 2, 1,    1, 1),
-  (3, 'tech1@izigsm.fr',      '$2b$12$SEED_TECH1_HASH_PLACEHOLDER',   'Lucas',   'Dubois',  '06 00 00 00 03', 3, 1,    1, 1),
-  (4, 'tech2@izigsm.fr',      '$2b$12$SEED_TECH2_HASH_PLACEHOLDER',   'Emma',    'Bernard', '06 00 00 00 04', 3, 1,    1, 1);
+  (1, 'admin@izigsm.fr',   '100000:f0cc9cb2109bfb74f965a6345f93793e:7df66f3af9547f005e0d89a96e0d488a52c87facdaaa063920df47b2590c606f', 'Admin',   'iziGSM',  '06 00 00 00 01', 1, NULL, 1, 1),
+  (2, 'manager@izigsm.fr', '100000:477ac0b6ec7ba6943c21c9faf240677f:7932b82f965ade06659c8ebb27ae8410a377ad96201ddc9d1a1529c5942911c7', 'Sophie',  'Martin',  '06 00 00 00 02', 2, 1,    1, 1),
+  (3, 'tech1@izigsm.fr',   '100000:bc773f3148d0e1d9b27b7f87f730f9a2:628f3aa6252f0dd4f4cb5832df3764dff53503f36a3ee1907df5a49dfa62c622', 'Lucas',   'Dubois',  '06 00 00 00 03', 3, 1,    1, 1),
+  (4, 'tech2@izigsm.fr',   '100000:8d45ac196da2b50b01d54009303245d2:dddc2ec27ea2ba531ddfe5e4e0ec50c1da3db390efc000b36a6864b7f927b2a8', 'Emma',    'Bernard', '06 00 00 00 04', 3, 1,    1, 1);
 
 -- ── Employés (liés aux users techniciens) ────────────────
 INSERT OR IGNORE INTO employes (id, boutique_id, user_id, prenom, nom, poste, commission_pct, statut_pointage) VALUES
