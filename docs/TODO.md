@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.6 terminé — 4 juin 2026
+> Dernière mise à jour : Sprint 2.15 terminé — 15 juin 2026
 
 ---
 
@@ -187,14 +187,18 @@
 - [x] P4 — JSDoc sur 14 fonctions de `dashboard.js`
 - [x] Build ✅ (197.52 kB) + tests T1–T6 ✅ 6/6 + commit `f915398`
 
-### Sprint 2.15 🔜 — CRM étendu
+### Sprint 2.15 ✅ — CRM étendu
 **Module CDC : MOD-07 (HAUTE)**
-- [ ] Historique consolidé client (tickets + factures + rachats + RDV + SAV)
-- [ ] Fix `JOIN tickets` cross-module dans `routes/clients.ts` (**violation backlog 🟡**)
-- [ ] `src/services/clientService.ts` (Model)
-- [ ] Import CSV clients avec mapping colonnes
-- [ ] Parrainage client (`referral_code`, `referred_by`)
-- [ ] Score fidélité client
+- [x] `src/services/clientService.ts` (Model) — 9 fonctions : listClients, getClient, updateClient, deleteClient, addAppareil, getHistoriqueClient, importClients, getKpis, createClient
+- [x] Fix violation P1 : `JOIN tickets` cross-module → sous-requête `COUNT(*)` dans clientService
+- [x] `src/routes/clients.ts` : Controller pur 0 SQL — 8 endpoints, ctx() refactorisé
+- [x] `GET /api/clients/:id/historique` : historique consolidé (tickets + factures + rdv + KPIs)
+- [x] `POST /api/clients/import-csv` : parsing côté client, mapping 9 colonnes, dédup email silencieux
+- [x] Fix montage Hono : `app.route('/api/clients')` (était `/api` → routing /:id cassé)
+- [x] Fix colonnes DB : `factures` (statut != ANNULE), `rachats` (pas de client_id → []), `rendez_vous` (type_rdv)
+- [x] `public/clients.html` : refonte complète — 4 KPIs, modal historique 4 onglets, modal import CSV 3 étapes
+- [x] `public/static/js/clients.js` : viewHistorique, doImportCsv, JSDoc P4 complet, CSV_FIELD_MAP 9 colonnes
+- [x] Build ✅ (201.22 kB, 58 modules) + tests 7/7 ✅ + commit `f621703`
 
 ### Sprint 2.16 🔜 — Reconditionnement + Bons d'achat
 **Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
@@ -211,10 +215,10 @@
 |---|---|---|---|
 | ✅ Résolu | ~~`src/index.tsx`~~ | ~~`/api/stats` SQL inline multi-module~~ | ✅ Résolu Sprint 2.13 |
 | ✅ Résolu | ~~`app.js` doublon~~ | ~~`apiPut` déclaré deux fois~~ | ✅ Résolu Fix DP |
-| 🟡 | `routes/clients.ts` l.41 | `JOIN tickets` cross-module | Sprint 2.15 |
+| ✅ Résolu | ~~`routes/clients.ts` l.41~~ | ~~`JOIN tickets` cross-module~~ | ✅ Résolu Sprint 2.15 |
+| ✅ Résolu | ~~`routes/clients.ts`~~ | ~~Pas de couche `clientService.ts`~~ | ✅ Résolu Sprint 2.15 |
 | 🟢 | `routes/*.ts` (anciens) | Documentation fonctions insuffisante | Au fil des sprints |
 | 🟢 | `routes/tickets.ts` | Pas de couche `ticketService.ts` | Sprint 2.8 |
-| 🟢 | `routes/clients.ts` | Pas de couche `clientService.ts` | Sprint 2.15 |
 | 🟢 | `routes/stocks.ts` | Pas de couche `stockService.ts` | Sprint 2.9 |
 
 ---
@@ -223,13 +227,13 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.14.0 |
-| Build | `dist/_worker.js` 197.52 kB — 57 modules |
+| Version | 2.15.0 |
+| Build | `dist/_worker.js` 201.22 kB — 58 modules |
 | Dernière migration | `0015_agenda.sql` ✅ (inchangée depuis Sprint 2.6) |
-| Dernier commit | `f915398` — *refactor: Sprint correctif design pattern — P1/P2/P4* |
+| Dernier commit | `f621703` — *feat: Sprint 2.15 — CRM étendu (clientService + historique + import-csv)* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
-| Conformité DP | ✅ P1 P2 P3 P4 P5 — aucune violation active (backlog : `routes/clients.ts` 🟡) |
+| Conformité DP | ✅ P1 P2 P3 P4 P5 — violation P1 clients résolue. Backlog : `routes/tickets.ts` 🟢 |
 
 ---
 

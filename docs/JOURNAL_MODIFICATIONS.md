@@ -31,6 +31,7 @@
 | [2.13](#sprint-213) | Export PDF + Dashboard Chart.js | `ab88537` |
 | [2.14](#sprint-214) | PWA manifest + Service Worker | `0d7cdf6` |
 | [Correctif DP](#sprint-correctif-design-pattern) | Conformité design pattern P1/P2/P4 | `f915398` |
+| [2.15](#sprint-215) | CRM étendu — clientService + historique + import-csv | `f621703` |
 
 ---
 
@@ -464,3 +465,37 @@
 
 *Document créé le 8 juin 2026 — Post-Sprint correctif Design Pattern (commit `f915398`)*
 *Maintenu manuellement — mettre à jour à chaque sprint terminé*
+
+## Sprint 2.15
+
+**Thème** : CRM étendu — Model layer + historique consolidé + import CSV  
+**Commit** : `f621703`  
+**Date** : 15 juin 2026  
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/clientService.ts` | 🆕 créé | Model layer CRM complet : `listClients` (sous-requête COUNT tickets P1), `getClient`, `createClient`, `updateClient`, `deleteClient`, `addAppareil`, `getHistoriqueClient` (Promise.all tickets+factures+rdv+kpis), `importClients` (dédup email), `getKpis`. Fix colonnes DB : `factures` (statut != ANNULE), `rachats` (pas client_id → []), `rendez_vous` (type_rdv as type) |
+| `src/routes/clients.ts` | ✏️ réécriture | Controller pur 0 SQL (8 endpoints). ctx() refactorisé : `queryBoutiqueId` séparé, chaque handler POST combine `body.boutique_id ?? queryBoutiqueId`. Route `/import-csv` déclarée avant `/:id`. |
+| `src/index.tsx` | 🔧 corrigé | Montage `app.route('/api/clients', clientsRoutes)` — était `/api`, causait `/:id` à capturer la liste |
+| `public/clients.html` | ✏️ réécriture | Refonte complète : 4 KPIs, table 8 colonnes, modal client (prénom/nom séparés), modal historique (4 onglets : Tickets / Factures / Rachats / RDV + KPIs synthèse), modal import CSV (3 étapes : drop zone → mapping → résultat) |
+| `public/static/js/clients.js` | ✏️ réécriture | 30 316 chars JSDoc complet (P4). `viewHistorique()` → `GET /api/clients/:id/historique`. `doImportCsv()` → `POST /api/clients/import-csv`. CSV_FIELD_MAP 9 colonnes avec aliases (prénom/prenom/firstname…). State module. Helpers privés documentés (`_fullName`, `_initials`, `_avatarColor`). Usage `_money()` / `_fmtDate()` de app.js (P2). |
+
+### Décisions architecturales
+
+- **Violation P1 résolue** : le `LEFT JOIN tickets` inline dans `routes/clients.ts` est remplacé par une sous-requête `(SELECT COUNT(*) FROM tickets WHERE client_id=c.id)` dans `clientService.ts`. Aucun cross-module avec retour de données.
+- **Violation P1 résolue** : création de `clientService.ts` — `routes/clients.ts` ne contient plus de SQL.
+- **Routing fix** : pattern `app.route('/api/clients', clientsRoutes)` identique à `ticketsRoutes`. Avant : `app.route('/api')` avec handlers `/` et `/:id` causait confusion avec les autres routers.
+- **rachats** : pas de colonne `client_id` (table livre de police vendeur, non liée au CRM client) → `Promise.resolve({ results: [] })` dans `getHistoriqueClient`.
+
+### Tests Sprint 2.15
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/clients?boutique_id=1` | ✅ 8 clients, nb_tickets OK |
+| T2 | `POST /api/clients` | ✅ id: 7 |
+| T3 | `GET /api/clients/:id/historique` | ✅ kpis + tickets + factures + rdv |
+| T4 | `POST /api/clients/import-csv` | ✅ inserted: 2, skipped: 0 |
+| T5 | `PUT /api/clients/:id` | ✅ |
+| T6 | `POST /api/clients/:id/appareils` | ✅ id: 7 |
+| T7 | `DELETE /api/clients/:id` | ✅ |
+
