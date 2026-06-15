@@ -34,6 +34,7 @@
 | [2.15](#sprint-215) | CRM étendu — clientService + historique + import-csv | `f621703` |
 | [2.16](#sprint-216) | Reconditionnement + Bons d'achat | `81b00fa` |
 | [2.17](#sprint-217) | Violations P1 soldées : ticketService + stockService | `3b1405d` |
+| [2.17-fix](#sprint-217-fix) | Fix login + dashboard KPIs + auto-sélection boutique admin | `869d5ae` |
 
 ---
 
@@ -577,3 +578,62 @@
 | T7 | `POST /api/produits/1/mouvement` `sortie` | ✅ stock_avant:12 → stock_apres:11 |
 | T8 | `GET /api/categories?boutique_id=1` | ✅ 8 catégories |
 
+
+---
+
+## Sprint 2.17-fix
+
+**Titre** : Fix login + dashboard KPIs — auto-sélection boutique pour admin  
+**Commits** : `a6c075a` (fix login) + `953bf02` (fix redirections html) + `869d5ae` (fix KPIs)  
+**Date** : 15 juin 2026  
+
+### Problèmes corrigés
+
+#### Bug 1 — Fausse authentification login.html
+**Symptôme** : login sans erreur mais état d'authentification incorrect / ERR_CONNECTION_FAILED  
+**Cause** : `login.html` utilisait un tableau `DEMO_USERS` hardcodé avec `Admin1234` (majuscule) — n'appelait jamais `POST /api/auth/login`  
+**Fix** : Remplacement complet du handler par `fetch('/api/auth/login', ...)` + stockage session format `izigsm_session` attendu par `app.js`
+
+#### Bug 2 — ERR_FAILED sur dashboard.html après login
+**Symptôme** : Page "Ce site est inaccessible / ERR_FAILED" après redirection post-login  
+**Cause** : `window.location.href = '/dashboard.html'` → wrangler émet 308 Redirect vers `/dashboard` → sur sandbox, le 2ème hop réseau échoue  
+**Fix** : Suppression de toutes les extensions `.html` dans les redirections JS (7 occurrences dans 3 fichiers)
+
+#### Bug 3 — Dashboard KPIs tous à 0
+**Symptôme** : Dashboard accessible, tickets: 0, CA: 0€, clients: 0, stock_bas: 0  
+**Cause** :
+1. Admin `boutique_id: null` en base (rôle multi-boutiques sans boutique assignée)
+2. `dashboard.js` appelle `apiGet('/api/stats')` sans paramètre `boutique_id`
+3. `getBoutiqueId()` retourne `null` pour l'admin → `apiGet` n'injecte pas `boutique_id`
+4. `statsService` reçoit `boutique_id` null → retourne données vides
+
+**Fix en 2 couches** :
+- `login.html` : après login réussi, si `user.boutique_id === null`, appel `GET /api/boutiques` (avec le token obtenu) pour récupérer la première boutique disponible et renseigner `boutique_id`/`boutique_name` dans la session `localStorage` avant la redirection
+- `app.js apiGet()` : auto-injection de `boutique_id` via `getBoutiqueId()` si absent des paramètres et de l'URL — protège tous les futurs appels sans toucher aux views
+
+**Résultat** : KPIs dashboard affichent les vraies données — `tickets_en_cours: 5`, `ca_mois: 70.03€`, `nb_clients: 8`, `stock_bas: 1`
+
+#### Bonus — Hashes PBKDF2 seed.sql
+**Cause** : `seed.sql` contenait des placeholders `$2b$12$SEED_*_HASH_PLACEHOLDER` (format bcrypt fictif) — incompatible avec `verifyPassword()` qui attend le format PBKDF2 `100000:salt:hash`  
+**Fix** : Remplacement par de vrais hashes PBKDF2-SHA256 (100 000 itérations) pour `Admin@2026!` — tous les utilisateurs de test (admin, manager, tech1, tech2)
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `public/login.html` | ✏️ modifié | Fix auth réelle `POST /api/auth/login` + redirect `/dashboard` sans `.html` + auto-sélection boutique si `user.boutique_id === null` |
+| `public/static/js/app.js` | ✏️ modifié | `apiGet()` auto-injecte `boutique_id` depuis `getBoutiqueId()` + 5× `/login.html` → `/login` |
+| `public/static/js/personnel.js` | ✏️ modifié | 2× `/login.html` → `/login` |
+| `public/static/js/sav.js` | ✏️ modifié | 1× `/login.html` → `/login` |
+| `public/sw.js` | ✏️ modifié | Cache `izigsm-v2.14` → `izigsm-v2.17` |
+| `seed.sql` | ✏️ modifié | Hashes PBKDF2 réels pour `Admin@2026!` — remplace placeholders bcrypt fictifs |
+
+### Tests de non-régression
+
+| Test | Résultat |
+|---|---|
+| `POST /api/auth/login admin@izigsm.fr / Admin@2026!` | ✅ `success: true`, token JWT retourné |
+| `GET /api/boutiques` avec token admin | ✅ `[{id:1, nom:"iziGSM Paris 11"}]` |
+| `GET /api/stats?boutique_id=1` | ✅ `tickets_en_cours:5, ca_mois:70.03, nb_clients:8, stock_bas:1` |
+| Build production | ✅ 225.24 kB, 62 modules |
+| Redirect `/dashboard` (sans .html) | ✅ Pas de 308, page accessible |

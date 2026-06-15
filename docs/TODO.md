@@ -202,13 +202,23 @@
 
 ### Sprint 2.16 ✅ — Reconditionnement + Bons d'achat
 
-### Sprint 2.17 ✅ — Correction violations P1 : ticketService + stockService
+### Sprint 2.17 ✅ — Correction violations P1 : ticketService + stockService + fix dashboard KPIs
 **Backlog architectural P1**
 - [x] `src/services/ticketService.ts` créé (14 fonctions exportées, JSDoc P4) : `listTickets`, `getKanban`, `getTicketById`, `createTicket`, `updateTicket`, `updateStatutTicket` (machine à états), `deleteTicket` + helpers privés `genererTrackingToken`, `couleurAnciennete`
 - [x] `src/services/stockService.ts` créé (9 fonctions exportées, JSDoc P4) : `listProduits`, `getProduitById`, `createProduit`, `updateProduit`, `deleteProduit`, `enregistrerMouvement`, `listCategories`, `createCategorie`, `getKpisStock`
 - [x] `src/routes/tickets.ts` refactorisé : 0 SQL inline, 100% délégué à `ticketService`. Hooks cross-service conservés (garantie + email) — non bloquants
 - [x] `src/routes/stocks.ts` refactorisé : 0 SQL inline, 100% délégué à `stockService`. Nouveau endpoint `GET /api/produits/kpis`
 - [x] Build ✅ (225.24 kB, 62 modules) + tests 8/8 ✅ + commit `3b1405d`
+**Corrections bugs login / navigation (hors P1)**
+- [x] `public/login.html` : fausse auth hardcodée → `POST /api/auth/login` réel + redirect `/dashboard` sans `.html` — commit `a6c075a`
+- [x] `public/static/js/app.js` : 5× `/login.html` → `/login` (redirections logout/session expirée) — commit `953bf02`
+- [x] `public/static/js/personnel.js` + `sav.js` : `/login.html` → `/login` — commit `953bf02`
+- [x] `public/sw.js` : cache `v2.14` → `v2.17` — commit `953bf02`
+**Fix dashboard KPIs à 0 — commit `869d5ae`**
+- [x] Diagnostic : admin `boutique_id: null` → `getBoutiqueId()` retourne `null` → stats vides
+- [x] `public/login.html` : après login réussi, si `user.boutique_id === null`, appel `GET /api/boutiques` pour auto-sélectionner la première boutique et renseigner la session
+- [x] `public/static/js/app.js` : `apiGet()` auto-injecte `boutique_id` depuis `getBoutiqueId()` → tous les appels dashboard bénéficient du boutique_id sans modifier dashboard.js
+- [x] `seed.sql` : placeholders bcrypt → vrais hashes PBKDF2-SHA256 `Admin@2026!` pour tous les users de test
 **Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
 - [x] Migration `0021` : table `ordres_reconditionnement` (colonne `cout_revient` générée) + table `bons_achat` (code BA-XXXXXXXX, expiration, machine statuts)
 - [x] `src/services/reconditionnementService.ts` (Model) — 14 fonctions : ordres (listOrdres, getOrdre, createOrdre, updateOrdre, updateStatutOrdre, terminerOrdre → crée produit occasion, getKpisReconditionnement) + bons (listBonsAchat, getBonAchat, createBonAchat, verifierBonAchat, consommerBonAchat partiel/total, annulerBonAchat)
@@ -239,10 +249,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.17.0 |
+| Version | 2.17.1 |
 | Build | `dist/_worker.js` 225.24 kB — 62 modules |
 | Dernière migration | `0021_reconditionnement_bons_achat.sql` ✅ Sprint 2.16 |
-| Dernier commit | `3b1405d` — *feat: Sprint 2.17 — ticketService + stockService (violation P1 résolue)* |
+| Dernier commit | `869d5ae` — *fix: dashboard KPIs — auto-sélection boutique pour admin* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}
