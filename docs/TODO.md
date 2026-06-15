@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.16 terminé — 15 juin 2026
+> Dernière mise à jour : Sprint 2.17 terminé — 15 juin 2026
 
 ---
 
@@ -201,6 +201,14 @@
 - [x] Build ✅ (201.22 kB, 58 modules) + tests 7/7 ✅ + commit `f621703`
 
 ### Sprint 2.16 ✅ — Reconditionnement + Bons d'achat
+
+### Sprint 2.17 ✅ — Correction violations P1 : ticketService + stockService
+**Backlog architectural P1**
+- [x] `src/services/ticketService.ts` créé (14 fonctions exportées, JSDoc P4) : `listTickets`, `getKanban`, `getTicketById`, `createTicket`, `updateTicket`, `updateStatutTicket` (machine à états), `deleteTicket` + helpers privés `genererTrackingToken`, `couleurAnciennete`
+- [x] `src/services/stockService.ts` créé (9 fonctions exportées, JSDoc P4) : `listProduits`, `getProduitById`, `createProduit`, `updateProduit`, `deleteProduit`, `enregistrerMouvement`, `listCategories`, `createCategorie`, `getKpisStock`
+- [x] `src/routes/tickets.ts` refactorisé : 0 SQL inline, 100% délégué à `ticketService`. Hooks cross-service conservés (garantie + email) — non bloquants
+- [x] `src/routes/stocks.ts` refactorisé : 0 SQL inline, 100% délégué à `stockService`. Nouveau endpoint `GET /api/produits/kpis`
+- [x] Build ✅ (225.24 kB, 62 modules) + tests 8/8 ✅ + commit `3b1405d`
 **Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
 - [x] Migration `0021` : table `ordres_reconditionnement` (colonne `cout_revient` générée) + table `bons_achat` (code BA-XXXXXXXX, expiration, machine statuts)
 - [x] `src/services/reconditionnementService.ts` (Model) — 14 fonctions : ordres (listOrdres, getOrdre, createOrdre, updateOrdre, updateStatutOrdre, terminerOrdre → crée produit occasion, getKpisReconditionnement) + bons (listBonsAchat, getBonAchat, createBonAchat, verifierBonAchat, consommerBonAchat partiel/total, annulerBonAchat)
@@ -222,8 +230,8 @@
 | ✅ Résolu | ~~`routes/clients.ts` l.41~~ | ~~`JOIN tickets` cross-module~~ | ✅ Résolu Sprint 2.15 |
 | ✅ Résolu | ~~`routes/clients.ts`~~ | ~~Pas de couche `clientService.ts`~~ | ✅ Résolu Sprint 2.15 |
 | 🟢 | `routes/*.ts` (anciens) | Documentation fonctions insuffisante | Au fil des sprints |
-| 🟢 | `routes/tickets.ts` | Pas de couche `ticketService.ts` | Sprint 2.8 |
-| 🟢 | `routes/stocks.ts` | Pas de couche `stockService.ts` | Sprint 2.9 |
+| ✅ Résolu | ~~`routes/tickets.ts`~~ | ~~Pas de couche `ticketService.ts`~~ | ✅ Résolu Sprint 2.17 |
+| ✅ Résolu | ~~`routes/stocks.ts`~~ | ~~Pas de couche `stockService.ts`~~ | ✅ Résolu Sprint 2.17 |
 
 ---
 
@@ -231,13 +239,13 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.16.0 |
-| Build | `dist/_worker.js` 220.29 kB — 60 modules |
+| Version | 2.17.0 |
+| Build | `dist/_worker.js` 225.24 kB — 62 modules |
 | Dernière migration | `0021_reconditionnement_bons_achat.sql` ✅ Sprint 2.16 |
-| Dernier commit | `81b00fa` — *feat: Sprint 2.16 — Reconditionnement + Bons d'achat* |
+| Dernier commit | `3b1405d` — *feat: Sprint 2.17 — ticketService + stockService (violation P1 résolue)* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
-| Conformité DP | ✅ P1 P2 P3 P4 P5 — tous respectés. Backlog résiduel : `routes/tickets.ts` 🟢 (pas de ticketService) |}
+| Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}
 
 ---
 

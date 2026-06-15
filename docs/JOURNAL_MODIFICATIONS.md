@@ -33,6 +33,7 @@
 | [Correctif DP](#sprint-correctif-design-pattern) | Conformité design pattern P1/P2/P4 | `f915398` |
 | [2.15](#sprint-215) | CRM étendu — clientService + historique + import-csv | `f621703` |
 | [2.16](#sprint-216) | Reconditionnement + Bons d'achat | `81b00fa` |
+| [2.17](#sprint-217) | Violations P1 soldées : ticketService + stockService | `3b1405d` |
 
 ---
 
@@ -539,4 +540,40 @@
 | T6 | `POST /api/bons-achat` | ✅ code `BA-N9MWGRT6`, `montant=30` |
 | T7 | `POST /api/bons-achat/verifier` | ✅ `valide=true`, `solde=30` |
 | T8 | `GET /api/bons-achat/:id` | ✅ détail complet |
+
+---
+
+## Sprint 2.17
+
+**Thème** : Violations P1 soldées — couches Model pour Tickets et Stock  
+**Commit** : `3b1405d`  
+**Date** : 15 juin 2026  
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/ticketService.ts` | 🆕 créé | Model layer tickets (7 fonctions exportées) : `listTickets` (filtres statut/technicien/client/search + pagination), `getKanban` (10 colonnes + indicateurs ancienneté + stats), `getTicketById` (+ historique + photos via `Promise.all`), `createTicket` (génère numéro + tracking_token + historique initial), `updateTicket` (COALESCE, valide priorité), `updateStatutTicket` (machine à états TRANSITIONS_TICKET, champs date associés, historique), `deleteTicket` (soft delete). Helpers privés : `genererTrackingToken()` Web Crypto, `couleurAnciennete()`. JSDoc P4 complet. |
+| `src/services/stockService.ts` | 🆕 créé | Model layer stock (9 fonctions exportées) : `listProduits` (filtres + marge % + `alerte_stock`), `getProduitById` (+ 20 derniers mouvements), `createProduit` (mouvement entree automatique si stock > 0), `updateProduit` (COALESCE), `deleteProduit` (soft delete), `enregistrerMouvement` (4 types : entree/sortie/ajustement/inventaire, garde délta effectif en DB), `listCategories` (avec `nb_produits`), `createCategorie`, `getKpisStock` (valeur stock HT + CUMP + ruptures + alertes). JSDoc P4 complet. |
+| `src/routes/tickets.ts` | ✏️ refactorisé | Controller pur 0 SQL. Import `ticketService`. Pattern `ctx()` helper. Hooks cross-service conservés non bloquants : `createGarantieFromTicket` (SAV) + `sendTicketTermine` (email) au passage en `termine`. 346 lignes → 246 lignes (- 100L de SQL). |
+| `src/routes/stocks.ts` | ✏️ refactorisé | Controller pur 0 SQL. Import `stockService`. Pattern `ctx()` helper. Nouveau endpoint `GET /api/produits/kpis` (segment fixe avant `/:id`). 194 lignes → 196 lignes (logique métier déplacée dans service). |
+
+### Décisions architecturales
+
+- **Complétude du backlog P1** : `ticketService.ts` + `stockService.ts` soldent les 2 dernières violations P1 référencées dans le backlog. **Tous les modules ont désormais leur couche Model** : tickets, stocks, clients, fournisseurs, agenda, garanties, caisse, stats, reconditionnement, config.
+- **TRANSITIONS_TICKET exporté** : la map des transitions est exportée depuis le service (pas dupliquée dans la route) — la route consulte le service pour connaître l'état précédent et les transitions via `updateStatutTicket`.
+- **Hooks cross-service non déplacés** : `createGarantieFromTicket` et `sendTicketTermine` restent dans la route (pas dans le service) car ils créent des dépendances inter-modules — la route est le bon niveau d'orchestration pour les effets secondaires.
+- **`GET /api/produits/kpis`** : nouvel endpoint ajouté à l'occasion du refactoring — valeur stock HT et CUMP en un seul appel.
+
+### Tests Sprint 2.17
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/tickets?boutique_id=1` | ✅ 6 tickets, pagination OK |
+| T2 | `GET /api/tickets/kanban?boutique_id=1` | ✅ 10 colonnes, stats actifs/urgents |
+| T3 | `GET /api/tickets/1` | ✅ fiche + historique + photos |
+| T4 | `PUT /api/tickets/1/statut` `en_reparation→termine` | ✅ + garantie créée |
+| T4c | Transition invalide `termine→en_reparation` | ✅ 422 Transition invalide |
+| T5 | `GET /api/produits?boutique_id=1` | ✅ 10 produits, alerte_stock OK |
+| T6 | `GET /api/produits/kpis?boutique_id=1` | ✅ ruptures/alertes/valeur_ht |
+| T7 | `POST /api/produits/1/mouvement` `sortie` | ✅ stock_avant:12 → stock_apres:11 |
+| T8 | `GET /api/categories?boutique_id=1` | ✅ 8 catégories |
 
