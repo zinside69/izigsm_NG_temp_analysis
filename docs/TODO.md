@@ -229,6 +229,15 @@
 - [x] `public/static/js/app.js` sidebar : entrée « Reconditionnement » ajoutée
 - [x] Build ✅ (220.29 kB, 60 modules) + tests 8/8 ✅ + commit `81b00fa`
 
+### Sprint 2.18 ✅ — Correction bugs bloquants post-audit
+- [x] `src/services/garantiesService.ts` : alias SQL `to` (mot réservé SQLite) → `t_orig` dans `listSav()` + `getSav()` → fix `D1_ERROR SQLITE_ERROR` sur `GET /api/sav`
+- [x] `src/routes/public.ts` : mapping `STATUT_CLIENT` redesigné en clés minuscules alignées sur la machine à états (`recu`, `en_diagnostic`, `attente_accord`…) → `statut_label` en français dans la page suivi client
+- [x] `src/routes/boutiques.ts` : auto-génération slug à la création `POST /api/boutiques`
+- [x] `migrations/0022_slug_boutiques.sql` : `UPDATE boutiques SET slug` pour les boutiques existantes sans slug
+- [x] `seed.sql` : INSERT boutique avec slug `'izigsm-paris-11'` — cohérence après `db:reset`
+- [x] Build ✅ (225.68 kB, 62 modules) + tests 7/7 ✅ + commit `0ba5d22`
+
+
 ---
 
 ## Backlog violations architecturales (à corriger au fil des sprints)
@@ -249,10 +258,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.17.1 |
+| Version | 2.18.0 |
 | Build | `dist/_worker.js` 225.24 kB — 62 modules |
-| Dernière migration | `0021_reconditionnement_bons_achat.sql` ✅ Sprint 2.16 |
-| Dernier commit | `869d5ae` — *fix: dashboard KPIs — auto-sélection boutique pour admin* |
+| Dernière migration | `0022_slug_boutiques.sql` ✅ Sprint 2.18 |
+| Dernier commit | `0ba5d22` — *fix: Sprint 2.18 — SAV + vitrine publique + slug boutique* |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}

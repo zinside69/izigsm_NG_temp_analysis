@@ -35,6 +35,7 @@
 | [2.16](#sprint-216) | Reconditionnement + Bons d'achat | `81b00fa` |
 | [2.17](#sprint-217) | Violations P1 soldées : ticketService + stockService | `3b1405d` |
 | [2.17-fix](#sprint-217-fix) | Fix login + dashboard KPIs + auto-sélection boutique admin | `869d5ae` |
+| [2.18](#sprint-218) | Bugs bloquants SAV + vitrine publique + slug boutique | `0ba5d22` |
 
 ---
 
@@ -637,3 +638,43 @@
 | `GET /api/stats?boutique_id=1` | ✅ `tickets_en_cours:5, ca_mois:70.03, nb_clients:8, stock_bas:1` |
 | Build production | ✅ 225.24 kB, 62 modules |
 | Redirect `/dashboard` (sans .html) | ✅ Pas de 308, page accessible |
+
+---
+
+## Sprint 2.18
+
+**Titre** : Corrections bugs bloquants post-audit — SAV + vitrine publique + slug boutique  
+**Commit** : `0ba5d22`  
+**Date** : 17 juin 2026  
+
+### Contexte
+
+Audit complet des modules post-Sprint 2.17 ayant révélé 3 bugs bloquants :
+1. `GET /api/sav` → `D1_ERROR: near "to": syntax error` (alias SQL réservé)
+2. `GET /api/public/ticket/:token` → `statut_label` retournait la valeur brute (ex: `recu`) au lieu du libellé FR
+3. `GET /api/public/boutique/:slug` → `404 Boutique introuvable` car colonne `slug` NULL en base
+
+Audit également révélé que `GET /api/notifications/stats|logs` fonctionnait correctement — le faux positif était dû à un test sur `/api/notifications` (root sans sous-chemin).
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/garantiesService.ts` | ✏️ modifié | Alias `to` (mot réservé SQLite) → `t_orig` dans `listSav()` (L433) et `getSav()` (L479) — 2 LEFT JOIN concernés |
+| `src/routes/public.ts` | ✏️ modifié | `STATUT_CLIENT` map redesignée : clés MAJUSCULES (RECEIVED…) → minuscules (recu, en_diagnostic, attente_accord, a_commander, commande, pieces_recues, en_reparation, termine, livre, annule) alignées sur machine à états `ticketService` |
+| `src/routes/boutiques.ts` | ✏️ modifié | `POST /api/boutiques` : auto-génération slug depuis `nom` (minuscules, espaces→tirets, accents normalisés) |
+| `migrations/0022_slug_boutiques.sql` | 🆕 créé | `UPDATE boutiques SET slug = ...` pour les boutiques existantes sans slug |
+| `seed.sql` | ✏️ modifié | INSERT boutique avec `slug = 'izigsm-paris-11'` |
+
+### Tests Sprint 2.18
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/sav?boutique_id=1` | ✅ success (était D1_ERROR SQLITE_ERROR) |
+| T2 | `GET /api/sav/kpis?boutique_id=1` | ✅ success |
+| T3 | `GET /api/public/ticket/:token` | ✅ `statut_label=Reçu` (était `recu` brut) |
+| T4 | `GET /api/public/boutique/izigsm-paris-11` | ✅ `boutique=iziGSM Paris 11` (était 404) |
+| T5 | `GET /api/public/catalogue/izigsm-paris-11` | ✅ catalogue 0 catégories (boutique sans services) |
+| T6 | `GET /api/notifications/stats?boutique_id=1` | ✅ `provider=resend` |
+| T7 | `GET /api/garanties?boutique_id=1` | ✅ `total=3` |
+
