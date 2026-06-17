@@ -28,23 +28,28 @@
             <p>Créez et gérez vos devis de réparation</p>
           </div>
           <div class="page-header-actions">
-            <button class="btn btn-secondary btn-sm">📥 Exporter PDF</button>
             <button class="btn btn-primary" onclick="openNewDevis()">+ Nouveau devis</button>
           </div>
         </div>
 
-        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <!-- KPIs stats devis -->
+        <div id="devis-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+        <!-- Filtres -->
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
           <div class="search-input" style="flex:1;max-width:300px;">
             <span class="search-icon">🔍</span>
-            <input type="text" placeholder="Rechercher…" oninput="filterDevis(this.value)">
+            <input type="text" id="search-devis" placeholder="N° devis, client…" oninput="filterDevis(this.value)">
           </div>
-          <select onchange="filterDevisStatus(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+          <select id="filter-devis-status" onchange="filterDevisStatus(this.value)"
+            style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
             <option value="">Tous statuts</option>
-            <option value="Brouillon">Brouillon</option>
-            <option value="Envoyé">Envoyé</option>
-            <option value="Accepté">Accepté</option>
-            <option value="Refusé">Refusé</option>
-            <option value="Expiré">Expiré</option>
+            <option value="draft">Brouillon</option>
+            <option value="envoye">Envoyé</option>
+            <option value="accepte">Accepté</option>
+            <option value="refuse">Refusé</option>
+            <option value="expire">Expiré</option>
+            <option value="annule">Annulé</option>
           </select>
         </div>
 
@@ -54,12 +59,11 @@
               <tr>
                 <th>N° Devis</th>
                 <th>Client</th>
-                <th>Appareil</th>
                 <th>Montant HT</th>
                 <th>TVA</th>
                 <th>Total TTC</th>
                 <th>Statut</th>
-                <th>Date</th>
+                <th>Créé le</th>
                 <th>Validité</th>
                 <th>Actions</th>
               </tr>
@@ -77,9 +81,9 @@
     </div>
   </div>
 
-  <!-- Modal Nouveau Devis -->
+  <!-- ═══════════════════ Modal Nouveau / Modifier Devis ═══════════════════ -->
   <div class="modal-overlay" id="modal-devis">
-    <div class="modal" style="max-width:700px;">
+    <div class="modal" style="max-width:740px;">
       <div class="modal-header">
         <h2 id="modal-devis-title">Nouveau devis</h2>
         <button class="modal-close" onclick="closeModal('modal-devis')">✕</button>
@@ -89,7 +93,7 @@
           <div class="form-field">
             <label>Client *</label>
             <select id="d-client" required>
-              <option value="">Sélectionner</option>
+              <option value="">— Sélectionner un client —</option>
             </select>
           </div>
           <div class="form-field">
@@ -97,10 +101,6 @@
             <select id="d-ticket">
               <option value="">Aucun</option>
             </select>
-          </div>
-          <div class="form-field full">
-            <label>Description de la réparation *</label>
-            <textarea id="d-description" rows="2" placeholder="Ex : Remplacement écran iPhone 14 Pro Max"></textarea>
           </div>
         </div>
 
@@ -115,10 +115,10 @@
               <thead>
                 <tr style="background:#f3f4f6;">
                   <th style="text-align:left;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);">Description</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:80px;">Qté</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:70px;">Qté</th>
                   <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:110px;">Prix unit. HT</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:110px;">Total HT</th>
-                  <th style="width:40px;"></th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);width:100px;">Total HT</th>
+                  <th style="width:36px;"></th>
                 </tr>
               </thead>
               <tbody id="devis-lines"></tbody>
@@ -138,25 +138,44 @@
               <option value="15">15 jours</option>
               <option value="30" selected>30 jours</option>
               <option value="60">60 jours</option>
+              <option value="90">90 jours</option>
             </select>
           </div>
           <div class="form-field">
-            <label>Statut</label>
-            <select id="d-status">
-              <option value="Brouillon">Brouillon</option>
-              <option value="Envoyé">Envoyé</option>
+            <label>Taux TVA par défaut</label>
+            <select id="d-tva">
+              <option value="20" selected>20 %</option>
+              <option value="10">10 %</option>
+              <option value="5.5">5,5 %</option>
+              <option value="0">0 % (exonéré)</option>
             </select>
           </div>
           <div class="form-field full">
-            <label>Conditions de paiement / Notes</label>
-            <textarea id="d-notes" rows="2" placeholder="Ex : Paiement à réception, acompte 30%..."></textarea>
+            <label>Notes / Conditions de paiement</label>
+            <textarea id="d-notes" rows="2" placeholder="Ex : Paiement à réception, acompte 30 %…"></textarea>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-devis')">Annuler</button>
-        <button class="btn btn-ghost" onclick="saveDevis('Brouillon')">💾 Brouillon</button>
-        <button class="btn btn-primary" onclick="saveDevis('Envoyé')">📧 Enregistrer & Envoyer</button>
+        <button class="btn btn-ghost" id="btn-save-draft" onclick="saveDevis('draft')">💾 Brouillon</button>
+        <button class="btn btn-primary" id="btn-save-send" onclick="saveDevis('envoye')">📧 Enregistrer &amp; Envoyer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Modal Détail Devis ═══════════════════ -->
+  <div class="modal-overlay" id="modal-devis-detail">
+    <div class="modal" style="max-width:680px;">
+      <div class="modal-header">
+        <h2 id="detail-titre">Devis —</h2>
+        <button class="modal-close" onclick="closeModal('modal-devis-detail')">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body">
+        <!-- rempli dynamiquement -->
+      </div>
+      <div class="modal-footer" id="detail-footer">
+        <!-- boutons selon statut -->
       </div>
     </div>
   </div>

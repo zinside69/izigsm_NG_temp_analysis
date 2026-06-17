@@ -237,6 +237,28 @@
 - [x] `seed.sql` : INSERT boutique avec slug `'izigsm-paris-11'` — cohérence après `db:reset`
 - [x] Build ✅ (225.68 kB, 62 modules) + tests 7/7 ✅ + commit `0ba5d22`
 
+### Sprint 2.19 ✅ — MOD-03 Devis : complétion complète
+**Modules CDC : MOD-03 Devis (HAUTE)**
+- [x] `migrations/0023_devis_public_token.sql` : `ALTER TABLE devis` → colonnes `public_token`, `envoye_le`, `repondu_le`, `signature_client` + index unique `idx_devis_public_token`
+- [x] `src/services/devisService.ts` (Model — 8 fonctions) :
+  - Machine à états `draft → envoye → accepte|refuse|expire|annule` (transitions validées)
+  - `listDevis()` : liste paginée avec filtres statut/client/search
+  - `getDevis()` : détail + lignes JOIN
+  - `createDevis()` : numéro séquentiel + `public_token` hex 32 via Web Crypto
+  - `updateDevis()` : modification (draft uniquement)
+  - `updateStatutDevis()` : machine à états avec flag `fromPublic`
+  - `convertirDevis()` : copie lignes → facture (liaison `devis_id`)
+  - `getDevisByToken()` : accès public sans auth
+  - `getStatsDevis()` : agrégats KPIs (total/envoyes/acceptes/montants/taux)
+  - `expireDevisPerimes()` : batch expiration date_validite dépassée
+- [x] `src/routes/facturation.ts` : section devis réécrite — 3 routes SQL inline → 9 routes (0 SQL, délègue à devisService) + import emailService pour `/envoyer`
+- [x] `src/routes/public.ts` : 2 nouveaux endpoints (sans auth, CORS `*`) :
+  - `GET /api/public/devis/:token` : consultation client avec statut_label FR + `peut_repondre` + vérification expiration
+  - `POST /api/public/devis/:token/repondre` : accepter/refuser + enregistrement `signature_client`
+- [x] `public/devis.html` : KPIs stats, filtres statuts (valeurs minuscules alignées API), modal détail complet, modal création/édition refactorisé (champ TVA)
+- [x] `public/static/js/devis.js` : réécriture complète 31 kB — `loadDevisStats()`, `openDevisDetail()`, `openEditDevis()`, `envoyerDevis()`, `changerStatutDevis()`, `annulerDevis()`, badges `devisBadge()`, boutons d'action selon statut
+- [x] Build ✅ (239.49 kB, 63 modules) + tests 8/8 ✅ + commit (Sprint 2.19)
+
 
 ---
 
@@ -258,10 +280,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.18.0 |
-| Build | `dist/_worker.js` 225.24 kB — 62 modules |
-| Dernière migration | `0022_slug_boutiques.sql` ✅ Sprint 2.18 |
-| Dernier commit | `0ba5d22` — *fix: Sprint 2.18 — SAV + vitrine publique + slug boutique* |
+| Version | 2.19.0 |
+| Build | `dist/_worker.js` 239.49 kB — 63 modules |
+| Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
+| Dernier commit | Sprint 2.19 — MOD-03 Devis complet (endpoints publics + UI) |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}

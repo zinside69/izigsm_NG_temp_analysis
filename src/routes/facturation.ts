@@ -1,138 +1,219 @@
 /**
  * routes/facturation.ts — Devis, Factures, Paiements + NF525
+ * Architecture P1 MVC : Controller pur — 0 SQL pour les devis (délégué à devisService).
+ * Les sections Factures/Avoirs conservent leur SQL inline (refactoring Sprint 2.20).
  */
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { parsePagination, nextNumero, calculLignes, auditLog } from '../lib/db'
 import { enregistrerTransaction } from '../lib/nf525'
+import {
+  listDevis, getDevis, createDevis, updateDevis,
+  updateStatutDevis, convertirDevis, getStatsDevis,
+  expireDevisPerimes, type StatutDevis,
+} from '../services/devisService'
+import { sendEmail } from '../services/emailService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
 type Variables = { user: any }
 
 const facturation = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 facturation.use('*', authMiddleware)
 
 // ══════════════════════════════════════════════════════════════════════════════
-// DEVIS
+// DEVIS — Controller pur (0 SQL), délègue à devisService
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── GET /api/devis ────────────────────────────────────────────────────────────
+/**
+ * GET /api/devis
+ * Query : page, limit, statut, client_id, search, boutique_id
+ */
 facturation.get('/devis', async (c) => {
-  const user   = c.get('user')
-  const query  = c.req.query()
-  const { limit, offset, page } = parsePagination(query)
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  const user       = c.get('user')
+  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const conditions = ['d.boutique_id = ?']
-  const bindings: any[] = [boutiqueId]
-  if (query.statut)    { conditions.push('d.statut = ?');   bindings.push(query.statut) }
-  if (query.client_id) { conditions.push('d.client_id = ?'); bindings.push(parseInt(query.client_id, 10)) }
-  const where = 'WHERE ' + conditions.join(' AND ')
-
-  const total = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM devis d ${where}`)
-    .bind(...bindings).first<{ cnt: number }>()
-
-  const rows = await c.env.DB.prepare(`
-    SELECT d.id, d.numero, d.statut, d.total_ttc, d.date_emission, d.date_validite, d.facture_id,
-           c.prenom || ' ' || c.nom as client_nom
-    FROM   devis d
-    JOIN   clients c ON c.id = d.client_id
-    ${where}
-    ORDER  BY d.created_at DESC
-    LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
-
-  return c.json({ success: true, data: rows.results, pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) } })
+  const result = await listDevis(c.env.DB, boutiqueId, c.req.query())
+  return c.json({ success: true, ...result })
 })
 
-// ── POST /api/devis ───────────────────────────────────────────────────────────
+/**
+ * GET /api/devis/stats
+ * Statistiques agrégées des devis d'une boutique.
+ */
+facturation.get('/devis/stats', async (c) => {
+  const user       = c.get('user')
+  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await getStatsDevis(c.env.DB, boutiqueId)
+  return c.json({ success: true, data })
+})
+
+/**
+ * POST /api/devis/expire
+ * Expire les devis dont la date_validite est dépassée (cron-like, admin uniquement).
+ */
+facturation.post('/devis/expire', requireRole('admin'), async (c) => {
+  const count = await expireDevisPerimes(c.env.DB)
+  return c.json({ success: true, data: { expires: count }, message: `${count} devis expiré(s).` })
+})
+
+/**
+ * POST /api/devis
+ * Crée un devis avec ses lignes. Génère numéro séquentiel + public_token.
+ * Body : { boutique_id?, client_id, ticket_id?, lignes[], notes?, conditions?, date_validite? }
+ */
 facturation.post('/devis', async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
-  const { client_id, ticket_id, lignes, notes, conditions: conds, date_validite } = body
 
-  if (!client_id || !lignes?.length)
+  if (!body.client_id || !body.lignes?.length)
     return c.json({ success: false, error: 'client_id et lignes obligatoires.' }, 400)
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const { total_ht, total_tva, total_ttc } = calculLignes(lignes)
-  const numero = await nextNumero(c.env.DB, boutiqueId, 'devis')
-
-  const result = await c.env.DB.prepare(`
-    INSERT INTO devis (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, date_validite)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(boutiqueId, numero, client_id, ticket_id ?? null, total_ht, total_tva, total_ttc, notes ?? null, conds ?? null, date_validite ?? null)
-    .first<{ id: number }>()
-
-  // Insérer les lignes
-  for (let i = 0; i < lignes.length; i++) {
-    const l   = lignes[i]
-    const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
-    const tva = Math.round(ht * (l.tva_taux / 100) * 100) / 100
-    await c.env.DB.prepare(`
-      INSERT INTO lignes_document (document_type, document_id, ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
-      VALUES ('devis', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(result?.id, i + 1, l.description, l.quantite, l.prix_unitaire_ht, l.tva_taux ?? 20, ht, tva, ht + tva, l.produit_id ?? null).run()
+  try {
+    const result = await createDevis(c.env.DB, boutiqueId, user.sub, { ...body, boutique_id: boutiqueId })
+    return c.json({ success: true, ...result, message: 'Devis créé.' }, 201)
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
   }
-
-  return c.json({ success: true, id: result?.id, numero, message: 'Devis créé.' }, 201)
 })
 
-// ── PUT /api/devis/:id/convertir — Devis → Facture ────────────────────────────
-facturation.put('/devis/:id/convertir', async (c) => {
+/**
+ * GET /api/devis/:id
+ * Détail complet d'un devis avec lignes, client et boutique.
+ */
+facturation.get('/devis/:id', async (c) => {
+  const id   = parseInt(c.req.param('id'), 10)
+  const data = await getDevis(c.env.DB, id)
+  if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+  return c.json({ success: true, data })
+})
+
+/**
+ * PUT /api/devis/:id
+ * Modifie un devis (uniquement si statut = draft).
+ * Body : { client_id?, lignes?, notes?, conditions?, date_validite? }
+ */
+facturation.put('/devis/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  const body = await c.req.json()
+
+  try {
+    await updateDevis(c.env.DB, id, user.sub, body)
+    return c.json({ success: true, message: 'Devis mis à jour.' })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+})
+
+/**
+ * PUT /api/devis/:id/statut
+ * Change le statut d'un devis (machine à états enforced).
+ * Body : { statut }  — valeurs : envoye | accepte | refuse | expire | annule
+ */
+facturation.put('/devis/:id/statut', requireRole('admin', 'manager'), async (c) => {
+  const user   = c.get('user')
+  const id     = parseInt(c.req.param('id'), 10)
+  const { statut } = await c.req.json()
+  if (!statut) return c.json({ success: false, error: 'statut obligatoire.' }, 400)
+
+  try {
+    const result = await updateStatutDevis(c.env.DB, id, user.sub, statut as StatutDevis)
+    return c.json({ success: true, ...result, message: `Statut mis à jour : ${statut}.` })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+})
+
+/**
+ * POST /api/devis/:id/envoyer
+ * Marque le devis comme "envoye" et notifie le client par email.
+ * Le lien public_token est inclus dans l'email.
+ */
+facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  const data = await getDevis(c.env.DB, id)
+  if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+  if (!data.client_email) return c.json({ success: false, error: 'Le client n\'a pas d\'email renseigné.' }, 422)
+
+  try {
+    await updateStatutDevis(c.env.DB, id, user.sub, 'envoye')
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+
+  // Construire lien acceptation
+  const baseUrl     = c.env.FRONTEND_URL ?? 'http://localhost:3000'
+  const lienPublic  = `${baseUrl}/devis-public?token=${data.public_token}`
+  const expiration  = data.date_validite
+    ? `<p>Ce devis est valable jusqu'au <strong>${new Date(data.date_validite).toLocaleDateString('fr-FR')}</strong>.</p>`
+    : ''
+
+  // Envoi email non bloquant
+  sendEmail({
+    db:         c.env.DB,
+    boutiqueId: data.boutique_id,
+    to:         data.client_email,
+    sujet:      `Devis ${data.numero} — ${data.boutique_nom}`,
+    html: `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+      <h2 style="color:#6366f1;">📄 Votre devis ${data.numero}</h2>
+      <p>Bonjour ${data.client_prenom || data.client_nom},</p>
+      <p><strong>${data.boutique_nom}</strong> vous a envoyé un devis de <strong>${data.total_ttc?.toFixed(2)} € TTC</strong>.</p>
+      ${expiration}
+      <div style="text-align:center;margin:30px 0;">
+        <a href="${lienPublic}" style="background:#6366f1;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;">
+          Consulter et répondre au devis →
+        </a>
+      </div>
+      <p style="color:#888;font-size:12px;">Ou copiez ce lien dans votre navigateur : ${lienPublic}</p>
+      <hr><p style="color:#888;font-size:11px;">${data.boutique_nom} — ${data.boutique_telephone ?? ''} — ${data.boutique_email ?? ''}</p>
+    </body></html>`,
+    type: 'devis',
+  }).catch(() => {/* non bloquant */})
+
+  return c.json({
+    success:      true,
+    lien_public:  lienPublic,
+    message:      `Devis ${data.numero} envoyé — email de notification envoyé à ${data.client_email}.`,
+  })
+})
+
+/**
+ * PUT /api/devis/:id/convertir
+ * Convertit un devis en facture (avec chaîne NF525).
+ */
+facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (c) => {
   const user    = c.get('user')
   const devisId = parseInt(c.req.param('id'), 10)
 
-  const devis = await c.env.DB.prepare('SELECT * FROM devis WHERE id = ? AND statut != "refuse" AND facture_id IS NULL')
-    .bind(devisId).first<any>()
-  if (!devis) return c.json({ success: false, error: 'Devis introuvable ou déjà converti.' }, 404)
+  try {
+    const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
 
-  const numero = await nextNumero(c.env.DB, devis.boutique_id, 'facture')
+    // ── NF525 : récupérer le devis pour l'enregistrement ──────────────────
+    const devis = await c.env.DB.prepare('SELECT * FROM devis WHERE id = ?').bind(devisId).first<any>()
+    if (devis) {
+      const hashNf525 = await enregistrerTransaction(c.env.DB, {
+        boutique_id: devis.boutique_id, type_transaction: 'facture',
+        reference_id: facture_id, reference_numero: facture_numero,
+        client_id: devis.client_id,
+        montant_ht: devis.total_ht, montant_tva: devis.total_tva, montant_ttc: devis.total_ttc,
+        date_transaction: new Date().toISOString(), user_id: user.sub,
+      })
+      await c.env.DB.prepare('UPDATE factures SET hash_nf525 = ? WHERE id = ?').bind(hashNf525, facture_id).run()
+    }
 
-  const facture = await c.env.DB.prepare(`
-    INSERT INTO factures (boutique_id, numero, client_id, ticket_id, devis_id, total_ht, total_tva, total_ttc)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(devis.boutique_id, numero, devis.client_id, devis.ticket_id, devisId,
-          devis.total_ht, devis.total_tva, devis.total_ttc).first<{ id: number }>()
-
-  if (!facture?.id) throw new Error('Erreur création facture')
-
-  // Copier les lignes du devis vers la facture
-  await c.env.DB.prepare(`
-    INSERT INTO lignes_document (document_type, document_id, ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
-    SELECT 'facture', ?, ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id
-    FROM   lignes_document WHERE document_type = 'devis' AND document_id = ?
-  `).bind(facture.id, devisId).run()
-
-  // Marquer le devis comme accepté et lié
-  await c.env.DB.prepare('UPDATE devis SET statut = "accepte", facture_id = ? WHERE id = ?').bind(facture.id, devisId).run()
-
-  // ── NF525 : enregistrer la transaction ────────────────────────────────────
-  const hashNf525 = await enregistrerTransaction(c.env.DB, {
-    boutique_id:      devis.boutique_id,
-    type_transaction: 'facture',
-    reference_id:     facture.id,
-    reference_numero: numero,
-    client_id:        devis.client_id,
-    montant_ht:       devis.total_ht,
-    montant_tva:      devis.total_tva,
-    montant_ttc:      devis.total_ttc,
-    date_transaction: new Date().toISOString(),
-    user_id:          user.sub,
-  })
-
-  // Stocker le hash sur la facture
-  await c.env.DB.prepare('UPDATE factures SET hash_nf525 = ? WHERE id = ?').bind(hashNf525, facture.id).run()
-
-  await auditLog(c.env.DB, { boutique_id: devis.boutique_id, user_id: user.sub, action: 'CONVERT_DEVIS_FACTURE', entite_type: 'facture', entite_id: facture.id })
-
-  return c.json({ success: true, facture_id: facture.id, facture_numero: numero, hash_nf525: hashNf525, message: 'Devis converti en facture.' })
+    return c.json({ success: true, facture_id, facture_numero, message: 'Devis converti en facture.' })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
 })
 
 // ══════════════════════════════════════════════════════════════════════════════

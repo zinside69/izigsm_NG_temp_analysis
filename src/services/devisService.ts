@@ -1,0 +1,519 @@
+/**
+ * services/devisService.ts — Model layer Devis (MOD-03)
+ * Sprint 2.19 — Architecture P1 : 0 SQL dans les routes, tout ici.
+ *
+ * Machine à états devis :
+ *   draft → envoye → accepte → (converti en facture)
+ *                 → refuse
+ *   draft → expire  (automatique si date_validite dépassée)
+ *   Tout état non terminal → annule
+ *
+ * @module devisService
+ */
+
+import { nextNumero, auditLog, parsePagination } from '../lib/db'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type StatutDevis = 'draft' | 'envoye' | 'accepte' | 'refuse' | 'expire' | 'annule'
+
+export interface LigneDevisInput {
+  description:      string
+  quantite:         number
+  prix_unitaire_ht: number
+  tva_taux:         number
+  produit_id?:      number | null
+}
+
+export interface CreateDevisInput {
+  boutique_id:    number
+  client_id:      number
+  ticket_id?:     number | null
+  lignes:         LigneDevisInput[]
+  notes?:         string
+  conditions?:    string
+  date_validite?: string | null
+}
+
+export interface UpdateDevisInput {
+  client_id?:     number
+  lignes?:        LigneDevisInput[]
+  notes?:         string
+  conditions?:    string
+  date_validite?: string | null
+}
+
+export interface StatsDevis {
+  total:          number
+  draft:          number
+  envoyes:        number
+  acceptes:       number
+  refuses:        number
+  expires:        number
+  montant_envoye: number
+  montant_signe:  number
+  taux_conversion: number | null
+}
+
+// ─── Helpers privés ───────────────────────────────────────────────────────────
+
+/**
+ * Génère un token public aléatoire (32 hex) via Web Crypto.
+ */
+async function genererPublicToken(): Promise<string> {
+  const buf = new Uint8Array(16)
+  crypto.getRandomValues(buf)
+  return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Calcule les totaux HT / TVA / TTC depuis un tableau de lignes.
+ */
+function calculerTotaux(lignes: LigneDevisInput[]): { total_ht: number; total_tva: number; total_ttc: number } {
+  let total_ht = 0, total_tva = 0
+  for (const l of lignes) {
+    const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
+    const tva = Math.round(ht * (l.tva_taux / 100) * 100) / 100
+    total_ht  += ht
+    total_tva += tva
+  }
+  return {
+    total_ht:  Math.round(total_ht  * 100) / 100,
+    total_tva: Math.round(total_tva * 100) / 100,
+    total_ttc: Math.round((total_ht + total_tva) * 100) / 100,
+  }
+}
+
+/**
+ * Insère les lignes d'un devis dans lignes_document.
+ * Supprime les lignes existantes avant réinsertion (lors d'un update).
+ */
+async function upsertLignes(db: D1Database, devisId: number, lignes: LigneDevisInput[]): Promise<void> {
+  await db.prepare('DELETE FROM lignes_document WHERE document_type = ? AND document_id = ?')
+    .bind('devis', devisId).run()
+
+  const stmts = lignes.map((l, i) =>
+    db.prepare(`
+      INSERT INTO lignes_document
+        (document_type, document_id, ordre, description, quantite, prix_unitaire_ht,
+         tva_taux, total_ht, total_tva, total_ttc, produit_id)
+      VALUES ('devis', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      devisId,
+      i + 1,
+      l.description,
+      l.quantite,
+      l.prix_unitaire_ht,
+      l.tva_taux,
+      Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100,
+      Math.round(l.quantite * l.prix_unitaire_ht * (l.tva_taux / 100) * 100) / 100,
+      Math.round(l.quantite * l.prix_unitaire_ht * (1 + l.tva_taux / 100) * 100) / 100,
+      l.produit_id ?? null,
+    )
+  )
+
+  if (stmts.length > 0) await db.batch(stmts)
+}
+
+// ─── Fonctions exportées ──────────────────────────────────────────────────────
+
+/**
+ * Liste des devis d'une boutique avec filtres et pagination.
+ * @param db        - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @param opts      - Query params : page, limit, statut, client_id, search
+ */
+export async function listDevis(
+  db:          D1Database,
+  boutiqueId:  number,
+  opts:        Record<string, string | undefined> = {}
+): Promise<{ data: any[]; pagination: any }> {
+  const { page, limit, offset } = parsePagination(opts)
+  const statut    = opts.statut    ?? null
+  const clientId  = opts.client_id ? parseInt(opts.client_id, 10) : null
+  const search    = opts.search    ?? null
+
+  const conditions = ['d.boutique_id = ?', 'd.statut != \'annule\'']
+  const params: any[] = [boutiqueId]
+
+  if (statut)   { conditions.push('d.statut = ?');          params.push(statut) }
+  if (clientId) { conditions.push('d.client_id = ?');       params.push(clientId) }
+  if (search)   {
+    conditions.push('(d.numero LIKE ? OR c.nom LIKE ? OR c.prenom LIKE ?)')
+    const q = `%${search}%`
+    params.push(q, q, q)
+  }
+
+  const where = conditions.join(' AND ')
+
+  const [total, rows] = await Promise.all([
+    db.prepare(`
+      SELECT COUNT(*) as cnt
+      FROM   devis d
+      LEFT   JOIN clients c ON c.id = d.client_id
+      WHERE  ${where}
+    `).bind(...params).first<{ cnt: number }>(),
+
+    db.prepare(`
+      SELECT d.*,
+             c.nom      AS client_nom,
+             c.prenom   AS client_prenom,
+             c.email    AS client_email,
+             c.telephone AS client_telephone
+      FROM   devis d
+      LEFT   JOIN clients c ON c.id = d.client_id
+      WHERE  ${where}
+      ORDER  BY d.created_at DESC
+      LIMIT  ? OFFSET ?
+    `).bind(...params, limit, offset).all<any>(),
+  ])
+
+  return {
+    data: rows.results ?? [],
+    pagination: {
+      page, limit,
+      total: total?.cnt ?? 0,
+      pages: Math.ceil((total?.cnt ?? 0) / limit),
+    },
+  }
+}
+
+/**
+ * Détail complet d'un devis (+ lignes).
+ * @param db  - Instance D1Database
+ * @param id  - ID du devis
+ */
+export async function getDevis(db: D1Database, id: number): Promise<any | null> {
+  const [devis, lignes] = await Promise.all([
+    db.prepare(`
+      SELECT d.*,
+             c.nom       AS client_nom,
+             c.prenom    AS client_prenom,
+             c.email     AS client_email,
+             c.telephone AS client_telephone,
+             c.adresse   AS client_adresse,
+             b.nom       AS boutique_nom,
+             b.siret     AS boutique_siret,
+             b.adresse   AS boutique_adresse,
+             b.telephone AS boutique_telephone,
+             b.email     AS boutique_email,
+             b.tva_numero AS boutique_tva
+      FROM   devis d
+      LEFT   JOIN clients   c ON c.id = d.client_id
+      LEFT   JOIN boutiques b ON b.id = d.boutique_id
+      WHERE  d.id = ?
+    `).bind(id).first<any>(),
+
+    db.prepare(`
+      SELECT * FROM lignes_document
+      WHERE  document_type = 'devis' AND document_id = ?
+      ORDER  BY ordre ASC
+    `).bind(id).all<any>(),
+  ])
+
+  if (!devis) return null
+  return { ...devis, lignes: lignes.results ?? [] }
+}
+
+/**
+ * Crée un devis avec ses lignes. Génère numéro + public_token.
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @param userId     - ID de l'utilisateur créateur
+ * @param input      - Données du devis
+ */
+export async function createDevis(
+  db:          D1Database,
+  boutiqueId:  number,
+  userId:      number,
+  input:       CreateDevisInput
+): Promise<{ id: number; numero: string; public_token: string }> {
+  if (!input.lignes || input.lignes.length === 0)
+    throw new Error('Le devis doit contenir au moins une ligne.')
+
+  const numero       = await nextNumero(db, boutiqueId, 'devis')
+  const totaux       = calculerTotaux(input.lignes)
+  const public_token = await genererPublicToken()
+
+  const result = await db.prepare(`
+    INSERT INTO devis
+      (boutique_id, numero, client_id, ticket_id,
+       total_ht, total_tva, total_ttc,
+       notes, conditions, date_validite, public_token, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+    RETURNING id
+  `).bind(
+    boutiqueId,
+    numero,
+    input.client_id,
+    input.ticket_id   ?? null,
+    totaux.total_ht,
+    totaux.total_tva,
+    totaux.total_ttc,
+    input.notes       ?? null,
+    input.conditions  ?? null,
+    input.date_validite ?? null,
+    public_token,
+  ).first<{ id: number }>()
+
+  if (!result?.id) throw new Error('Erreur lors de la création du devis.')
+
+  await upsertLignes(db, result.id, input.lignes)
+  await auditLog(db, { boutique_id: boutiqueId, user_id: userId, action: 'CREATE_DEVIS', entite_type: 'devis', entite_id: result.id })
+
+  return { id: result.id, numero, public_token }
+}
+
+/**
+ * Met à jour un devis (draft uniquement — les devis envoyés sont verrouillés).
+ * @param db     - Instance D1Database
+ * @param id     - ID du devis
+ * @param userId - ID de l'utilisateur
+ * @param input  - Champs à mettre à jour
+ */
+export async function updateDevis(
+  db:     D1Database,
+  id:     number,
+  userId: number,
+  input:  UpdateDevisInput
+): Promise<void> {
+  const existing = await db.prepare('SELECT * FROM devis WHERE id = ?').bind(id).first<any>()
+  if (!existing) throw new Error('Devis introuvable.')
+  if (existing.statut !== 'draft') throw new Error('Seuls les devis en brouillon peuvent être modifiés.')
+
+  const totaux = input.lignes ? calculerTotaux(input.lignes) : null
+
+  await db.prepare(`
+    UPDATE devis SET
+      client_id     = COALESCE(?, client_id),
+      total_ht      = COALESCE(?, total_ht),
+      total_tva     = COALESCE(?, total_tva),
+      total_ttc     = COALESCE(?, total_ttc),
+      notes         = COALESCE(?, notes),
+      conditions    = COALESCE(?, conditions),
+      date_validite = COALESCE(?, date_validite),
+      updated_at    = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(
+    input.client_id    ?? null,
+    totaux?.total_ht   ?? null,
+    totaux?.total_tva  ?? null,
+    totaux?.total_ttc  ?? null,
+    input.notes        ?? null,
+    input.conditions   ?? null,
+    input.date_validite ?? null,
+    id,
+  ).run()
+
+  if (input.lignes) await upsertLignes(db, id, input.lignes)
+
+  await auditLog(db, { boutique_id: existing.boutique_id, user_id: userId, action: 'UPDATE_DEVIS', entite_type: 'devis', entite_id: id })
+}
+
+/**
+ * Change le statut d'un devis (machine à états enforced).
+ * Transitions autorisées :
+ *   draft    → envoye | annule
+ *   envoye   → accepte | refuse | expire | annule
+ *   accepte  → (géré par convertirDevis)
+ *   refuse   → (terminal)
+ *   expire   → (terminal)
+ *   annule   → (terminal)
+ *
+ * @param db       - Instance D1Database
+ * @param id       - ID du devis
+ * @param userId   - ID de l'utilisateur
+ * @param statut   - Nouveau statut
+ * @param fromPublic - true si changement initié par le client (page publique)
+ */
+export async function updateStatutDevis(
+  db:         D1Database,
+  id:         number,
+  userId:     number,
+  statut:     StatutDevis,
+  fromPublic: boolean = false
+): Promise<{ statut_avant: string; statut_apres: string }> {
+  const TRANSITIONS: Record<StatutDevis, StatutDevis[]> = {
+    draft:   ['envoye', 'annule'],
+    envoye:  ['accepte', 'refuse', 'expire', 'annule'],
+    accepte: [],
+    refuse:  [],
+    expire:  [],
+    annule:  [],
+  }
+
+  const devis = await db.prepare('SELECT * FROM devis WHERE id = ?').bind(id).first<any>()
+  if (!devis) throw new Error('Devis introuvable.')
+
+  const current = devis.statut as StatutDevis
+  if (!TRANSITIONS[current]?.includes(statut))
+    throw new Error(`Transition invalide : ${current} → ${statut}.`)
+
+  const extras: Record<string, string> = {}
+  if (statut === 'envoye')  extras['envoye_le']  = 'CURRENT_TIMESTAMP'
+  if (statut === 'accepte') extras['repondu_le'] = 'CURRENT_TIMESTAMP'
+  if (statut === 'refuse')  extras['repondu_le'] = 'CURRENT_TIMESTAMP'
+
+  const setClause = ['statut = ?', 'updated_at = CURRENT_TIMESTAMP',
+    ...Object.keys(extras).map(k => `${k} = ${extras[k]}`)
+  ].join(', ')
+
+  await db.prepare(`UPDATE devis SET ${setClause} WHERE id = ?`)
+    .bind(statut, id).run()
+
+  const action = fromPublic ? 'PUBLIC_STATUT_DEVIS' : 'UPDATE_STATUT_DEVIS'
+  await auditLog(db, { boutique_id: devis.boutique_id, user_id: userId, action, entite_type: 'devis', entite_id: id })
+
+  return { statut_avant: current, statut_apres: statut }
+}
+
+/**
+ * Convertit un devis accepté en facture (avec copie des lignes).
+ * @param db     - Instance D1Database
+ * @param id     - ID du devis
+ * @param userId - ID de l'utilisateur
+ */
+export async function convertirDevis(
+  db:     D1Database,
+  id:     number,
+  userId: number
+): Promise<{ facture_id: number; facture_numero: string }> {
+  const devis = await db.prepare('SELECT * FROM devis WHERE id = ?').bind(id).first<any>()
+  if (!devis)                       throw new Error('Devis introuvable.')
+  if (devis.statut === 'refuse')    throw new Error('Impossible de convertir un devis refusé.')
+  if (devis.statut === 'annule')    throw new Error('Impossible de convertir un devis annulé.')
+  if (devis.facture_id)             throw new Error('Ce devis a déjà été converti en facture.')
+
+  const numero = await nextNumero(db, devis.boutique_id, 'facture')
+
+  const facture = await db.prepare(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, devis_id, total_ht, total_tva, total_ttc, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+    RETURNING id
+  `).bind(
+    devis.boutique_id, numero,
+    devis.client_id, devis.ticket_id ?? null, id,
+    devis.total_ht, devis.total_tva, devis.total_ttc,
+  ).first<{ id: number }>()
+
+  if (!facture?.id) throw new Error('Erreur lors de la création de la facture.')
+
+  // Copier les lignes devis → facture
+  await db.prepare(`
+    INSERT INTO lignes_document
+      (document_type, document_id, ordre, description, quantite,
+       prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+    SELECT 'facture', ?, ordre, description, quantite,
+           prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id
+    FROM   lignes_document
+    WHERE  document_type = 'devis' AND document_id = ?
+  `).bind(facture.id, id).run()
+
+  // Marquer le devis accepté + lié à la facture
+  await db.prepare(`
+    UPDATE devis SET statut = 'accepte', facture_id = ?, repondu_le = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(facture.id, id).run()
+
+  await auditLog(db, {
+    boutique_id: devis.boutique_id, user_id: userId,
+    action: 'CONVERT_DEVIS_FACTURE',
+    entite_type: 'facture', entite_id: facture.id,
+  })
+
+  return { facture_id: facture.id, facture_numero: numero }
+}
+
+/**
+ * Récupère un devis par son token public (sans authentification).
+ * Retourne uniquement les données nécessaires pour la page d'acceptation client.
+ * @param db    - Instance D1Database
+ * @param token - Token public du devis
+ */
+export async function getDevisByToken(db: D1Database, token: string): Promise<any | null> {
+  const [devis, lignes] = await Promise.all([
+    db.prepare(`
+      SELECT d.id, d.numero, d.statut, d.total_ht, d.total_tva, d.total_ttc,
+             d.date_validite, d.envoye_le, d.repondu_le, d.notes, d.conditions,
+             c.nom       AS client_nom,
+             c.prenom    AS client_prenom,
+             b.nom       AS boutique_nom,
+             b.telephone AS boutique_telephone,
+             b.email     AS boutique_email,
+             b.adresse   AS boutique_adresse,
+             b.ville     AS boutique_ville,
+             b.logo_url  AS boutique_logo
+      FROM   devis d
+      LEFT   JOIN clients   c ON c.id = d.client_id
+      LEFT   JOIN boutiques b ON b.id = d.boutique_id
+      WHERE  d.public_token = ?
+    `).bind(token).first<any>(),
+
+    db.prepare(`
+      SELECT ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_ttc
+      FROM   lignes_document
+      WHERE  document_type = 'devis' AND document_id = (
+        SELECT id FROM devis WHERE public_token = ?
+      )
+      ORDER  BY ordre ASC
+    `).bind(token).all<any>(),
+  ])
+
+  if (!devis) return null
+  return { ...devis, lignes: lignes.results ?? [] }
+}
+
+/**
+ * Statistiques des devis d'une boutique.
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ */
+export async function getStatsDevis(db: D1Database, boutiqueId: number): Promise<StatsDevis> {
+  const rows = await db.prepare(`
+    SELECT
+      COUNT(*)                                              AS total,
+      SUM(CASE WHEN statut = 'draft'   THEN 1 ELSE 0 END) AS draft,
+      SUM(CASE WHEN statut = 'envoye'  THEN 1 ELSE 0 END) AS envoyes,
+      SUM(CASE WHEN statut = 'accepte' THEN 1 ELSE 0 END) AS acceptes,
+      SUM(CASE WHEN statut = 'refuse'  THEN 1 ELSE 0 END) AS refuses,
+      SUM(CASE WHEN statut = 'expire'  THEN 1 ELSE 0 END) AS expires,
+      SUM(CASE WHEN statut = 'envoye'  THEN total_ttc ELSE 0 END) AS montant_envoye,
+      SUM(CASE WHEN statut = 'accepte' THEN total_ttc ELSE 0 END) AS montant_signe
+    FROM devis
+    WHERE boutique_id = ? AND statut != 'annule'
+  `).bind(boutiqueId).first<any>()
+
+  const envoyes  = rows?.envoyes  ?? 0
+  const acceptes = rows?.acceptes ?? 0
+  const taux     = envoyes > 0 ? Math.round((acceptes / (envoyes + acceptes + (rows?.refuses ?? 0))) * 100) : null
+
+  return {
+    total:           rows?.total          ?? 0,
+    draft:           rows?.draft          ?? 0,
+    envoyes,
+    acceptes,
+    refuses:         rows?.refuses        ?? 0,
+    expires:         rows?.expires        ?? 0,
+    montant_envoye:  rows?.montant_envoye ?? 0,
+    montant_signe:   rows?.montant_signe  ?? 0,
+    taux_conversion: taux,
+  }
+}
+
+/**
+ * Expire automatiquement les devis dont la date_validite est dépassée.
+ * À appeler en tâche de fond (Cron Trigger ou manuellement).
+ * @param db - Instance D1Database
+ */
+export async function expireDevisPerimes(db: D1Database): Promise<number> {
+  const result = await db.prepare(`
+    UPDATE devis
+    SET statut = 'expire', updated_at = CURRENT_TIMESTAMP
+    WHERE statut = 'envoye'
+      AND date_validite IS NOT NULL
+      AND date_validite < date('now')
+  `).run()
+
+  return result.meta?.changes ?? 0
+}

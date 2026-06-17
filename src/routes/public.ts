@@ -14,13 +14,14 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { getDevisByToken, updateStatutDevis, type StatutDevis } from '../services/devisService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 
 const pub = new Hono<{ Bindings: Bindings }>()
 
 // CORS large pour les pages publiques (clients sans compte)
-pub.use('/*', cors({ origin: '*', allowMethods: ['GET', 'OPTIONS'] }))
+pub.use('/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'OPTIONS'] }))
 
 // ─── Suivi ticket par token ───────────────────────────────────────────────────
 
@@ -216,6 +217,158 @@ pub.get('/catalogue/:slug', async (c) => {
   } catch (e: any) {
     console.error('[catalogue]', e?.message ?? e)
     return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── Devis public (accès client sans authentification) ───────────────────────
+
+/**
+ * GET /api/public/devis/:token
+ * Consultation d'un devis par le client via son token public.
+ * Retourne les lignes, totaux et infos boutique — sans données sensibles.
+ * Statuts lisibles par le client.
+ */
+pub.get('/devis/:token', async (c) => {
+  try {
+    const token = c.req.param('token')
+    if (!token || token.length < 16)
+      return c.json({ success: false, error: 'Token invalide.' }, 400)
+
+    const devis = await getDevisByToken(c.env.DB, token)
+    if (!devis)
+      return c.json({ success: false, error: 'Devis introuvable ou lien invalide.' }, 404)
+
+    // Libellés statuts lisibles par le client
+    const STATUT_DEVIS_CLIENT: Record<string, { label: string; description: string; emoji: string; peutRepondre: boolean }> = {
+      draft:   { label: 'Brouillon',          description: 'Ce devis n\'est pas encore finalisé.',                          emoji: '📝', peutRepondre: false },
+      envoye:  { label: 'En attente',         description: 'Votre devis est prêt. Vous pouvez l\'accepter ou le refuser.',  emoji: '⏳', peutRepondre: true  },
+      accepte: { label: 'Accepté',            description: 'Vous avez accepté ce devis. Merci de votre confiance !',        emoji: '✅', peutRepondre: false },
+      refuse:  { label: 'Refusé',             description: 'Vous avez refusé ce devis.',                                    emoji: '❌', peutRepondre: false },
+      expire:  { label: 'Expiré',             description: 'Ce devis a dépassé sa date de validité.',                       emoji: '⌛', peutRepondre: false },
+      annule:  { label: 'Annulé',             description: 'Ce devis a été annulé par le technicien.',                      emoji: '🚫', peutRepondre: false },
+    }
+
+    const statutInfo = STATUT_DEVIS_CLIENT[devis.statut] ?? {
+      label: devis.statut, description: '', emoji: '📋', peutRepondre: false
+    }
+
+    // Vérifier expiration si statut envoye
+    let estExpire = false
+    if (devis.statut === 'envoye' && devis.date_validite) {
+      estExpire = new Date(devis.date_validite) < new Date()
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        numero:         devis.numero,
+        statut:         devis.statut,
+        statut_label:   estExpire ? 'Expiré' : statutInfo.label,
+        statut_desc:    estExpire ? 'Ce devis a dépassé sa date de validité.' : statutInfo.description,
+        statut_emoji:   estExpire ? '⌛' : statutInfo.emoji,
+        peut_repondre:  statutInfo.peutRepondre && !estExpire,
+        est_expire:     estExpire,
+        // Totaux
+        total_ht:       devis.total_ht,
+        total_tva:      devis.total_tva,
+        total_ttc:      devis.total_ttc,
+        // Dates
+        date_validite:  devis.date_validite,
+        envoye_le:      devis.envoye_le,
+        repondu_le:     devis.repondu_le,
+        // Notes/conditions
+        notes:          devis.notes,
+        conditions:     devis.conditions,
+        // Client (prénom uniquement pour la confidentialité)
+        client_prenom:  devis.client_prenom,
+        // Boutique
+        boutique: {
+          nom:       devis.boutique_nom,
+          telephone: devis.boutique_telephone,
+          email:     devis.boutique_email,
+          adresse:   devis.boutique_adresse,
+          ville:     devis.boutique_ville,
+          logo:      devis.boutique_logo,
+        },
+        // Lignes du devis
+        lignes: (devis.lignes ?? []).map((l: any) => ({
+          ordre:            l.ordre,
+          description:      l.description,
+          quantite:         l.quantite,
+          prix_unitaire_ht: l.prix_unitaire_ht,
+          tva_taux:         l.tva_taux,
+          total_ht:         l.total_ht,
+          total_ttc:        l.total_ttc,
+        })),
+      }
+    })
+  } catch (e: any) {
+    console.error('[public/devis]', e?.message ?? e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+/**
+ * POST /api/public/devis/:token/repondre
+ * Permet au client d'accepter ou de refuser un devis (sans authentification).
+ * Body : { action: 'accepte' | 'refuse', signature?: string }
+ * Transition machine à états : envoye → accepte | refuse
+ */
+pub.post('/devis/:token/repondre', async (c) => {
+  try {
+    const token = c.req.param('token')
+    if (!token || token.length < 16)
+      return c.json({ success: false, error: 'Token invalide.' }, 400)
+
+    const body = await c.req.json().catch(() => ({}))
+    const { action, signature } = body
+
+    if (!action || !['accepte', 'refuse'].includes(action))
+      return c.json({ success: false, error: 'action doit être "accepte" ou "refuse".' }, 400)
+
+    // Récupérer le devis par token pour obtenir l'id
+    const devis = await getDevisByToken(c.env.DB, token)
+    if (!devis)
+      return c.json({ success: false, error: 'Devis introuvable ou lien invalide.' }, 404)
+
+    if (devis.statut !== 'envoye')
+      return c.json({ success: false, error: `Ce devis ne peut plus être modifié (statut actuel : ${devis.statut}).` }, 409)
+
+    // Vérifier expiration
+    if (devis.date_validite && new Date(devis.date_validite) < new Date())
+      return c.json({ success: false, error: 'Ce devis a expiré et ne peut plus être accepté.' }, 410)
+
+    // Enregistrer la signature si fournie
+    if (signature && typeof signature === 'string' && signature.length > 0) {
+      await c.env.DB.prepare(
+        'UPDATE devis SET signature_client = ? WHERE id = ?'
+      ).bind(signature.slice(0, 1000), devis.id).run()
+    }
+
+    // Appliquer la transition (fromPublic = true)
+    const { statut_avant, statut_apres } = await updateStatutDevis(
+      c.env.DB,
+      devis.id,
+      0, // userId = 0 pour action publique (pas d'utilisateur authentifié)
+      action as StatutDevis,
+      true, // fromPublic
+    )
+
+    const messages: Record<string, string> = {
+      accepte: 'Merci ! Votre devis a été accepté. L\'équipe vous contactera prochainement.',
+      refuse:  'Devis refusé. L\'équipe a été notifiée.',
+    }
+
+    return c.json({
+      success:      true,
+      statut_avant,
+      statut_apres,
+      message:      messages[action] ?? 'Réponse enregistrée.',
+    })
+
+  } catch (e: any) {
+    console.error('[public/devis/repondre]', e?.message ?? e)
+    return c.json({ success: false, error: e.message ?? 'Erreur serveur.' }, 500)
   }
 })
 

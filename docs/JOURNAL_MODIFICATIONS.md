@@ -36,6 +36,7 @@
 | [2.17](#sprint-217) | Violations P1 soldées : ticketService + stockService | `3b1405d` |
 | [2.17-fix](#sprint-217-fix) | Fix login + dashboard KPIs + auto-sélection boutique admin | `869d5ae` |
 | [2.18](#sprint-218) | Bugs bloquants SAV + vitrine publique + slug boutique | `0ba5d22` |
+| [2.19](#sprint-219) | MOD-03 Devis : endpoints publics + UI complète | Sprint 2.19 |
 
 ---
 
@@ -677,4 +678,48 @@ Audit également révélé que `GET /api/notifications/stats|logs` fonctionnait 
 | T5 | `GET /api/public/catalogue/izigsm-paris-11` | ✅ catalogue 0 catégories (boutique sans services) |
 | T6 | `GET /api/notifications/stats?boutique_id=1` | ✅ `provider=resend` |
 | T7 | `GET /api/garanties?boutique_id=1` | ✅ `total=3` |
+
+
+---
+
+## Sprint 2.19
+
+**Titre** : MOD-03 Devis — complétion complète (endpoints publics + UI)  
+**Commit** : Sprint 2.19  
+**Date** : 17 juin 2026  
+
+### Contexte
+
+Sprint de complétion du module Devis (MOD-03). Le service `devisService.ts` et les 9 routes de `facturation.ts` avaient été créés en fin de Sprint 2.19 précédent. Il restait à ajouter :
+1. Les 2 endpoints publics (sans auth) dans `public.ts` — consultation et réponse client
+2. L'UI complète `devis.html` + `devis.js` — KPIs, modal détail, badges statuts, boutons selon état
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/routes/public.ts` | ✏️ modifié | Import `devisService` ; CORS étendu aux méthodes POST ; 2 nouveaux endpoints sans auth : `GET /api/public/devis/:token` (consultation + statut FR + `peut_repondre`) et `POST /api/public/devis/:token/repondre` (machine à états côté client, enregistrement `signature_client`) |
+| `public/devis.html` | ✏️ modifié | Ajout section KPIs `#devis-stats` ; filtres statuts en valeurs minuscules alignées API ; modal détail `#modal-devis-detail` avec body/footer dynamiques ; champ TVA dans le formulaire |
+| `public/static/js/devis.js` | ✏️ modifié | Réécriture complète 31 kB — `STATUT_DEVIS` badges map ; `loadDevisStats()` + `kpiCard()` ; `openDevisDetail()` avec lignes + boutons selon statut ; `openEditDevis()` pour modification brouillon ; `envoyerDevis()` ; `changerStatutDevis()` ; `annulerDevis()` ; `buildRowActions()` selon statut ; `addLine(prefill?)` avec champ TVA caché ; `updateDevisTotals()` multiTVA |
+
+### Décisions architecturales
+
+- **Endpoint `GET /api/public/devis/:token`** : retourne uniquement `client_prenom` (pas le nom complet) pour préserver la confidentialité — le client connaît son prénom
+- **Vérification expiration inline** : même si le statut DB est encore `envoye`, on vérifie `date_validite < now()` → `peut_repondre: false` + `est_expire: true` retournés au frontend sans modifier le statut DB (la mise à jour est assurée par le cron `POST /api/devis/expire`)
+- **userId = 0** pour les actions publiques : `updateStatutDevis(db, id, 0, action, true)` — l'audit log enregistre `user_id=0` et `action='PUBLIC_STATUT_DEVIS'` pour traçabilité
+- **`signature_client`** : stockée brute (max 1 000 chars) — permettra d'afficher dans le PDF "Accepté le JJ/MM/AAAA par [prénom]"
+- **CORS POST activé** : `allowMethods: ['GET', 'POST', 'OPTIONS']` sur `pub.use('/*', cors(...))` — nécessaire pour `POST /api/public/devis/:token/repondre` depuis la page d'acceptation
+
+### Tests Sprint 2.19
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/devis/stats?boutique_id=1` | ✅ KPIs 7 champs (total, draft, envoyes, acceptes, refuses, montants, taux) |
+| T2 | `POST /api/devis` | ✅ `DEV-2026-00004`, `public_token` 32 chars, 2 lignes |
+| T3 | `GET /api/devis/1` | ✅ statut=draft, 2 lignes, `total_ttc=208.8` |
+| T4 | `PUT /api/devis/1/statut {statut:envoye}` | ✅ `draft → envoye` |
+| T5 | `POST /api/devis/1/envoyer` (depuis envoye) | ✅ rejet correct `Transition invalide : envoye → envoye` |
+| T6 | `GET /api/public/devis/:token` (sans auth) | ✅ `peut_repondre=true`, `statut_label=En attente`, 2 lignes |
+| T7 | `POST /api/public/devis/:token/repondre {action:accepte}` | ✅ `envoye → accepte`, message FR |
+| T8 | `PUT /api/devis/2/convertir` (devis accepté) | ✅ `FAC-2026-00012`, `facture_id=6` |
 
