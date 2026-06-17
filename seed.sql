@@ -5,8 +5,8 @@
 -- ============================================================
 
 -- ── Boutique de démo ──────────────────────────────────────
-INSERT OR IGNORE INTO boutiques (id, nom, siret, tva_numero, adresse, code_postal, ville, telephone, email) VALUES
-  (1, 'iziGSM Paris 11', '12345678901234', 'FR12345678901', '42 rue de la Roquette', '75011', 'Paris', '01 23 45 67 89', 'paris11@izigsm.fr');
+INSERT OR IGNORE INTO boutiques (id, nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email) VALUES
+  (1, 'iziGSM Paris 11', 'izigsm-paris-11', '12345678901234', 'FR12345678901', '42 rue de la Roquette', '75011', 'Paris', '01 23 45 67 89', 'paris11@izigsm.fr');
 
 INSERT OR IGNORE INTO boutique_settings (boutique_id, tva_taux_defaut, horaires) VALUES
   (1, 20.0, '{"lun":"09:00-19:00","mar":"09:00-19:00","mer":"09:00-19:00","jeu":"09:00-19:00","ven":"09:00-19:00","sam":"10:00-18:00","dim":"ferme"}');

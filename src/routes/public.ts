@@ -67,19 +67,21 @@ pub.get('/ticket/:token', async (c) => {
       return c.json({ success: false, error: 'Ticket introuvable ou lien invalide.' }, 404)
 
     // Libellés statuts lisibles par le client
+    // Clés en minuscules — correspondent aux valeurs de la machine à états ticketService
     const STATUT_CLIENT: Record<string, { label: string; description: string; emoji: string }> = {
-      RECEIVED:       { label: 'Reçu',              description: 'Votre appareil a été réceptionné.',             emoji: '📥' },
-      DIAGNOSED:      { label: 'Diagnostiqué',       description: 'Le diagnostic est en cours.',                   emoji: '🔍' },
-      WAITING_PARTS:  { label: 'Pièces en attente',  description: 'Nous attendons les pièces nécessaires.',        emoji: '⏳' },
-      IN_PROGRESS:    { label: 'En réparation',      description: 'Votre appareil est en cours de réparation.',    emoji: '🔧' },
-      DONE:           { label: 'Réparé',             description: 'La réparation est terminée.',                    emoji: '✅' },
-      READY:          { label: 'Prêt à récupérer',   description: 'Votre appareil est prêt. Vous pouvez venir le récupérer.', emoji: '🎉' },
-      DELIVERED:      { label: 'Rendu',              description: 'L\'appareil vous a été restitué.',               emoji: '🏠' },
-      CANCELLED:      { label: 'Annulé',             description: 'La réparation a été annulée.',                   emoji: '❌' },
-      UNREPAIRABLE:   { label: 'Irréparable',        description: 'Malheureusement, l\'appareil ne peut pas être réparé.', emoji: '😢' },
+      recu:           { label: 'Reçu',              description: 'Votre appareil a été réceptionné.',                         emoji: '📥' },
+      en_diagnostic:  { label: 'En diagnostic',     description: 'Le technicien examine votre appareil.',                     emoji: '🔍' },
+      attente_accord: { label: 'Accord en attente', description: 'Nous attendons votre accord pour procéder à la réparation.', emoji: '✋' },
+      a_commander:    { label: 'Pièces à commander',description: 'Les pièces nécessaires vont être commandées.',               emoji: '🛒' },
+      commande:       { label: 'Pièces commandées', description: 'Les pièces sont en cours de livraison.',                    emoji: '📦' },
+      pieces_recues:  { label: 'Pièces reçues',     description: 'Les pièces sont arrivées, la réparation va débuter.',       emoji: '✅' },
+      en_reparation:  { label: 'En réparation',     description: 'Votre appareil est en cours de réparation.',                emoji: '🔧' },
+      termine:        { label: 'Réparé',            description: 'La réparation est terminée. Vous pouvez venir récupérer votre appareil.', emoji: '🎉' },
+      livre:          { label: 'Rendu',             description: 'L\'appareil vous a été restitué.',                          emoji: '🏠' },
+      annule:         { label: 'Annulé',            description: 'La réparation a été annulée.',                               emoji: '❌' },
     }
 
-    const statutInfo = STATUT_CLIENT[ticket.statut] || {
+    const statutInfo = STATUT_CLIENT[ticket.statut] ?? {
       label: ticket.statut, description: '', emoji: '📋'
     }
 

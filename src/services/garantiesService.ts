@@ -424,15 +424,15 @@ export async function listSav(
              c.nom         AS client_nom,
              c.prenom      AS client_prenom,
              c.telephone   AS client_telephone,
-             to.numero     AS ticket_origine_numero,
+             t_orig.numero AS ticket_origine_numero,
              ts.numero     AS ticket_sav_numero,
              g.date_fin    AS garantie_date_fin,
              g.statut      AS garantie_statut
       FROM   sav_dossiers s
-      LEFT   JOIN clients  c  ON c.id  = s.client_id
-      LEFT   JOIN tickets  to ON to.id = s.ticket_origine_id
-      LEFT   JOIN tickets  ts ON ts.id = s.ticket_sav_id
-      LEFT   JOIN garanties g ON g.id  = s.garantie_id
+      LEFT   JOIN clients  c      ON c.id      = s.client_id
+      LEFT   JOIN tickets  t_orig ON t_orig.id = s.ticket_origine_id
+      LEFT   JOIN tickets  ts     ON ts.id     = s.ticket_sav_id
+      LEFT   JOIN garanties g     ON g.id      = s.garantie_id
       WHERE  ${where}
       ORDER  BY s.date_ouverture DESC
       LIMIT  ? OFFSET ?
@@ -464,9 +464,9 @@ export async function getSav(
            c.prenom      AS client_prenom,
            c.telephone   AS client_telephone,
            c.email       AS client_email,
-           to.numero     AS ticket_origine_numero,
-           to.appareil_marque AS ticket_origine_marque,
-           to.appareil_modele AS ticket_origine_modele,
+           t_orig.numero         AS ticket_origine_numero,
+           t_orig.appareil_marque AS ticket_origine_marque,
+           t_orig.appareil_modele AS ticket_origine_modele,
            ts.numero     AS ticket_sav_numero,
            ts.statut     AS ticket_sav_statut,
            g.date_debut  AS garantie_date_debut,
@@ -475,10 +475,10 @@ export async function getSav(
            g.statut      AS garantie_statut,
            CAST(julianday(g.date_fin) - julianday('now') AS INTEGER) AS garantie_jours_restants
     FROM   sav_dossiers s
-    LEFT   JOIN clients   c  ON c.id  = s.client_id
-    LEFT   JOIN tickets   to ON to.id = s.ticket_origine_id
-    LEFT   JOIN tickets   ts ON ts.id = s.ticket_sav_id
-    LEFT   JOIN garanties g  ON g.id  = s.garantie_id
+    LEFT   JOIN clients   c      ON c.id      = s.client_id
+    LEFT   JOIN tickets   t_orig ON t_orig.id = s.ticket_origine_id
+    LEFT   JOIN tickets   ts     ON ts.id     = s.ticket_sav_id
+    LEFT   JOIN garanties g      ON g.id      = s.garantie_id
     WHERE  s.id = ? AND s.boutique_id = ? AND s.actif = 1
   `).bind(id, boutiqueId).first<any>()
 }

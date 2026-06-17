@@ -44,11 +44,18 @@ boutiques.post('/', requireRole('admin'), async (c) => {
   const { nom, siret, tva_numero, adresse, code_postal, ville, telephone, email } = await c.req.json()
   if (!nom) return c.json({ success: false, error: 'Nom obligatoire.' }, 400)
 
+  // Auto-générer le slug depuis le nom si non fourni
+  const slug = nom.toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[éèêë]/g, 'e').replace(/[àâ]/g, 'a')
+    .replace(/[ôö]/g, 'o').replace(/[ùûü]/g, 'u')
+    .replace(/[^a-z0-9-]/g, '')
+
   const result = await c.env.DB.prepare(`
-    INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone, email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).bind(nom, siret ?? null, tva_numero ?? null, adresse ?? null, code_postal ?? null, ville ?? null, telephone ?? null, email ?? null)
+  `).bind(nom, slug, siret ?? null, tva_numero ?? null, adresse ?? null, code_postal ?? null, ville ?? null, telephone ?? null, email ?? null)
     .first<{ id: number }>()
 
   await c.env.DB.prepare('INSERT INTO boutique_settings (boutique_id) VALUES (?)').bind(result?.id).run()
