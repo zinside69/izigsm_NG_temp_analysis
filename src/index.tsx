@@ -69,7 +69,7 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.16.0',
+    version:   '2.20.0',
     sprint:    '2.16 — Reconditionnement + Bons d\'achat',
     timestamp: new Date().toISOString(),
   })

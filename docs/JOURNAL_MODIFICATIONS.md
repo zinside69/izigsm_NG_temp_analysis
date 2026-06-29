@@ -37,6 +37,7 @@
 | [2.17-fix](#sprint-217-fix) | Fix login + dashboard KPIs + auto-sélection boutique admin | `869d5ae` |
 | [2.18](#sprint-218) | Bugs bloquants SAV + vitrine publique + slug boutique | `0ba5d22` |
 | [2.19](#sprint-219) | MOD-03 Devis : endpoints publics + UI complète | Sprint 2.19 |
+| [2.20](#sprint-220) | MOD-02 factureService + page publique devis client | Sprint 2.20 |
 
 ---
 
@@ -722,4 +723,49 @@ Sprint de complétion du module Devis (MOD-03). Le service `devisService.ts` et 
 | T6 | `GET /api/public/devis/:token` (sans auth) | ✅ `peut_repondre=true`, `statut_label=En attente`, 2 lignes |
 | T7 | `POST /api/public/devis/:token/repondre {action:accepte}` | ✅ `envoye → accepte`, message FR |
 | T8 | `PUT /api/devis/2/convertir` (devis accepté) | ✅ `FAC-2026-00012`, `facture_id=6` |
+
+---
+
+## Sprint 2.20
+
+**Titre** : MOD-02 Facturation — Model layer `factureService` + page publique devis client  
+**Commit** : Sprint 2.20  
+**Date** : 29 juin 2026  
+
+### Contexte
+
+Sprint en deux axes :
+1. **Page publique `/devis-public`** : page HTML autonome sans auth pour qu'un client accepte ou refuse son devis via son `public_token` — complète la machine à états devis côté client
+2. **`factureService.ts` P1** : extraction de toutes les requêtes SQL inline de la section Factures/Avoirs de `facturation.ts` (36 appels SQL → 0) vers une couche service dédiée — conformité stricte P1 MVC
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `public/devis-public.html` | 🆕 créé | Page HTML autonome sans auth (TailwindCSS CDN + FontAwesome). 4 sections : `#loading-section` (spinner), `#error-section` (token invalide), `#devis-section` (affichage complet + boutons), `#repondu-section` (terminal). Lecture token depuis URL path ou querystring. Appels `GET /api/public/devis/:token` + `POST .../repondre`. |
+| `src/services/factureService.ts` | 🆕 créé | Model layer P1 — 7 fonctions exportées : `listFactures`, `getFacture`, `ajouterPaiement`, `emettreFacture`, `listAvoirs`, `getAvoir`, `createAvoir`. Toute la logique SQL + NF525 centralisée ici. JSDoc complet. |
+| `src/routes/facturation.ts` | ✏️ modifié | Section Factures/Avoirs refactorisée : 36 SQL inline → 6 routes controller pures (0 SQL), imports `listFactures` / `getFacture` / `ajouterPaiement` / `emettreFacture` / `listAvoirs` / `getAvoir` / `createAvoir`. Import `enregistrerTransaction` restauré pour la route `PUT /devis/:id/convertir`. |
+| `src/index.tsx` | ✏️ modifié | Version `2.16.0` → `2.20.0` dans le health check `/api/health`. |
+
+### Décisions architecturales
+
+- **`factureService.ts` couche Model P1** : les routes `facturation.ts` section factures/avoirs étaient les dernières à contenir du SQL inline — ce sprint les nettoie complètement. Toute modification SQL passe désormais par le service.
+- **`ajouterPaiement`** : calcule le nouveau statut (`payee` / `partiellement_payee`) à partir de `montant_paye + input.montant` vs `total_ttc`. La mise à jour `date_paiement` est conditionnelle (CASE WHEN) pour n'enregistrer la date que si entièrement payée.
+- **`emettreFacture`** : génère le `tracking_token` via `crypto.randomUUID()` (Web Crypto, compatible Cloudflare Workers). Enchaîne `enregistrerTransaction()` puis verrouille la facture en une seule UPDATE.
+- **`createAvoir`** : vérifie que la facture source est `locked=1` avant de créer l'avoir — les avoirs ne peuvent être émis que sur factures émises (conformité NF525).
+- **Page `/devis-public`** : servie automatiquement par wrangler Pages depuis `public/` sans route Hono explicite. Accès via `/devis-public` (308 redirect depuis `/devis-public.html`).
+
+### Tests Sprint 2.20
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/factures?boutique_id=1` | ✅ 6 factures |
+| T2 | `GET /api/factures/1` | ✅ détail complet, lignes=0 |
+| T3 | `GET /api/avoirs?boutique_id=1` | ✅ 0 avoirs (base vide) |
+| T4 | `POST /api/factures/1/paiement {montant:50,mode:carte}` | ✅ `montant_paye=50`, `statut=payee` |
+| T5 | `POST /api/factures/5/emettre` | ✅ `FAC-2026-00011` émise, `hash_nf525` 64 chars, `tracking_token` UUID |
+| T6 | `POST /api/avoirs {facture_id:5,type:remboursement,...}` | ✅ `AV-2026-00001` créé, `hash_nf525` chaîné NF525 |
+| T7 | `GET /devis-public?token=62a2fcb...` | ✅ HTTP 200, HTML page publique servie |
+| T7b | `GET /api/public/devis/:token` | ✅ `num=DEV-2026-00007`, `statut=envoye`, `peut_repondre=True`, 1 ligne |
+| T8 | `POST /api/public/devis/:token/repondre {action:accepte}` | ✅ `statut=accepte`, `peut_repondre=False`, `repondu_le` enregistré |
 

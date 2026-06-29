@@ -259,6 +259,24 @@
 - [x] `public/static/js/devis.js` : réécriture complète 31 kB — `loadDevisStats()`, `openDevisDetail()`, `openEditDevis()`, `envoyerDevis()`, `changerStatutDevis()`, `annulerDevis()`, badges `devisBadge()`, boutons d'action selon statut
 - [x] Build ✅ (239.49 kB, 63 modules) + tests 8/8 ✅ + commit (Sprint 2.19)
 
+### Sprint 2.20 ✅ — MOD-02 Factures/Avoirs : Model layer + page publique devis
+**Modules CDC : MOD-02 Facturation (CRITIQUE) + MOD-03 Devis page client**
+- [x] `public/devis-public.html` : page autonome sans auth (TailwindCSS CDN) — sections loading/error/devis/repondu
+  - Lecture `public_token` depuis URL (`/devis-public/TOKEN` ou `?token=TOKEN`)
+  - Boutons Accepter/Refuser → `POST /api/public/devis/:token/repondre`
+  - Confirmation inline sans rechargement, badge statut coloré, lignes tableau + totaux
+- [x] `src/services/factureService.ts` (Model P1 — 7 fonctions, 0 SQL dans routes) :
+  - `listFactures()` : liste paginée avec filtres statut/client
+  - `getFacture()` : détail + lignes + paiements (Promise.all parallèle)
+  - `ajouterPaiement()` : paiement + calcul statut (payee/partiellement_payee) + audit
+  - `emettreFacture()` : verrouillage NF525 + SHA-256 + tracking_token (CGI art. 289)
+  - `listAvoirs()` : liste paginée avec filtres
+  - `getAvoir()` : détail + lignes
+  - `createAvoir()` : création avec chaîne NF525 obligatoire (facture doit être locked)
+- [x] `src/routes/facturation.ts` : section Factures/Avoirs refactorisée — 36 SQL inline → 6 routes controller pures (0 SQL)
+  - Import `enregistrerTransaction` restauré pour la route `PUT /devis/:id/convertir`
+- [x] `src/index.tsx` : version → `2.20.0`
+- [x] Build ✅ (241.41 kB, 64 modules) + tests 8/8 ✅ + commit (Sprint 2.20)
 
 ---
 
@@ -280,10 +298,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.19.0 |
-| Build | `dist/_worker.js` 239.49 kB — 63 modules |
+| Version | 2.20.0 |
+| Build | `dist/_worker.js` 241.41 kB — 64 modules |
 | Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
-| Dernier commit | Sprint 2.19 — MOD-03 Devis complet (endpoints publics + UI) |
+| Dernier commit | Sprint 2.20 — MOD-02 factureService + page devis-public cliente |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}

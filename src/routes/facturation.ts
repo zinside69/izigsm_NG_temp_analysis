@@ -1,19 +1,23 @@
 /**
  * routes/facturation.ts — Devis, Factures, Paiements + NF525
- * Architecture P1 MVC : Controller pur — 0 SQL pour les devis (délégué à devisService).
- * Les sections Factures/Avoirs conservent leur SQL inline (refactoring Sprint 2.20).
+ * Architecture P1 MVC : Controller pur — 0 SQL (tout délégué aux services).
+ * Sprint 2.20 : section Factures/Avoirs migrée vers factureService.
  */
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
-import { parsePagination, nextNumero, calculLignes, auditLog } from '../lib/db'
-import { enregistrerTransaction } from '../lib/nf525'
+import { parsePagination } from '../lib/db'
 import {
   listDevis, getDevis, createDevis, updateDevis,
   updateStatutDevis, convertirDevis, getStatsDevis,
   expireDevisPerimes, type StatutDevis,
 } from '../services/devisService'
+import {
+  listFactures, getFacture, ajouterPaiement, emettreFacture,
+  listAvoirs, getAvoir, createAvoir,
+} from '../services/factureService'
 import { sendEmail } from '../services/emailService'
+import { enregistrerTransaction } from '../lib/nf525'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
 type Variables = { user: any }
@@ -217,293 +221,138 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FACTURES
+// FACTURES — Controller pur (0 SQL), délègue à factureService
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── GET /api/factures ─────────────────────────────────────────────────────────
+/**
+ * GET /api/factures
+ * Liste paginée des factures d'une boutique.
+ * Query : page, limit, statut, client_id, boutique_id
+ */
 facturation.get('/factures', async (c) => {
-  const user   = c.get('user')
-  const query  = c.req.query()
-  const { limit, offset, page } = parsePagination(query)
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  const user       = c.get('user')
+  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const rows = await c.env.DB.prepare(`
-    SELECT f.id, f.numero, f.statut, f.total_ttc, f.montant_paye, f.date_emission,
-           f.hash_nf525, c.prenom || ' ' || c.nom as client_nom
-    FROM   factures f
-    JOIN   clients c ON c.id = f.client_id
-    WHERE  f.boutique_id = ?
-    ORDER  BY f.created_at DESC
-    LIMIT ? OFFSET ?
-  `).bind(boutiqueId, limit, offset).all()
-
-  return c.json({ success: true, data: rows.results, pagination: { page, limit, total: 0, pages: 1 } })
+  const result = await listFactures(c.env.DB, boutiqueId, c.req.query())
+  return c.json({ success: true, ...result })
 })
 
-// ── GET /api/factures/:id ─────────────────────────────────────────────────────
+/**
+ * GET /api/factures/:id
+ * Détail complet d'une facture (lignes + paiements + infos client/boutique).
+ */
 facturation.get('/factures/:id', async (c) => {
-  const id = parseInt(c.req.param('id'), 10)
-
-  const facture = await c.env.DB.prepare(`
-    SELECT f.*, c.prenom || ' ' || c.nom as client_nom, c.email as client_email,
-           c.telephone as client_telephone, c.adresse, c.code_postal, c.ville,
-           b.nom as boutique_nom, b.siret, b.tva_numero, b.adresse as boutique_adresse
-    FROM   factures f
-    JOIN   clients c ON c.id = f.client_id
-    JOIN   boutiques b ON b.id = f.boutique_id
-    WHERE  f.id = ?
-  `).bind(id).first()
-  if (!facture) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
-
-  const lignes = await c.env.DB.prepare(
-    "SELECT * FROM lignes_document WHERE document_type = 'facture' AND document_id = ? ORDER BY ordre"
-  ).bind(id).all()
-
-  const paiements = await c.env.DB.prepare(
-    'SELECT * FROM paiements WHERE facture_id = ? ORDER BY created_at'
-  ).bind(id).all()
-
-  return c.json({ success: true, data: { ...facture, lignes: lignes.results, paiements: paiements.results } })
+  const id   = parseInt(c.req.param('id'), 10)
+  const data = await getFacture(c.env.DB, id)
+  if (!data) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
+  return c.json({ success: true, data })
 })
 
-// ── POST /api/factures/:id/paiement ──────────────────────────────────────────
+/**
+ * POST /api/factures/:id/paiement
+ * Enregistre un paiement et met à jour le statut (payee / partiellement_payee).
+ * Body : { montant, mode_paiement, reference?, notes? }
+ */
 facturation.post('/factures/:id/paiement', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
   const factureId = parseInt(c.req.param('id'), 10)
-  const { montant, mode_paiement, reference, notes } = await c.req.json()
+  const body      = await c.req.json()
 
-  if (!montant || !mode_paiement)
+  if (!body.montant || !body.mode_paiement)
     return c.json({ success: false, error: 'montant et mode_paiement obligatoires.' }, 400)
 
-  const facture = await c.env.DB.prepare('SELECT id, total_ttc, montant_paye, boutique_id, locked FROM factures WHERE id = ?')
-    .bind(factureId).first<any>()
-  if (!facture) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
-  if (facture.locked) return c.json({ success: false, error: 'Facture verrouillée — modification interdite (CGI art. 289).' }, 403)
-
-  await c.env.DB.prepare(`
-    INSERT INTO paiements (facture_id, boutique_id, montant, mode_paiement, reference, user_id, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(factureId, facture.boutique_id, montant, mode_paiement, reference ?? null, user.sub, notes ?? null).run()
-
-  // Mettre à jour montant_paye et statut
-  const nouveauMontantPaye = facture.montant_paye + montant
-  const statut = nouveauMontantPaye >= facture.total_ttc ? 'payee' : 'partiellement_payee'
-
-  await c.env.DB.prepare(`
-    UPDATE factures SET montant_paye = ?, statut = ?, date_paiement = CASE WHEN ? >= total_ttc THEN CURRENT_TIMESTAMP ELSE date_paiement END
-    WHERE  id = ?
-  `).bind(nouveauMontantPaye, statut, nouveauMontantPaye, factureId).run()
-
-  return c.json({ success: true, montant_paye: nouveauMontantPaye, statut, message: 'Paiement enregistré.' })
+  try {
+    const result = await ajouterPaiement(c.env.DB, factureId, user.sub, body)
+    return c.json({ success: true, ...result, message: 'Paiement enregistré.' })
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404
+                 : err.message.includes('verrouillée') ? 403 : 422
+    return c.json({ success: false, error: err.message }, status)
+  }
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
 // EMISSION FACTURE (CGI art. 289 — verrouillage inaltérable)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── POST /api/factures/:id/emettre ────────────────────────────────────────────
+/**
+ * POST /api/factures/:id/emettre
+ * Émet la facture : verrouillage NF525 + hash SHA-256 + tracking_token.
+ * La facture devient inaltérable (CGI art. 289).
+ */
 facturation.post('/factures/:id/emettre', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
   const factureId = parseInt(c.req.param('id'), 10)
 
-  const facture = await c.env.DB.prepare('SELECT * FROM factures WHERE id = ?')
-    .bind(factureId).first<any>()
-  if (!facture) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
-  if (facture.locked) return c.json({ success: false, error: 'Facture déjà émise et verrouillée.' }, 400)
-
-  // Générer un tracking_token UUID pour la vitrine client (Sprint 2.7)
-  const trackingToken = crypto.randomUUID()
-
-  // Chaîner le hash NF525 (inscription dans le journal)
-  const hashNf525 = await enregistrerTransaction(c.env.DB, {
-    boutique_id:      facture.boutique_id,
-    type_transaction: 'facture',
-    reference_id:     facture.id,
-    reference_numero: facture.numero,
-    client_id:        facture.client_id,
-    montant_ht:       facture.total_ht,
-    montant_tva:      facture.total_tva,
-    montant_ttc:      facture.total_ttc,
-    date_transaction: new Date().toISOString(),
-    user_id:          user.sub,
-  })
-
-  // Verrouiller la facture — CGI art. 289 (inaltérable après émission)
-  await c.env.DB.prepare(`
-    UPDATE factures
-    SET locked = 1, issued_at = CURRENT_TIMESTAMP,
-        tracking_token = ?, hash_nf525 = ?,
-        statut = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
-    WHERE id = ?
-  `).bind(trackingToken, hashNf525, factureId).run()
-
-  await auditLog(c.env.DB, {
-    boutique_id: facture.boutique_id, user_id: user.sub,
-    action: 'EMETTRE_FACTURE', entite_type: 'facture', entite_id: factureId,
-    apres: { locked: true, issued_at: new Date().toISOString(), hash_nf525: hashNf525 },
-  })
-
-  return c.json({
-    success: true,
-    facture_id:     factureId,
-    facture_numero: facture.numero,
-    tracking_token: trackingToken,
-    hash_nf525:     hashNf525,
-    message:        'Facture émise et verrouillée conformément au CGI art. 289.',
-  })
+  try {
+    const result = await emettreFacture(c.env.DB, factureId, user.sub)
+    return c.json({
+      success:    true,
+      facture_id: factureId,
+      ...result,
+      message:    'Facture émise et verrouillée conformément au CGI art. 289.',
+    })
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404
+                 : err.message.includes('verrouillée') ? 400 : 422
+    return c.json({ success: false, error: err.message }, status)
+  }
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AVOIRS (NF525 — chaîne SHA-256 anti-fraude)
+// AVOIRS (NF525 — chaîne SHA-256 anti-fraude) — Controller pur
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── GET /api/avoirs ───────────────────────────────────────────────────────────
+/**
+ * GET /api/avoirs
+ * Liste paginée des avoirs. Query : page, limit, statut, facture_id, client_id
+ */
 facturation.get('/avoirs', async (c) => {
-  const user   = c.get('user')
-  const query  = c.req.query()
-  const { limit, offset, page } = parsePagination(query)
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  const user       = c.get('user')
+  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const conditions = ['a.boutique_id = ?']
-  const bindings: any[] = [boutiqueId]
-  if (query.statut)     { conditions.push('a.statut = ?');     bindings.push(query.statut) }
-  if (query.facture_id) { conditions.push('a.facture_id = ?'); bindings.push(parseInt(query.facture_id, 10)) }
-  if (query.client_id)  { conditions.push('a.client_id = ?');  bindings.push(parseInt(query.client_id, 10)) }
-  const where = 'WHERE ' + conditions.join(' AND ')
-
-  const total = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM avoirs a ${where}`)
-    .bind(...bindings).first<{ cnt: number }>()
-
-  const rows = await c.env.DB.prepare(`
-    SELECT a.id, a.numero, a.type, a.motif, a.statut, a.total_ttc,
-           a.date_emission, a.facture_id, f.numero as facture_numero,
-           c.prenom || ' ' || c.nom as client_nom
-    FROM   avoirs a
-    JOIN   factures f ON f.id = a.facture_id
-    JOIN   clients  c ON c.id = a.client_id
-    ${where}
-    ORDER  BY a.created_at DESC
-    LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
-
-  return c.json({
-    success: true,
-    data:       rows.results,
-    pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) },
-  })
+  const result = await listAvoirs(c.env.DB, boutiqueId, c.req.query())
+  return c.json({ success: true, ...result })
 })
 
-// ── GET /api/avoirs/:id ───────────────────────────────────────────────────────
+/**
+ * GET /api/avoirs/:id
+ * Détail complet d'un avoir (+ lignes).
+ */
 facturation.get('/avoirs/:id', async (c) => {
-  const id = parseInt(c.req.param('id'), 10)
-
-  const avoir = await c.env.DB.prepare(`
-    SELECT a.*,
-           c.prenom || ' ' || c.nom as client_nom, c.email as client_email, c.telephone as client_telephone,
-           c.adresse, c.code_postal, c.ville,
-           b.nom as boutique_nom, b.siret, b.tva_numero, b.adresse as boutique_adresse,
-           f.numero as facture_numero
-    FROM   avoirs a
-    JOIN   clients   c ON c.id = a.client_id
-    JOIN   boutiques b ON b.id = a.boutique_id
-    JOIN   factures  f ON f.id = a.facture_id
-    WHERE  a.id = ?
-  `).bind(id).first()
-  if (!avoir) return c.json({ success: false, error: 'Avoir introuvable.' }, 404)
-
-  const lignes = await c.env.DB.prepare(
-    'SELECT * FROM lignes_avoir WHERE avoir_id = ? ORDER BY ordre'
-  ).bind(id).all()
-
-  return c.json({ success: true, data: { ...avoir, lignes: lignes.results } })
+  const id   = parseInt(c.req.param('id'), 10)
+  const data = await getAvoir(c.env.DB, id)
+  if (!data) return c.json({ success: false, error: 'Avoir introuvable.' }, 404)
+  return c.json({ success: true, data })
 })
 
-// ── POST /api/avoirs ──────────────────────────────────────────────────────────
+/**
+ * POST /api/avoirs
+ * Crée un avoir sur une facture émise (NF525 obligatoire).
+ * Body : { facture_id, type?, motif, lignes[], notes? }
+ */
 facturation.post('/avoirs', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
-  const { facture_id, type = 'remboursement', motif, lignes, notes } = body
 
-  // ── Validations ──────────────────────────────────────────────────────────
-  if (!facture_id) return c.json({ success: false, error: 'facture_id obligatoire.' }, 400)
-  if (!motif)      return c.json({ success: false, error: 'motif obligatoire.' }, 400)
-  if (!lignes?.length) return c.json({ success: false, error: 'Au moins une ligne obligatoire.' }, 400)
+  if (!body.facture_id) return c.json({ success: false, error: 'facture_id obligatoire.' }, 400)
+  if (!body.motif)      return c.json({ success: false, error: 'motif obligatoire.' }, 400)
+  if (!body.lignes?.length) return c.json({ success: false, error: 'Au moins une ligne obligatoire.' }, 400)
 
-  const typesValides = ['remboursement', 'bon_achat', 'echange']
-  if (!typesValides.includes(type))
-    return c.json({ success: false, error: `type doit être parmi : ${typesValides.join(', ')}.` }, 400)
-
-  // ── Vérifier que la facture existe ET est verrouillée ─────────────────────
-  // Un avoir ne peut être émis que sur une facture officielle (locked=1)
-  const facture = await c.env.DB.prepare('SELECT * FROM factures WHERE id = ?')
-    .bind(facture_id).first<any>()
-  if (!facture) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
-  if (!facture.locked)
-    return c.json({ success: false, error: 'Impossible d\'émettre un avoir sur une facture non émise.' }, 400)
-
-  const boutiqueId = facture.boutique_id
-
-  // ── Calcul montants ───────────────────────────────────────────────────────
-  const { total_ht, total_tva, total_ttc } = calculLignes(lignes)
-
-  // ── Numéro séquentiel AV-AAAA-XXXXX ──────────────────────────────────────
-  const numero = await nextNumero(c.env.DB, boutiqueId, 'avoir')
-
-  // ── Insérer l'avoir ───────────────────────────────────────────────────────
-  const result = await c.env.DB.prepare(`
-    INSERT INTO avoirs (boutique_id, numero, facture_id, client_id, type, motif, total_ht, total_tva, total_ttc, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(boutiqueId, numero, facture_id, facture.client_id, type, motif,
-          total_ht, total_tva, total_ttc, notes ?? null).first<{ id: number }>()
-
-  if (!result?.id) throw new Error('Erreur création avoir')
-  const avoirId = result.id
-
-  // ── Insérer les lignes ────────────────────────────────────────────────────
-  for (let i = 0; i < lignes.length; i++) {
-    const l   = lignes[i]
-    const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
-    const tva = Math.round(ht * ((l.tva_taux ?? 20) / 100) * 100) / 100
-    await c.env.DB.prepare(`
-      INSERT INTO lignes_avoir (avoir_id, ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(avoirId, i + 1, l.description, l.quantite, l.prix_unitaire_ht, l.tva_taux ?? 20,
-            ht, tva, ht + tva).run()
+  try {
+    const result = await createAvoir(c.env.DB, user.sub, body)
+    return c.json({
+      success:    true,
+      ...result,
+      message:    'Avoir créé et enregistré dans le journal NF525.',
+    }, 201)
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404
+                 : err.message.includes('non émise')   ? 400 : 422
+    return c.json({ success: false, error: err.message }, status)
   }
-
-  // ── Chaîne NF525 — avoir obligatoirement enregistré dans le journal ───────
-  const hashNf525 = await enregistrerTransaction(c.env.DB, {
-    boutique_id:      boutiqueId,
-    type_transaction: 'avoir',
-    reference_id:     avoirId,
-    reference_numero: numero,
-    client_id:        facture.client_id,
-    montant_ht:       total_ht,
-    montant_tva:      total_tva,
-    montant_ttc:      total_ttc,
-    date_transaction: new Date().toISOString(),
-    user_id:          user.sub,
-  })
-
-  // Stocker le hash sur l'avoir
-  await c.env.DB.prepare('UPDATE avoirs SET hash_nf525 = ? WHERE id = ?').bind(hashNf525, avoirId).run()
-
-  await auditLog(c.env.DB, {
-    boutique_id: boutiqueId, user_id: user.sub,
-    action: 'CREATE_AVOIR', entite_type: 'avoir', entite_id: avoirId,
-    apres: { numero, facture_id, type, motif, total_ttc, hash_nf525: hashNf525 },
-  })
-
-  return c.json({
-    success:    true,
-    id:         avoirId,
-    numero,
-    hash_nf525: hashNf525,
-    message:    'Avoir créé et enregistré dans le journal NF525.',
-  }, 201)
 })
 
 export default facturation
