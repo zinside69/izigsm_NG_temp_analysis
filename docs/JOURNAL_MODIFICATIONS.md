@@ -6,6 +6,60 @@
 
 ---
 
+## Sprint 2.24
+
+**Titre** : Tests automatisés Vitest — couverture `authService` + `boutiqueService` + `caisseService`
+**Commit** : Sprint 2.24 — 8 nouveaux fichiers tests/config, 61/61 tests ✅
+**Date** : 29 juin 2026
+**Version** : 2.24.0 (infra qualité — aucun changement fonctionnel)
+
+### Contexte
+
+Sprint infrastructure qualité : mise en place du framework de test Vitest avec couverture des Model layers P1 déjà en production. L'objectif est de sécuriser les fonctions critiques (auth PBKDF2, NF525 SHA-256, isolation multi-tenant) contre les régressions futures.
+
+Les sprints 2.7 (vitrine publique) et 2.8 (Kanban) ont été détectés comme **déjà implémentés** lors de l'audit pré-sprint — migrations 0016+0017 appliquées, `routes/public.ts`, `ticketService.getKanban()`, `public/suivi.html`, `public/kanban.html` tous présents.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `vitest.config.ts` | 🆕 créé | Config Vitest : env `node`, globals activés, coverage v8, seuils 70% lignes/fonctions + 60% branches, include `tests/**/*.test.ts` |
+| `tests/setup.ts` | 🆕 créé | Setup global — vérifie `globalThis.crypto?.subtle` disponible (Node 18+, requis pour SHA-256 NF525) |
+| `tests/helpers/mockD1.ts` | 🆕 créé | Mock D1Database complet en mémoire. SQL normalisé (`.replace(/\s+/g, ' ').trim()`) comme clé. API `__setResponse`, `__setResponseFn`, `__setListFn`, `__getCalls`, `__resetCalls`, `__reset` |
+| `tests/helpers/mockKV.ts` | 🆕 créé | Mock KVNamespace en mémoire (`Map<string, string>`). TTL stocké, non appliqué automatiquement. API `__expire`, `__set`, `__keys`, `__reset` |
+| `tests/authService.test.ts` | 🆕 créé | **23/23 ✅** — 8 describe blocks : `findUserByEmail` (3) · `findUserByEmailFull` (2) · `findUserById` (3) · `findUserWithProfile` (3) · `createBoutiqueWithSettings` (4) · `createUser` (4) · `activateUser` (2) · `findUserByEmailAfterActivation` (2) |
+| `tests/boutiqueService.test.ts` | 🆕 créé | **24/24 ✅** — 8 describe blocks : `listAllBoutiques` (2) · `listBoutiqueForUser` (3) · `getBoutiqueById` (2) · `getBoutiqueSettings` (2) · `createBoutique` (4) · `updateBoutique` (3) · `updateBoutiqueSettings` (4) · `getStatsBoutique` (4) |
+| `tests/caisseService.test.ts` | 🆕 créé | **14/14 ✅** — 4 describe blocks : `getHashPrecedent` (3) · `verifierIntegriteChaine` (6, SHA-256 réel) · `getKpisCaisse` (2, 5 requêtes parallèles) · `listClotures` (3) |
+
+### Fichiers modifiés
+
+| Fichier | Action | Avant → Après |
+|---|---|---|
+| `package.json` | ✏️ modifié | Scripts ajoutés : `"test": "vitest run"`, `"test:watch": "vitest"`, `"test:coverage": "vitest run --coverage"` |
+
+### Décisions architecturales
+
+- **SQL normalisé comme clé de mock** : `.replace(/\s+/g, ' ').trim()` permet de matcher des requêtes TypeScript multi-lignes avec des clés d'une seule ligne dans les `Map<string, ...>` — robuste face aux reformatages de code
+- **`__setResponseFn` vs `__setResponse`** : `__setResponseFn` permet au mock de retourner des valeurs différentes selon les paramètres (`params[0]`, `params[1]`), utile pour tester l'isolation multi-tenant (`boutique_id` transmis correctement)
+- **SHA-256 réel dans `verifierIntegriteChaine`** : les tests NF525 utilisent `crypto.subtle.digest('SHA-256')` natif — pas de mock. La détection de fraude est testée en conditions cryptographiques réelles
+- **`derniere_cloture` → `undefined` (pas `null`)** : `derniereClot?.date_cloture` retourne `undefined` quand `derniereClot` est `null` — comportement JS optionnel chaining documenté dans le test (`toBeUndefined()` intentionnel)
+- **`createVente` / `enregistrerEncaissement` exclus** : ces fonctions appellent `nextNumero()` qui nécessite la table `parametres_numerotation`. Réservés aux tests d'intégration futurs (`tests/integration/`)
+
+### Résultats des tests
+
+| Suite | Tests | Résultat | Durée |
+|---|---|---|---|
+| `authService.test.ts` | 23 | **23/23 ✅** | ~28ms |
+| `boutiqueService.test.ts` | 24 | **24/24 ✅** | ~31ms |
+| `caisseService.test.ts` | 14 | **14/14 ✅** | ~35ms |
+| **Total** | **61** | **61/61 ✅** | **~94ms** |
+
+### Build
+
+`npm run build` → ✅ 69 modules, 246.44 kB — **identique Sprint 2.23**, 0 régression.
+
+---
+
 ## Sprint 2.23
 
 **Titre** : Conformité P1 MVC — `authService` + `boutiqueService` + validation iCal

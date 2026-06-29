@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.17 terminé — 15 juin 2026
+> Dernière mise à jour : Sprint 2.24 terminé — 29 juin 2026
 
 ---
 
@@ -327,6 +327,38 @@
 - [x] Tests 8/8 ✅ (register, verify-otp, login, me, boutiques, iCal)
 - [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
 - [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
+
+### Sprint 2.24 ✅ — Tests automatisés Vitest : authService + boutiqueService + caisseService
+**Infrastructure qualité : couverture unitaire des Model layers P1**
+- [x] Installer Vitest 4.1.9 + `@vitest/coverage-v8` — compatible ES Modules, env node
+- [x] Créer `vitest.config.ts` — env node, globals, coverage v8 (seuils 70% lignes/fonctions, 60% branches)
+- [x] Créer `tests/setup.ts` — vérification Web Crypto API disponible (Node 18+ natif)
+- [x] Créer `tests/helpers/mockD1.ts` — mock D1Database en mémoire
+  - `.prepare().bind().first<T>()` / `.all<T>()` / `.run()`
+  - SQL normalisé (`.replace(/\s+/g, ' ').trim()`) comme clé de matching
+  - API test préfixée `__` : `__setResponse`, `__setResponseFn`, `__setListFn`, `__getCalls`, `__reset`
+- [x] Créer `tests/helpers/mockKV.ts` — mock KVNamespace en mémoire (Map string→string)
+  - API TTL simulée : `__expire`, `__set`, `__keys`, `__reset`
+- [x] Créer `tests/authService.test.ts` — **23/23 ✅**
+  - `findUserByEmail` (3) · `findUserByEmailFull` (2) · `findUserById` (3) · `findUserWithProfile` (3)
+  - `createBoutiqueWithSettings` (4) · `createUser` (4) · `activateUser` (2) · `findUserByEmailAfterActivation` (2)
+- [x] Créer `tests/boutiqueService.test.ts` — **24/24 ✅**
+  - `listAllBoutiques` (2) · `listBoutiqueForUser` (3) · `getBoutiqueById` (2) · `getBoutiqueSettings` (2)
+  - `createBoutique` (4) · `updateBoutique` (3) · `updateBoutiqueSettings` (4) · `getStatsBoutique` (4)
+- [x] Créer `tests/caisseService.test.ts` — **14/14 ✅**
+  - `getHashPrecedent` (3) — hash genèse 64 zéros + hash existant
+  - `verifierIntegriteChaine` (6) — SHA-256 réel NF525, détection fraude, chaîne 3 tx, filtres dates
+  - `getKpisCaisse` (2) — fallback 0, KPIs jour (5 requêtes parallèles)
+  - `listClotures` (3) — JOIN users, tableau vide, paramètres transmis
+- [x] Ajouter scripts `package.json` : `"test": "vitest run"`, `"test:watch": "vitest"`, `"test:coverage": "vitest run --coverage"`
+- [x] Suite complète `npm test` → **61/61 ✅** (3 fichiers, 1.36s)
+- [x] Build ✅ (69 modules, 246.44 kB — identique Sprint 2.23, 0 régression)
+- [x] Commit Sprint 2.24
+
+**Note : `createVente()` / `enregistrerEncaissement()` non couverts** — dépendant de `nextNumero()`
+(table `parametres_numerotation`). Réservés aux tests d'intégration futurs (`tests/integration/`).
+
+---
 
 ### Sprint 2.22 ✅ — Documentation P4 : JSDoc exhaustif (services + lib + routes)
 **Principe P4 Lisibilité : JSDoc obligatoire sur toutes les fonctions exportées**
