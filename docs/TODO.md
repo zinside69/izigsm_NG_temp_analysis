@@ -308,6 +308,26 @@
 - [x] `src/index.tsx` : version `2.20.0` → `2.21.0`, sprint mis à jour
 - [x] Build ✅ (244.23 kB, 67 modules) + tests 8/8 ✅ + commit (Sprint 2.21)
 
+### Sprint 2.23 ✅ — Conformité P1 MVC : authService + boutiqueService + validation iCal
+**Principe P1 Modularité : derniers controllers SQL → services dédiés (0 SQL dans tous les controllers)**
+- [x] Lire `src/routes/auth.ts` — inventaire 9 SQL inline
+- [x] Créer `src/services/authService.ts` — 8 fonctions SQL + JSDoc P4-DOC complet
+  - `findUserByEmail`, `findUserByEmailFull`, `findUserById`, `findUserWithProfile`
+  - `createBoutiqueWithSettings`, `createUser`, `activateUser`, `findUserByEmailAfterActivation`
+  - Interfaces TypeScript : `UserWithRole`, `UserFull`, `UserProfile`
+- [x] Réécrire `src/routes/auth.ts` — controller pur (0 SQL, 9 `.prepare` → 0)
+- [x] Lire `src/routes/boutiques.ts` — inventaire 12 SQL inline
+- [x] Créer `src/services/boutiqueService.ts` — 8 fonctions SQL + JSDoc P4-DOC complet
+  - `listAllBoutiques`, `listBoutiqueForUser`, `getBoutiqueById`, `getBoutiqueSettings`
+  - `createBoutique`, `updateBoutique`, `updateBoutiqueSettings`, `getStatsBoutique`
+  - 5 interfaces TypeScript exportées : `Boutique`, `BoutiqueSettings`, `StatsBoutique`, `CreateBoutiqueInput`, `UpdateBoutiqueInput`, `UpdateSettingsInput`
+- [x] Réécrire `src/routes/boutiques.ts` — controller pur (0 SQL, 12 `.prepare` → 0)
+- [x] Valider route iCal `GET /api/calendar/:token.ics` — RFC 5545, Content-Type text/calendar ✅
+- [x] Build ✅ 69 modules (+2), 246.44 kB, 0 erreur TypeScript
+- [x] Tests 8/8 ✅ (register, verify-otp, login, me, boutiques, iCal)
+- [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
+- [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
+
 ### Sprint 2.22 ✅ — Documentation P4 : JSDoc exhaustif (services + lib + routes)
 **Principe P4 Lisibilité : JSDoc obligatoire sur toutes les fonctions exportées**
 - [x] `src/services/agendaService.ts` : `@module` + JSDoc 10 fonctions + 5 helpers privés (machine états RDV, iCal RFC 5545)
@@ -348,13 +368,13 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.22.0 |
-| Build | `dist/_worker.js` 244.26 kB — 67 modules |
+| Version | 2.23.0 |
+| Build | `dist/_worker.js` 246.44 kB — 69 modules |
 | Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
-| Dernier commit | `ac116be` Sprint 2.22 — JSDoc P4 complet (services + lib + routes) |
+| Dernier commit | `e4f52a2` Sprint 2.23 — authService + boutiqueService (0 SQL dans controllers) |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
-| Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}
+| Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les controllers sont à 0 SQL direct |
 
 ---
 

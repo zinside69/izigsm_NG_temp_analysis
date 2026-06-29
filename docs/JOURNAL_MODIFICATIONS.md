@@ -3,6 +3,68 @@
 > **But de ce document** : traçabilité exhaustive de chaque fichier créé ou modifié,
 > classé par sprint. Permet à tout développeur (ou IA) de reprendre le projet sans
 > avoir à lire l'intégralité du code ou de l'historique git.
+
+---
+
+## Sprint 2.23
+
+**Titre** : Conformité P1 MVC — `authService` + `boutiqueService` + validation iCal
+**Commit** : `e4f52a2` — refactor: Sprint 2.23 — P1 MVC : authService + boutiqueService (0 SQL dans controllers)
+**Date** : 29 juin 2026
+**Version** : 2.23.0
+
+### Contexte
+
+Sprint de conformité P1 Modularité : deux controllers (`routes/auth.ts` et `routes/boutiques.ts`) contenaient encore du SQL direct issu des premières versions. Ce sprint extrait le SQL vers des services dédiés pour atteindre l'objectif **0 SQL dans tous les controllers**.
+
+La route iCal publique `GET /api/calendar/:token.ics`, déjà en production depuis Sprint 2.6, est validée en conditions réelles dans ce sprint.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/authService.ts` | ✅ créé | 8 fonctions SQL extraites de `routes/auth.ts`. JSDoc P4-DOC complet avec interfaces TypeScript (`UserWithRole`, `UserFull`, `UserProfile`). Fonctions : `findUserByEmail`, `findUserByEmailFull`, `findUserById`, `findUserWithProfile`, `createBoutiqueWithSettings`, `createUser`, `activateUser`, `findUserByEmailAfterActivation` |
+| `src/services/boutiqueService.ts` | ✅ créé | 8 fonctions SQL extraites de `routes/boutiques.ts`. JSDoc P4-DOC complet avec 5 interfaces TypeScript (`Boutique`, `BoutiqueSettings`, `StatsBoutique`, `CreateBoutiqueInput`, `UpdateBoutiqueInput`, `UpdateSettingsInput`). Fonctions : `listAllBoutiques`, `listBoutiqueForUser`, `getBoutiqueById`, `getBoutiqueSettings`, `createBoutique`, `updateBoutique`, `updateBoutiqueSettings`, `getStatsBoutique` |
+
+### Fichiers refactorisés
+
+| Fichier | Action | Avant → Après |
+|---|---|---|
+| `src/routes/auth.ts` | ✏️ refactorisé | 9 `.prepare` SQL → 0 — 6 routes controller pures. Imports `authService` ajoutés |
+| `src/routes/boutiques.ts` | ✏️ refactorisé | 12 `.prepare` SQL → 0 — 8 routes controller pures. Imports `boutiqueService` + types ajoutés |
+
+### Décisions architecturales
+
+- **`findUserByEmailFull()` séparé de `findUserByEmail()`** : la séparation évite de transporter `password_hash` dans des appels qui n'en ont pas besoin (unicité email dans register) — principe de moindre privilège sur les données
+- **`createBoutiqueWithSettings()` dans `authService`** : la création de boutique lors du register est une opération d'auth (atomique avec la création user) — elle est intentionnellement séparée de `boutiqueService.createBoutique()` qui gère le CRUD admin
+- **`toInt()` helper local dans `boutiqueService`** : fonction privée de conversion bool→0|1 pour SQLite — non exportée car interne au service (pas de fuite d'implémentation)
+- **Interfaces TypeScript exportées depuis les services** : les routes importent les types `CreateBoutiqueInput`, `UpdateBoutiqueInput`, etc. depuis le service — source unique de vérité pour les contrats de données
+
+### Validation iCal
+
+Route `GET /api/calendar/:token.ics` testée et validée :
+
+| Test | Vérification | Résultat |
+|---|---|---|
+| GET avec token valide | `Content-Type: text/calendar; charset=utf-8` | ✅ |
+| GET avec token valide | Body : `BEGIN:VCALENDAR`, `PRODID`, `X-WR-CALNAME`, `CALSCALE` | ✅ RFC 5545 |
+| GET avec token valide | `Content-Disposition: inline; filename="agenda-izigsm.ics"` | ✅ |
+| GET avec token valide | `Cache-Control: no-cache, no-store` | ✅ |
+| GET avec token invalide | 404 `{ success: false, error: "Token iCal invalide." }` | ✅ |
+| GET sans `.ics` | Token extrait correctement (`.slice(0, -4)`) | ✅ |
+
+### Tests Sprint 2.23
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `POST /api/auth/register` (avec workshopName) | ✅ 201 — boutique créée + OTP généré |
+| T2 | `POST /api/auth/register` (email dupliqué) | ✅ 409 — `findUserByEmail` détecte le doublon |
+| T3 | `POST /api/auth/verify-otp` | ✅ 200 — compte activé + paire tokens |
+| T4 | `GET /api/auth/me` | ✅ 200 — profil complet avec `boutique_nom` |
+| T5 | `POST /api/auth/login` | ✅ 200 — PBKDF2 validé |
+| T6 | `GET /api/boutiques` (manager) | ✅ 200 — isolation boutique_id respectée |
+| T7 | `GET /api/calendar/:token.ics` | ✅ 200 — RFC 5545 complet, Content-Type correct |
+| T8 | `npm run build` | ✅ 69 modules (+2), 246.44 kB |
 >
 > **Format** : pour chaque sprint → liste fichiers + rôle + décisions architecturales.
 > **Convention** : 🆕 créé | ✏️ modifié | 🗑️ supprimé | 🔧 corrigé bug
