@@ -23,7 +23,11 @@ import { reconditionnementRoutes, bonsAchatRoutes } from './routes/reconditionne
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 /**
- * iziGSM — API Backend Sprint 1 (Cloudflare Pages Functions)
+ * @module index
+ * @version 2.22.0
+ * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1 + KV).
+ *
+ * Sprint 2.22 — Documentation P4 : JSDoc exhaustif sur tous les services et lib.
  *
  * Architecture :
  * - HTML/CSS/JS dans dist/ → servis automatiquement par Cloudflare Pages CDN

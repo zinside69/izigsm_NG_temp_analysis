@@ -1,15 +1,40 @@
 /**
- * lib/db.ts — Helpers D1 : numérotation automatique, pagination, validation
+ * @module db
+ * @description Helpers D1 : utilitaires partagés entre tous les services.
+ *
+ * Ce module ne contient PAS de logique métier — uniquement des helpers
+ * réutilisés dans l'ensemble des services (Model layer).
+ *
+ * Fonctions exportées :
+ *  - `nextNumero()`    : numérotation séquentielle (TKT-2026-00001, etc.)
+ *  - `parsePagination()`: extraction page/limit/offset depuis les query params
+ *  - `calculTva()`     : calcul HT → TVA → TTC (arrondi à 2 décimales)
+ *  - `calculLignes()`  : agrégat de lignes document (facture, devis, avoir)
+ *  - `auditLog()`      : traçabilité des mutations en base
+ *  - Validateurs       : email, IMEI, téléphone (regex)
  */
 
 // ─── Numérotation automatique ─────────────────────────────────────────────────
 
 /**
  * Génère le prochain numéro séquentiel pour une boutique.
- * Format configurable via boutique_settings :
- *   - format_numero='annee'  → PREFIX-ANNÉE-XXXXX (ex: TKT-2026-00001)
- *   - format_numero='simple' → PREFIX-XXXXX       (ex: TKT-00001)
- * Les préfixes sont personnalisables (prefix_ticket, prefix_facture…)
+ *
+ * Format configurable depuis `boutique_settings.format_numero` :
+ *   - `'annee'`  → `PREFIX-ANNÉE-XXXXX` (ex: TKT-2026-00001) — par défaut
+ *   - `'simple'` → `PREFIX-XXXXX`       (ex: TKT-00001)
+ *
+ * Les préfixes sont personnalisables par boutique :
+ *   `prefix_ticket`, `prefix_facture`, `prefix_devis`, `prefix_avoir`, `prefix_rachat`
+ *   Valeurs par défaut : TKT, FAC, DEV, AV, LP, SAV
+ *
+ * Implémentation : upsert sur la table `sequences(boutique_id, type, annee)`
+ * avec `ON CONFLICT DO UPDATE SET dernier_num = dernier_num + 1`.
+ * Garantit l'atomicité de l'incrémentation (pas de course condition sur D1).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutique_id Identifiant de la boutique
+ * @param type        Type de document ('ticket' | 'facture' | 'devis' | 'avoir' | 'rachat' | 'sav')
+ * @returns           Numéro formaté (ex: "TKT-2026-00042")
  */
 export async function nextNumero(
   db: D1Database,
@@ -73,6 +98,13 @@ export interface PaginationParams {
   offset:  number
 }
 
+/**
+ * Extrait et normalise les paramètres de pagination depuis les query params HTTP.
+ * Borne `page` ≥ 1 et `limit` dans [1, 100] pour protéger contre les abus.
+ *
+ * @param query  Objet des query params (ex: `{ page: "2", limit: "50" }`)
+ * @returns      `{ page, limit, offset }` — `offset = (page-1) * limit`
+ */
 export function parsePagination(query: Record<string, string>): PaginationParams {
   const page  = Math.max(1, parseInt(query.page  ?? '1',  10))
   const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20', 10)))
@@ -91,14 +123,34 @@ export interface PaginatedResult<T> {
 
 // ─── Validation basique ───────────────────────────────────────────────────────
 
+/**
+ * Valide une adresse email avec une regex basique.
+ *
+ * @param email  Adresse email à valider
+ * @returns      `true` si le format est valide
+ */
 export function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+/**
+ * Valide un numéro IMEI (exactement 15 chiffres).
+ * Ne vérifie pas le checksum Luhn — validation syntaxique uniquement.
+ *
+ * @param imei  Numéro IMEI à valider
+ * @returns     `true` si 15 chiffres exactement
+ */
 export function validateImei(imei: string): boolean {
   return /^\d{15}$/.test(imei)
 }
 
+/**
+ * Valide un numéro de téléphone français (mobile ou fixe).
+ * Accepte : format international +33, format national 0X, espaces ignorés.
+ *
+ * @param tel  Numéro de téléphone à valider
+ * @returns    `true` si le format est conforme
+ */
 export function validateTelephone(tel: string): boolean {
   return /^(\+33|0)[1-9](\d{8})$/.test(tel.replace(/\s/g, ''))
 }
@@ -111,6 +163,14 @@ export interface TvaResult {
   ttc: number
 }
 
+/**
+ * Calcule HT → TVA → TTC avec arrondi à 2 décimales.
+ * Évite les erreurs de flottants via `Math.round(x * 100) / 100`.
+ *
+ * @param prixHt   Prix hors taxe en euros
+ * @param tauxTva  Taux de TVA en % (ex: 20 pour 20%)
+ * @returns        `{ ht, tva, ttc }` — tous arrondis à 2 décimales
+ */
 export function calculTva(prixHt: number, tauxTva: number): TvaResult {
   const ht  = Math.round(prixHt * 100) / 100
   const tva = Math.round(ht * (tauxTva / 100) * 100) / 100
@@ -118,6 +178,14 @@ export function calculTva(prixHt: number, tauxTva: number): TvaResult {
   return { ht, tva, ttc }
 }
 
+/**
+ * Agrège les lignes d'un document (facture, devis, avoir) pour calculer les totaux.
+ * Arrondit chaque ligne individuellement avant de sommer (méthode comptable).
+ *
+ * @param lignes  Tableau de lignes `{ quantite, prix_unitaire_ht, tva_taux }`
+ *                — `prix_unitaire_ht` peut déjà intégrer une remise (appliquée en amont)
+ * @returns       `{ total_ht, total_tva, total_ttc }` — tous arrondis à 2 décimales
+ */
 export function calculLignes(lignes: Array<{ quantite: number; prix_unitaire_ht: number; tva_taux: number }>) {
   return lignes.reduce(
     (acc, l) => {
@@ -135,6 +203,16 @@ export function calculLignes(lignes: Array<{ quantite: number; prix_unitaire_ht:
 
 // ─── Audit log ────────────────────────────────────────────────────────────────
 
+/**
+ * Enregistre une entrée dans le journal d'audit pour toute mutation en base.
+ * Appelé systématiquement par les services après chaque CREATE/UPDATE/DELETE.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param params  `{ boutique_id?, user_id, action, entite_type?, entite_id?, avant?, apres?, ip? }`
+ *                — `action` : verbe métier en majuscules (ex: "CREATE_TICKET", "UPDATE_STATUT")
+ *                — `avant`/`apres` : objets JSON pour diff avant/après
+ * @returns       void (erreur silencieuse si la table n'existe pas)
+ */
 export async function auditLog(
   db: D1Database,
   params: {

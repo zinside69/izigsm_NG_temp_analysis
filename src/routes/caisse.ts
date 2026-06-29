@@ -1,16 +1,25 @@
 /**
- * routes/caisse.ts — Controller Caisse POS + Journal NF525 (Sprint 2.12)
+ * @module routes/caisse
+ * @description Controller Caisse POS + Journal NF525 (P1 MVC — 0 SQL ici).
+ *
+ * Rôle architectural :
+ *   Controller pur (P1 Modularité) — orchestration HTTP uniquement.
+ *   Toute logique métier et SQL est déléguée à `caisseService.ts` (Model).
  *
  * Endpoints :
- *   GET    /api/caisse/kpis            → KPIs caisse du jour + mois
- *   GET    /api/caisse/journal         → Journal du jour (ou ?date=YYYY-MM-DD)
- *   POST   /api/caisse/vente           → Vente POS directe (crée facture + journal NF525)
- *   POST   /api/caisse/encaissement    → Encaisser une facture existante
- *   GET    /api/caisse/clotures        → Historique des clôtures
- *   POST   /api/caisse/cloture         → Clôture journalière NF525
- *   GET    /api/caisse/integrite       → Vérifier intégrité chaîne de hash
+ *   GET    /api/caisse/kpis         → KPIs caisse du jour + mois
+ *   GET    /api/caisse/journal      → Journal NF525 du jour (ou ?date=YYYY-MM-DD)
+ *   POST   /api/caisse/vente        → Vente POS directe (crée facture + journal NF525)
+ *   POST   /api/caisse/encaissement → Encaisser une facture existante
+ *   GET    /api/caisse/clotures     → Historique des clôtures journalières
+ *   POST   /api/caisse/cloture      → Clôture journalière NF525 (admin/gerant)
+ *   GET    /api/caisse/integrite    → Vérifier intégrité chaîne de hash (admin/gerant)
  *
- * Architecture : 0 SQL ici — tout passe par caisseService.ts
+ * Sécurité :
+ *   Toutes les routes requièrent `authMiddleware`.
+ *   `cloture` et `integrite` requièrent en plus `requireRole('admin', 'gerant')`.
+ *
+ * Format de réponse (P5 uniforme) : `{ success, data?, error?, message? }`
  */
 
 import { Hono }          from 'hono'
@@ -32,6 +41,13 @@ const caisse = new Hono<{ Bindings: Bindings }>()
 
 // ─── Helper contexte (même pattern que sav.ts) ────────────────────────────────
 
+/**
+ * Extrait le contexte utilisateur et le boutique_id résolu depuis le contexte Hono.
+ * Centralise la résolution multi-tenant pour toutes les routes de ce controller.
+ *
+ * @param c  Contexte Hono
+ * @returns  `{ user: JwtPayload, boutiqueId: number | null }`
+ */
 function ctx(c: any) {
   const user       = c.get('user')
   const boutiqueId = getBoutiqueId(user, new URL(c.req.url).searchParams.get('boutique_id') ?? undefined)
@@ -43,6 +59,16 @@ caisse.use('*', authMiddleware)
 
 // ─── Validators locaux ────────────────────────────────────────────────────────
 
+/**
+ * Valide le corps d'une requête de vente POS.
+ * Vérifie la présence des lignes, le mode de paiement et la cohérence de chaque ligne.
+ *
+ * Modes de paiement valides : `especes` | `cb` | `virement` | `cheque` | `mixte`
+ * Taux TVA valides : `0` | `5.5` | `10` | `20`
+ *
+ * @param body  Corps JSON de la requête POST /caisse/vente
+ * @returns     Message d'erreur (string) si invalide, `null` si valide
+ */
 function validateVente(body: any): string | null {
   if (!Array.isArray(body.lignes) || body.lignes.length === 0)
     return 'Au moins une ligne de vente obligatoire.'
@@ -66,6 +92,18 @@ function validateVente(body: any): string | null {
 
 // ─── KPIs Caisse ─────────────────────────────────────────────────────────────
 
+/**
+ * GET /api/caisse/kpis
+ * Retourne les indicateurs clés de performance de la caisse pour le jour courant et le mois.
+ * Délègue à `getKpisCaisse()` qui effectue des requêtes D1 + KV en parallèle.
+ *
+ * Query params :
+ *   `boutique_id` (requis pour admin, ignoré pour autres rôles)
+ *
+ * @returns 200 `{ success: true, data: KpisCaisse }`
+ * @returns 400 si boutique_id manquant
+ * @returns 500 en cas d'erreur serveur
+ */
 caisse.get('/caisse/kpis', async (c) => {
   const { boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -80,6 +118,18 @@ caisse.get('/caisse/kpis', async (c) => {
 
 // ─── Journal du jour ──────────────────────────────────────────────────────────
 
+/**
+ * GET /api/caisse/journal
+ * Retourne le journal NF525 du jour courant ou d'une date spécifique.
+ *
+ * Query params :
+ *   `boutique_id` (requis admin)
+ *   `date`        (optionnel, format YYYY-MM-DD — défaut : aujourd'hui)
+ *
+ * @returns 200 `{ success: true, data: JournalEntry[] }`
+ * @returns 400 si boutique_id manquant ou format date invalide
+ * @returns 500 en cas d'erreur serveur
+ */
 caisse.get('/caisse/journal', async (c) => {
   const { boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -99,6 +149,34 @@ caisse.get('/caisse/journal', async (c) => {
 
 // ─── Vente POS ────────────────────────────────────────────────────────────────
 
+/**
+ * POST /api/caisse/vente
+ * Crée une vente POS directe : génère la facture + l'entrée NF525 en une transaction.
+ *
+ * Body JSON :
+ * ```json
+ * {
+ *   "client_id":       1,          // optionnel
+ *   "mode_paiement":  "especes",   // requis : especes|cb|virement|cheque|mixte
+ *   "montant_especes": 50.00,      // pour mode mixte
+ *   "montant_cb":      30.00,      // pour mode mixte
+ *   "note":            "...",      // optionnel
+ *   "lignes": [{
+ *     "produit_id":       1,       // optionnel
+ *     "service_id":       2,       // optionnel
+ *     "designation":      "Réparation écran",
+ *     "quantite":         1,
+ *     "prix_unitaire_ht": 80.00,
+ *     "tva_taux":         20,      // 0 | 5.5 | 10 | 20
+ *     "remise_pct":       0        // optionnel
+ *   }]
+ * }
+ * ```
+ *
+ * @returns 201 `{ success: true, data: { facture_id, numero_facture, hash_nf525 } }`
+ * @returns 400 si boutique_id manquant ou erreur métier
+ * @returns 422 si corps invalide (validation `validateVente`)
+ */
 caisse.post('/caisse/vente', async (c) => {
   const { user, boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -136,6 +214,22 @@ caisse.post('/caisse/vente', async (c) => {
 
 // ─── Encaissement sur facture existante ──────────────────────────────────────
 
+/**
+ * POST /api/caisse/encaissement
+ * Encaisse une facture existante (statut `en_attente` → `payee`) + entrée NF525.
+ *
+ * Body JSON :
+ * ```json
+ * {
+ *   "facture_id":    42,        // requis
+ *   "mode_paiement": "cb"       // requis : especes|cb|virement|cheque|mixte
+ * }
+ * ```
+ *
+ * @returns 201 `{ success: true, data: JournalEntry }`
+ * @returns 400 si facture_id manquant, erreur métier, ou facture déjà payée
+ * @returns 422 si mode_paiement invalide
+ */
 caisse.post('/caisse/encaissement', async (c) => {
   const { user, boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -167,6 +261,18 @@ caisse.post('/caisse/encaissement', async (c) => {
 
 // ─── Historique clôtures ──────────────────────────────────────────────────────
 
+/**
+ * GET /api/caisse/clotures
+ * Retourne l'historique des clôtures journalières NF525.
+ *
+ * Query params :
+ *   `boutique_id` (requis admin)
+ *   `limit`       (optionnel, défaut 30, max 100)
+ *
+ * @returns 200 `{ success: true, data: Cloture[] }`
+ * @returns 400 si boutique_id manquant
+ * @returns 500 en cas d'erreur serveur
+ */
 caisse.get('/caisse/clotures', async (c) => {
   const { boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -184,6 +290,22 @@ caisse.get('/caisse/clotures', async (c) => {
 
 // ─── Clôture journalière NF525 ────────────────────────────────────────────────
 
+/**
+ * POST /api/caisse/cloture
+ * Effectue la clôture journalière NF525 (opération irréversible).
+ * Réservé aux rôles `admin` et `gerant`.
+ *
+ * Body JSON (optionnel) :
+ * ```json
+ * { "date": "2026-06-29" }  // défaut : aujourd'hui
+ * ```
+ *
+ * Délègue à `cloturerJournee()` — génère le hash de clôture SHA-256
+ * enchaîné avec la dernière transaction du journal.
+ *
+ * @returns 201 `{ success: true, data: { hash_cloture, nb_transactions, total_ttc } }`
+ * @returns 400 si journée déjà clôturée, format date invalide, ou aucune transaction
+ */
 caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
   const { user, boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -205,6 +327,23 @@ caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
 
 // ─── Vérification intégrité chaîne NF525 ─────────────────────────────────────
 
+/**
+ * GET /api/caisse/integrite
+ * Vérifie l'intégrité complète de la chaîne de hash NF525 pour la boutique.
+ * Réservé aux rôles `admin` et `gerant`.
+ *
+ * Recalcule chaque hash SHA-256 et détecte toute rupture de chaîne
+ * qui indiquerait une modification frauduleuse des données.
+ *
+ * Query params :
+ *   `boutique_id` (requis admin)
+ *   `date_debut`  (optionnel, format YYYY-MM-DD)
+ *   `date_fin`    (optionnel, format YYYY-MM-DD)
+ *
+ * @returns 200 `{ success: true, data: { valide, nb_entrees, premiere_erreur? } }`
+ * @returns 400 si boutique_id manquant
+ * @returns 500 en cas d'erreur serveur
+ */
 caisse.get('/caisse/integrite', requireRole('admin', 'gerant'), async (c) => {
   const { boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)

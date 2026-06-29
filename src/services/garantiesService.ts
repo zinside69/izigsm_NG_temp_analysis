@@ -1,11 +1,28 @@
 /**
- * garantiesService.ts — Model SAV & Garanties (Sprint 2.10)
+ * @module garantiesService
+ * @description Model P1 : Garanties après-vente + Dossiers SAV.
+ *
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL ici.
+ * Les routes `src/routes/sav.ts` délèguent sans aucun `.prepare()`.
  *
  * Règles métier :
- *  - Une garantie est créée automatiquement quand un ticket passe en "termine"
- *  - Un dossier SAV peut être ouvert sur n'importe quelle garantie encore active
- *  - Un dossier SAV crée un nouveau ticket (type réparation sous garantie)
- *  - Machine à états SAV : ouvert → en_traitement → resolu | refuse → clos
+ *  - Une garantie est créée AUTOMATIQUEMENT quand un ticket passe en "termine"
+ *    (via `createGarantieFromTicket()`). Idempotent : pas de doublon si appelé 2×.
+ *  - Durée de garantie configurable dans `boutique_settings.garantie_defaut_jours` (défaut 90j).
+ *  - Un dossier SAV peut être ouvert sur n'importe quelle garantie encore `active`.
+ *  - L'ouverture d'un SAV consomme la garantie (statut → `consommee`)
+ *    et crée automatiquement un nouveau ticket SAV (priorité haute).
+ *
+ * Machine à états SAV :
+ *   ouvert → en_traitement → resolu → clos
+ *          ↘                refus  → clos
+ *                                    clos (direct)
+ *
+ * Alias SQL dans les requêtes SAV :
+ *   `t_orig` = alias pour `tickets` (ticket d'origine de la garantie)
+ *   `ts`     = alias pour `tickets` (ticket SAV créé pour le dossier)
+ *
+ * Sprint 2.10 — MOD-09 SAV & Garanties
  */
 
 import { nextNumero, parsePagination } from '../lib/db'
@@ -48,7 +65,8 @@ export interface SavRow {
   updated_at:        string
 }
 
-// Transitions SAV (machine à états)
+// Matrice des transitions SAV — seules ces transitions sont autorisées
+// Tout autre changement de statut lève une Error dans updateSavStatut()
 const TRANSITIONS_SAV: Record<string, string[]> = {
   ouvert:        ['en_traitement', 'refuse', 'clos'],
   en_traitement: ['resolu', 'refuse', 'clos'],
@@ -61,8 +79,19 @@ const TRANSITIONS_SAV: Record<string, string[]> = {
 
 /**
  * Crée une garantie automatiquement lors du passage d'un ticket en "termine".
- * La durée est lue depuis boutique_settings.garantie_defaut_jours (défaut : 90j).
- * Idempotent : si une garantie active existe déjà pour ce ticket, elle est retournée.
+ * Lecture de la durée depuis `boutique_settings.garantie_defaut_jours` (défaut : 90j).
+ *
+ * Idempotent : si une garantie `actif=1` existe déjà pour ce ticket, elle est
+ * retournée sans créer de doublon (safe à appeler plusieurs fois).
+ *
+ * La date de fin est calculée côté JavaScript (pas SQLite) pour contourner
+ * le bug de binding D1 avec `datetime('now', '+N days')` et paramètre dynamique.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param ticketId    Identifiant du ticket terminé
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           La garantie créée ou existante (`GarantieRow`)
+ * @throws            Error si l'insertion échoue
  */
 export async function createGarantieFromTicket(
   db:        D1Database,
@@ -118,7 +147,16 @@ export async function createGarantieFromTicket(
 }
 
 /**
- * Création manuelle d'une garantie (sans ticket associé obligatoire).
+ * Création manuelle d'une garantie (hors ticket ou pour ticket optionnel).
+ *
+ * Cas d'usage : garantie sur pièce vendue sans réparation, ou création
+ * manuelle depuis le backoffice sans ticket associé (`ticket_id` nullable depuis migration 0019).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param data        Données de la garantie (ticket_id optionnel, durée, client, appareil)
+ * @returns           La garantie créée (`GarantieRow`)
+ * @throws            Error si l'insertion échoue
  */
 export async function createGarantie(
   db:         D1Database,
@@ -163,7 +201,13 @@ export async function createGarantie(
 }
 
 /**
- * Récupère une garantie par son id (avec vérification boutique).
+ * Récupère une garantie par son identifiant avec les infos liées.
+ * Vérifie l'appartenance à la boutique et que la garantie n'est pas supprimée.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant de la garantie
+ * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
+ * @returns           Garantie enrichie (client + ticket) ou `null` si absente
  */
 export async function getGarantie(
   db:         D1Database,
@@ -189,7 +233,22 @@ export async function getGarantie(
 }
 
 /**
- * Liste des garanties avec pagination + filtres.
+ * Liste paginée des garanties avec filtres dynamiques.
+ *
+ * Filtres via `query` :
+ *  - `statut`      : active | expiree | consommee
+ *  - `client_id`   : filtre par client
+ *  - `search`      : plein-texte sur marque, modèle, nom/prénom client
+ *  - `expires_soon`: "1" pour les garanties expirant dans les 7 prochains jours
+ *  - `page`, `limit`: pagination
+ *
+ * Exécute 2 requêtes en parallèle (count + data) via `Promise.all`.
+ * Ajoute `jours_restants` (entier, négatif si expirée) calculé via `julianday`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param query       Paramètres de filtrage (query params HTTP)
+ * @returns           `{ data: GarantieRow[], pagination }`
  */
 export async function listGaranties(
   db:         D1Database,
@@ -261,8 +320,12 @@ export async function listGaranties(
 }
 
 /**
- * Expire automatiquement les garanties dont date_fin < now.
- * Retourne le nombre de garanties expirées.
+ * Expire automatiquement toutes les garanties dont `date_fin` < maintenant.
+ * Opération périodique à appeler via cron ou à la lecture de la liste.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Nombre de garanties passées au statut `expiree`
  */
 export async function checkAndExpireGaranties(
   db:         D1Database,
@@ -283,9 +346,21 @@ export async function checkAndExpireGaranties(
 // ─── Dossiers SAV ─────────────────────────────────────────────────────────────
 
 /**
- * Ouvre un dossier SAV.
- * Vérifie que la garantie existe et est active (si garantie_id fourni).
- * Crée un nouveau ticket SAV automatiquement.
+ * Ouvre un dossier SAV et crée le ticket de réparation associé.
+ *
+ * Séquence :
+ *  1. Vérifie la garantie (si `garantie_id` fourni) : doit être `active`
+ *  2. Génère le numéro SAV via `nextNumero()`
+ *  3. Crée un ticket SAV (priorité haute, statut `recu`) avec tracking_token
+ *  4. Crée le dossier SAV lié à la garantie + ticket SAV
+ *  5. Marque la garantie comme `consommee` (une seule utilisation)
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param userId      Identifiant de l'utilisateur créant le dossier
+ * @param data        `{ garantie_id?, client_id?, motif, description? }`
+ * @returns           Le dossier SAV créé (`SavRow`)
+ * @throws            Error si garantie expirée, consommée ou introuvable
  */
 export async function createSav(
   db:         D1Database,
@@ -380,7 +455,16 @@ export async function createSav(
 }
 
 /**
- * Liste des dossiers SAV avec pagination + filtres.
+ * Liste paginée des dossiers SAV avec filtres et enrichissement.
+ *
+ * Alias SQL utilisés dans la requête principale :
+ *   `t_orig` → `tickets` : ticket d'origine (réparation initiale)
+ *   `ts`     → `tickets` : ticket SAV créé pour ce dossier
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param query       Filtres : `statut`, `client_id`, `search`, `page`, `limit`
+ * @returns           `{ data: SavRow[], pagination }`
  */
 export async function listSav(
   db:         D1Database,
@@ -451,7 +535,18 @@ export async function listSav(
 }
 
 /**
- * Détail d'un dossier SAV.
+ * Récupère le détail complet d'un dossier SAV.
+ *
+ * Enrichit avec :
+ *  - Client (nom, prénom, téléphone, email)
+ *  - Ticket d'origine (`t_orig` alias) : marque, modèle, numéro
+ *  - Ticket SAV (`ts` alias) : numéro, statut
+ *  - Garantie : dates, durée, jours restants
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant du dossier SAV
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Dossier SAV enrichi ou `null` si introuvable
  */
 export async function getSav(
   db:         D1Database,
@@ -484,8 +579,26 @@ export async function getSav(
 }
 
 /**
- * Met à jour le statut d'un dossier SAV (machine à états).
- * Ferme le ticket SAV associé si résolu/refusé/clos.
+ * Change le statut d'un dossier SAV en respectant la machine à états.
+ *
+ * Transitions autorisées (`TRANSITIONS_SAV`) :
+ *   ouvert → en_traitement | refuse | clos
+ *   en_traitement → resolu | refuse | clos
+ *   resolu → clos
+ *   refuse → clos
+ *   clos   → (terminal)
+ *
+ * Effets de bord quand statut fermant (resolu | refuse | clos) :
+ *   - `date_cloture` renseignée automatiquement
+ *   - Le ticket SAV associé passe en `termine` (si resolu) ou `annule`
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant du dossier SAV
+ * @param boutiqueId  Identifiant de la boutique
+ * @param statut      Nouveau statut (doit être une transition valide)
+ * @param resolution  (optionnel) Texte de résolution/refus
+ * @returns           Dossier SAV mis à jour (`SavRow`)
+ * @throws            Error si transition interdite ou dossier introuvable
  */
 export async function updateSavStatut(
   db:         D1Database,
@@ -532,7 +645,15 @@ export async function updateSavStatut(
 }
 
 /**
- * KPIs SAV & Garanties pour le dashboard.
+ * Calcule les KPIs SAV & Garanties pour le tableau de bord.
+ * Exécute 5 requêtes en parallèle via `Promise.all`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           `{ garanties_actives, garanties_expirees, garanties_consommees,
+ *                    garanties_expirant_7j, sav_ouverts, sav_en_traitement,
+ *                    sav_resolus_mois, taux_retour_pct }`
+ *                    — `taux_retour_pct` : % garanties consommées / total garanties
  */
 export async function getKpisSav(
   db:         D1Database,

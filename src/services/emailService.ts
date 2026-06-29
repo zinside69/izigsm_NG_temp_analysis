@@ -1,14 +1,25 @@
 /**
- * emailService.ts — Notifications email transactionnelles (Sprint 2.11)
+ * @module emailService
+ * @description Model P1 : Notifications email transactionnelles via Resend.
  *
- * Provider : Resend (API REST, compatible Cloudflare Workers)
- * Fallback : mode "simulé" si pas de clé API configurée (log en DB sans envoi réel)
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL et les appels API ici.
+ * Les routes ne font jamais d'appel direct à Resend.
+ *
+ * Provider : Resend (API REST, compatible Cloudflare Workers).
+ * Pas de Node Mailer — Cloudflare Workers n'a pas de runtime Node.js.
+ *
+ * Stratégie non-bloquante :
+ *  - L'envoi est toujours logé dans `email_logs` (succès, erreur ou simulé).
+ *  - Mode simulé automatique si `email_api_key` non configurée → zéro dépendance en dev.
+ *  - La route appelante ne recevra jamais d'erreur liée à l'email — les échecs sont logés.
  *
  * Règles métier :
- *  - Chaque boutique configure sa propre clé API + adresse expéditeur
- *  - Un email = une entrée dans email_logs (audit complet)
- *  - Mode simulé si email_api_key absent → aucune dépendance externe en dev
- *  - Déduplication : pas de double envoi pour le même (entite_id, type) dans les 5min
+ *  - Chaque boutique configure sa propre clé API Resend + adresse expéditeur.
+ *  - Un email = une entrée dans `email_logs` (audit complet, consultable en backoffice).
+ *  - Déduplication : pas de double envoi pour le même `(entite_id, type)` dans les 5 min.
+ *  - Chaque type de notification peut être activé/désactivé dans `boutique_settings`.
+ *
+ * Sprint 2.11 — MOD-11 Notifications email
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +49,15 @@ export interface SendEmailParams {
 
 // ─── Config boutique ──────────────────────────────────────────────────────────
 
+/**
+ * Lit la configuration email d'une boutique depuis `boutique_settings`.
+ * Applique des valeurs par défaut si aucune configuration n'existe :
+ * provider=resend, from=nom_boutique<email_boutique>, toutes notifs activées.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Configuration complète avec clé API, expéditeur et flags notifications
+ */
 export async function getEmailConfig(
   db:         D1Database,
   boutiqueId: number
@@ -69,8 +89,17 @@ export async function getEmailConfig(
 // ─── Envoi core ───────────────────────────────────────────────────────────────
 
 /**
- * Envoie un email via Resend (ou simule si pas de clé API).
- * Logue toujours dans email_logs.
+ * Envoie un email transactionnel via Resend, ou simule l'envoi si clé API absente.
+ * Logue systématiquement le résultat dans `email_logs` — toujours, sans exception.
+ *
+ * Logique de décision (dans l'ordre) :
+ *  1. Déduplication : si même `(entite_id, type)` envoyé dans les 5 dernières minutes → skip
+ *  2. Notification désactivée dans settings → simule (success=true, simulated=true)
+ *  3. Clé API absente → log statut='simule'
+ *  4. Envoi via Resend REST API → log statut='envoye' ou 'erreur'
+ *
+ * @param params  Paramètres de l'email (`SendEmailParams`)
+ * @returns       `{ success: boolean, simulated: boolean }` — ne jette jamais d'exception
  */
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; simulated: boolean }> {
   const { db, boutiqueId, to, sujet, html, type, entiteType, entiteId } = params
@@ -215,7 +244,15 @@ function baseLayout(content: string, boutiqueName: string): string {
 // ─── Emails métier ────────────────────────────────────────────────────────────
 
 /**
- * Email de confirmation de dépôt (ticket créé).
+ * Envoie l'email de confirmation de dépôt au client (ticket créé).
+ * Inclut un lien de suivi si `tracking_token` est disponible.
+ * Opération silencieuse : les erreurs d'envoi sont logées sans propager d'exception.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique (pour config email + nom expéditeur)
+ * @param ticket      Données du ticket (numéro, appareil, client, tracking_token)
+ * @param frontendUrl URL de base du frontend (ex: "https://izigsm.pages.dev")
+ * @returns           void
  */
 export async function sendTicketCree(
   db:         D1Database,
@@ -269,7 +306,16 @@ export async function sendTicketCree(
 }
 
 /**
- * Email de notification de fin de réparation (ticket terminé).
+ * Envoie la notification de fin de réparation au client.
+ * Déclenché quand un ticket passe au statut `termine`.
+ * Inclut les informations de garantie si disponibles (durée + date fin).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param ticket      Données du ticket terminé (prix_final, diagnostic, tracking_token)
+ * @param garantie    Données garantie `{ date_fin, garantie_jours }` ou `null`
+ * @param frontendUrl URL de base du frontend
+ * @returns           void
  */
 export async function sendTicketTermine(
   db:         D1Database,
@@ -333,7 +379,13 @@ export async function sendTicketTermine(
 }
 
 /**
- * Email de confirmation d'ouverture de dossier SAV.
+ * Envoie la confirmation d'ouverture de dossier SAV au client.
+ * Déclenché à la création d'un dossier SAV (garantie ou hors-garantie).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param dossier     Données du dossier SAV (numéro, motif, client, appareil)
+ * @returns           void
  */
 export async function sendSavOuvert(
   db:         D1Database,
@@ -381,7 +433,14 @@ export async function sendSavOuvert(
 }
 
 /**
- * Email de relance client — ticket sans réponse depuis N jours.
+ * Envoie un email de relance pour un ticket en attente sans réponse.
+ * Le statut du ticket est traduit en libellé lisible dans l'email.
+ * Appelé individuellement ou par `processRelances()`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param ticket      Données du ticket (numéro, appareil, statut, client)
+ * @returns           void
  */
 export async function sendRelance(
   db:         D1Database,
@@ -439,8 +498,18 @@ export async function sendRelance(
 // ─── Batch relances ───────────────────────────────────────────────────────────
 
 /**
- * Envoie des relances pour tous les tickets en attente depuis delai_relance_jours.
- * Retourne le nombre de relances envoyées.
+ * Traitement batch : envoie les relances pour tous les tickets en attente.
+ *
+ * Critères d'éligibilité cumulés :
+ *  - Statut du ticket parmi : `attente_accord`, `a_commander`, `commande`, `en_diagnostic`
+ *  - Aucune relance envoyée dans les `delai_relance_jours` jours (configuré par boutique)
+ *  - Client possède un email valide
+ *  - Limité à 50 tickets par exécution (protection anti-spam)
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param frontendUrl URL de base du frontend (non utilisée ici, par cohérence d'interface)
+ * @returns           Nombre de relances envoyées
  */
 export async function processRelances(
   db:         D1Database,
@@ -481,6 +550,15 @@ export async function processRelances(
 
 // ─── KPIs email ───────────────────────────────────────────────────────────────
 
+/**
+ * Retourne les statistiques d'envoi email pour le tableau de bord.
+ * Exécute 3 requêtes en parallèle via `Promise.all` (total, mois courant, par type).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           `{ envoyes_total, envoyes_mois, erreurs_mois, simules_mois, par_type }`
+ *                    — `par_type` : nombre d'emails par type sur le mois courant
+ */
 export async function getEmailStats(
   db:         D1Database,
   boutiqueId: number

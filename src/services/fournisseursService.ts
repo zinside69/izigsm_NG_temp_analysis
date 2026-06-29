@@ -1,6 +1,26 @@
 /**
- * services/fournisseursService.ts — Logique métier : Fournisseurs + Bons de commande + CUMP
- * Rôle architectural (P3 BFF Hono) : Model — tout le SQL ici, aucune route n'accède à D1 directement.
+ * @module fournisseursService
+ * @description Model P1 : Fournisseurs + Bons de commande + gestion CUMP stock.
+ *
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL ici.
+ * Les routes `src/routes/fournisseurs.ts` délèguent sans aucun `.prepare()`.
+ *
+ * Fonctionnalités :
+ *  - CRUD fournisseurs (soft delete, pagination, recherche)
+ *  - CRUD bons de commande avec numérotation BC-AAAA-XXXXX
+ *  - Réception partielle/totale : mise à jour stock + recalcul CUMP
+ *  - Vue "à commander" : produits sous le seuil minimum
+ *  - KPIs : nb commandes, montants, impayés, produits en rupture
+ *
+ * Algorithme CUMP (Coût Unitaire Moyen Pondéré) :
+ *   CUMP_nouveau = (stock_avant × CUMP_avant + qty_reçue × prix_achat) / stock_après
+ *   Si stock_avant = 0 : CUMP_nouveau = prix_achat (pas de pondération)
+ *   Le CUMP est stocké dans `produits.prix_achat_cump`.
+ *
+ * Numérotation bons de commande :
+ *   Format : BC-AAAA-NNNNN (ex: BC-2026-00001)
+ *   Calculée par MAX(seq) sur la table (pas via nextNumero — différent du préfixe standard).
+ *
  * Sprint 2.5 — MOD-10 Achats/Approvisionnement
  */
 
@@ -51,8 +71,13 @@ export interface LigneBonCommande {
 // ─── Fournisseurs ─────────────────────────────────────────────────────────────
 
 /**
- * Liste tous les fournisseurs actifs d'une boutique.
- * Inclut le nombre de bons de commande associés.
+ * Liste paginée des fournisseurs actifs d'une boutique.
+ * Inclut le nombre de bons de commande associés et le nombre en attente de livraison.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param query       Filtres : `search` (nom/email/contact), `page`, `limit`
+ * @returns           `{ data: Fournisseur[], pagination }`
  */
 export async function listFournisseurs(
   db: D1Database,
@@ -95,7 +120,11 @@ export async function listFournisseurs(
 }
 
 /**
- * Retourne un fournisseur par son id.
+ * Récupère un fournisseur par son identifiant.
+ *
+ * @param db  Binding D1 Cloudflare
+ * @param id  Identifiant du fournisseur
+ * @returns   `Fournisseur` ou `null` si introuvable / soft-deleted
  */
 export async function getFournisseur(
   db: D1Database, id: number
@@ -107,8 +136,12 @@ export async function getFournisseur(
 }
 
 /**
- * Crée un fournisseur.
- * @returns id du fournisseur créé
+ * Crée un nouveau fournisseur et trace dans l'audit log.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param data    Données du fournisseur (nom obligatoire, reste optionnel)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       Identifiant du fournisseur créé
  */
 export async function createFournisseur(
   db: D1Database,
@@ -138,7 +171,14 @@ export async function createFournisseur(
 }
 
 /**
- * Met à jour un fournisseur.
+ * Met à jour les champs d'un fournisseur (PATCH partiel via COALESCE).
+ * Seuls les champs fournis sont modifiés.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant du fournisseur
+ * @param data    Champs à mettre à jour (tous optionnels)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function updateFournisseur(
   db: D1Database,
@@ -171,7 +211,13 @@ export async function updateFournisseur(
 }
 
 /**
- * Désactive (soft delete) un fournisseur.
+ * Désactive un fournisseur (soft delete — `actif = 0`).
+ * Le fournisseur n'apparaît plus dans les listes mais les données sont conservées.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant du fournisseur
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function deleteFournisseur(
   db: D1Database, id: number, userId: number
@@ -183,7 +229,12 @@ export async function deleteFournisseur(
 // ─── Bons de commande ─────────────────────────────────────────────────────────
 
 /**
- * Liste les bons de commande d'une boutique avec filtres.
+ * Liste paginée des bons de commande avec filtres et enrichissement fournisseur.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param query       Filtres : `statut`, `fournisseur_id`, `statut_paiement`, `search`, `page`, `limit`
+ * @returns           `{ data: BonCommande[], pagination }` enrichi avec nb_lignes et totaux articles
  */
 export async function listBonsCommande(
   db: D1Database,
@@ -237,7 +288,12 @@ export async function listBonsCommande(
 }
 
 /**
- * Retourne un bon de commande complet avec ses lignes.
+ * Récupère un bon de commande complet avec ses lignes de détail.
+ * Joint les infos du fournisseur et les stocks/CUMP des produits liés.
+ *
+ * @param db  Binding D1 Cloudflare
+ * @param id  Identifiant du bon de commande
+ * @returns   `{ bc: BonCommande, lignes: LigneBonCommande[] }` ou `null` si introuvable
  */
 export async function getBonCommande(
   db: D1Database, id: number
@@ -263,9 +319,18 @@ export async function getBonCommande(
 }
 
 /**
- * Crée un bon de commande avec ses lignes.
- * Utilise nextNumero pour la numérotation BC-AAAA-XXXXX.
- * @returns id du bon créé
+ * Crée un bon de commande avec ses lignes d'articles.
+ *
+ * Numérotation : `BC-AAAA-NNNNN` calculée par `MAX(seq)` sur la table
+ * (différente de `nextNumero()` qui gère d'autres préfixes).
+ * Statut initial : `draft` / paiement : `pending`.
+ * Calcule automatiquement `montant_ht` et `montant_ttc` depuis les lignes.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param data    Données du bon (fournisseur, lignes, boutique_id, notes, ticket_id optionnel)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       Identifiant du bon de commande créé
+ * @throws        Error si l'insertion du bon échoue
  */
 export async function createBonCommande(
   db: D1Database,
@@ -338,7 +403,16 @@ export async function createBonCommande(
 
 /**
  * Met à jour le statut d'un bon de commande.
- * Statuts autorisés : draft → awaiting_delivery → received | cancelled
+ *
+ * Flux de statuts : `draft` → `awaiting_delivery` → `received` | `cancelled`
+ * La validation du statut est effectuée ici (liste blanche).
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant du bon de commande
+ * @param statut  Nouveau statut (parmi draft | awaiting_delivery | received | cancelled)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
+ * @throws        Error si statut invalide
  */
 export async function updateStatutBonCommande(
   db: D1Database,
@@ -359,14 +433,23 @@ export async function updateStatutBonCommande(
 }
 
 /**
- * Réceptionne un bon de commande :
- * - Met à jour quantite_recue sur chaque ligne
- * - Met à jour le stock de chaque produit (+qty)
- * - Recalcule le CUMP de chaque produit
- * - Passe le bon en statut 'received'
- * - Crée les mouvements de stock de type 'reception_commande'
+ * Réceptionne un bon de commande : met à jour le stock et recalcule le CUMP.
  *
- * Formule CUMP : (stock_actuel × prix_achat_cump + qty_recue × prix_achat_ht) / (stock_actuel + qty_recue)
+ * Pour chaque ligne reçue avec un `produit_id` :
+ *  1. Met à jour `quantite_recue` sur la ligne du bon
+ *  2. Incrémente `stock_actuel` du produit
+ *  3. Recalcule `prix_achat_cump` (Coût Unitaire Moyen Pondéré) :
+ *     `CUMP = (stock_avant × CUMP_avant + qty × prix) / stock_après`
+ *     Si `stock_avant = 0` : `CUMP = prix_achat_ht` (pas de pondération)
+ *  4. Crée un mouvement de stock `reception_commande` pour la traçabilité
+ *  5. Passe le bon en statut `received`
+ *
+ * @param db           Binding D1 Cloudflare
+ * @param id           Identifiant du bon de commande
+ * @param lignesRecues Liste `[{ ligne_id, quantite_recue }]` — quantité ≤ 0 ignorée
+ * @param userId       Identifiant de l'utilisateur (pour audit log)
+ * @returns            `{ nb_produits_mis_a_jour }` — nombre de produits dont le stock a changé
+ * @throws             Error si bon introuvable, déjà reçu, ou annulé
  */
 export async function receptionnerBonCommande(
   db: D1Database,
@@ -455,7 +538,13 @@ export async function receptionnerBonCommande(
 }
 
 /**
- * Retourne les KPIs fournisseurs / commandes d'une boutique.
+ * Calcule les KPIs fournisseurs et achats pour le tableau de bord.
+ * Exécute 2 requêtes en parallèle via `Promise.all`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           `{ nb_fournisseurs, nb_commandes_total, nb_en_attente,
+ *                    montant_achats_ht, montant_impaye_ttc, nb_produits_a_commander }`
  */
 export async function getKpisFournisseurs(
   db: D1Database, boutiqueId: number
@@ -485,8 +574,14 @@ export async function getKpisFournisseurs(
 }
 
 /**
- * Vue "À commander" : produits avec stock_actuel ≤ stock_minimum.
- * Enrichit avec le fournisseur principal si disponible.
+ * Retourne les produits dont le stock est inférieur ou égal au seuil minimum.
+ * Enrichit chaque produit avec son fournisseur principal (si renseigné).
+ * Calcule la quantité suggérée à commander : `stock_minimum - stock_actuel + 1`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Liste de produits en alerte `{ id, nom, stock_actuel, alerte: 'rupture'|'bas', quantite_suggere, ... }`
+ *                    triée par stock croissant (ruptures en premier)
  */
 export async function getProduitsACommander(
   db: D1Database, boutiqueId: number

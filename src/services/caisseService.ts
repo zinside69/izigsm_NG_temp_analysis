@@ -1,22 +1,34 @@
 /**
- * caisseService.ts — Model Caisse POS + Journal NF525 (Sprint 2.12)
+ * @module caisseService
+ * @description Model P1 : Caisse POS + Journal fiscal NF525.
  *
- * Architecture NF525 :
- *  - Chaque transaction est insérée dans journal_nf525 avec un hash chaîné SHA-256
- *  - hash_courant = SHA-256(type | reference_numero | montant_ttc | date | hash_precedent)
- *  - La clôture journalière calcule un hash_cloture sur toutes les transactions du jour
- *  - Les tables journal_nf525 et clotures_journalieres existent depuis migration 0008
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL est ici.
+ * Les routes `src/routes/caisse.ts` délèguent sans aucun `.prepare()`.
+ *
+ * Architecture NF525 (Loi anti-fraude TVA, art. 88 LFR 2015) :
+ *  - Chaque transaction est insérée dans `journal_nf525` avec un hash SHA-256 chaîné.
+ *  - Formule : `hash_courant = SHA-256(type|reference_numero|montant_centimes|date|hash_precedent)`
+ *  - Le montant est stocké en centimes (entier) pour éviter les erreurs de virgule flottante.
+ *  - La clôture journalière enchaîne les hash de toutes les transactions du jour
+ *    avec le hash de la clôture précédente (chaînage inter-journées).
+ *  - L'intégrité de la chaîne est vérifiable via `verifierIntegriteChaine()`.
  *
  * Types de transactions POS :
- *  - 'vente'    → vente directe en caisse (crée facture + lignes_document)
- *  - 'remboursement' → remboursement (lié à un avoir)
- *  - 'encaissement'  → encaissement sur facture existante
+ *  - `'vente'`        → vente directe en caisse (crée facture + lignes + paiement)
+ *  - `'encaissement'` → règlement d'une facture existante via caisse
+ *  - `'remboursement'`→ remboursement lié à un avoir
+ *
+ * Tables concernées : `journal_nf525`, `clotures_journalieres`, `factures`,
+ *   `lignes_document`, `paiements`, `mouvements_stock`.
+ *
+ * Sprint 2.12 — MOD-12 Caisse POS
  */
 
 import { nextNumero, calculLignes } from '../lib/db'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Une ligne d'article pour une vente POS (produit ou service). */
 export interface LignePOS {
   produit_id?:     number
   service_id?:     number
@@ -27,6 +39,7 @@ export interface LignePOS {
   remise_pct?:     number  // remise en % sur la ligne
 }
 
+/** Données d'entrée pour enregistrer une vente en caisse. */
 export interface VentePOSData {
   client_id?:     number
   lignes:         LignePOS[]
@@ -37,6 +50,7 @@ export interface VentePOSData {
   note?:           string
 }
 
+/** Entrée du journal fiscal NF525 (une ligne par transaction). */
 export interface JournalEntry {
   id:                number
   boutique_id:       number
@@ -57,6 +71,7 @@ export interface JournalEntry {
   created_at:        string
 }
 
+/** Résumé d'une clôture journalière NF525. */
 export interface ClotureSummary {
   id:               number
   boutique_id:      number
@@ -75,8 +90,13 @@ export interface ClotureSummary {
 
 /**
  * Calcule un SHA-256 sur la chaîne fournie.
- * Retourne la représentation hexadécimale lowercase.
- * Utilise l'API Web Crypto (disponible dans Workers, navigateur, Node 18+).
+ * Retourne la représentation hexadécimale lowercase (64 caractères).
+ *
+ * IMPORTANT : Utilise Web Crypto API — compatible Cloudflare Workers / navigateur.
+ * Pas de `require('crypto')` Node.js ici.
+ *
+ * @param input  Chaîne canonique à hasher
+ * @returns      Hash SHA-256 en hex (ex: "a3f9b2c1...")
  */
 async function sha256(input: string): Promise<string> {
   const encoder  = new TextEncoder()
@@ -87,8 +107,20 @@ async function sha256(input: string): Promise<string> {
 }
 
 /**
- * Construit la chaîne à hasher pour une transaction NF525.
- * Format : type_transaction|reference_numero|montant_ttc_centimes|date_iso|hash_precedent
+ * Construit la chaîne canonique à hasher pour une transaction NF525.
+ *
+ * FORMAT FIGÉ — ne jamais modifier l'ordre ou le séparateur !
+ * Toute modification rompt la chaîne de hash de toutes les transactions existantes.
+ *
+ * Format : `type_transaction|reference_numero|montant_centimes|date_iso|hash_precedent`
+ * Le montant est en centimes entiers (×100, arrondi) pour éviter les flottants.
+ *
+ * @param type             Type de transaction ('vente', 'encaissement', etc.)
+ * @param referenceNumero  Numéro de la facture / avoir référencé
+ * @param montantTtc       Montant TTC en euros (converti en centimes pour le hash)
+ * @param date             Date ISO de la transaction
+ * @param hashPrecedent    Hash SHA-256 de la transaction précédente (ou "000..." si genèse)
+ * @returns                Chaîne canonique prête à passer dans sha256()
  */
 function buildDonneesHash(
   type:             string,
@@ -105,7 +137,13 @@ function buildDonneesHash(
 
 /**
  * Récupère le hash de la dernière transaction NF525 enregistrée pour la boutique.
- * Retourne '0' si aucune transaction n'existe (hash genèse).
+ * Retourne une chaîne de 64 zéros si aucune transaction n'existe (hash genèse).
+ *
+ * Ce hash est le `hash_precedent` de la prochaine transaction à insérer.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Hash hex de 64 caractères ("000..." pour la première transaction)
  */
 export async function getHashPrecedent(
   db:         D1Database,
@@ -122,7 +160,12 @@ export async function getHashPrecedent(
 }
 
 /**
- * Récupère le hash de la dernière clôture journalière (pour chaînage des clôtures).
+ * Récupère le hash de la dernière clôture journalière.
+ * Utilisé pour chaîner les clôtures inter-journées (hash_precedent de la clôture).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Hash hex 64 caractères ("000..." si aucune clôture précédente)
  */
 async function getHashPrecedentCloture(
   db:         D1Database,
@@ -142,12 +185,23 @@ async function getHashPrecedentCloture(
 
 /**
  * Enregistre une vente directe en caisse POS.
- * Crée :
- *  1. Une facture avec ses lignes_document
- *  2. Un paiement associé
- *  3. Une entrée dans journal_nf525 avec hash chaîné
  *
- * Retourne la facture créée + l'entrée journal.
+ * Séquence d'opérations (non transactionnelle — D1 ne supporte pas les transactions multi-requêtes) :
+ *  1. Calcul des totaux HT/TVA/TTC ligne par ligne avec remises
+ *  2. Résolution du client (création d'un client sentinelle "Comptoir" si absent)
+ *  3. Génération du numéro de facture via `nextNumero()`
+ *  4. Insertion de la facture (statut `payee` immédiatement)
+ *  5. Insertion des lignes + décrémentation du stock produit + mouvement de stock
+ *  6. Insertion du paiement
+ *  7. Calcul du rendu monnaie si paiement en espèces
+ *  8. Insertion dans `journal_nf525` avec hash SHA-256 chaîné
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param userId      Identifiant du caissier (tracé dans journal + mouvements)
+ * @param data        Données de la vente : lignes, mode paiement, client optionnel
+ * @returns           `{ facture, journal, rendu_monnaie? }`
+ * @throws            Error si aucune ligne, si création facture/journal échoue
  */
 export async function createVente(
   db:         D1Database,
@@ -319,8 +373,18 @@ export async function createVente(
 // ─── Encaissement sur facture existante ──────────────────────────────────────
 
 /**
- * Enregistre un encaissement sur une facture déjà existante dans le journal NF525.
- * Utilisé quand une facture créée ailleurs est réglée en caisse.
+ * Enregistre un encaissement sur une facture existante (créée hors caisse).
+ * Marque la facture comme `payee`, crée le paiement et trace dans le journal NF525.
+ *
+ * Cas d'usage : une facture devis/SAV est réglée physiquement au comptoir.
+ *
+ * @param db            Binding D1 Cloudflare
+ * @param boutiqueId    Identifiant de la boutique
+ * @param userId        Identifiant du caissier
+ * @param factureId     Identifiant de la facture à encaisser
+ * @param modePaiement  Mode de règlement ('especes', 'cb', 'virement', 'cheque')
+ * @returns             Entrée journal NF525 créée
+ * @throws              Error si facture introuvable ou déjà payée
  */
 export async function enregistrerEncaissement(
   db:           D1Database,
@@ -384,8 +448,16 @@ export async function enregistrerEncaissement(
 // ─── Journal du jour ──────────────────────────────────────────────────────────
 
 /**
- * Retourne toutes les transactions NF525 pour une date donnée (défaut : aujourd'hui).
- * Inclut les totaux du jour.
+ * Retourne le journal de caisse pour une date donnée (défaut : aujourd'hui).
+ * Exécute 2 requêtes en parallèle : transactions du jour + clôture éventuelle.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param date        Date ciblée au format "YYYY-MM-DD" (défaut : aujourd'hui)
+ * @returns           `{ date, transactions, totaux, est_cloture, cloture? }`
+ *                    - `totaux` : agrégat HT/TVA/TTC + nb transactions du jour
+ *                    - `est_cloture` : true si une clôture existe pour cette date
+ *                    - `cloture` : détail de la clôture si existante
  */
 export async function getCaisseJournal(
   db:         D1Database,
@@ -445,13 +517,26 @@ export async function getCaisseJournal(
 // ─── Clôture journalière NF525 ────────────────────────────────────────────────
 
 /**
- * Effectue la clôture journalière NF525.
- * - Vérifie qu'il n'y a pas déjà une clôture pour cette date
- * - Calcule un hash de clôture sur l'ensemble des transactions du jour
- * - Marque toutes les transactions du jour comme clôturées
- * - Insère dans clotures_journalieres
+ * Effectue la clôture journalière NF525 (opération irréversible).
  *
- * IMPORTANT : Conforme NF525 — la clôture est irréversible.
+ * Algorithme :
+ *  1. Vérifie l'absence de clôture existante pour cette date (idempotence)
+ *  2. Récupère toutes les transactions non-clôturées du jour
+ *  3. Calcule les totaux HT/TVA/TTC
+ *  4. Construit le hash de clôture :
+ *     `SHA-256("cloture|date|nb_tx|montant_centimes|hash_tx1|hash_tx2|...|hash_clot_precedente")`
+ *  5. Marque les transactions comme `est_cloture = 1`
+ *  6. Insère dans `clotures_journalieres`
+ *
+ * IMPORTANT : Conforme NF525 (CGI art. 289) — opération irréversible.
+ * Une clôture ne peut pas être annulée ni modifiée.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param userId      Identifiant de l'utilisateur effectuant la clôture
+ * @param date        Date à clôturer "YYYY-MM-DD" (défaut : aujourd'hui)
+ * @returns           Résumé de la clôture (`ClotureSummary`)
+ * @throws            Error si journée déjà clôturée ou aucune transaction à clôturer
  */
 export async function cloturerJournee(
   db:         D1Database,
@@ -540,8 +625,18 @@ export async function cloturerJournee(
 
 /**
  * Vérifie l'intégrité de la chaîne de hash NF525 sur une plage de dates.
- * Recalcule chaque hash et compare avec la valeur stockée.
- * Retourne les transactions avec anomalie (liste vide = chaîne intègre).
+ *
+ * Pour chaque transaction, recalcule le hash attendu et le compare au hash stocké.
+ * Toute divergence indique une modification frauduleuse d'une transaction passée.
+ *
+ * Cette vérification peut être effectuée par l'administration fiscale ou l'exploitant.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param dateDebut   (optionnel) Début de plage "YYYY-MM-DD" — défaut : toutes
+ * @param dateFin     (optionnel) Fin de plage "YYYY-MM-DD"
+ * @returns           `{ integre: boolean, anomalies: Array<{ id, reference_numero, details }> }`
+ *                    — `anomalies` est vide si la chaîne est intègre
  */
 export async function verifierIntegriteChaine(
   db:          D1Database,
@@ -595,7 +690,12 @@ export async function verifierIntegriteChaine(
 // ─── KPIs Caisse ──────────────────────────────────────────────────────────────
 
 /**
- * KPIs caisse du jour + période.
+ * Retourne les KPIs caisse pour le tableau de bord.
+ * Exécute 4 requêtes en parallèle (aujourd'hui, mois, clôtures, dernière clôture).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           `{ today: { nb_transactions, total_ttc, total_ht, est_cloture }, mois, derniere_cloture?, nb_clotures_mois }`
  */
 export async function getKpisCaisse(
   db:         D1Database,
@@ -669,6 +769,15 @@ export async function getKpisCaisse(
 
 // ─── Historique des clôtures ──────────────────────────────────────────────────
 
+/**
+ * Retourne l'historique des clôtures journalières NF525.
+ * Inclut le nom du caissier ayant effectué chaque clôture.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param limit       Nombre maximum de clôtures retournées (défaut : 30)
+ * @returns           Liste de `ClotureSummary` enrichis du nom caissier, ordre anti-chronologique
+ */
 export async function listClotures(
   db:         D1Database,
   boutiqueId: number,

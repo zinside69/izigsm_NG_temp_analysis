@@ -1,6 +1,19 @@
 /**
- * services/agendaService.ts — Logique métier : Agenda / Rendez-vous + iCal
- * Rôle architectural (P3 BFF Hono) : Model — tout le SQL ici.
+ * @module agendaService
+ * @description Model P1 : Logique métier Agenda / Rendez-vous + export iCal.
+ *
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL est ici.
+ * Les routes `src/routes/agenda.ts` délèguent à ce service sans aucun `.prepare()`.
+ *
+ * Machine à états RDV :
+ *   PENDING → SCHEDULED | CANCELLED
+ *   SCHEDULED → DONE | NO_SHOW | CANCELLED | CONVERTED
+ *   DONE, CANCELLED, CONVERTED → (terminal)
+ *   NO_SHOW → SCHEDULED (re-planification possible)
+ *
+ * Export iCal : flux RFC 5545 compatible Google Calendar / Apple Calendar.
+ * Le token iCal est par boutique, généré via Web Crypto (16 bytes hex).
+ *
  * Sprint 2.6 — MOD-08 Agenda
  */
 
@@ -8,55 +21,82 @@ import { parsePagination } from '../lib/db'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Représentation complète d'un rendez-vous en base. */
 export interface RendezVous {
   id:               number
   boutique_id:      number
   client_id:        number | null
   ticket_id:        number | null
-  user_id:          number | null
+  user_id:          number | null   // technicien assigné
   titre:            string
   description:      string | null
-  debut:            string
+  debut:            string          // ISO datetime local : "2026-06-10 14:30:00"
   fin:              string
   duree_minutes:    number
-  statut:           string
-  type_rdv:         string
-  nom_client:       string | null
+  statut:           string          // voir STATUTS_RDV
+  type_rdv:         string          // voir TYPES_RDV
+  nom_client:       string | null   // client non enregistré
   telephone_client: string | null
-  rappel_envoye:    number
-  rappel_minutes:   number
-  ical_token:       string | null
-  couleur:          string | null
+  rappel_envoye:    number          // 0 | 1
+  rappel_minutes:   number          // délai de rappel avant le RDV
+  ical_token:       string | null   // identifiant unique pour le flux iCal
+  couleur:          string | null   // couleur hex affichée dans le calendrier
   notes:            string | null
 }
 
-// Statuts valides
+/** Statuts valides pour un RDV (voir machine à états dans updateStatutRdv). */
 export const STATUTS_RDV = ['PENDING','SCHEDULED','DONE','NO_SHOW','CANCELLED','CONVERTED'] as const
+
+/** Types de rendez-vous disponibles. */
 export const TYPES_RDV   = ['reparation','restitution','devis','diagnostic','autre'] as const
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers privés ───────────────────────────────────────────────────────────
 
-/** Génère un token unique (16 bytes hex) — Web Crypto API (pas Node.js) */
+/**
+ * Génère un token aléatoire unique de 16 octets en hexadécimal.
+ * Utilise Web Crypto API (compatible Cloudflare Workers, pas Node.js).
+ *
+ * @returns Token hex de 32 caractères (ex: "a3f9b2c1d4e5f608...")
+ */
 function generateToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 /**
- * Calcule la fin à partir du début + durée si fin non fournie.
+ * Calcule la date/heure de fin à partir du début et de la durée.
+ * Utilisé quand le champ `fin` n'est pas fourni par le client.
+ *
+ * @param debut         Date/heure de début (ISO string ou "YYYY-MM-DD HH:MM:SS")
+ * @param dureeMinutes  Durée en minutes à ajouter
+ * @returns             Datetime de fin au format "YYYY-MM-DD HH:MM:SS"
  */
 function computeFin(debut: string, dureeMinutes: number): string {
   const d = new Date(debut)
   d.setMinutes(d.getMinutes() + dureeMinutes)
+  // Normalise vers le format SQLite sans millisecondes
   return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
 }
 
 // ─── CRUD Rendez-vous ─────────────────────────────────────────────────────────
 
 /**
- * Liste les RDV d'une boutique.
- * Filtres : date_debut, date_fin, statut, user_id, type_rdv, search
- * Inclut infos client et technicien.
+ * Liste les rendez-vous d'une boutique avec pagination et filtres.
+ *
+ * Filtres disponibles via `query` :
+ *  - `date_debut`  : RDV dont le début est ≥ cette date
+ *  - `date_fin`    : RDV dont le début est ≤ cette date
+ *  - `statut`      : filtre par statut exact (PENDING, SCHEDULED, etc.)
+ *  - `user_id`     : filtre par technicien assigné
+ *  - `type_rdv`    : filtre par type (reparation, devis, etc.)
+ *  - `client_id`   : filtre par client enregistré
+ *  - `search`      : recherche plein-texte sur titre, nom_client, téléphone, nom/prénom client
+ *  - `page`, `limit` : pagination (défaut : page=1, limit=20)
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
+ * @param query       Paramètres de filtrage issus des query params HTTP
+ * @returns           `{ data: RendezVous[], total, page, limit }`
  */
 export async function listRendezVous(
   db: D1Database,
@@ -87,6 +127,7 @@ export async function listRendezVous(
     bindings.push(query.type_rdv)
   }
   if (query.search) {
+    // Recherche multi-champs : titre, client libre ou enregistré, téléphone
     conditions.push("(r.titre LIKE ? OR r.nom_client LIKE ? OR r.telephone_client LIKE ? OR c.nom LIKE ? OR c.prenom LIKE ?)")
     const s = `%${query.search}%`
     bindings.push(s, s, s, s, s)
@@ -100,6 +141,7 @@ export async function listRendezVous(
 
   const { limit, offset, page } = parsePagination(query)
 
+  // Deux requêtes parallèles : count total + page courante
   const total = await db.prepare(
     `SELECT COUNT(*) as cnt
      FROM rendez_vous r
@@ -133,7 +175,13 @@ export async function listRendezVous(
 }
 
 /**
- * Récupère un RDV par son id, avec toutes les infos liées.
+ * Récupère un rendez-vous par son identifiant.
+ * Joint les infos client, technicien et ticket associé.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant du RDV
+ * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
+ * @returns           RDV enrichi (client, tech, ticket) ou `null` si introuvable / soft-deleted
  */
 export async function getRendezVous(db: D1Database, id: number, boutiqueId: number) {
   return db.prepare(`
@@ -157,7 +205,20 @@ export async function getRendezVous(db: D1Database, id: number, boutiqueId: numb
 
 /**
  * Crée un nouveau rendez-vous.
- * Génère un ical_token unique.
+ *
+ * Comportement :
+ *  - Si `body.fin` absent, calcule automatiquement via `computeFin(debut, duree_minutes)`
+ *  - Génère un `ical_token` unique (Web Crypto, 16 bytes hex) pour l'export iCal individuel
+ *  - Si `body.user_id` absent, assigne le créateur du RDV (`userId`)
+ *  - Statut par défaut : `PENDING`
+ *  - Type par défaut : `reparation`
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param body        Données du formulaire (titre, debut, duree_minutes, client_id, etc.)
+ * @param userId      Identifiant de l'utilisateur créant le RDV
+ * @returns           `{ id }` du RDV créé
+ * @throws            Error si l'insertion échoue
  */
 export async function createRendezVous(
   db: D1Database,
@@ -167,7 +228,9 @@ export async function createRendezVous(
 ): Promise<{ id: number }> {
   const duree  = Number(body.duree_minutes) || 30
   const debut  = body.debut
+  // Calcul automatique de fin si non fournie
   const fin    = body.fin || computeFin(debut, duree)
+  // Token unique pour l'intégration iCal / rappel email
   const token  = generateToken()
 
   const result = await db.prepare(`
@@ -183,7 +246,7 @@ export async function createRendezVous(
     boutiqueId,
     body.client_id    ? Number(body.client_id)    : null,
     body.ticket_id    ? Number(body.ticket_id)    : null,
-    body.user_id      ? Number(body.user_id)      : userId,
+    body.user_id      ? Number(body.user_id)      : userId,  // fallback : créateur
     body.titre.trim(),
     body.description  || null,
     debut,
@@ -204,7 +267,14 @@ export async function createRendezVous(
 }
 
 /**
- * Met à jour un rendez-vous (tous champs modifiables).
+ * Met à jour tous les champs modifiables d'un rendez-vous.
+ * Les champs non fournis dans `body` conservent leurs valeurs existantes.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant du RDV à modifier
+ * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
+ * @param body        Champs à mettre à jour (tous optionnels)
+ * @throws            Error si le RDV est introuvable ou soft-deleted
  */
 export async function updateRendezVous(
   db: D1Database,
@@ -212,12 +282,14 @@ export async function updateRendezVous(
   boutiqueId: number,
   body: any
 ): Promise<void> {
+  // Lire l'état actuel pour les fallbacks (champs non modifiés)
   const rdv = await db.prepare(
     'SELECT * FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1'
   ).bind(id, boutiqueId).first<RendezVous>()
 
   if (!rdv) throw new Error('RDV introuvable.')
 
+  // Recalcul de fin si debut ou duree changent
   const duree = Number(body.duree_minutes) || rdv.duree_minutes
   const debut = body.debut || rdv.debut
   const fin   = body.fin   || computeFin(debut, duree)
@@ -264,8 +336,19 @@ export async function updateRendezVous(
 }
 
 /**
- * Change uniquement le statut d'un RDV.
- * Transitions valides uniquement.
+ * Change uniquement le statut d'un RDV en validant la machine à états.
+ *
+ * Transitions autorisées :
+ *  - PENDING   → SCHEDULED | CANCELLED
+ *  - SCHEDULED → DONE | NO_SHOW | CANCELLED | CONVERTED
+ *  - NO_SHOW   → SCHEDULED (re-planification)
+ *  - DONE, CANCELLED, CONVERTED → aucune transition (états terminaux)
+ *
+ * @param db            Binding D1 Cloudflare
+ * @param id            Identifiant du RDV
+ * @param boutiqueId    Identifiant de la boutique
+ * @param nouveauStatut Statut cible (doit figurer dans STATUTS_RDV)
+ * @throws              Error si transition interdite ou RDV introuvable
  */
 export async function updateStatutRdv(
   db: D1Database,
@@ -279,14 +362,14 @@ export async function updateStatutRdv(
 
   if (!rdv) throw new Error('RDV introuvable.')
 
-  // Transitions autorisées
+  // Matrice des transitions valides par statut courant
   const transitions: Record<string, string[]> = {
     PENDING:   ['SCHEDULED', 'CANCELLED'],
     SCHEDULED: ['DONE', 'NO_SHOW', 'CANCELLED', 'CONVERTED'],
-    DONE:      [],
-    NO_SHOW:   ['SCHEDULED'],
-    CANCELLED: [],
-    CONVERTED: [],
+    DONE:      [],                    // terminal — aucune transition
+    NO_SHOW:   ['SCHEDULED'],         // re-planification possible après absence
+    CANCELLED: [],                    // terminal
+    CONVERTED: [],                    // terminal (ticket créé depuis RDV)
   }
 
   const allowed = transitions[rdv.statut] ?? []
@@ -302,7 +385,13 @@ export async function updateStatutRdv(
 }
 
 /**
- * Suppression logique d'un RDV.
+ * Suppression logique (soft delete) d'un rendez-vous.
+ * Positionne `actif = 0` — le RDV n'apparaît plus dans aucune liste.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param id          Identifiant du RDV à supprimer
+ * @param boutiqueId  Identifiant de la boutique
+ * @throws            Error si le RDV est introuvable ou déjà supprimé
  */
 export async function deleteRendezVous(db: D1Database, id: number, boutiqueId: number): Promise<void> {
   const rdv = await db.prepare(
@@ -318,8 +407,15 @@ export async function deleteRendezVous(db: D1Database, id: number, boutiqueId: n
 // ─── Vue agenda (plage de dates) ─────────────────────────────────────────────
 
 /**
- * Vue calendrier : RDV groupés par date (pour affichage agenda).
- * Retourne un objet { "2026-06-10": [rdv1, rdv2], ... }
+ * Retourne les rendez-vous d'une plage de dates groupés par jour.
+ * Exclut les RDV annulés. Utile pour l'affichage en vue calendrier.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param dateDebut   Date de début incluse (ISO : "2026-06-01" ou "2026-06-01 00:00:00")
+ * @param dateFin     Date de fin incluse
+ * @param userId      (optionnel) Filtre sur un technicien spécifique
+ * @returns           Dictionnaire `{ "YYYY-MM-DD": RendezVous[] }` trié par heure
  */
 export async function getAgendaView(
   db: D1Database,
@@ -333,7 +429,7 @@ export async function getAgendaView(
     'r.actif = 1',
     "r.debut >= ?",
     "r.debut <= ?",
-    "r.statut != 'CANCELLED'"
+    "r.statut != 'CANCELLED'"  // les annulés n'apparaissent pas dans la vue calendrier
   ]
   const bindings: any[] = [boutiqueId, dateDebut, dateFin]
 
@@ -359,7 +455,7 @@ export async function getAgendaView(
     ORDER BY r.debut ASC
   `).bind(...bindings).all<any>()
 
-  // Grouper par date YYYY-MM-DD
+  // Regroupement par date YYYY-MM-DD (première partie du datetime)
   const grouped: Record<string, any[]> = {}
   for (const rdv of rows.results ?? []) {
     const dateKey = rdv.debut.slice(0, 10)
@@ -372,20 +468,35 @@ export async function getAgendaView(
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Calcule les KPIs de l'agenda pour le tableau de bord.
+ * Exécute 5 requêtes en parallèle via `Promise.all`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           `{ total_rdv, rdv_auj, rdv_semaine, en_attente, taux_honore }`
+ *                    - `taux_honore` : % de RDV passés au statut DONE sur le total non-annulé
+ */
 export async function getKpisAgenda(db: D1Database, boutiqueId: number) {
   const today     = new Date().toISOString().slice(0, 10)
   const weekStart = getWeekStart(new Date())
   const weekEnd   = getWeekEnd(new Date())
 
+  // 5 requêtes parallèles pour performance maximale
   const [total, aujourdhui, semaine, en_attente, taux_done] = await Promise.all([
+    // Total RDV non-annulés (dénominateur du taux honoré)
     db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut!='CANCELLED'")
       .bind(boutiqueId).first<{ cnt: number }>(),
+    // RDV du jour calendaire
     db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND DATE(debut)=? AND statut!='CANCELLED'")
       .bind(boutiqueId, today).first<{ cnt: number }>(),
+    // RDV de la semaine courante (lundi–dimanche)
     db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND debut>=? AND debut<=? AND statut!='CANCELLED'")
       .bind(boutiqueId, weekStart, weekEnd).first<{ cnt: number }>(),
+    // RDV en attente de confirmation ou planifiés
     db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut IN ('PENDING','SCHEDULED')")
       .bind(boutiqueId).first<{ cnt: number }>(),
+    // RDV effectivement honorés (DONE) — numérateur du taux
     db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut='DONE'")
       .bind(boutiqueId).first<{ cnt: number }>(),
   ])
@@ -398,6 +509,7 @@ export async function getKpisAgenda(db: D1Database, boutiqueId: number) {
     rdv_auj:      aujourdhui?.cnt ?? 0,
     rdv_semaine:  semaine?.cnt    ?? 0,
     en_attente:   en_attente?.cnt ?? 0,
+    // Taux d'honoré en % — 0 si aucun RDV
     taux_honore:  totalDone > 0 ? Math.round((nbDone / totalDone) * 100) : 0,
   }
 }
@@ -405,7 +517,13 @@ export async function getKpisAgenda(db: D1Database, boutiqueId: number) {
 // ─── Export iCal ─────────────────────────────────────────────────────────────
 
 /**
- * Récupère ou crée le token iCal d'une boutique.
+ * Récupère le token iCal d'une boutique, ou le crée s'il n'existe pas.
+ * Le token est stocké dans `boutique_ical_tokens` et est permanent.
+ * Il sert d'URL secrète pour le flux iCal public (pas d'authentification JWT).
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Token hex (32 caractères)
  */
 export async function getOrCreateIcalToken(db: D1Database, boutiqueId: number): Promise<string> {
   const existing = await db.prepare(
@@ -414,6 +532,7 @@ export async function getOrCreateIcalToken(db: D1Database, boutiqueId: number): 
 
   if (existing?.token) return existing.token
 
+  // Créer un nouveau token permanent pour cette boutique
   const token = generateToken()
   await db.prepare(
     'INSERT INTO boutique_ical_tokens (boutique_id, token) VALUES (?, ?)'
@@ -422,8 +541,17 @@ export async function getOrCreateIcalToken(db: D1Database, boutiqueId: number): 
 }
 
 /**
- * Génère le flux iCal (.ics) pour une boutique.
- * Retourne une chaîne au format RFC 5545.
+ * Génère le flux iCal (format RFC 5545) pour l'agenda d'une boutique.
+ * Compatible Google Calendar, Apple Calendar, Outlook.
+ *
+ * Inclut les RDV SCHEDULED, PENDING et DONE des 30 derniers jours.
+ * Limité à 500 événements. Le flux est stateless — recalculé à chaque appel.
+ *
+ * Format de sortie : texte iCal avec CRLF (`\r\n`) obligatoire selon RFC 5545.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Chaîne iCal complète (Content-Type: text/calendar)
  */
 export async function generateIcal(db: D1Database, boutiqueId: number): Promise<string> {
   const boutique = await db.prepare(
@@ -441,6 +569,7 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
     LIMIT 500
   `).bind(boutiqueId).all<any>()
 
+  // En-tête du calendrier iCal (RFC 5545 §3.4)
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -451,10 +580,13 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
     'METHOD:PUBLISH',
   ]
 
+  // Génération d'un VEVENT par rendez-vous
   for (const rdv of rows.results ?? []) {
     const dtStart = toIcalDate(rdv.debut)
     const dtEnd   = toIcalDate(rdv.fin)
     const summary = escIcal(rdv.titre)
+
+    // Construction de la description : client + téléphone + notes
     const clientLabel = rdv.client_nom
       ? `${rdv.client_prenom ?? ''} ${rdv.client_nom}`.trim()
       : rdv.nom_client ?? ''
@@ -464,6 +596,7 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
       rdv.description ?? '',
     ].filter(Boolean).join('\\n'))
 
+    // UID stable : rdv-{id}-{ical_token} — permet la mise à jour dans les agendas clients
     const uid = `rdv-${rdv.id}-${rdv.ical_token ?? 'nk'}@izigsm`
 
     const vevent = [
@@ -482,31 +615,55 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
   }
 
   lines.push('END:VCALENDAR')
+  // RFC 5545 impose CRLF comme séparateur de lignes
   return lines.join('\r\n') + '\r\n'
 }
 
-// ─── Utilitaires iCal ─────────────────────────────────────────────────────────
+// ─── Utilitaires iCal (helpers privés) ───────────────────────────────────────
 
-/** Convertit "2026-06-10 14:30:00" → "20260610T143000Z" */
+/**
+ * Convertit un datetime SQLite/ISO en format iCal UTC.
+ * Ex: "2026-06-10 14:30:00" → "20260610T143000Z"
+ *
+ * @param str  Date au format "YYYY-MM-DD HH:MM:SS" ou ISO 8601
+ * @returns    Date au format iCal UTC (15 caractères + "Z")
+ */
 function toIcalDate(str: string): string {
   return str.replace(/[-:]/g, '').replace(' ', 'T').replace(/\.\d{3}$/, '').slice(0, 15) + 'Z'
 }
 
-/** Échappe les caractères spéciaux iCal */
+/**
+ * Échappe les caractères réservés du format iCal (RFC 5545 §3.3.11).
+ * Traite : `\`, `;`, `,`, `\n`
+ *
+ * @param s  Chaîne à échapper
+ * @returns  Chaîne avec caractères spéciaux échappés
+ */
 function escIcal(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
 }
 
-/** Lundi de la semaine courante au format ISO */
+/**
+ * Retourne la date/heure du lundi de la semaine courante (ISO local).
+ * Utilisé par getKpisAgenda() pour délimiter la semaine calendaire.
+ *
+ * @param d  Date de référence
+ * @returns  "YYYY-MM-DD 00:00:00" du lundi de la semaine
+ */
 function getWeekStart(d: Date): string {
-  const day = d.getDay() || 7
+  const day = d.getDay() || 7  // getDay() retourne 0 pour dimanche → normalise à 7
   const monday = new Date(d)
   monday.setDate(d.getDate() - day + 1)
   monday.setHours(0, 0, 0, 0)
   return monday.toISOString().replace('T', ' ').slice(0, 19)
 }
 
-/** Dimanche de la semaine courante au format ISO */
+/**
+ * Retourne la date/heure du dimanche de la semaine courante (ISO local).
+ *
+ * @param d  Date de référence
+ * @returns  "YYYY-MM-DD 23:59:59" du dimanche de la semaine
+ */
 function getWeekEnd(d: Date): string {
   const day = d.getDay() || 7
   const sunday = new Date(d)

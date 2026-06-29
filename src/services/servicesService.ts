@@ -1,7 +1,30 @@
 /**
- * services/servicesService.ts — Logique métier : Catalogue services hiérarchique
- * Rôle architectural (P3 BFF Hono) : Model — accès D1, calculs, requêtes SQL.
- * Les routes ne contiennent aucun SQL — elles délèguent à ce service.
+ * @module servicesService
+ * @description Model P1 : Catalogue de prestations hiérarchique (catégories + services).
+ *
+ * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL ici.
+ * Les routes `src/routes/services.ts` délèguent sans aucun `.prepare()`.
+ *
+ * Structure hiérarchique :
+ *   Catégorie parente → Sous-catégories → Services (prestations)
+ *   Exemple : "Téléphones" → "Apple" → "Remplacement écran iPhone 14"
+ *
+ * `getCatalogueArbre()` retourne la structure complète en mémoire :
+ *   ```
+ *   [
+ *     { ...cat_parent, enfants: [...sous_cats], services: [...svc_direct] },
+ *     ...
+ *   ]
+ *   ```
+ *
+ * Prix :
+ *   `prix_ht` est stocké en base. `prix_ttc` est calculé à la volée :
+ *   `prix_ttc = ROUND(prix_ht * (1 + tva_taux / 100), 2)`
+ *
+ * Soft delete cascade :
+ *   La suppression d'une catégorie désactive aussi tous ses services.
+ *
+ * Sprint 2.4 — MOD-04 Catalogue services
  */
 
 import { parsePagination, auditLog, calculTva } from '../lib/db'
@@ -37,8 +60,13 @@ export interface Service {
 // ─── Catégories ───────────────────────────────────────────────────────────────
 
 /**
- * Retourne toutes les catégories d'une boutique (arbre aplati, triées par ordre).
- * Inclut le nombre de services actifs par catégorie.
+ * Retourne toutes les catégories d'une boutique sous forme aplatie (pas arborescente).
+ * Triées par `parent_id NULLS FIRST` puis `ordre` puis `nom` (racines en premier).
+ * Inclut le nombre de services actifs associés à chaque catégorie.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Liste plate de `CategorieService` avec `nb_services`
  */
 export async function listCategories(
   db: D1Database, boutiqueId: number
@@ -56,8 +84,13 @@ export async function listCategories(
 }
 
 /**
- * Crée une catégorie de service.
- * @returns id de la catégorie créée
+ * Crée une catégorie de service (racine ou sous-catégorie).
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param data    `{ boutique_id, nom, parent_id?, description?, couleur?, ordre? }`
+ *                — `couleur` par défaut `#6366f1` (indigo), `ordre` par défaut 0
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       Identifiant de la catégorie créée
  */
 export async function createCategorie(
   db: D1Database,
@@ -82,7 +115,16 @@ export async function createCategorie(
 }
 
 /**
- * Met à jour une catégorie de service.
+ * Met à jour les champs d'une catégorie de service.
+ *
+ * ATTENTION : `parent_id` peut être `null` (déplacer vers la racine).
+ * Utilise `?? null` (pas `COALESCE`) pour permettre la nullification explicite.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant de la catégorie
+ * @param data    Champs à modifier (tous optionnels)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function updateCategorie(
   db: D1Database,
@@ -111,8 +153,13 @@ export async function updateCategorie(
 }
 
 /**
- * Désactive (soft delete) une catégorie.
- * Désactive aussi tous les services de cette catégorie.
+ * Désactive une catégorie (soft delete) et tous ses services en cascade.
+ * Les données sont conservées en base — seul `actif = 0` est positionné.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant de la catégorie
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function deleteCategorie(
   db: D1Database, id: number, userId: number
@@ -125,8 +172,13 @@ export async function deleteCategorie(
 // ─── Services (prestations) ───────────────────────────────────────────────────
 
 /**
- * Liste les services d'une boutique avec pagination et filtres.
- * Calcule prix_ttc à la volée.
+ * Liste paginée des services d'une boutique avec filtres et enrichissement catégorie.
+ * `prix_ttc` est calculé à la volée : `ROUND(prix_ht * (1 + tva_taux / 100), 2)`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param query       Filtres : `categorie_id`, `search` (nom/référence/description), `page`, `limit`
+ * @returns           `{ data: Service[], pagination }` enrichi avec `categorie_nom`, `categorie_couleur`
  */
 export async function listServices(
   db: D1Database,
@@ -173,7 +225,12 @@ export async function listServices(
 }
 
 /**
- * Retourne un service par son id avec sa catégorie.
+ * Récupère un service par son identifiant avec les infos de catégorie.
+ * `prix_ttc` calculé à la volée.
+ *
+ * @param db  Binding D1 Cloudflare
+ * @param id  Identifiant du service
+ * @returns   `Service` enrichi ou `null` si introuvable / soft-deleted
  */
 export async function getService(
   db: D1Database, id: number
@@ -191,8 +248,13 @@ export async function getService(
 }
 
 /**
- * Crée un service dans le catalogue.
- * @returns id du service créé
+ * Crée un service dans le catalogue de prestations.
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param data    `{ boutique_id, nom, prix_ht, categorie_id?, tva_taux?, duree_minutes?, reference?, garantie_jours? }`
+ *                — `tva_taux` par défaut 20%, `garantie_jours` par défaut 0
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       Identifiant du service créé
  */
 export async function createService(
   db: D1Database,
@@ -224,7 +286,13 @@ export async function createService(
 }
 
 /**
- * Met à jour un service existant.
+ * Met à jour les champs d'un service (PATCH partiel via COALESCE).
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant du service
+ * @param data    Champs à modifier (tous optionnels)
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function updateService(
   db: D1Database,
@@ -262,7 +330,12 @@ export async function updateService(
 }
 
 /**
- * Désactive (soft delete) un service.
+ * Désactive un service (soft delete — `actif = 0`).
+ *
+ * @param db      Binding D1 Cloudflare
+ * @param id      Identifiant du service
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @returns       void
  */
 export async function deleteService(
   db: D1Database, id: number, userId: number
@@ -272,8 +345,27 @@ export async function deleteService(
 }
 
 /**
- * Retourne le catalogue complet structuré en arbre (catégories + leurs services).
- * Utilisé par le frontend pour afficher l'arborescence.
+ * Retourne le catalogue complet sous forme d'arbre hiérarchique en mémoire.
+ * Exécute 2 requêtes en parallèle (catégories + services) via `Promise.all`.
+ *
+ * Structure retournée :
+ * ```
+ * [
+ *   {
+ *     ...categorie_parente,
+ *     enfants: [{ ...sous_cat, services: [Service, ...] }],
+ *     services: [Service, ...]  // services directement rattachés au parent
+ *   },
+ *   ...
+ * ]
+ * ```
+ *
+ * `prix_ttc` calculé à la volée pour chaque service.
+ * Les catégories orphelines (parent inexistant) sont ignorées dans l'arbre.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @returns           Arbre hiérarchique des catégories et services
  */
 export async function getCatalogueArbre(
   db: D1Database, boutiqueId: number
