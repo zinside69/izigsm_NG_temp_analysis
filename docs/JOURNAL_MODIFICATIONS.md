@@ -822,3 +822,52 @@ Résultat après Sprint 2.21 : **12 routes à 0 SQL** — seules `auth.ts` (9), 
 | T7 | `POST /api/users/pin/verify {pin:"1234"}` | ✅ session KV 15min ouverte |
 | T7b | `GET /api/users/pin/status` | ✅ `pin_actif=True, session_active=True` |
 | T8 | `PUT /api/users/1/permissions` | ✅ 3 permissions upsertées |
+
+---
+
+## Sprint 2.22
+
+**Titre** : Documentation P4 — JSDoc exhaustif (services + lib + routes)
+**Commit** : `ac116be` — docs: Sprint 2.22 — JSDoc P4 complet (services + lib + routes)
+**Date** : 29 juin 2026
+**Version** : 2.22.0
+
+### Contexte
+
+Audit de documentation : 6 services, 4 fichiers `src/lib/`, 5 routes controllers étaient sous-documentés (0 à 2 JSDoc par fichier). Ce sprint applique le **Principe P4 Lisibilité** sur l'ensemble du périmètre concerné : `@module` complet sur chaque fichier, JSDoc `@param`/`@returns`/`@throws` sur toutes les fonctions exportées, commentaires inline sur la logique métier (machines à états, algorithmes NF525, CUMP).
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/agendaService.ts` | ✏️ documenté | `@module` machine états RDV + export iCal RFC 5545. JSDoc complet sur 10 fonctions exportées + 5 helpers privés (formatDate, buildVEvent, etc.) |
+| `src/services/caisseService.ts` | ✏️ documenté | `@module` NF525 + explication chaîne SHA-256. JSDoc sur 8 fonctions + 3 helpers privés + 4 interfaces typées. `buildDonneesHash` : FORMAT FIGÉ documenté |
+| `src/services/emailService.ts` | ✏️ documenté | `@module` stratégie non-bloquante + déduplication 5 min. JSDoc sur 8 fonctions dont `sendEmail` avec logique de décision en 4 étapes |
+| `src/services/garantiesService.ts` | ✏️ documenté | `@module` machine états SAV + alias SQL `t_orig`/`ts`. JSDoc sur 10 fonctions dont `createSav` avec séquence en 5 étapes |
+| `src/services/fournisseursService.ts` | ✏️ documenté | `@module` CUMP + numérotation BC. JSDoc sur 12 fonctions dont `receptionnerBonCommande` avec formule CUMP complète |
+| `src/services/servicesService.ts` | ✏️ documenté | `@module` structure arbre hiérarchique + soft delete cascade. JSDoc sur 10 fonctions dont `getCatalogueArbre` avec structure JSON retournée |
+| `src/lib/db.ts` | ✏️ documenté | `@module` + JSDoc sur 7 fonctions : `nextNumero` (atomicité upsert D1), `parsePagination`, `calculTva`, `calculLignes`, `auditLog` |
+| `src/lib/nf525.ts` | ✏️ documenté | `@module` légal LFR2015 + cadre NF525. `sha256` : note Web Crypto API. `buildCanonicalData` : FORMAT FIGÉ + ordre des 8 champs. `clotureJournaliere` : séquence + hash de clôture |
+| `src/lib/middleware.ts` | ✏️ documenté | `@module` RBAC + architecture de sécurité en 3 niveaux. JSDoc complet sur `authMiddleware`, `requireRole`, `requirePin`, `hasPermission`, `getBoutiqueId` |
+| `src/lib/auth.ts` | ✏️ documenté | `@module` PBKDF2/JWT/KV/OTP. JSDoc sur 12 fonctions dont `timingSafeEqual`, `signJwt`, `verifyJwt`, `generateRefreshToken`, `storeOtp`, `verifyOtp`, `generateOtp` |
+| `src/routes/caisse.ts` | ✏️ documenté | `@module` + JSDoc sur 7 handlers + `validateVente` + helper `ctx()` |
+| `src/routes/boutiques.ts` | ✏️ documenté | `@module` + JSDoc sur 8 handlers. `/:id/stats` : Promise.all documenté |
+| `src/routes/agenda.ts` | ✏️ documenté | `@module` machine états RDV + JSDoc sur 9 handlers + note route iCal index.tsx |
+| `src/routes/auth.ts` | ✏️ documenté | `@module` flux auth complet (inscription → OTP → login → refresh → logout). JSDoc sur 6 handlers avec séquences détaillées et notes sécurité |
+| `src/routes/services.ts` | ✏️ documenté | `@module` arbre hiérarchique + soft delete cascade. JSDoc sur 10 handlers (catalogue, categories CRUD, services CRUD) |
+| `src/index.tsx` | ✏️ modifié | `@module` + `@version 2.22.0` |
+
+### Décisions documentaires
+
+- **FORMAT FIGÉ `buildCanonicalData`** : le commentaire `@warning` est documenté dans `nf525.ts` ET `caisseService.ts` — toute modification de l'ordre des champs ou du séparateur `|` est une rupture de chaîne NF525 irréversible
+- **`timingSafeEqual`** : fonction privée documentée explicitement (protection timing attack — raison métier non évidente)
+- **Rotation refresh token** : séquence "valider → révoquer → émettre → stocker" documentée dans le handler `/refresh` et dans `revokeRefreshToken()`
+- **Encodage Python pour les remplacements** : les caractères box-drawing `─` dans les séparateurs TypeScript nécessitent des scripts Python (str.replace UTF-8) plutôt que l'outil Edit (problème d'encodage détecté au Sprint 2.22)
+
+### Tests Sprint 2.22
+
+| Test | Résultat |
+|---|---|
+| `npm run build` | ✅ 67 modules, 244.26 kB, 0 erreur TypeScript |
+| Git status post-commit | ✅ 16 fichiers modifiés, +2114/-264 lignes |
+

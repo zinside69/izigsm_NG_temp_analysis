@@ -308,6 +308,26 @@
 - [x] `src/index.tsx` : version `2.20.0` → `2.21.0`, sprint mis à jour
 - [x] Build ✅ (244.23 kB, 67 modules) + tests 8/8 ✅ + commit (Sprint 2.21)
 
+### Sprint 2.22 ✅ — Documentation P4 : JSDoc exhaustif (services + lib + routes)
+**Principe P4 Lisibilité : JSDoc obligatoire sur toutes les fonctions exportées**
+- [x] `src/services/agendaService.ts` : `@module` + JSDoc 10 fonctions + 5 helpers privés (machine états RDV, iCal RFC 5545)
+- [x] `src/services/caisseService.ts` : `@module` NF525 + JSDoc 8 fonctions + interfaces + `buildDonneesHash` FORMAT FIGÉ
+- [x] `src/services/emailService.ts` : `@module` stratégie non-bloquante + JSDoc 8 fonctions + logique décision `sendEmail`
+- [x] `src/services/garantiesService.ts` : `@module` machine états SAV + alias SQL + JSDoc 10 fonctions
+- [x] `src/services/fournisseursService.ts` : `@module` CUMP + JSDoc 12 fonctions + formule CUMP documentée
+- [x] `src/services/servicesService.ts` : `@module` arbre hiérarchique + JSDoc 10 fonctions
+- [x] `src/lib/db.ts` : `@module` + JSDoc 7 fonctions (nextNumero atomicité, parsePagination, auditLog)
+- [x] `src/lib/nf525.ts` : `@module` légal LFR2015 + `sha256` Web Crypto + `buildCanonicalData` FORMAT FIGÉ + `clotureJournaliere`
+- [x] `src/lib/middleware.ts` : `@module` RBAC + JSDoc complet sur 5 fonctions/middlewares
+- [x] `src/lib/auth.ts` : `@module` PBKDF2/JWT/KV + JSDoc 12 fonctions dont `timingSafeEqual`, `signJwt`, `storeOtp`, `generateOtp`
+- [x] `src/routes/caisse.ts` : `@module` + JSDoc 7 handlers + `validateVente` + `ctx()`
+- [x] `src/routes/boutiques.ts` : `@module` + JSDoc 8 handlers (CRUD, settings, stats, NF525)
+- [x] `src/routes/agenda.ts` : `@module` machine états + JSDoc 9 handlers
+- [x] `src/routes/auth.ts` : `@module` flux auth + JSDoc 6 handlers (séquences détaillées + notes sécurité)
+- [x] `src/routes/services.ts` : `@module` arbre + JSDoc 10 handlers (catalogue, categories, services)
+- [x] `src/index.tsx` : `@version 2.22.0`
+- [x] Build ✅ (244.26 kB, 67 modules, 0 erreur TypeScript) + commit `ac116be` (Sprint 2.22)
+
 ---
 
 ## Backlog violations architecturales (à corriger au fil des sprints)
@@ -318,7 +338,7 @@
 | ✅ Résolu | ~~`app.js` doublon~~ | ~~`apiPut` déclaré deux fois~~ | ✅ Résolu Fix DP |
 | ✅ Résolu | ~~`routes/clients.ts` l.41~~ | ~~`JOIN tickets` cross-module~~ | ✅ Résolu Sprint 2.15 |
 | ✅ Résolu | ~~`routes/clients.ts`~~ | ~~Pas de couche `clientService.ts`~~ | ✅ Résolu Sprint 2.15 |
-| 🟢 | `routes/*.ts` (anciens) | Documentation fonctions insuffisante | Au fil des sprints |
+| ✅ Résolu | ~~`routes/*.ts` (anciens)~~ | ~~Documentation fonctions insuffisante~~ | ✅ Résolu Sprint 2.22 |
 | ✅ Résolu | ~~`routes/tickets.ts`~~ | ~~Pas de couche `ticketService.ts`~~ | ✅ Résolu Sprint 2.17 |
 | ✅ Résolu | ~~`routes/stocks.ts`~~ | ~~Pas de couche `stockService.ts`~~ | ✅ Résolu Sprint 2.17 |
 
@@ -328,10 +348,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.21.0 |
-| Build | `dist/_worker.js` 244.23 kB — 67 modules |
+| Version | 2.22.0 |
+| Build | `dist/_worker.js` 244.26 kB — 67 modules |
 | Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
-| Dernier commit | Sprint 2.21 — P1 MVC : rachatService + personnelService + userService |
+| Dernier commit | `ac116be` Sprint 2.22 — JSDoc P4 complet (services + lib + routes) |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}
