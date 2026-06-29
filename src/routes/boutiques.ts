@@ -1,12 +1,16 @@
 /**
  * @module routes/boutiques
- * @description Controller Boutiques & Paramètres (P1 MVC).
+ * @description Controller Boutiques & Paramètres (P1 MVC — controller pur, 0 SQL).
  *
- * Note architecturale :
- *   Ce controller contient exceptionnellement du SQL direct — les opérations
- *   sur les boutiques sont des opérations d'administration simple (CRUD basique)
- *   qui ne justifient pas un service dédié à ce stade.
- *   Les endpoints NF525 (`/nf525/verify`, `/nf525/cloture`) délèguent à `nf525.ts`.
+ * Rôle architectural (P1 Modularité) :
+ *   Controller pur — 0 SQL direct. Toutes les opérations DB sont déléguées
+ *   à `boutiqueService.ts`. Les endpoints NF525 délèguent à `nf525.ts`.
+ *
+ * Responsabilités du controller :
+ *   - Validation des inputs (formats, contraintes métier)
+ *   - Contrôles d'autorisation (isolation boutique, rôles)
+ *   - Orchestration des appels service
+ *   - Formatage des réponses P5
  *
  * Endpoints :
  *   GET    /api/boutiques                    → Liste boutiques (admin = toutes, autres = la leur)
@@ -28,6 +32,19 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../lib/middleware'
 import { verifyChain, clotureJournaliere } from '../lib/nf525'
+import {
+  listAllBoutiques,
+  listBoutiqueForUser,
+  getBoutiqueById,
+  getBoutiqueSettings,
+  createBoutique,
+  updateBoutique,
+  updateBoutiqueSettings,
+  getStatsBoutique,
+  type CreateBoutiqueInput,
+  type UpdateBoutiqueInput,
+  type UpdateSettingsInput,
+} from '../services/boutiqueService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -42,8 +59,8 @@ boutiques.use('*', authMiddleware)
  * Liste les boutiques actives selon le rôle de l'utilisateur.
  *
  * Isolation multi-tenant :
- *   - `admin` → retourne toutes les boutiques actives (ORDER BY nom)
- *   - Autres  → retourne uniquement la boutique de l'utilisateur (`user.boutique_id`)
+ *   - `admin` → retourne toutes les boutiques actives via `listAllBoutiques()`
+ *   - Autres  → retourne uniquement la boutique de l'utilisateur via `listBoutiqueForUser()`
  *
  * @returns 200 `{ success: true, data: Boutique[] }`
  */
@@ -51,11 +68,11 @@ boutiques.get('/', async (c) => {
   const user = c.get('user')
 
   // Admin voit toutes les boutiques ; les autres rôles voient uniquement la leur
-  const rows = user.role === 'admin'
-    ? await c.env.DB.prepare('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom').all()
-    : await c.env.DB.prepare('SELECT * FROM boutiques WHERE id = ? AND actif = 1').bind(user.boutique_id).all()
+  const data = user.role === 'admin'
+    ? await listAllBoutiques(c.env.DB)
+    : await listBoutiqueForUser(c.env.DB, user.boutique_id)
 
-  return c.json({ success: true, data: rows.results })
+  return c.json({ success: true, data })
 })
 
 // ─── GET /api/boutiques/:id ───────────────────────────────────────────────────
@@ -78,10 +95,10 @@ boutiques.get('/:id', async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const boutique = await c.env.DB.prepare('SELECT * FROM boutiques WHERE id = ? AND actif = 1').bind(id).first()
+  const boutique = await getBoutiqueById(c.env.DB, id)
   if (!boutique) return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
-  const settings = await c.env.DB.prepare('SELECT * FROM boutique_settings WHERE boutique_id = ?').bind(id).first()
+  const settings = await getBoutiqueSettings(c.env.DB, id)
 
   return c.json({ success: true, data: { ...boutique, settings } })
 })
@@ -93,7 +110,7 @@ boutiques.get('/:id', async (c) => {
  * Crée une nouvelle boutique. Réservé aux administrateurs.
  *
  * Auto-génère un slug depuis le nom (normalisation des accents et caractères spéciaux).
- * Crée automatiquement une entrée `boutique_settings` avec les valeurs par défaut.
+ * Délègue la création DB + initialisation settings à `createBoutique()`.
  *
  * Body JSON :
  * ```json
@@ -123,16 +140,19 @@ boutiques.post('/', requireRole('admin'), async (c) => {
     .replace(/[ôö]/g, 'o').replace(/[ùûü]/g, 'u')
     .replace(/[^a-z0-9-]/g, '')
 
-  const result = await c.env.DB.prepare(`
-    INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).bind(nom, slug, siret ?? null, tva_numero ?? null, adresse ?? null, code_postal ?? null, ville ?? null, telephone ?? null, email ?? null)
-    .first<{ id: number }>()
+  const input: CreateBoutiqueInput = {
+    nom, slug,
+    siret:       siret       ?? null,
+    tva_numero:  tva_numero  ?? null,
+    adresse:     adresse     ?? null,
+    code_postal: code_postal ?? null,
+    ville:       ville       ?? null,
+    telephone:   telephone   ?? null,
+    email:       email       ?? null,
+  }
 
-  // Initialiser les settings avec les valeurs par défaut (colonnes DEFAULT en SQL)
-  await c.env.DB.prepare('INSERT INTO boutique_settings (boutique_id) VALUES (?)').bind(result?.id).run()
-  return c.json({ success: true, id: result?.id, message: 'Boutique créée.' }, 201)
+  const id = await createBoutique(c.env.DB, input)
+  return c.json({ success: true, id, message: 'Boutique créée.' }, 201)
 })
 
 // ─── PUT /api/boutiques/:id ───────────────────────────────────────────────────
@@ -142,7 +162,7 @@ boutiques.post('/', requireRole('admin'), async (c) => {
  * Met à jour les informations d'une boutique (identité, contact, réseaux sociaux).
  * Réservé à `admin` et `manager`. Non-admin ne peut modifier que sa boutique.
  *
- * Utilise COALESCE pour ne mettre à jour que les champs fournis (PATCH-like).
+ * Délègue la mise à jour à `updateBoutique()` (COALESCE PATCH-like).
  *
  * Body JSON (tous optionnels) :
  *   `nom`, `siret`, `tva_numero`, `adresse`, `code_postal`, `ville`,
@@ -159,25 +179,29 @@ boutiques.put('/:id', requireRole('admin', 'manager'), async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const { nom, siret, tva_numero, adresse, code_postal, ville, telephone, email,
-          site_web, slug, description, facebook_url, instagram_url, google_maps_url } = await c.req.json()
+  const {
+    nom, siret, tva_numero, adresse, code_postal, ville, telephone, email,
+    site_web, slug, description, facebook_url, instagram_url, google_maps_url
+  } = await c.req.json()
 
-  await c.env.DB.prepare(`
-    UPDATE boutiques SET
-      nom=COALESCE(?,nom), siret=COALESCE(?,siret), tva_numero=COALESCE(?,tva_numero),
-      adresse=COALESCE(?,adresse), code_postal=COALESCE(?,code_postal), ville=COALESCE(?,ville),
-      telephone=COALESCE(?,telephone), email=COALESCE(?,email), site_web=COALESCE(?,site_web),
-      slug=COALESCE(?,slug), description=COALESCE(?,description),
-      facebook_url=COALESCE(?,facebook_url), instagram_url=COALESCE(?,instagram_url),
-      google_maps_url=COALESCE(?,google_maps_url),
-      updated_at=CURRENT_TIMESTAMP
-    WHERE id=?
-  `).bind(nom ?? null, siret ?? null, tva_numero ?? null,
-          adresse ?? null, code_postal ?? null, ville ?? null,
-          telephone ?? null, email ?? null, site_web ?? null,
-          slug ?? null, description ?? null,
-          facebook_url ?? null, instagram_url ?? null, google_maps_url ?? null, id).run()
+  const input: UpdateBoutiqueInput = {
+    nom:             nom             ?? null,
+    siret:           siret           ?? null,
+    tva_numero:      tva_numero      ?? null,
+    adresse:         adresse         ?? null,
+    code_postal:     code_postal     ?? null,
+    ville:           ville           ?? null,
+    telephone:       telephone       ?? null,
+    email:           email           ?? null,
+    site_web:        site_web        ?? null,
+    slug:            slug            ?? null,
+    description:     description     ?? null,
+    facebook_url:    facebook_url    ?? null,
+    instagram_url:   instagram_url   ?? null,
+    google_maps_url: google_maps_url ?? null,
+  }
 
+  await updateBoutique(c.env.DB, id, input)
   return c.json({ success: true, message: 'Boutique mise à jour.' })
 })
 
@@ -188,15 +212,11 @@ boutiques.put('/:id', requireRole('admin', 'manager'), async (c) => {
  * Met à jour les paramètres opérationnels d'une boutique.
  * Réservé à `admin` et `manager`. Non-admin ne peut modifier que sa boutique.
  *
- * Paramètres gérés (tous optionnels, COALESCE sur champs non fournis) :
- *   - TVA/paiements : `tva_taux_defaut`, `paiement_especes/cb/cheque/virement`
- *   - Numérotation  : `prefix_ticket/facture/devis/avoir/rachat`, `format_numero`, `padding_numero`
- *   - Métier        : `garantie_defaut_jours`, `delai_relance_jours`, `mention_facture`, `pied_de_page`
- *   - Email         : `email_provider`, `email_api_key`, `email_from`, notifications activées/désactivées
- *
- * Validations :
+ * Validations effectuées ici (avant délégation au service) :
  *   - `format_numero` : 'annee' ou 'simple' uniquement
  *   - `padding_numero` : entre 3 et 8
+ *
+ * Délègue la mise à jour à `updateBoutiqueSettings()`.
  *
  * @param id  Identifiant numérique de la boutique
  * @returns 200 `{ success: true, message: 'Paramètres mis à jour.' }`
@@ -212,62 +232,51 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
   const {
     tva_taux_defaut, horaires, notif_email_actif, notif_sms_actif,
     paiement_especes, paiement_cb, paiement_cheque, paiement_virement,
-    // Numérotation configurable (Sprint 2.9)
     prefix_ticket, prefix_facture, prefix_devis, prefix_avoir, prefix_rachat,
     format_numero, padding_numero,
-    // Paramètres métier
     garantie_defaut_jours, delai_relance_jours, mention_facture, pied_de_page,
-    // Email notifications (Sprint 2.11)
     email_provider, email_api_key, email_from,
     email_notif_ticket_cree, email_notif_ticket_termine,
     email_notif_sav_ouvert,  email_notif_relance,
   } = await c.req.json()
 
-  // Validations numérotation
+  // Validations numérotation (avant appel service)
   const FORMATS_VALIDES = ['annee', 'simple']
   if (format_numero && !FORMATS_VALIDES.includes(format_numero))
     return c.json({ success: false, error: `format_numero invalide. Valeurs : ${FORMATS_VALIDES.join(', ')}.` }, 422)
   if (padding_numero && (padding_numero < 3 || padding_numero > 8))
     return c.json({ success: false, error: 'padding_numero doit être entre 3 et 8.' }, 422)
 
-  await c.env.DB.prepare(`
-    UPDATE boutique_settings SET
-      tva_taux_defaut=?, horaires=?, notif_email_actif=?, notif_sms_actif=?,
-      paiement_especes=?, paiement_cb=?, paiement_cheque=?, paiement_virement=?,
-      prefix_ticket=COALESCE(?,prefix_ticket), prefix_facture=COALESCE(?,prefix_facture),
-      prefix_devis=COALESCE(?,prefix_devis),   prefix_avoir=COALESCE(?,prefix_avoir),
-      prefix_rachat=COALESCE(?,prefix_rachat),
-      format_numero=COALESCE(?,format_numero),  padding_numero=COALESCE(?,padding_numero),
-      garantie_defaut_jours=COALESCE(?,garantie_defaut_jours),
-      delai_relance_jours=COALESCE(?,delai_relance_jours),
-      mention_facture=COALESCE(?,mention_facture),
-      pied_de_page=COALESCE(?,pied_de_page),
-      email_provider=COALESCE(?,email_provider),
-      email_api_key=COALESCE(?,email_api_key),
-      email_from=COALESCE(?,email_from),
-      email_notif_ticket_cree=COALESCE(?,email_notif_ticket_cree),
-      email_notif_ticket_termine=COALESCE(?,email_notif_ticket_termine),
-      email_notif_sav_ouvert=COALESCE(?,email_notif_sav_ouvert),
-      email_notif_relance=COALESCE(?,email_notif_relance),
-      updated_at=CURRENT_TIMESTAMP
-    WHERE boutique_id=?
-  `).bind(
-    tva_taux_defaut ?? 20, horaires ? JSON.stringify(horaires) : null,
-    notif_email_actif ? 1 : 0, notif_sms_actif ? 1 : 0,
-    paiement_especes ? 1 : 0, paiement_cb ? 1 : 0, paiement_cheque ? 1 : 0, paiement_virement ? 1 : 0,
-    prefix_ticket  ?? null, prefix_facture ?? null,
-    prefix_devis   ?? null, prefix_avoir   ?? null, prefix_rachat  ?? null,
-    format_numero  ?? null, padding_numero ?? null,
-    garantie_defaut_jours ?? null, delai_relance_jours ?? null,
-    mention_facture ?? null, pied_de_page ?? null,
-    email_provider  ?? null, email_api_key ?? null, email_from ?? null,
-    email_notif_ticket_cree    != null ? (email_notif_ticket_cree    ? 1 : 0) : null,
-    email_notif_ticket_termine != null ? (email_notif_ticket_termine ? 1 : 0) : null,
-    email_notif_sav_ouvert     != null ? (email_notif_sav_ouvert     ? 1 : 0) : null,
-    email_notif_relance        != null ? (email_notif_relance        ? 1 : 0) : null,
-    id
-  ).run()
+  const input: UpdateSettingsInput = {
+    tva_taux_defaut:            tva_taux_defaut           ?? null,
+    horaires:                   horaires                  ?? null,
+    notif_email_actif:          notif_email_actif         ?? null,
+    notif_sms_actif:            notif_sms_actif           ?? null,
+    paiement_especes:           paiement_especes          ?? null,
+    paiement_cb:                paiement_cb               ?? null,
+    paiement_cheque:            paiement_cheque           ?? null,
+    paiement_virement:          paiement_virement         ?? null,
+    prefix_ticket:              prefix_ticket             ?? null,
+    prefix_facture:             prefix_facture            ?? null,
+    prefix_devis:               prefix_devis              ?? null,
+    prefix_avoir:               prefix_avoir              ?? null,
+    prefix_rachat:              prefix_rachat             ?? null,
+    format_numero:              format_numero             ?? null,
+    padding_numero:             padding_numero            ?? null,
+    garantie_defaut_jours:      garantie_defaut_jours     ?? null,
+    delai_relance_jours:        delai_relance_jours       ?? null,
+    mention_facture:            mention_facture           ?? null,
+    pied_de_page:               pied_de_page              ?? null,
+    email_provider:             email_provider            ?? null,
+    email_api_key:              email_api_key             ?? null,
+    email_from:                 email_from                ?? null,
+    email_notif_ticket_cree:    email_notif_ticket_cree    ?? null,
+    email_notif_ticket_termine: email_notif_ticket_termine ?? null,
+    email_notif_sav_ouvert:     email_notif_sav_ouvert     ?? null,
+    email_notif_relance:        email_notif_relance        ?? null,
+  }
 
+  await updateBoutiqueSettings(c.env.DB, id, input)
   return c.json({ success: true, message: 'Paramètres mis à jour.' })
 })
 
@@ -275,7 +284,7 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
 
 /**
  * GET /api/boutiques/:id/stats
- * Retourne les KPIs globaux d'une boutique en 4 requêtes parallèles (`Promise.all`).
+ * Retourne les KPIs globaux d'une boutique via `getStatsBoutique()`.
  *
  * Indicateurs retournés :
  *   - `nb_clients`          : clients actifs
@@ -284,7 +293,7 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
  *   - `produits_stock_bas`  : produits dont `stock_actuel <= stock_minimum`
  *
  * @param id  Identifiant numérique de la boutique
- * @returns 200 `{ success: true, data: { nb_clients, tickets_en_cours, ca_mois, produits_stock_bas } }`
+ * @returns 200 `{ success: true, data: StatsBoutique }`
  * @returns 403 si non-admin tente d'accéder aux stats d'une autre boutique
  */
 boutiques.get('/:id/stats', async (c) => {
@@ -293,23 +302,8 @@ boutiques.get('/:id/stats', async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  // 4 requêtes en parallèle via Promise.all pour optimiser la latence
-  const [clients, tickets, ca_mois, stock_bas] = await Promise.all([
-    c.env.DB.prepare('SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1').bind(id).first<{ cnt: number }>(),
-    c.env.DB.prepare("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1").bind(id).first<{ cnt: number }>(),
-    c.env.DB.prepare("SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')").bind(id).first<{ ca: number }>(),
-    c.env.DB.prepare('SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1').bind(id).first<{ cnt: number }>(),
-  ])
-
-  return c.json({
-    success: true,
-    data: {
-      nb_clients:         clients?.cnt ?? 0,
-      tickets_en_cours:   tickets?.cnt ?? 0,
-      ca_mois:            ca_mois?.ca  ?? 0,
-      produits_stock_bas: stock_bas?.cnt ?? 0,
-    }
-  })
+  const data = await getStatsBoutique(c.env.DB, id)
+  return c.json({ success: true, data })
 })
 
 // ─── GET /api/boutiques/:id/nf525/verify ──────────────────────────────────────

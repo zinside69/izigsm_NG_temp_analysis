@@ -2,10 +2,10 @@
  * @module routes/auth
  * @description Controller Authentification — register, OTP, login, refresh, logout, me.
  *
- * Rôle architectural :
- *   Controller hybride — contient du SQL direct (justifié : opérations d'auth
- *   très couplées à la logique de session, pas de service dédié requis).
- *   La cryptographie (PBKDF2, JWT, OTP) est déléguée à `auth.ts` (lib).
+ * Rôle architectural (P1 Modularité) :
+ *   Controller pur — 0 SQL direct. Toutes les opérations DB sont déléguées
+ *   à `authService.ts`. La cryptographie (PBKDF2, JWT, OTP) est déléguée
+ *   à `auth.ts` (lib).
  *
  * Flux d'inscription :
  *   1. POST /register  → crée le compte (inactif), génère OTP, stocke hashé en KV
@@ -37,12 +37,22 @@
 import { Hono } from 'hono'
 import {
   hashPassword, verifyPassword,
-  generateTokenPair, validateAccessToken,
+  generateTokenPair,
   storeRefreshToken, validateRefreshToken, revokeRefreshToken,
   storeOtp, verifyOtp, generateOtp
 } from '../lib/auth'
 import { validateEmail, auditLog } from '../lib/db'
 import { authMiddleware } from '../lib/middleware'
+import {
+  findUserByEmail,
+  findUserByEmailFull,
+  findUserById,
+  findUserWithProfile,
+  createBoutiqueWithSettings,
+  createUser,
+  activateUser,
+  findUserByEmailAfterActivation,
+} from '../services/authService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -57,10 +67,10 @@ const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>()
  *
  * Séquence :
  *   1. Valide les champs obligatoires (email, password, prenom, nom)
- *   2. Vérifie l'unicité de l'email en DB
- *   3. Crée optionnellement une boutique si `workshopName` est fourni
- *   4. Hashe le mot de passe (PBKDF2-SHA256)
- *   5. Crée l'utilisateur avec `actif = 0` et `email_verifie = 0`
+ *   2. Vérifie l'unicité de l'email via `findUserByEmail()`
+ *   3. Crée optionnellement une boutique via `createBoutiqueWithSettings()` si `workshopName` est fourni
+ *   4. Hashe le mot de passe via `hashPassword()` (PBKDF2-SHA256)
+ *   5. Crée l'utilisateur inactif via `createUser()`
  *   6. Génère un OTP 6 chiffres et le stocke hashé en KV (TTL 10 min)
  *   7. Logue l'action `REGISTER` en audit
  *
@@ -96,36 +106,23 @@ auth.post('/register', async (c) => {
       return c.json({ success: false, error: 'Mot de passe minimum 8 caractères.' }, 400)
 
     // Vérifier si email déjà utilisé
-    const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()
+    const existing = await findUserByEmail(c.env.DB, email)
     if (existing)
       return c.json({ success: false, error: 'Cet email est déjà utilisé.' }, 409)
 
     // Créer la boutique si workshopName fourni
-    let boutiqueId: number | null = null
-    if (workshopName) {
-      const bResult = await c.env.DB.prepare(
-        'INSERT INTO boutiques (nom) VALUES (?) RETURNING id'
-      ).bind(workshopName).first<{ id: number }>()
-      boutiqueId = bResult?.id ?? null
-
-      if (boutiqueId) {
-        await c.env.DB.prepare(
-          'INSERT INTO boutique_settings (boutique_id) VALUES (?)'
-        ).bind(boutiqueId).run()
-      }
-    }
+    const boutiqueId = workshopName
+      ? await createBoutiqueWithSettings(c.env.DB, workshopName)
+      : null
 
     // Hasher le mot de passe (PBKDF2-SHA256, 100 000 itérations)
     const passwordHash = await hashPassword(password)
 
     // Créer l'utilisateur (inactif jusqu'à vérification email)
-    const result = await c.env.DB.prepare(`
-      INSERT INTO users (email, password_hash, prenom, nom, telephone, boutique_id, role_id, actif, email_verifie)
-      VALUES (?, ?, ?, ?, ?, ?, 2, 0, 0)
-      RETURNING id
-    `).bind(email, passwordHash, prenom, nom, telephone ?? null, boutiqueId).first<{ id: number }>()
-
-    const userId = result?.id
+    const userId = await createUser(
+      c.env.DB, email, passwordHash, prenom, nom,
+      telephone ?? null, boutiqueId
+    )
     if (!userId) throw new Error('Erreur création utilisateur')
 
     // Générer et stocker l'OTP (hashé en KV, TTL 10 min)
@@ -155,10 +152,10 @@ auth.post('/register', async (c) => {
  * Valide le code OTP envoyé par email et active le compte utilisateur.
  *
  * Séquence :
- *   1. Vérifie l'OTP en KV (usage unique — supprimé si valide)
- *   2. Active le compte (`actif = 1`, `email_verifie = 1`)
- *   3. Génère une paire de tokens (access + refresh)
- *   4. Stocke le refresh token en KV
+ *   1. Vérifie l'OTP en KV via `verifyOtp()` (usage unique — supprimé si valide)
+ *   2. Active le compte via `activateUser()` (`actif = 1`, `email_verifie = 1`)
+ *   3. Récupère le profil via `findUserByEmailAfterActivation()`
+ *   4. Génère une paire de tokens et stocke le refresh en KV
  *
  * Body JSON :
  * ```json
@@ -181,22 +178,20 @@ auth.post('/verify-otp', async (c) => {
       return c.json({ success: false, error: 'Code OTP invalide ou expiré.' }, 400)
 
     // Activer le compte
-    await c.env.DB.prepare(
-      'UPDATE users SET actif = 1, email_verifie = 1, updated_at = CURRENT_TIMESTAMP WHERE email = ?'
-    ).bind(email).run()
+    await activateUser(c.env.DB, email)
 
-    const user = await c.env.DB.prepare(`
-      SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
-      FROM   users u JOIN roles r ON r.id = u.role_id
-      WHERE  u.email = ?
-    `).bind(email).first<any>()
-
+    const user = await findUserByEmailAfterActivation(c.env.DB, email)
     if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
 
     const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
     await storeRefreshToken(c.env.KV, user.id, tokens.refreshToken)
 
-    return c.json({ success: true, message: 'Compte activé !', ...tokens, user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role } })
+    return c.json({
+      success: true,
+      message: 'Compte activé !',
+      ...tokens,
+      user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role }
+    })
   } catch (e) {
     console.error('[verify-otp]', e)
     return c.json({ success: false, error: 'Erreur serveur.' }, 500)
@@ -210,9 +205,9 @@ auth.post('/verify-otp', async (c) => {
  * Authentifie un utilisateur par email et mot de passe.
  *
  * Séquence :
- *   1. Récupère l'utilisateur par email (avec son rôle)
+ *   1. Récupère l'utilisateur par email via `findUserByEmailFull()` (avec hash)
  *   2. Vérifie que le compte est actif et email vérifié
- *   3. Vérifie le mot de passe (PBKDF2 en temps constant)
+ *   3. Vérifie le mot de passe via `verifyPassword()` (PBKDF2 en temps constant)
  *   4. Génère une paire de tokens et stocke le refresh en KV
  *   5. Logue l'action `LOGIN` en audit
  *
@@ -236,11 +231,7 @@ auth.post('/login', async (c) => {
     if (!email || !password)
       return c.json({ success: false, error: 'Email et mot de passe requis.' }, 400)
 
-    const user = await c.env.DB.prepare(`
-      SELECT u.id, u.email, u.password_hash, u.prenom, u.nom, u.boutique_id, u.actif, u.email_verifie, r.nom as role
-      FROM   users u JOIN roles r ON r.id = u.role_id
-      WHERE  u.email = ?
-    `).bind(email).first<any>()
+    const user = await findUserByEmailFull(c.env.DB, email)
 
     // Message identique pour email inconnu et mot de passe incorrect (anti-énumération)
     if (!user)
@@ -277,10 +268,10 @@ auth.post('/login', async (c) => {
  * Rafraîchit une paire de tokens par rotation du refresh token.
  *
  * Rotation de token (sécurité) :
- *   1. Valide l'ancien refresh token en KV
- *   2. Révoque l'ancien token (suppression KV — ne peut plus être réutilisé)
- *   3. Régénère une nouvelle paire (access + refresh)
- *   4. Stocke le nouveau refresh token en KV
+ *   1. Valide l'ancien refresh token en KV via `validateRefreshToken()`
+ *   2. Révoque l'ancien token via `revokeRefreshToken()` (ne peut plus être réutilisé)
+ *   3. Récupère l'utilisateur actif via `findUserById()`
+ *   4. Régénère une nouvelle paire et stocke le nouveau refresh en KV
  *
  * Body JSON :
  * ```json
@@ -306,12 +297,7 @@ auth.post('/refresh', async (c) => {
     // Rotation : révoquer l'ancien avant d'émettre le nouveau
     await revokeRefreshToken(c.env.KV, userId, refreshToken)
 
-    const user = await c.env.DB.prepare(`
-      SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
-      FROM   users u JOIN roles r ON r.id = u.role_id
-      WHERE  u.id = ? AND u.actif = 1
-    `).bind(userId).first<any>()
-
+    const user = await findUserById(c.env.DB, userId)
     if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
 
     const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
@@ -356,7 +342,8 @@ auth.post('/logout', authMiddleware, async (c) => {
  * Retourne le profil complet de l'utilisateur courant (issu du JWT).
  * Nécessite un JWT valide (`authMiddleware`).
  *
- * Enrichit les données JWT avec le profil DB complet (téléphone, boutique_nom).
+ * Enrichit les données JWT avec le profil DB complet (téléphone, boutique_nom)
+ * via `findUserWithProfile()`.
  * Vérifie que le compte est toujours actif en base (évite les tokens zombies).
  *
  * @returns 200 `{ success: true, user: { id, email, prenom, nom, telephone, boutique_id, role, boutique_nom } }`
@@ -364,14 +351,7 @@ auth.post('/logout', authMiddleware, async (c) => {
  */
 auth.get('/me', authMiddleware, async (c) => {
   const user = c.get('user')
-  const profile = await c.env.DB.prepare(`
-    SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.boutique_id, r.nom as role,
-           b.nom as boutique_nom
-    FROM   users u
-    JOIN   roles r ON r.id = u.role_id
-    LEFT JOIN boutiques b ON b.id = u.boutique_id
-    WHERE  u.id = ? AND u.actif = 1
-  `).bind(user.sub).first()
+  const profile = await findUserWithProfile(c.env.DB, user.sub)
   if (!profile) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
   return c.json({ success: true, user: profile })
 })
