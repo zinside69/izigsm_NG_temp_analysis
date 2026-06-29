@@ -6,6 +6,57 @@
 
 ---
 
+## Sprint 2.25
+
+**Titre** : Conformité P1 MVC — purge SQL résiduel (16 → 0 `.prepare` dans routes/)
+**Commit** : Sprint 2.25 — P1 MVC complet, 0 SQL dans tous les controllers
+**Date** : 29 juin 2026
+**Version** : 2.25.0
+
+### Contexte
+
+Sprint de finalisation P1 : les 5 derniers fichiers controllers contenaient encore 16 `.prepare()` directs. Ce sprint les extrait vers les services appropriés. Résultat : **l'ensemble des 18 fichiers `src/routes/*.ts` est désormais 0 SQL** — objectif P1 global atteint.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/publicService.ts` | 🆕 créé | 7 fonctions SQL + 7 interfaces pour les routes publiques (vitrine, suivi ticket, catalogue). Fonctions : `getTicketPublicByToken`, `getBoutiquePublicBySlug`, `getStatsBoutiquePublic`, `getBoutiqueIdBySlug`, `getCategoriesPubliques`, `getServicesPublics` |
+
+### Fichiers enrichis (nouvelles fonctions ajoutées)
+
+| Fichier | Fonctions ajoutées | Usage |
+|---|---|---|
+| `src/services/clientService.ts` | `getClientEmailPrenom()` | Lookup léger email+prénom pour hooks email dans tickets.ts + sav.ts |
+| `src/services/ticketService.ts` | `getTicketBoutiqueId()`, `getTicketAvecClient()` | Hooks statut `termine` : garantie + email notification |
+| `src/services/factureService.ts` | `getDevisPourNf525()`, `updateFactureHash()` | Conversion devis → facture NF525 dans facturation.ts |
+| `src/services/emailService.ts` | `listEmailLogs()`, `getBoutiqueNomById()` | Journal emails paginé + nom boutique pour email test |
+| `src/services/devisService.ts` | `saveSignatureDevis()` | Enregistrement signature client public |
+
+### Fichiers refactorisés
+
+| Fichier | `.prepare` avant → après | Imports ajoutés |
+|---|---|---|
+| `src/routes/public.ts` | 7 → 0 | `publicService`, `saveSignatureDevis` |
+| `src/routes/tickets.ts` | 3 → 0 | `getTicketBoutiqueId`, `getTicketAvecClient`, `getClientEmailPrenom` |
+| `src/routes/notifications.ts` | 3 → 0 | `listEmailLogs`, `getBoutiqueNomById` |
+| `src/routes/facturation.ts` | 2 → 0 | `getDevisPourNf525`, `updateFactureHash` |
+| `src/routes/sav.ts` | 1 → 0 | `getClientEmailPrenom` |
+
+### Décisions architecturales
+
+- **`getClientEmailPrenom()` dans `clientService`** : pattern de lookup léger partagé par 2 routes (tickets + sav) — ne pas dupliquer, ne pas surcharger `getClientById()` qui charge aussi les appareils
+- **`listEmailLogs()` dans `emailService`** : les logs emails sont une responsabilité du Model email — la route ne doit pas construire les clauses WHERE dynamiques
+- **`saveSignatureDevis()` dans `devisService`** : même si c'est un simple UPDATE, c'est une mutation d'un devis — appartient au service devis
+- **`getDevisPourNf525()` — colonnes minimales** : SELECT ciblé (`boutique_id, client_id, total_ht, total_tva, total_ttc`) au lieu de `SELECT *` — moindre surface de données
+
+### Build
+
+`npm run build` → ✅ **70 modules** (+1 `publicService`), **247.05 kB**
+`npm test` → **61/61 ✅** — 0 régression
+
+---
+
 ## Sprint 2.24
 
 **Titre** : Tests automatisés Vitest — couverture `authService` + `boutiqueService` + `caisseService`

@@ -15,6 +15,7 @@ import {
 import {
   listFactures, getFacture, ajouterPaiement, emettreFacture,
   listAvoirs, getAvoir, createAvoir,
+  getDevisPourNf525, updateFactureHash,
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
@@ -201,8 +202,8 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
   try {
     const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
 
-    // ── NF525 : récupérer le devis pour l'enregistrement ──────────────────
-    const devis = await c.env.DB.prepare('SELECT * FROM devis WHERE id = ?').bind(devisId).first<any>()
+    // ── NF525 : enregistrer la transaction chaînée ─────────────────────────
+    const devis = await getDevisPourNf525(c.env.DB, devisId)
     if (devis) {
       const hashNf525 = await enregistrerTransaction(c.env.DB, {
         boutique_id: devis.boutique_id, type_transaction: 'facture',
@@ -211,7 +212,7 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
         montant_ht: devis.total_ht, montant_tva: devis.total_tva, montant_ttc: devis.total_ttc,
         date_transaction: new Date().toISOString(), user_id: user.sub,
       })
-      await c.env.DB.prepare('UPDATE factures SET hash_nf525 = ? WHERE id = ?').bind(hashNf525, facture_id).run()
+      await updateFactureHash(c.env.DB, facture_id, hashNf525)
     }
 
     return c.json({ success: true, facture_id, facture_numero, message: 'Devis converti en facture.' })

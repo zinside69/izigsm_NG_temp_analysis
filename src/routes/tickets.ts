@@ -22,8 +22,11 @@ import {
   updateTicket,
   updateStatutTicket,
   deleteTicket,
+  getTicketBoutiqueId,
+  getTicketAvecClient,
   type StatutTicket,
 } from '../services/ticketService'
+import { getClientEmailPrenom } from '../services/clientService'
 import { createGarantieFromTicket } from '../services/garantiesService'
 import { sendTicketCree, sendTicketTermine } from '../services/emailService'
 
@@ -130,9 +133,7 @@ tickets.post('/', async (c) => {
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
   const frontendUrl  = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
-  const clientRow = await db.prepare(
-    'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
-  ).bind(client_id).first<{ email: string | null; prenom: string }>()
+  const clientRow = await getClientEmailPrenom(db, client_id)
 
   if (clientRow?.email) {
     sendTicketCree(db, boutiqueId, {
@@ -198,10 +199,7 @@ tickets.put('/:id/statut', async (c) => {
     // ── Hooks à la clôture (statut 'termine') — non bloquants ────────────────
     let garantieCreee: any = null
     if (statut_apres === 'termine') {
-      const ticketRow = await db
-        .prepare('SELECT boutique_id FROM tickets WHERE id = ?')
-        .bind(id)
-        .first<{ boutique_id: number }>()
+      const ticketRow = await getTicketBoutiqueId(db, id)
 
       if (ticketRow) {
         // Garantie automatique
@@ -212,13 +210,7 @@ tickets.put('/:id/statut', async (c) => {
         // Email notification
         try {
           const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
-          const tFull = await db.prepare(`
-            SELECT t.numero, t.tracking_token, t.prix_final, t.diagnostic,
-                   t.appareil_marque, t.appareil_modele,
-                   c.email AS client_email, c.prenom AS client_prenom
-            FROM tickets t JOIN clients c ON c.id = t.client_id
-            WHERE t.id = ? LIMIT 1
-          `).bind(id).first<any>()
+          const tFull = await getTicketAvecClient(db, id)
 
           if (tFull?.client_email) {
             sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl).catch(() => {})

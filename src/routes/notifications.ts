@@ -17,6 +17,8 @@ import { parsePagination }   from '../lib/db'
 import {
   sendEmail,
   getEmailStats,
+  listEmailLogs,
+  getBoutiqueNomById,
   processRelances,
   getEmailConfig,
 } from '../services/emailService'
@@ -85,32 +87,15 @@ notifications.get('/notifications/logs', async (c) => {
     const type   = query.get('type')   ?? null
     const statut = query.get('statut') ?? null
 
-    const conditions = ['boutique_id = ?']
-    const params: any[] = [boutiqueId]
-    if (type)   { conditions.push('type = ?');   params.push(type) }
-    if (statut) { conditions.push('statut = ?'); params.push(statut) }
-    const where = conditions.join(' AND ')
-
-    const [total, rows] = await Promise.all([
-      c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM email_logs WHERE ${where}`)
-        .bind(...params).first<{ cnt: number }>(),
-      c.env.DB.prepare(`
-        SELECT id, destinataire, sujet, type, entite_type, entite_id,
-               statut, erreur, created_at
-        FROM   email_logs
-        WHERE  ${where}
-        ORDER  BY created_at DESC
-        LIMIT  ? OFFSET ?
-      `).bind(...params, limit, offset).all<any>(),
-    ])
+    const { rows, total } = await listEmailLogs(c.env.DB, boutiqueId, { page, limit, offset, type, statut })
 
     return c.json({
       success: true,
-      data: rows.results ?? [],
+      data: rows,
       pagination: {
         page, limit,
-        total: total?.cnt ?? 0,
-        pages: Math.ceil((total?.cnt ?? 0) / limit),
+        total,
+        pages: Math.ceil(total / limit),
       },
     })
   } catch (e: any) {
@@ -133,9 +118,7 @@ notifications.post('/notifications/test', requireRole('admin', 'manager'), async
     const body = await c.req.json()
     if (!body.to?.trim()) return c.json({ success: false, error: 'Adresse email destinataire obligatoire.' }, 422)
 
-    const boutique = await c.env.DB.prepare('SELECT nom FROM boutiques WHERE id = ?')
-      .bind(boutiqueId).first<{ nom: string }>()
-    const nomB = boutique?.nom ?? 'iziGSM'
+    const nomB = (await getBoutiqueNomById(c.env.DB, boutiqueId)) ?? 'iziGSM'
 
     const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;">
       <h2>✅ Configuration email opérationnelle</h2>

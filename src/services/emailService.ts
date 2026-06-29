@@ -601,3 +601,69 @@ export async function getEmailStats(
     par_type:      byType,
   }
 }
+
+// ─── Helpers pour routes/notifications.ts ─────────────────────────────────────
+
+/**
+ * Retourne le journal paginé des emails d'une boutique.
+ * Supporte les filtres `type` et `statut` en clause WHERE dynamique.
+ *
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @param opts       - Pagination + filtres facultatifs
+ * @returns          `{ rows, total }` — rows = entrées de logs, total = count sans LIMIT
+ */
+export async function listEmailLogs(
+  db:         D1Database,
+  boutiqueId: number,
+  opts: {
+    page?:   number
+    limit?:  number
+    offset?: number
+    type?:   string | null
+    statut?: string | null
+  }
+): Promise<{ rows: any[]; total: number }> {
+  const { limit = 20, offset = 0, type = null, statut = null } = opts
+
+  const conditions: string[] = ['boutique_id = ?']
+  const params: any[] = [boutiqueId]
+  if (type)   { conditions.push('type = ?');   params.push(type) }
+  if (statut) { conditions.push('statut = ?'); params.push(statut) }
+  const where = conditions.join(' AND ')
+
+  const [countRow, rows] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) as cnt FROM email_logs WHERE ${where}`)
+      .bind(...params).first<{ cnt: number }>(),
+    db.prepare(`
+      SELECT id, destinataire, sujet, type, entite_type, entite_id,
+             statut, erreur, created_at
+      FROM   email_logs
+      WHERE  ${where}
+      ORDER  BY created_at DESC
+      LIMIT  ? OFFSET ?
+    `).bind(...params, limit, offset).all<any>(),
+  ])
+
+  return {
+    rows:  rows.results ?? [],
+    total: countRow?.cnt ?? 0,
+  }
+}
+
+/**
+ * Retourne le nom d'une boutique par son ID.
+ * Utilisé par le handler `POST /api/notifications/test` pour personnaliser l'email.
+ *
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @returns          Nom de la boutique ou `null`
+ */
+export async function getBoutiqueNomById(
+  db:         D1Database,
+  boutiqueId: number
+): Promise<string | null> {
+  const row = await db.prepare('SELECT nom FROM boutiques WHERE id = ?')
+    .bind(boutiqueId).first<{ nom: string }>()
+  return row?.nom ?? null
+}

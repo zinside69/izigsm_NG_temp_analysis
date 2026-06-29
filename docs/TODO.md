@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.24 terminé — 29 juin 2026
+> Dernière mise à jour : Sprint 2.25 terminé — 29 juin 2026
 
 ---
 
@@ -327,6 +327,27 @@
 - [x] Tests 8/8 ✅ (register, verify-otp, login, me, boutiques, iCal)
 - [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
 - [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
+
+### Sprint 2.25 ✅ — Conformité P1 MVC : purge SQL résiduel (16 → 0 `.prepare` dans routes/)
+**Principe P1 Modularité : 0 SQL dans tous les controllers — objectif global atteint**
+- [x] Audit : 16 `.prepare` répartis sur 5 fichiers (`public.ts` 7, `tickets.ts` 3, `notifications.ts` 3, `facturation.ts` 2, `sav.ts` 1)
+- [x] Créer `src/services/publicService.ts` — 7 fonctions + 7 interfaces TypeScript JSDoc P4
+  - `getTicketPublicByToken` · `getBoutiquePublicBySlug` · `getStatsBoutiquePublic`
+  - `getBoutiqueIdBySlug` · `getCategoriesPubliques` · `getServicesPublics`
+- [x] Ajouter `getClientEmailPrenom()` dans `clientService.ts` (lookup léger email+prénom pour hooks email)
+- [x] Ajouter `getTicketBoutiqueId()` + `getTicketAvecClient()` dans `ticketService.ts` (hooks statut termine)
+- [x] Ajouter `getDevisPourNf525()` + `updateFactureHash()` dans `factureService.ts` (conversion devis→facture NF525)
+- [x] Ajouter `listEmailLogs()` + `getBoutiqueNomById()` dans `emailService.ts` (logs paginés + nom boutique test email)
+- [x] Ajouter `saveSignatureDevis()` dans `devisService.ts` (UPDATE signature client public)
+- [x] Refactoriser `routes/public.ts` — 7 `.prepare` → 0, imports publicService + saveSignatureDevis
+- [x] Refactoriser `routes/tickets.ts` — 3 `.prepare` → 0, imports ticketService + clientService
+- [x] Refactoriser `routes/notifications.ts` — 3 `.prepare` → 0, imports listEmailLogs + getBoutiqueNomById
+- [x] Refactoriser `routes/facturation.ts` — 2 `.prepare` → 0, imports getDevisPourNf525 + updateFactureHash
+- [x] Refactoriser `routes/sav.ts` — 1 `.prepare` → 0, import getClientEmailPrenom
+- [x] Audit final : `grep -rn ".prepare(" src/routes/` → **0 résultat** ✅
+- [x] Build ✅ (70 modules, 247.05 kB) + tests 61/61 ✅ + commit Sprint 2.25
+
+---
 
 ### Sprint 2.24 ✅ — Tests automatisés Vitest : authService + boutiqueService + caisseService
 **Infrastructure qualité : couverture unitaire des Model layers P1**

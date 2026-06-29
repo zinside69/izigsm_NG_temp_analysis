@@ -8,6 +8,9 @@
  *
  * NF525 : chaque facture émise et chaque avoir est chaîné via SHA-256
  * dans la table `journal_nf525`. Le hash est inaltérable une fois émis.
+ * Fonctions auxiliaires pour `routes/facturation.ts` :
+ *   getDevisPourNf525(db, devisId)         — Charge un devis pour enregistrement NF525
+ *   updateFactureHash(db, factureId, hash) — Écrit le hash NF525 sur une facture
  *
  * @module factureService
  */
@@ -423,4 +426,46 @@ export async function createAvoir(
   })
 
   return { id: avoirId, numero, hash_nf525: hashNf525 }
+}
+
+// ─── Helpers NF525 pour conversion devis → facture ────────────────────────────
+
+/**
+ * Charge les données brutes d'un devis nécessaires à l'enregistrement NF525
+ * lors de la conversion en facture (`PUT /api/devis/:id/convertir`).
+ *
+ * @param db      - Instance D1Database
+ * @param devisId - ID du devis converti
+ * @returns       Données devis (boutique_id, client_id, totaux) ou `null` si inexistant
+ */
+export async function getDevisPourNf525(
+  db:      D1Database,
+  devisId: number
+): Promise<{
+  boutique_id: number
+  client_id:   number
+  total_ht:    number
+  total_tva:   number
+  total_ttc:   number
+} | null> {
+  return db.prepare(
+    'SELECT boutique_id, client_id, total_ht, total_tva, total_ttc FROM devis WHERE id = ?'
+  ).bind(devisId).first()
+}
+
+/**
+ * Écrit le hash NF525 calculé sur une facture.
+ * Appelé après `convertirDevis()` + `enregistrerTransaction()`.
+ *
+ * @param db        - Instance D1Database
+ * @param factureId - ID de la facture à mettre à jour
+ * @param hash      - Hash NF525 hex 64 caractères
+ */
+export async function updateFactureHash(
+  db:        D1Database,
+  factureId: number,
+  hash:      string
+): Promise<void> {
+  await db.prepare('UPDATE factures SET hash_nf525 = ? WHERE id = ?')
+    .bind(hash, factureId).run()
 }

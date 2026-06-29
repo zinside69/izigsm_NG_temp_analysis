@@ -32,6 +32,7 @@ import {
 } from '../services/garantiesService'
 import { validateSav, validateSavStatut, validateGarantie } from '../lib/validators'
 import { sendSavOuvert } from '../services/emailService'
+import { getClientEmailPrenom } from '../services/clientService'
 
 type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
 
@@ -175,9 +176,7 @@ sav.post('/sav', async (c) => {
 
     // Hook Sprint 2.11 : email confirmation SAV ouvert
     try {
-      const clientRow = await c.env.DB.prepare(
-        'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
-      ).bind(dossier.client_id).first<{ email: string | null; prenom: string }>()
+      const clientRow = await getClientEmailPrenom(c.env.DB, dossier.client_id)
       if (clientRow?.email) {
         sendSavOuvert(c.env.DB, boutiqueId, {
           id:            dossier.id,

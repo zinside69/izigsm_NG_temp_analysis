@@ -16,6 +16,7 @@
  *   getHistoriqueClient(db, id, boutiqueId)     — Historique consolidé (tickets + factures + rachats + RDV)
  *   importClients(db, boutiqueId, rows)         — Import CSV batch
  *   countByClient(db, clientId)                 — Nb tickets (usage interne service)
+ *   getClientEmailPrenom(db, clientId)           — Email + prénom pour hooks email (léger)
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -433,6 +434,24 @@ export async function importClients(
 }
 
 // ─── Helpers internes ─────────────────────────────────────────────────────────
+
+/**
+ * Retourne uniquement l'email et le prénom d'un client.
+ * Utilisé par les hooks email non-bloquants dans `routes/tickets.ts` et `routes/sav.ts`.
+ * Plus léger que `getClientById()` — ne charge pas les appareils ni la boutique.
+ *
+ * @param db       - Instance D1Database
+ * @param clientId - ID du client
+ * @returns        `{ email, prenom }` ou `null` si client introuvable
+ */
+export async function getClientEmailPrenom(
+  db:       D1Database,
+  clientId: number
+): Promise<{ email: string | null; prenom: string } | null> {
+  return db.prepare(
+    'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
+  ).bind(clientId).first<{ email: string | null; prenom: string }>()
+}
 
 /**
  * Compte le nombre de tickets actifs d'un client.

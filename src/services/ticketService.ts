@@ -18,6 +18,8 @@
  *   updateTicket(db, id, userId, data)             — Mise à jour champs éditables
  *   updateStatut(db, id, userId, statut, comment)  — Machine à états + champs date
  *   deleteTicket(db, id, userId)                   — Soft delete (actif = 0)
+ *   getTicketBoutiqueId(db, id)                    — Résout ticket → boutique_id (hook termine)
+ *   getTicketAvecClient(db, id)                    — Données ticket + email client (hook email)
  */
 
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
@@ -556,4 +558,55 @@ export async function deleteTicket(
     entite_type: 'ticket',
     entite_id:   id,
   })
+}
+
+// ─── Helpers pour hooks cross-service ─────────────────────────────────────────
+
+/**
+ * Retourne uniquement le `boutique_id` d'un ticket.
+ * Utilisé par le hook garantie + email dans `routes/tickets.ts` au passage statut `termine`.
+ *
+ * @param db - Instance D1Database
+ * @param id - ID du ticket
+ * @returns  `{ boutique_id }` ou `null` si ticket introuvable
+ */
+export async function getTicketBoutiqueId(
+  db: D1Database,
+  id: number
+): Promise<{ boutique_id: number } | null> {
+  return db
+    .prepare('SELECT boutique_id FROM tickets WHERE id = ?')
+    .bind(id)
+    .first<{ boutique_id: number }>()
+}
+
+/**
+ * Retourne les données d'un ticket enrichies de l'email et prénom du client.
+ * Utilisé exclusivement par le hook email `sendTicketTermine` dans `routes/tickets.ts`.
+ * N'expose pas les notes internes ni les données sensibles.
+ *
+ * @param db - Instance D1Database
+ * @param id - ID du ticket
+ * @returns  Données ticket + client_email + client_prenom, ou `null`
+ */
+export async function getTicketAvecClient(
+  db: D1Database,
+  id: number
+): Promise<{
+  numero:         string
+  tracking_token: string | null
+  prix_final:     number | null
+  diagnostic:     string | null
+  appareil_marque: string
+  appareil_modele: string
+  client_email:   string | null
+  client_prenom:  string
+} | null> {
+  return db.prepare(`
+    SELECT t.numero, t.tracking_token, t.prix_final, t.diagnostic,
+           t.appareil_marque, t.appareil_modele,
+           c.email AS client_email, c.prenom AS client_prenom
+    FROM tickets t JOIN clients c ON c.id = t.client_id
+    WHERE t.id = ? LIMIT 1
+  `).bind(id).first()
 }

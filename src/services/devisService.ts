@@ -517,3 +517,21 @@ export async function expireDevisPerimes(db: D1Database): Promise<number> {
 
   return result.meta?.changes ?? 0
 }
+
+/**
+ * Enregistre la signature client sur un devis (réponse publique).
+ * Tronquée à 1000 caractères (protection contre abus).
+ *
+ * @param db        - Instance D1Database
+ * @param devisId   - ID du devis
+ * @param signature - Contenu de la signature (texte ou data URL SVG)
+ */
+export async function saveSignatureDevis(
+  db:        D1Database,
+  devisId:   number,
+  signature: string
+): Promise<void> {
+  await db.prepare(
+    'UPDATE devis SET signature_client = ? WHERE id = ?'
+  ).bind(signature.slice(0, 1000), devisId).run()
+}
