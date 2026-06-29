@@ -278,6 +278,36 @@
 - [x] `src/index.tsx` : version → `2.20.0`
 - [x] Build ✅ (241.41 kB, 64 modules) + tests 8/8 ✅ + commit (Sprint 2.20)
 
+### Sprint 2.21 ✅ — Conformité P1 MVC : rachatService + personnelService + userService
+**Principe P1 Modularité : routes = Controller pur (0 SQL), services = Model**
+- [x] `src/services/rachatService.ts` (Model P1 — 5 fonctions) :
+  - `listRachats()` : liste paginée + filtres (statut, search 6 champs, dates)
+  - `getRachat()` : détail + opérateur + boutique (JOIN triple)
+  - `createRachat()` : vérification doublon IMEI + `nextNumero(LP)` + audit
+  - `updateStatutRachat()` : machine à états statut + audit
+  - `exportLivrePolice()` : données brutes pour CSV réglementaire art. 321-7
+  - Constantes exportées : `PIECES_VALIDES`, `ETATS_VALIDES`, `MODES_PAIEMENT_VALIDES`, `STATUTS_VALIDES`
+- [x] `src/services/personnelService.ts` (Model P1 — 8 fonctions) :
+  - `listEmployes()` : liste + statut pointage temps réel + heures aujourd'hui
+  - `getEmploye()` : détail + 50 derniers pointages (Promise.all)
+  - `createEmploye()` / `updateEmploye()` / `desactiverEmploye()` : CRUD employés
+  - `pointer()` : machine à états pointage (absent→en_poste↔pause→termine)
+  - `pointagesAujourdhui()` : pointages du jour + calcul heures JS (sans SQL complexe)
+  - `rapportPointage()` : présences sur période
+  - `statutsTempsReel()` : statuts groupés + résumé chiffré
+  - Constantes exportées : `TRANSITIONS_POINTAGE`, `STATUT_LABELS`
+- [x] `src/services/userService.ts` (Model P1 — 8 fonctions) :
+  - `setPIN()` / `verifyPIN()` / `deletePIN()` / `getPINStatus()` : cycle de vie PIN PBKDF2
+  - `resetPINAdmin()` : réinitialisation admin avec contrôle accès boutique
+  - `getPermissions()` : map action → bool avec défaut tout-autorisé
+  - `setPermissions()` : upsert batch avec whitelist `ACTIONS_VALIDES` (8 actions)
+  - `listUsers()` : tous ou filtré boutique selon rôle admin/manager
+- [x] `src/routes/rachats.ts` refactorisé : 12 SQL inline → 0 (5 routes controller pures)
+- [x] `src/routes/personnel.ts` refactorisé : 12 SQL inline → 0 (9 routes controller pures)
+- [x] `src/routes/users.ts` refactorisé : 11 SQL inline → 0 (7 routes controller pures)
+- [x] `src/index.tsx` : version `2.20.0` → `2.21.0`, sprint mis à jour
+- [x] Build ✅ (244.23 kB, 67 modules) + tests 8/8 ✅ + commit (Sprint 2.21)
+
 ---
 
 ## Backlog violations architecturales (à corriger au fil des sprints)
@@ -298,10 +328,10 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.20.0 |
-| Build | `dist/_worker.js` 241.41 kB — 64 modules |
+| Version | 2.21.0 |
+| Build | `dist/_worker.js` 244.23 kB — 67 modules |
 | Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
-| Dernier commit | Sprint 2.20 — MOD-02 factureService + page devis-public cliente |
+| Dernier commit | Sprint 2.21 — P1 MVC : rachatService + personnelService + userService |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les modules ont leur couche Service |}

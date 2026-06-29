@@ -38,6 +38,7 @@
 | [2.18](#sprint-218) | Bugs bloquants SAV + vitrine publique + slug boutique | `0ba5d22` |
 | [2.19](#sprint-219) | MOD-03 Devis : endpoints publics + UI complète | Sprint 2.19 |
 | [2.20](#sprint-220) | MOD-02 factureService + page publique devis client | Sprint 2.20 |
+| [2.21](#sprint-221) | P1 MVC : rachatService + personnelService + userService | Sprint 2.21 |
 
 ---
 
@@ -769,3 +770,55 @@ Sprint en deux axes :
 | T7b | `GET /api/public/devis/:token` | ✅ `num=DEV-2026-00007`, `statut=envoye`, `peut_repondre=True`, 1 ligne |
 | T8 | `POST /api/public/devis/:token/repondre {action:accepte}` | ✅ `statut=accepte`, `peut_repondre=False`, `repondu_le` enregistré |
 
+---
+
+## Sprint 2.21
+
+**Titre** : Conformité P1 MVC — rachatService + personnelService + userService  
+**Commit** : Sprint 2.21  
+**Date** : 29 juin 2026  
+
+### Contexte
+
+Audit SQL inline sur toutes les routes : `rachats.ts` (12 `.prepare`), `personnel.ts` (12), `users.ts` (11) n'avaient pas encore de couche service dédiée. Ce sprint crée les 3 services manquants et refactorise les routes correspondantes en controllers purs (0 SQL).
+
+Résultat après Sprint 2.21 : **12 routes à 0 SQL** — seules `auth.ts` (9), `boutiques.ts` (12), `public.ts` (7), `facturation.ts` (2 résidus `convertirDevis`), `tickets.ts` (3), `notifications.ts` (3) et `sav.ts` (1) contiennent encore du SQL inline.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/rachatService.ts` | 🆕 créé | Model P1 — 5 fonctions : `listRachats`, `getRachat`, `createRachat`, `updateStatutRachat`, `exportLivrePolice`. Constantes exportées : `PIECES_VALIDES`, `ETATS_VALIDES`, `MODES_PAIEMENT_VALIDES`, `STATUTS_VALIDES`. Doublon IMEI via erreur typée `{ code: 'DOUBLON_IMEI', doublon_id }`. |
+| `src/services/personnelService.ts` | 🆕 créé | Model P1 — 8 fonctions : CRUD employés + machine à états pointage + `pointagesAujourdhui` (calcul heures JS pur) + `rapportPointage` + `statutsTempsReel` (groupé par statut). Constantes `TRANSITIONS_POINTAGE` + `STATUT_LABELS`. |
+| `src/services/userService.ts` | 🆕 créé | Model P1 — 8 fonctions : cycle de vie PIN PBKDF2 (`setPIN`/`verifyPIN`/`deletePIN`/`getPINStatus`/`resetPINAdmin`), permissions granulaires (`getPermissions`/`setPermissions` avec batch upsert), `listUsers` admin/manager. `ACTIONS_VALIDES` (8 actions) exporté. |
+
+### Fichiers refactorisés
+
+| Fichier | Action | Avant → Après |
+|---|---|---|
+| `src/routes/rachats.ts` | ✏️ refactorisé | 12 `.prepare` → 0 — 5 routes controller pures |
+| `src/routes/personnel.ts` | ✏️ refactorisé | 12 `.prepare` → 0 — 9 routes controller pures |
+| `src/routes/users.ts` | ✏️ refactorisé | 11 `.prepare` → 0 — 7 routes controller pures |
+| `src/index.tsx` | ✏️ modifié | Version `2.20.0` → `2.21.0`, sprint label mis à jour |
+
+### Décisions architecturales
+
+- **Erreurs typées avec `code`** : les services lancent des erreurs enrichies d'un `code` (`DOUBLON_IMEI`, `JOURNEE_TERMINEE`, `TRANSITION_INVALIDE`, `PIN_INCORRECT`, `NO_PIN`, `NOT_FOUND`, `FORBIDDEN`) — les routes mappent ces codes sur les statuts HTTP appropriés sans logique métier
+- **`pointer()` en service** : la machine à états pointage (transitions validées, insertion en `pointages`, mise à jour `employes.statut_pointage`) est entièrement dans le service — la route `POST /pointage/:id/pointer` est une simple passe avant
+- **`setPermissions()` batch** : upsert de toutes les permissions en une seule `db.batch()` — évite N requêtes séquentielles
+- **`getPINStatus` parallel** : `Promise.all([db.prepare..., kv.get...])` — DB et KV interrogés simultanément
+- **Constantes exportées depuis le service** : `PIECES_VALIDES`, `STATUTS_VALIDES`, `ACTIONS_VALIDES` etc. définis dans les services et importés dans les routes — source unique de vérité, pas de duplication entre route et service
+
+### Tests Sprint 2.21
+
+| Test | Endpoint | Résultat |
+|---|---|---|
+| T1 | `GET /api/rachats?boutique_id=1` | ✅ 0 rachats (base vide) |
+| T2 | `POST /api/rachats` | ✅ `LP-2026-00001` créé (art. 321-7) |
+| T3 | `GET /api/employes?boutique_id=1` | ✅ 3 employés avec statut_pointage |
+| T4 | `POST /api/pointage/1/pointer` | ✅ `absent → en_poste` — Lucas Dubois |
+| T5 | `GET /api/pointage/statuts?boutique_id=1` | ✅ résumé `{en_poste:1, absent:2}` |
+| T6 | `POST /api/users/pin/set {pin:"1234"}` | ✅ PIN PBKDF2 défini |
+| T7 | `POST /api/users/pin/verify {pin:"1234"}` | ✅ session KV 15min ouverte |
+| T7b | `GET /api/users/pin/status` | ✅ `pin_actif=True, session_active=True` |
+| T8 | `PUT /api/users/1/permissions` | ✅ 3 permissions upsertées |
