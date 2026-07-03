@@ -62,7 +62,18 @@ async function loadTickets() {
 
 // Mapper statuts API snake_case vers anciens libellés
 function mapStatutToLegacy(statut) {
-  const map = { recu:'Nouveau', diagnostic:'En cours', en_reparation:'En cours', termine:'Terminé', livre:'Terminé', annule:'Annulé' };
+  const map = {
+    recu:           'Nouveau',
+    en_diagnostic:  'En cours',
+    attente_accord: 'En cours',
+    a_commander:    'En cours',
+    commande:       'En cours',
+    pieces_recues:  'En cours',
+    en_reparation:  'En cours',
+    termine:        'Terminé',
+    livre:          'Terminé',
+    annule:         'Annulé',
+  };
   return map[statut] || statut || 'Nouveau';
 }
 
@@ -132,7 +143,7 @@ function openNewTicket() {
 }
 
 function editTicket(id) {
-  const ticket = getDB('tickets').find(t => t.id === id);
+  const ticket = allTicketsCache.find(t => t.id === id);
   if (!ticket) return;
   currentTicketId = id;
   document.getElementById('modal-ticket-title').textContent = `Modifier la prise en charge #${String(id).slice(-4)}`;
@@ -151,7 +162,7 @@ function editTicket(id) {
 }
 
 function viewTicket(id) {
-  const ticket = getDB('tickets').find(t => t.id === id);
+  const ticket = allTicketsCache.find(t => t.id === id);
   if (!ticket) return;
   currentTicketId = id;
   document.getElementById('detail-title').textContent = `Prise en charge #${String(id).slice(-4)}`;
@@ -300,9 +311,16 @@ async function _fetchTicketPrintData(id) {
  */
 function _buildTicketHTML(d) {
   const STATUT_LABELS = {
-    recu:'Reçu', diagnostic:'En diagnostic', en_reparation:'En réparation',
-    to_order:'À commander', ordered:'Commandé', parts_received:'Pièces reçues',
-    termine:'Terminé', livre:'Livré', annule:'Annulé',
+    recu:           'Reçu',
+    en_diagnostic:  'En diagnostic',
+    attente_accord: 'En attente d'accord',
+    a_commander:    'À commander',
+    commande:       'Commandé',
+    pieces_recues:  'Pièces reçues',
+    en_reparation:  'En réparation',
+    termine:        'Terminé',
+    livre:          'Livré',
+    annule:         'Annulé',
   };
   const PRIO_COLORS = {
     haute:'#ef4444', urgente:'#dc2626', normale:'#6366f1', basse:'#6b7280',
@@ -415,21 +433,17 @@ function _buildTicketHTML(d) {
 
 window.printTicket = printTicket;
 
-async function changeStatus(id, status) {
-  // Mapper statut legacy vers statut API
-  const statutMap = { 'Nouveau': 'recu', 'En cours': 'en_reparation', 'Terminé': 'termine', 'Annulé': 'annule' };
-  const statutApi = statutMap[status] || status;
-
+async function changeStatus(id, statut) {
   try {
     if (ticketsUseApi) {
-      const result = await apiPut('/api/tickets/' + id + '/statut', { statut: statutApi });
+      const result = await apiPut('/api/tickets/' + id + '/statut', { statut });
       if (!result.ok) throw new Error(result.error || 'Erreur API');
     } else {
       updateInDB('tickets', id, { status });
     }
     closeModal('modal-ticket-detail');
     await loadTickets();
-    showFlash('Statut mis à jour : ' + status);
+    showFlash('Statut mis à jour.');
   } catch (err) {
     showFlash('Erreur: ' + err.message, 'error');
   }
@@ -647,23 +661,40 @@ function addAttachmentItem(file) {
 }
 
 // ======================== CLIENT LIST ========================
-function populateClients() {
-  const clients = getDB('clients');
+async function populateClients() {
   const select = document.getElementById('t-client');
-  if (select) {
+  if (!select) return;
+  // Charger depuis API
+  try {
+    const r = await apiGet('/api/clients', { limit: 200 });
+    const clients = (r.data?.data || []).map(c => ({
+      id:    c.id,
+      nom:   (c.prenom || '') + ' ' + (c.nom || c.last || ''),
+      phone: c.telephone || c.phone || '',
+      email: c.email || '',
+    }));
     clients.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
-      opt.textContent = `${c.first} ${c.last}`;
+      opt.textContent = c.nom.trim() || `Client #${c.id}`;
       select.appendChild(opt);
     });
     select.addEventListener('change', function() {
       const client = clients.find(c => c.id == this.value);
       if (client) {
-        document.getElementById('t-new-client').value = client.first + ' ' + client.last;
-        document.getElementById('t-phone').value = client.phone || '';
-        document.getElementById('t-email').value = client.email || '';
+        document.getElementById('t-new-client').value = client.nom.trim();
+        document.getElementById('t-phone').value = client.phone;
+        document.getElementById('t-email').value = client.email;
       }
+    });
+  } catch {
+    // fallback localStorage silencieux
+    const clients = getDB('clients');
+    clients.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.first || ''} ${c.last || ''}`.trim() || `Client #${c.id}`;
+      select.appendChild(opt);
     });
   }
 }
