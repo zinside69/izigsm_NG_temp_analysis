@@ -22,27 +22,6 @@ const SavApp = (() => {
     clos:          [],
   }
 
-  // ── Helpers auth ────────────────────────────────────────────
-  function getToken() {
-    return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || ''
-  }
-  function authHeaders() {
-    return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` }
-  }
-
-  async function apiGet(path) {
-    const r = await fetch(path, { headers: authHeaders() })
-    return r.json()
-  }
-  async function apiPost(path, body) {
-    const r = await fetch(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
-    return r.json()
-  }
-  async function apiPut(path, body) {
-    const r = await fetch(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) })
-    return r.json()
-  }
-
   // ── Toast ────────────────────────────────────────────────────
   function toast(msg, type = 'success') {
     const el    = document.getElementById('toast')

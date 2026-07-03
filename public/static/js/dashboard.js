@@ -88,13 +88,10 @@ window.DashApp = (() => {
    */
   function _setUser() {
     try {
-      const tok = localStorage.getItem('access_token')
-      if (!tok) return
-      const [, b] = tok.split('.')
-      const pad = b.length % 4 === 0 ? '' : '='.repeat(4 - b.length % 4)
-      const pay = JSON.parse(atob(b.replace(/-/g,'+').replace(/_/g,'/') + pad))
+      const session = JSON.parse(localStorage.getItem('izigsm_session') || 'null')
+      if (!session) return
       const av = document.getElementById('topbar-avatar')
-      if (av) av.textContent = ((pay.prenom||'')[0]||'') + ((pay.nom||'')[0]||'')
+      if (av) av.textContent = ((session.prenom||session.name||'')[0]||'') + ((session.nom||'')[0]||'')
     } catch {}
   }
 

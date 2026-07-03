@@ -41,11 +41,6 @@ function updateTopbarAvatar(session) {
   el.textContent = name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2) || 'U';
 }
 
-function authHeaders() {
-  const token = getToken();
-  return token ? { Authorization: 'Bearer ' + token } : {};
-}
-
 // ─── Mapping API → format local ───────────────────────────────────────────────
 const STATUT_API_TO_LABEL = {
   brouillon:           'Brouillon',
