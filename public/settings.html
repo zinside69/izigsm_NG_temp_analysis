@@ -390,8 +390,8 @@ const Settings = (() => {
   let _settings   = {};
 
   async function init() {
-    if (typeof ApiService === 'undefined') { setTimeout(init, 100); return; }
-    const user = ApiService.getUser();
+    // session chargée via localStorage
+    const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null'); if (!user) { setTimeout(init, 100); return; }
     if (!user) { window.location.href = '/index.html'; return; }
     _boutiqueId = user.boutique_id;
     if (!_boutiqueId) {
@@ -410,7 +410,7 @@ const Settings = (() => {
 
   async function loadSettings() {
     try {
-      const r = await ApiService.get(`/api/boutiques/${_boutiqueId}`);
+      const r = await apiGet(`/api/boutiques/${_boutiqueId}`);
       if (!r.success) throw new Error(r.error);
       const b = r.data;
       _settings = b.settings || {};
@@ -499,7 +499,7 @@ const Settings = (() => {
       body[f] = document.getElementById(f)?.value?.trim() || null;
     });
     try {
-      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}`, body);
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}`, body);
       r.success ? showToast('✅ Boutique mise à jour') : showToast('❌ ' + r.error, 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
@@ -518,7 +518,7 @@ const Settings = (() => {
       delai_relance_jours:   parseInt(document.getElementById('delai_relance_jours')?.value || '3'),
     };
     try {
-      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
       r.success ? showToast('✅ Numérotation mise à jour') : showToast('❌ ' + r.error, 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
@@ -532,7 +532,7 @@ const Settings = (() => {
       pied_de_page:    document.getElementById('pied_de_page')?.value?.trim() || null,
     };
     try {
-      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
       r.success ? showToast('✅ Facturation mise à jour') : showToast('❌ ' + r.error, 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
@@ -548,7 +548,7 @@ const Settings = (() => {
       notif_sms_actif:   document.getElementById('notif_sms_actif')?.checked   ? 1 : 0,
     };
     try {
-      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, body);
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
       r.success ? showToast('✅ Paramètres mis à jour') : showToast('❌ ' + r.error, 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
@@ -574,7 +574,7 @@ const Settings = (() => {
     };
     if (apiKey) payload.email_api_key = apiKey;  // seulement si modifiée
     try {
-      const r = await ApiService.put(`/api/boutiques/${_boutiqueId}/settings`, payload);
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload);
       if (r.success) showToast('Configuration email enregistrée.');
       else showToast(r.error || 'Erreur.', 'error');
     } catch { showToast('Erreur réseau.', 'error'); }
@@ -588,7 +588,7 @@ const Settings = (() => {
     res.textContent = 'Envoi en cours…';
     res.classList.remove('hidden');
     try {
-      const r = await ApiService.post(`/api/notifications/test?boutique_id=${_boutiqueId}`, { to });
+      const r = await apiPost(`/api/notifications/test?boutique_id=${_boutiqueId}`, { to });
       if (r.success) {
         res.className = 'mt-2 text-sm text-green-600';
         res.textContent = r.simulated ? '⚠️ Mode simulé — aucune clé API configurée.' : '✅ Email envoyé avec succès !';
