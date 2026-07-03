@@ -336,7 +336,10 @@
 - [x] Audit `qualirepar.html` + `modules.html` : **0 dette** (0 axios, 0 ApiService, 0 authHeaders) — qualirepar.js en mode localStorage (backend futur), modules.html inline JS UI uniquement
 - [x] Build ✅ 71 modules + tests ✅ **319/319** (8 fichiers : authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65)
 - [x] `src/index.tsx` : version 2.28.0
-- [x] Commits : `bc54e6e` `fea49b0` `b241470`
+- [x] Commits : `bc54e6e` `fea49b0` `b241470` `41067fe`
+- [x] `gsk hosted deploy` → action `cc3077d7-...` → **code: "completed"** ✅ (13 assets uploadés, 288.23 KiB / 62.78 KiB gzip, Worker version `4649d6c2`)
+- [x] `GET /api/health` → ✅ `version: "2.28.0"` en production
+- [x] Tag git `v2.28.0` posé sur commit `41067fe`
 
 ### Sprint 2.27 ✅ — Audit global frontend : ApiService → apiGet/apiPost + fixes tickets + stats
 **Objectif : 0 ApiService, 0 axios, 0 helper auth obsolète dans tout le frontend**
