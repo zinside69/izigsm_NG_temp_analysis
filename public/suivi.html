@@ -135,26 +135,30 @@
 <script>
 // ─── Const ────────────────────────────────────────────────────────────────────
 
+// Statuts alignés sur ticketService.ts (minuscules FR)
 const STEPS = [
-  { key: 'RECEIVED',      label: 'Reçu',       icon: 'fa-inbox' },
-  { key: 'DIAGNOSED',     label: 'Diagnostic', icon: 'fa-stethoscope' },
-  { key: 'WAITING_PARTS', label: 'Pièces',     icon: 'fa-boxes' },
-  { key: 'IN_PROGRESS',   label: 'Réparation', icon: 'fa-wrench' },
-  { key: 'DONE',          label: 'Terminé',    icon: 'fa-check' },
-  { key: 'READY',         label: 'Prêt',       icon: 'fa-bell' },
-  { key: 'DELIVERED',     label: 'Rendu',      icon: 'fa-house' },
+  { key: 'recu',           label: 'Reçu',        icon: 'fa-inbox' },
+  { key: 'en_diagnostic',  label: 'Diagnostic',  icon: 'fa-stethoscope' },
+  { key: 'attente_accord', label: 'Accord',       icon: 'fa-handshake' },
+  { key: 'a_commander',    label: 'À commander', icon: 'fa-shopping-cart' },
+  { key: 'commande',       label: 'Commandé',    icon: 'fa-boxes' },
+  { key: 'pieces_recues',  label: 'Pièces reçues', icon: 'fa-box-open' },
+  { key: 'en_reparation',  label: 'Réparation',  icon: 'fa-wrench' },
+  { key: 'termine',        label: 'Terminé',     icon: 'fa-check' },
+  { key: 'livre',          label: 'Rendu',       icon: 'fa-house' },
 ]
 
 const STATUT_COLORS = {
-  RECEIVED:       'bg-blue-100 text-blue-700',
-  DIAGNOSED:      'bg-purple-100 text-purple-700',
-  WAITING_PARTS:  'bg-yellow-100 text-yellow-700',
-  IN_PROGRESS:    'bg-orange-100 text-orange-700',
-  DONE:           'bg-green-100 text-green-700',
-  READY:          'bg-emerald-100 text-emerald-700',
-  DELIVERED:      'bg-gray-100 text-gray-700',
-  CANCELLED:      'bg-red-100 text-red-700',
-  UNREPAIRABLE:   'bg-red-100 text-red-700',
+  recu:           'bg-blue-100 text-blue-700',
+  en_diagnostic:  'bg-purple-100 text-purple-700',
+  attente_accord: 'bg-yellow-100 text-yellow-700',
+  a_commander:    'bg-orange-100 text-orange-700',
+  commande:       'bg-indigo-100 text-indigo-700',
+  pieces_recues:  'bg-teal-100 text-teal-700',
+  en_reparation:  'bg-cyan-100 text-cyan-700',
+  termine:        'bg-green-100 text-green-700',
+  livre:          'bg-gray-100 text-gray-700',
+  annule:         'bg-red-100 text-red-700',
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -258,10 +262,10 @@ function renderTimeline(statut) {
   const el = document.getElementById('timeline')
 
   // Statuts terminaux non linéaires
-  if (['CANCELLED','UNREPAIRABLE'].includes(statut)) {
+  if (statut === 'annule') {
     el.innerHTML = `<div class="text-center py-4 text-gray-500 w-full">
       <i class="fas fa-times-circle text-red-400 text-3xl mb-2"></i>
-      <p class="text-sm">${statut === 'CANCELLED' ? 'Réparation annulée' : 'Appareil irréparable'}</p>
+      <p class="text-sm">Réparation annulée</p>
     </div>`
     return
   }

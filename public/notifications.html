@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.svg">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications Email — iziGSM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --sidebar-w: 240px; }
+    body { display: flex; min-height: 100vh; background: #f1f5f9; font-family: 'Inter', sans-serif; }
+    #sidebar { width: var(--sidebar-w); flex-shrink: 0; }
+    #main    { flex: 1; min-width: 0; overflow-y: auto; }
+    .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+    .stat-dot-envoye  { background: #22c55e; }
+    .stat-dot-simule  { background: #f59e0b; }
+    .stat-dot-erreur  { background: #ef4444; }
+    .badge-envoye  { background: #dcfce7; color: #16a34a; }
+    .badge-simule  { background: #fef3c7; color: #d97706; }
+    .badge-erreur  { background: #fee2e2; color: #dc2626; }
+    .badge-autre   { background: #e0e7ff; color: #4f46e5; }
+    .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 24px; cursor: pointer; transition: .2s; }
+    .toggle-slider::before { content:''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .2s; }
+    input:checked + .toggle-slider { background: #6366f1; }
+    input:checked + .toggle-slider::before { transform: translateX(20px); }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div id="sidebar" class="hidden md:block">
+    <div id="sidebar-root"></div>
+  </div>
+
+  <!-- Main -->
+  <div id="main" class="p-6">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">
+          <i class="fas fa-envelope text-indigo-500 mr-2"></i>Notifications Email
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">Configuration Resend + journal des envois</p>
+      </div>
+      <button onclick="openTestModal()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+        <i class="fas fa-paper-plane"></i>Email de test
+      </button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi-card">
+        <div class="text-2xl font-bold text-gray-800" id="kpi-total">—</div>
+        <div class="text-xs text-gray-500 mt-1">Emails au total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="text-2xl font-bold text-green-600" id="kpi-mois">—</div>
+        <div class="text-xs text-gray-500 mt-1">Envoyés ce mois</div>
+      </div>
+      <div class="kpi-card">
+        <div class="text-2xl font-bold text-yellow-500" id="kpi-simules">—</div>
+        <div class="text-xs text-gray-500 mt-1">Simulés (sans clé)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="text-2xl font-bold text-red-500" id="kpi-erreurs">—</div>
+        <div class="text-xs text-gray-500 mt-1">Erreurs ce mois</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Config email -->
+      <div class="lg:col-span-1 space-y-4">
+
+        <!-- Statut provider -->
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h2 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fas fa-plug text-indigo-400"></i>Connexion Resend
+          </h2>
+          <div id="provider-status" class="mb-4">
+            <div class="flex items-center gap-2 text-sm">
+              <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+              <span id="status-label" class="text-gray-500">Chargement…</span>
+            </div>
+          </div>
+          <form id="config-form" class="space-y-3" onsubmit="saveConfig(event)">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Clé API Resend <span class="text-gray-400">(re_...)</span></label>
+              <input id="cfg-api-key" type="password" placeholder="re_xxxxxxxxxxxxxxxx"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <p class="text-xs text-gray-400 mt-1">Laissez vide pour conserver la clé actuelle</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Expéditeur <span class="text-gray-400">(From)</span></label>
+              <input id="cfg-from" type="text" placeholder="iziGSM &lt;noreply@votredomaine.fr&gt;"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            </div>
+            <button type="submit"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+              <i class="fas fa-save mr-1"></i>Enregistrer
+            </button>
+          </form>
+        </div>
+
+        <!-- Notifications actives -->
+        <div class="bg-white rounded-xl p-5 shadow-sm">
+          <h2 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fas fa-bell text-indigo-400"></i>Notifications actives
+          </h2>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium text-gray-700">Ticket créé</div>
+                <div class="text-xs text-gray-400">Confirmation de réception</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-ticket-cree" onchange="saveNotif()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium text-gray-700">Ticket terminé</div>
+                <div class="text-xs text-gray-400">Appareil prêt à récupérer</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-ticket-termine" onchange="saveNotif()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium text-gray-700">SAV ouvert</div>
+                <div class="text-xs text-gray-400">Nouveau ticket SAV</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-sav-ouvert" onchange="saveNotif()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-medium text-gray-700">Relances clients</div>
+                <div class="text-xs text-gray-400">Tickets non récupérés</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="notif-relance" onchange="saveNotif()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="mt-4 pt-4 border-t border-gray-100">
+            <button onclick="lancerRelances()"
+              class="w-full text-sm border border-indigo-200 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition-colors">
+              <i class="fas fa-sync mr-1"></i>Lancer relances manuellement
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Journal emails -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-xl shadow-sm">
+          <div class="flex items-center justify-between p-5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-700 flex items-center gap-2">
+              <i class="fas fa-list text-indigo-400"></i>Journal des envois
+            </h2>
+            <div class="flex items-center gap-2">
+              <select id="filter-type" onchange="loadLogs()" class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none">
+                <option value="">Tous les types</option>
+                <option value="ticket_cree">Ticket créé</option>
+                <option value="ticket_termine">Ticket terminé</option>
+                <option value="sav_ouvert">SAV ouvert</option>
+                <option value="relance">Relance</option>
+                <option value="autre">Autre</option>
+              </select>
+              <select id="filter-statut" onchange="loadLogs()" class="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none">
+                <option value="">Tous statuts</option>
+                <option value="envoye">Envoyé</option>
+                <option value="simule">Simulé</option>
+                <option value="erreur">Erreur</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Table logs -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wide">
+                  <th class="text-left px-5 py-3 font-medium">Date</th>
+                  <th class="text-left px-3 py-3 font-medium">Destinataire</th>
+                  <th class="text-left px-3 py-3 font-medium">Type</th>
+                  <th class="text-left px-3 py-3 font-medium">Statut</th>
+                  <th class="text-left px-3 py-3 font-medium hidden lg:table-cell">Sujet</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                <tr><td colspan="5" class="text-center py-8 text-gray-400">Chargement…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <span class="text-xs text-gray-400" id="logs-info">—</span>
+            <div class="flex gap-2">
+              <button id="btn-prev" onclick="changePage(-1)"
+                class="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40" disabled>
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <button id="btn-next" onclick="changePage(1)"
+                class="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40" disabled>
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /main -->
+
+  <!-- Modal test email -->
+  <div id="test-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="font-bold text-gray-800 text-lg">
+          <i class="fas fa-paper-plane text-indigo-500 mr-2"></i>Email de test
+        </h3>
+        <button onclick="closeTestModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Destinataire</label>
+          <input id="test-to" type="email" placeholder="vous@example.com"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+        </div>
+        <div id="test-result" class="hidden rounded-xl p-3 text-sm"></div>
+        <div class="flex gap-3 pt-2">
+          <button onclick="closeTestModal()" class="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm hover:bg-gray-50">Annuler</button>
+          <button onclick="envoyerTest()" id="btn-send-test"
+            class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+            <i class="fas fa-paper-plane mr-1"></i>Envoyer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-4 right-4 hidden z-50">
+    <div id="toast-inner" class="px-4 py-3 rounded-xl text-white text-sm font-medium shadow-lg"></div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+  // ─── State ────────────────────────────────────────────────────────────────────
+
+  let _boutiqueId = null
+  let _currentPage = 1
+  let _totalPages  = 1
+  const LIMIT = 20
+
+  // ─── Init ─────────────────────────────────────────────────────────────────────
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    // Petit délai pour laisser app.js initialiser la session
+    await new Promise(r => setTimeout(r, 150))
+    const user = waitForUser()
+    if (!user) return
+    _boutiqueId = user.boutique_id
+    await Promise.all([loadStats(), loadConfig(), loadLogs()])
+  })
+
+  function waitForUser() {
+    // Lecture directe session localStorage (même pattern que les autres pages)
+    try {
+      const raw = localStorage.getItem('izigsm_session')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+
+  // ─── Stats ────────────────────────────────────────────────────────────────────
+
+  async function loadStats() {
+    try {
+      const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
+      const data = await apiGet(`/api/notifications/stats${params}`)
+      if (!data.success) return
+      const s = data.data
+      document.getElementById('kpi-total').textContent    = s.envoyes_total  ?? 0
+      document.getElementById('kpi-mois').textContent     = s.envoyes_mois   ?? 0
+      document.getElementById('kpi-simules').textContent  = s.simules_mois   ?? 0
+      document.getElementById('kpi-erreurs').textContent  = s.erreurs_mois   ?? 0
+
+      // Statut connexion
+      const dot   = document.getElementById('status-dot')
+      const label = document.getElementById('status-label')
+      if (s.config?.api_key_set) {
+        dot.className   = 'w-2.5 h-2.5 rounded-full bg-green-500'
+        label.textContent = 'Clé API configurée — envois réels actifs'
+        label.className = 'text-green-600 text-sm font-medium'
+      } else {
+        dot.className   = 'w-2.5 h-2.5 rounded-full bg-yellow-400'
+        label.textContent = 'Mode simulé — aucune clé API'
+        label.className = 'text-yellow-600 text-sm'
+      }
+
+      // Notifs toggles
+      if (s.config?.notifs) {
+        document.getElementById('notif-ticket-cree').checked    = !!s.config.notifs.ticket_cree
+        document.getElementById('notif-ticket-termine').checked = !!s.config.notifs.ticket_termine
+        document.getElementById('notif-sav-ouvert').checked     = !!s.config.notifs.sav_ouvert
+        document.getElementById('notif-relance').checked        = !!s.config.notifs.relance
+      }
+
+      // From
+      if (s.config?.from)
+        document.getElementById('cfg-from').value = s.config.from
+    } catch (e) { console.error(e) }
+  }
+
+  // ─── Config ───────────────────────────────────────────────────────────────────
+
+  async function loadConfig() {
+    // Les settings email sont déjà chargés dans loadStats via /notifications/stats
+  }
+
+  async function saveConfig(e) {
+    e.preventDefault()
+    if (!_boutiqueId) return
+    const apiKey = document.getElementById('cfg-api-key').value.trim()
+    const from   = document.getElementById('cfg-from').value.trim()
+
+    const payload = {}
+    if (apiKey) payload.email_api_key = apiKey
+    if (from)   payload.email_from    = from
+
+    try {
+      const data = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
+      if (data.success) {
+        showToast('Configuration sauvegardée ✓', 'green')
+        document.getElementById('cfg-api-key').value = ''
+        await loadStats()
+      } else {
+        showToast(data.error || 'Erreur', 'red')
+      }
+    } catch (e) {
+      showToast('Erreur réseau', 'red')
+    }
+  }
+
+  async function saveNotif() {
+    if (!_boutiqueId) return
+    const payload = {
+      email_notif_ticket_cree:    document.getElementById('notif-ticket-cree').checked    ? 1 : 0,
+      email_notif_ticket_termine: document.getElementById('notif-ticket-termine').checked ? 1 : 0,
+      email_notif_sav_ouvert:     document.getElementById('notif-sav-ouvert').checked     ? 1 : 0,
+      email_notif_relance:        document.getElementById('notif-relance').checked        ? 1 : 0,
+    }
+    try {
+      await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
+      showToast('Préférences mises à jour', 'green')
+    } catch (e) {
+      showToast('Erreur', 'red')
+    }
+  }
+
+  // ─── Relances ─────────────────────────────────────────────────────────────────
+
+  async function lancerRelances() {
+    if (!_boutiqueId) return
+    try {
+      const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
+      const data = await apiPost(`/api/notifications/relances${params}`, {})
+      if (data.success) {
+        showToast(`${data.data?.relances_envoyees ?? 0} relance(s) envoyée(s)`, 'green')
+        loadStats()
+        loadLogs()
+      } else {
+        showToast(data.error || 'Erreur relances', 'red')
+      }
+    } catch (e) { showToast('Erreur réseau', 'red') }
+  }
+
+  // ─── Journal ──────────────────────────────────────────────────────────────────
+
+  async function loadLogs(resetPage = true) {
+    if (resetPage) _currentPage = 1
+    if (!_boutiqueId) return
+
+    const type   = document.getElementById('filter-type').value
+    const statut = document.getElementById('filter-statut').value
+    const offset = (_currentPage - 1) * LIMIT
+
+    const qs = new URLSearchParams({
+      boutique_id: _boutiqueId,
+      limit: LIMIT,
+      offset,
+    })
+    if (type)   qs.set('type',   type)
+    if (statut) qs.set('statut', statut)
+
+    try {
+      const data = await apiGet(`/api/notifications/logs?${qs}`)
+      if (!data.success) return
+
+      _totalPages = data.pagination?.pages ?? 1
+      renderLogs(data.data)
+      updatePagination(data.pagination)
+    } catch (e) { console.error(e) }
+  }
+
+  function renderLogs(rows) {
+    const tbody = document.getElementById('logs-tbody')
+    if (!rows?.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400 text-sm">Aucun email dans le journal.</td></tr>'
+      return
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+        <td class="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">${fmtDate(r.created_at)}</td>
+        <td class="px-3 py-3 text-sm text-gray-700 max-w-[160px] truncate" title="${escHtml(r.destinataire)}">${escHtml(r.destinataire)}</td>
+        <td class="px-3 py-3"><span class="badge-${r.type?.replace('_','') || 'autre'} text-xs px-2 py-0.5 rounded-full font-medium ${typeBadgeClass(r.type)}">${typeLabel(r.type)}</span></td>
+        <td class="px-3 py-3"><span class="text-xs px-2 py-0.5 rounded-full font-medium ${statutClass(r.statut)}">${statutLabel(r.statut)}</span></td>
+        <td class="px-3 py-3 text-xs text-gray-500 hidden lg:table-cell max-w-[200px] truncate" title="${escHtml(r.sujet)}">${escHtml(r.sujet)}</td>
+      </tr>
+    `).join('')
+  }
+
+  function updatePagination(p) {
+    if (!p) return
+    document.getElementById('logs-info').textContent = `${p.total} entrée${p.total > 1 ? 's' : ''} — page ${p.page}/${p.pages || 1}`
+    document.getElementById('btn-prev').disabled = p.page <= 1
+    document.getElementById('btn-next').disabled = p.page >= (p.pages || 1)
+  }
+
+  function changePage(dir) {
+    _currentPage = Math.max(1, Math.min(_totalPages, _currentPage + dir))
+    loadLogs(false)
+  }
+
+  // ─── Modal test ───────────────────────────────────────────────────────────────
+
+  function openTestModal() {
+    document.getElementById('test-result').classList.add('hidden')
+    document.getElementById('test-to').value = ''
+    document.getElementById('test-modal').classList.remove('hidden')
+    setTimeout(() => document.getElementById('test-to').focus(), 100)
+  }
+
+  function closeTestModal() {
+    document.getElementById('test-modal').classList.add('hidden')
+  }
+
+  async function envoyerTest() {
+    const to  = document.getElementById('test-to').value.trim()
+    if (!to) { showResult('Veuillez entrer une adresse email.', 'red'); return }
+    if (!_boutiqueId) return
+
+    const btn = document.getElementById('btn-send-test')
+    btn.disabled = true
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Envoi…'
+
+    const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
+    try {
+      const data = await apiPost(`/api/notifications/test${params}`, { to })
+      if (data.success) {
+        showResult(data.message || (data.simulated ? 'Envoi simulé (pas de clé API).' : 'Email envoyé !'), data.simulated ? 'yellow' : 'green')
+        loadStats()
+        setTimeout(() => loadLogs(), 500)
+      } else {
+        showResult(data.error || 'Erreur', 'red')
+      }
+    } catch (e) {
+      showResult('Erreur réseau.', 'red')
+    }
+    btn.disabled = false
+    btn.innerHTML = '<i class="fas fa-paper-plane mr-1"></i>Envoyer'
+  }
+
+  function showResult(msg, color) {
+    const el = document.getElementById('test-result')
+    const colors = { green: 'bg-green-50 text-green-700 border border-green-200', yellow: 'bg-yellow-50 text-yellow-700 border border-yellow-200', red: 'bg-red-50 text-red-700 border border-red-200' }
+    el.className = `rounded-xl p-3 text-sm ${colors[color] || colors.red}`
+    el.textContent = msg
+    el.classList.remove('hidden')
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  function typeLabel(t) {
+    const m = { ticket_cree: 'Ticket créé', ticket_termine: 'Terminé', sav_ouvert: 'SAV', relance: 'Relance', autre: 'Autre' }
+    return m[t] || t || '—'
+  }
+
+  function typeBadgeClass(t) {
+    const m = {
+      ticket_cree:    'bg-blue-100 text-blue-700',
+      ticket_termine: 'bg-green-100 text-green-700',
+      sav_ouvert:     'bg-orange-100 text-orange-700',
+      relance:        'bg-purple-100 text-purple-700',
+      autre:          'bg-gray-100 text-gray-600',
+    }
+    return m[t] || 'bg-gray-100 text-gray-600'
+  }
+
+  function statutLabel(s) {
+    return { envoye: '✓ Envoyé', simule: '⟳ Simulé', erreur: '✗ Erreur' }[s] || s
+  }
+
+  function statutClass(s) {
+    return { envoye: 'bg-green-100 text-green-700', simule: 'bg-yellow-100 text-yellow-700', erreur: 'bg-red-100 text-red-700' }[s] || 'bg-gray-100 text-gray-600'
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—'
+    const dt = new Date(d)
+    return dt.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) + ' ' + dt.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  }
+
+  function showToast(msg, color = 'green') {
+    const colors = { green: 'bg-green-600', red: 'bg-red-500', yellow: 'bg-yellow-500' }
+    const t  = document.getElementById('toast')
+    const ti = document.getElementById('toast-inner')
+    ti.textContent  = msg
+    ti.className    = `px-4 py-3 rounded-xl text-white text-sm font-medium shadow-lg ${colors[color] || colors.green}`
+    t.classList.remove('hidden')
+    setTimeout(() => t.classList.add('hidden'), 3000)
+  }
+
+  // Fermer modal en cliquant dehors
+  document.getElementById('test-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('test-modal')) closeTestModal()
+  })
+  </script>
+</body>
+</html>

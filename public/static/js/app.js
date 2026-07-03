@@ -43,6 +43,7 @@ function buildSidebar(activePage) {
     { id:'reconditionnement',  icon:'🔄', label:'Reconditionnement',    href:'reconditionnement.html',  section:'gestion', badge: null },
     { id:'clients',            icon:'👥', label:'Clients',              href:'clients.html',            section:'gestion', badge: null },
     { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel.html', section:'gestion', badge: null },
+    { id:'notifications', icon:'✉️', label:'Notifications Email', href:'notifications.html', section:'gestion', badge: null },
     { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings.html', section:'config', badge: null },
     { id:'modules', icon:'🧩', label:'Modules', href:'modules.html', section:'config', badge: null },
   ];
