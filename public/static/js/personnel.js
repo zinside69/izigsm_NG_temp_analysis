@@ -118,14 +118,14 @@ async function loadEmployes() {
   const loadingState = document.getElementById('loading-state');
 
   try {
-    const res = await axios.get('/api/pointage/statuts', { headers: authHeaders() });
+    const res = await apiGet('/api/pointage/statuts');
 
-    if (!res.data.success) throw new Error(res.data.error || 'Erreur API');
+    if (!res.success) throw new Error(res.error || 'Erreur API');
 
-    allEmployes = res.data.data || [];
+    allEmployes = res.data || [];
 
     // Mise à jour des compteurs
-    const resume = res.data.resume || {};
+    const resume = res.resume || {};
     document.getElementById('cnt-en-poste').textContent = resume.en_poste ?? 0;
     document.getElementById('cnt-pause').textContent    = resume.pause    ?? 0;
     document.getElementById('cnt-absent').textContent   = resume.absent   ?? 0;
@@ -148,7 +148,7 @@ async function loadEmployes() {
       loadingState.innerHTML = `
         <i class="fas fa-exclamation-circle text-4xl mb-4 text-red-400"></i>
         <p class="text-red-500 font-medium">Impossible de charger les employés</p>
-        <p class="text-gray-400 text-sm mt-1">${err.response?.data?.error || err.message}</p>
+        <p class="text-gray-400 text-sm mt-1">${err.message}</p>
         <button onclick="loadEmployes()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
           <i class="fas fa-redo mr-2"></i>Réessayer
         </button>
@@ -373,30 +373,26 @@ async function pointer(employeId, statut) {
   }
 
   try {
-    const res = await axios.post(
-      `/api/pointage/${employeId}/pointer`,
-      { statut, notes },
-      { headers: authHeaders() }
-    );
+    const res = await apiPost(`/api/pointage/${employeId}/pointer`, { statut, notes });
 
-    if (!res.data.success) throw new Error(res.data.error || 'Erreur API');
+    if (!res.success) throw new Error(res.error || 'Erreur API');
 
     // Mettre à jour l'état local immédiatement
     const empIdx = allEmployes.findIndex(e => e.id === employeId);
     if (empIdx !== -1) {
-      allEmployes[empIdx].statut_pointage = res.data.statut_apres;
-      allEmployes[empIdx].depuis          = res.data.horodatage;
+      allEmployes[empIdx].statut_pointage = res.statut_apres;
+      allEmployes[empIdx].depuis          = res.horodatage;
     }
 
     closeModal('modal-pointage');
-    toast(res.data.message || 'Pointage enregistré', 'success');
+    toast(res.message || 'Pointage enregistré', 'success');
 
     // Recharger pour avoir les données fraîches
     await loadEmployes();
 
   } catch (err) {
     console.error('Erreur pointer:', err);
-    const msg = err.response?.data?.error || err.message || 'Erreur inconnue';
+    const msg = err.message || 'Erreur inconnue';
     toast(msg, 'error');
 
     if (btn) {
@@ -445,9 +441,9 @@ async function submitAddEmploye(event) {
   btn.innerHTML   = '<i class="fas fa-spinner fa-spin mr-2"></i>Création…';
 
   try {
-    const res = await axios.post('/api/employes', data, { headers: authHeaders() });
+    const res = await apiPost('/api/employes', data);
 
-    if (!res.data.success) throw new Error(res.data.error || 'Erreur API');
+    if (!res.success) throw new Error(res.error || 'Erreur API');
 
     closeModal('modal-add-employe');
     toast(`${data.prenom} ${data.nom} ajouté avec succès !`, 'success');
@@ -455,7 +451,7 @@ async function submitAddEmploye(event) {
 
   } catch (err) {
     console.error('Erreur submitAddEmploye:', err);
-    const msg = err.response?.data?.error || err.message || 'Erreur inconnue';
+    const msg = err.message || 'Erreur inconnue';
     toast(msg, 'error');
   } finally {
     btn.disabled  = false;
@@ -515,18 +511,16 @@ async function loadRapport() {
   }
 
   try {
-    const res = await axios.get('/api/pointage/rapport', {
-      headers: authHeaders(),
-      params:  { date_debut: debut, date_fin: fin },
-    });
+    const qs = new URLSearchParams({ date_debut: debut, date_fin: fin }).toString();
+    const res = await apiGet(`/api/pointage/rapport?${qs}`);
 
-    if (!res.data.success) throw new Error(res.data.error || 'Erreur API');
+    if (!res.success) throw new Error(res.error || 'Erreur API');
 
-    renderRapport(res.data);
+    renderRapport(res);
 
   } catch (err) {
     console.error('Erreur loadRapport:', err);
-    const msg = err.response?.data?.error || err.message || 'Erreur inconnue';
+    const msg = err.message || 'Erreur inconnue';
     if (content) {
       content.innerHTML = `
         <div class="text-center py-8 text-red-500">

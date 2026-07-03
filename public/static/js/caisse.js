@@ -38,23 +38,6 @@
     ligneIdx:     0,
   }
 
-  // ── Helpers auth ────────────────────────────────────────────────────────────
-
-  function token() {
-    return localStorage.getItem('access_token') || ''
-  }
-
-  function headers() {
-    return { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' }
-  }
-
-  function boutique() {
-    try {
-      const p = JSON.parse(atob(token().split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))
-      return p.boutique_id
-    } catch { return null }
-  }
-
   // ── Toast ───────────────────────────────────────────────────────────────────
 
   function toast(msg, type = 'success') {
@@ -129,7 +112,7 @@
 
   async function refreshKpis() {
     try {
-      const { data } = await axios.get('/api/caisse/kpis', { headers: headers() })
+      const data = await apiGet('/api/caisse/kpis')
       if (!data.success) return
       const d = data.data
 
@@ -152,7 +135,7 @@
     const date = document.getElementById('filtre-date-journal')?.value || new Date().toISOString().slice(0, 10)
 
     try {
-      const { data } = await axios.get(`/api/caisse/journal?date=${date}`, { headers: headers() })
+      const data = await apiGet(`/api/caisse/journal?date=${date}`)
       if (!data.success) return
 
       const d = data.data
@@ -210,7 +193,7 @@
 
   async function refreshClotures() {
     try {
-      const { data } = await axios.get('/api/caisse/clotures', { headers: headers() })
+      const data = await apiGet('/api/caisse/clotures')
       if (!data.success) return
       const list = document.getElementById('clotures-list')
       if (!list) return
@@ -243,10 +226,7 @@
     if (!confirm(`Clôturer définitivement la journée du ${date} ? Cette action est irréversible.`)) return
 
     try {
-      const { data } = await axios.post('/api/caisse/cloture',
-        date ? { date } : {},
-        { headers: headers() }
-      )
+      const data = await apiPost('/api/caisse/cloture', date ? { date } : {})
       if (data.success) {
         toast(`Journée ${data.data.date_cloture} clôturée — ${data.data.nb_transactions} transaction(s)`, 'success')
         refreshKpis()
@@ -255,7 +235,7 @@
         toast(data.error || 'Erreur clôture', 'error')
       }
     } catch (e) {
-      toast(e.response?.data?.error || 'Erreur serveur', 'error')
+      toast(e.message || 'Erreur serveur', 'error')
     }
   }
 
@@ -275,7 +255,7 @@
       if (debut) url += `date_debut=${debut}&`
       if (fin)   url += `date_fin=${fin}&`
 
-      const { data } = await axios.get(url, { headers: headers() })
+      const data = await apiGet(url)
       if (!data.success) {
         zone.innerHTML = `<div class="text-red-600 text-sm">${esc(data.error)}</div>`
         return
@@ -316,7 +296,7 @@
           </div>`
       }
     } catch (e) {
-      zone.innerHTML = `<div class="text-red-600 text-sm">${e.response?.data?.error || 'Erreur serveur'}</div>`
+      zone.innerHTML = `<div class="text-red-600 text-sm">${e.message || 'Erreur serveur'}</div>`
     }
   }
 
@@ -513,7 +493,7 @@
     if (!q || q.length < 2) { if (results) results.classList.add('hidden'); return }
 
     try {
-      const { data } = await axios.get(`/api/clients?search=${encodeURIComponent(q)}&limit=5`, { headers: headers() })
+      const data = await apiGet(`/api/clients?search=${encodeURIComponent(q)}&limit=5`)
       if (!data.success || !data.data?.length) { if (results) results.classList.add('hidden'); return }
 
       if (results) {
@@ -577,7 +557,7 @@
     }
 
     try {
-      const { data } = await axios.post('/api/caisse/vente', payload, { headers: headers() })
+      const data = await apiPost('/api/caisse/vente', payload)
       if (data.success) {
         const rendu = data.data.rendu_monnaie
         let msg = `Vente ${data.data.facture.numero} enregistrée.`
@@ -590,7 +570,7 @@
         toast(data.error || 'Erreur', 'error')
       }
     } catch (e) {
-      toast(e.response?.data?.error || 'Erreur serveur', 'error')
+      toast(e.message || 'Erreur serveur', 'error')
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check mr-2"></i>Valider la vente' }
     }
@@ -609,7 +589,7 @@
     if (!q || q.length < 3) { if (result) result.classList.add('hidden'); return }
 
     try {
-      const { data } = await axios.get(`/api/factures?search=${encodeURIComponent(q)}&limit=1`, { headers: headers() })
+      const data = await apiGet(`/api/factures?search=${encodeURIComponent(q)}&limit=1`)
       if (!data.success || !data.data?.length) {
         if (result) { result.classList.remove('hidden'); result.innerHTML = '<span class="text-red-500">Facture introuvable.</span>' }
         state.factureId = null
@@ -639,10 +619,7 @@
     const mode = document.getElementById('enc-mode-paiement')?.value || 'especes'
 
     try {
-      const { data } = await axios.post('/api/caisse/encaissement',
-        { facture_id: state.factureId, mode_paiement: mode },
-        { headers: headers() }
-      )
+      const data = await apiPost('/api/caisse/encaissement', { facture_id: state.factureId, mode_paiement: mode })
       if (data.success) {
         toast(`Encaissement ${data.data.reference_numero} enregistré.`, 'success')
         closeModalEnc()
@@ -652,7 +629,7 @@
         toast(data.error || 'Erreur', 'error')
       }
     } catch (e) {
-      toast(e.response?.data?.error || 'Erreur serveur', 'error')
+      toast(e.message || 'Erreur serveur', 'error')
     }
   }
 
