@@ -6,6 +6,86 @@
 
 ---
 
+## Sprint 2.26
+
+**Titre** : Déploiement Cloudflare Pages — D1AsKV (remplacement KV binding par D1)
+**Commit** : `5edd1f3` — feat: Sprint 2.26 — D1AsKV, suppression KV binding, déploiement CF Pages
+**Date** : 3 juillet 2026
+**Version** : 2.26.0
+
+### Contexte
+
+Sprint déploiement : `gsk hosted deploy` rejetait le `kv_namespaces` dans `wrangler.jsonc` (`KV namespace not found [code: 10041]`). Solution : émuler l'API `KVNamespace` via une table D1 `kv_store`, en injectant un wrapper au niveau du middleware global. Zéro changement dans le code métier (auth, PIN, refresh tokens) — ils continuent d'utiliser `c.env.KV` sans savoir que c'est maintenant D1.
+
+### Blocage résolu
+
+| Problème | Cause | Solution |
+|---|---|---|
+| `KV namespace not found [code: 10041]` | `gsk hosted deploy` ne provisionne pas de KV — seuls D1×1 + R2×1 sont auto-provisionnés | `D1AsKV` : table `kv_store` + wrapper `createD1KV()` émulant l'interface `KVNamespace` |
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/lib/d1kv.ts` | 🆕 créé | Interface `D1KVNamespace` + `createD1KV(db)` : get (TTL passif), put (upsert + expires_at), delete. `d1KvCleanup(db)` : purge des clés expirées (retourne le count supprimé). |
+| `migrations/0024_kv_store.sql` | 🆕 créé | `CREATE TABLE IF NOT EXISTS kv_store (key TEXT PK, value TEXT, expires_at INTEGER)` + index partiel `idx_kv_store_expires_at WHERE expires_at IS NOT NULL` |
+
+### Fichiers modifiés
+
+| Fichier | Modifications |
+|---|---|
+| `src/index.tsx` | Middleware global D1AsKV injecté avant toutes les routes : `(c.env as any).KV = createD1KV(c.env.DB)`. Nettoyage actif probabiliste 1% (`d1KvCleanup`). Bindings : suppression `KV: KVNamespace`. Version `2.22.0` → `2.26.0`. Sprint mis à jour. |
+| `wrangler.jsonc` | Bloc `kv_namespaces` entièrement supprimé. Seul `d1_databases` (binding `DB`) reste. |
+| `src/lib/auth.ts` | Tous les paramètres `kv: KVNamespace` → `D1KVNamespace` (PBKDF2 OTP, refresh tokens, PIN sessions) |
+| `src/lib/middleware.ts` | Type `Bindings.KV: KVNamespace` → `D1KVNamespace` |
+| `src/services/userService.ts` | Paramètres `kv: KVNamespace` → `D1KVNamespace` (setPIN, verifyPIN, deletePIN, resetPINAdmin) |
+| `src/routes/*.ts` (18 fichiers) | Type Bindings local `KV: KVNamespace` → `D1KVNamespace` dans : agenda, auth, boutiques, caisse, clients, fournisseurs, notifications, personnel, rachats, reconditionnement, sav, services, stats, stocks, tickets, users, facturation, public |
+
+### Décisions architecturales
+
+- **Injection middleware** vs paramètre explicite : injecter `createD1KV(DB)` dans `c.env.KV` au niveau middleware global est la solution minimale-invasive. Le code métier (auth, PIN, refresh tokens) n'est pas modifié.
+- **TTL passif** : `get()` vérifie `expires_at <= now` et DELETE la clé si expirée — le client reçoit `null` sans ligne zombie en base.
+- **Nettoyage actif probabiliste 1%** : `if (Math.random() < 0.01) d1KvCleanup(DB).catch(() => {})` dans le middleware global. Évite une cron job dédiée, fonctionne dans le runtime Workers sans scheduler.
+- **Interface `D1KVNamespace`** plutôt que `KVNamespace` de Cloudflare : évite la dépendance au type Workers-specific dans les couches internes, facilite le mocking Vitest.
+
+### Build & Tests
+
+`npm run build` → ✅ **71 modules** (+1 `d1kv.ts`), **248.05 kB**
+`npm test` → **61/61 ✅** — 0 régression
+
+### Déploiement production
+
+| Élément | Valeur |
+|---|---|
+| Action ID | `6f3ef9d7-6520-4213-9876-287db1a61690` |
+| Résultat | `code: "completed"` ✅ |
+| URL | `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` |
+| Worker | `8096d010-efde-413e-a481-72226566aa0b` |
+| Base D1 | `8096d010-efde-413e-a481-72226566aa0b-db` (ID: `85f74dc6-ff36-47ac-a673-a4d65a7f624f`) |
+| Migrations | 24 appliquées automatiquement (0001 → 0024) |
+| JWT_SECRET | Configuré via `gsk hosted secret_put` |
+
+### Validation post-déploiement
+
+| Test | Résultat |
+|---|---|
+| `GET /api/health` | ✅ `version: "2.26.0"`, `sprint: "2.26 — Déploiement CF Pages : D1AsKV (KV → D1)"` |
+| `POST /api/auth/register` | ✅ OTP demo retourné, compte créé |
+| `POST /api/auth/verify-otp` | ✅ accessToken JWT + refreshToken (stocké en D1KV) |
+| `POST /api/auth/login` | ✅ JWT avec rôle admin après `UPDATE users SET role_id = 1` |
+| `POST /api/boutiques` | ✅ Boutique créée (ID 1 — `iZiGSM Demo`) |
+| `POST /api/clients` | ✅ Client créé (ID 1 — Jean Dupont) |
+| `POST /api/agenda` | ✅ RDV créé (ID 1 — Réparation écran iPhone 15, 2026-07-04 10h–11h) |
+| `GET /api/agenda/ical-token` | ✅ Token `a9f5fb0c7e2438ce93b81d8d429557eb` |
+| `GET /api/calendar/a9f5fb0c7e2438ce93b81d8d429557eb.ics` | ✅ RFC 5545 valide — `VEVENT` avec UID, DTSTART, DTEND, SUMMARY, DESCRIPTION, CATEGORIES:REPARATION |
+
+**URL d'abonnement iCal (Google/Apple Calendar) :**
+```
+https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com/api/calendar/a9f5fb0c7e2438ce93b81d8d429557eb.ics
+```
+
+---
+
 ## Sprint 2.25
 
 **Titre** : Conformité P1 MVC — purge SQL résiduel (16 → 0 `.prepare` dans routes/)

@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.25 terminé — 29 juin 2026
+> Dernière mise à jour : Sprint 2.26 terminé — 3 juillet 2026
 
 ---
 
@@ -328,6 +328,30 @@
 - [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
 - [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
 
+### Sprint 2.26 ✅ — Déploiement Cloudflare Pages : D1AsKV (remplacement KV → D1)
+**Infrastructure déploiement : contournement blocage KV non supporté par gsk-hosted-deploy**
+- [x] Identifier blocage : `kv_namespaces` dans wrangler.jsonc → `KV namespace not found [code: 10041]`
+- [x] Créer `migrations/0024_kv_store.sql` : table `kv_store (key PK, value, expires_at)` + index TTL partiel
+- [x] Créer `src/lib/d1kv.ts` : interface `D1KVNamespace` + `createD1KV()` + `d1KvCleanup()`
+  - `get()` : lecture + TTL passif (DELETE si expiré)
+  - `put()` : upsert ON CONFLICT avec `expires_at = now + expirationTtl`
+  - `delete()` : suppression idempotente
+  - `d1KvCleanup()` : purge batch toutes clés expirées
+- [x] Modifier `src/index.tsx` : middleware D1AsKV avant toutes les routes, nettoyage actif 1%, version 2.26.0
+- [x] Modifier `wrangler.jsonc` : suppression bloc `kv_namespaces`
+- [x] Migrer `KVNamespace` → `D1KVNamespace` dans auth.ts, middleware.ts, userService.ts + 18 routes
+- [x] Build ✅ 71 modules + tests 61/61 ✅ + commit `5edd1f3`
+- [x] `gsk hosted deploy` → action `6f3ef9d7-...` → **code: "completed"** ✅
+- [x] 24 migrations appliquées automatiquement en production
+- [x] `gsk hosted secret_put JWT_SECRET` → ✅ configuré
+- [x] `GET /api/health` → ✅ version 2.26.0
+- [x] `POST /api/auth/register` + `verify-otp` + `login` → ✅ auth end-to-end avec D1KV (refresh tokens + OTP)
+- [x] `GET /api/calendar/:token.ics` → ✅ RFC 5545 valide — **objectif principal iCal validé**
+- [x] Docs + commit final Sprint 2.26
+
+**URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
+**URL iCal demo** : `/api/calendar/a9f5fb0c7e2438ce93b81d8d429557eb.ics`
+
 ### Sprint 2.25 ✅ — Conformité P1 MVC : purge SQL résiduel (16 → 0 `.prepare` dans routes/)
 **Principe P1 Modularité : 0 SQL dans tous les controllers — objectif global atteint**
 - [x] Audit : 16 `.prepare` répartis sur 5 fichiers (`public.ts` 7, `tickets.ts` 3, `notifications.ts` 3, `facturation.ts` 2, `sav.ts` 1)
@@ -421,13 +445,15 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.23.0 |
-| Build | `dist/_worker.js` 246.44 kB — 69 modules |
-| Dernière migration | `0023_devis_public_token.sql` ✅ Sprint 2.19 |
-| Dernier commit | `e4f52a2` Sprint 2.23 — authService + boutiqueService (0 SQL dans controllers) |
+| Version | 2.26.0 |
+| Build | `dist/_worker.js` 248.05 kB — 71 modules |
+| Dernière migration | `0024_kv_store.sql` ✅ Sprint 2.26 |
+| Dernier commit | `5edd1f3` Sprint 2.26 — D1AsKV, suppression KV binding, déploiement CF Pages |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les controllers sont à 0 SQL direct |
+| Déploiement production | ✅ `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` |
+| Tests | ✅ 61/61 Vitest (authService, boutiqueService, caisseService) |
 
 ---
 
