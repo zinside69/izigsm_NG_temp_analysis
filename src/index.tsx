@@ -25,10 +25,10 @@ import { createD1KV, d1KvCleanup } from './lib/d1kv'
 
 /**
  * @module index
- * @version 2.26.0
+ * @version 2.27.0
  * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1).
  *
- * Sprint 2.26 — Déploiement Cloudflare Pages : KV → D1AsKV pour compatibilité gsk-hosted.
+ * Sprint 2.27 — Audit global frontend : 0 axios/ApiService, stats.html, fix tickets.js, DEPLOIEMENT.md.
  *
  * Architecture :
  * - HTML/CSS/JS dans dist/ → servis automatiquement par Cloudflare Pages CDN
@@ -87,8 +87,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.26.0',
-    sprint:    '2.26 — Déploiement CF Pages : D1AsKV (KV → D1)',
+    version:   '2.27.0',
+    sprint:    '2.27 — Audit frontend : 0 axios/ApiService, stats.html, fix tickets.js',
     timestamp: new Date().toISOString(),
   })
 })

@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.26 terminé — 3 juillet 2026
+> Dernière mise à jour : Sprint 2.27+ terminé — 3 juillet 2026
 
 ---
 
@@ -328,6 +328,31 @@
 - [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
 - [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
 
+### Sprint 2.27 ✅ — Audit global frontend : ApiService → apiGet/apiPost + fixes tickets + stats
+**Objectif : 0 ApiService, 0 axios, 0 helper auth obsolète dans tout le frontend**
+- [x] `public/stats.html` : page analytics complète 4 onglets (CA / Tickets / Techniciens / Produits) — Chart.js 4 onglets, 6 endpoints `/api/stats/*`, pattern auth session standard
+- [x] `app.js` : +entrée sidebar `stats` (📈 Statistiques) + `notifications` (✉️) déjà présente
+- [x] `public/static/js/kanban.js` : 6× ApiService → apiGet/apiPut + session localStorage
+- [x] `public/static/js/caisse.js` : 9× axios → apiGet/apiPost + suppression helpers `token/headers/boutique`
+- [x] `public/static/js/personnel.js` : 4× axios → apiGet/apiPost + suppression helpers `getToken/authHeaders`
+- [x] `public/static/js/sav.js` : fonctions locales `apiGet/apiPost/apiPut` + `fetch()` → globales app.js (suppression bloc 19 lignes)
+- [x] `public/static/js/dashboard.js` : `access_token` JWT → `izigsm_session` pour `_setUser()`
+- [x] `public/static/js/factures.js` : `authHeaders()` morte supprimée
+- [x] `public/agenda.html` : CDN axios inutile retiré (`agenda.js` utilisait déjà apiGet)
+- [x] `public/static/js/tickets.js` : statuts FR 10 valeurs, `allTicketsCache` pour edit/view, `changeStatus` direct (sans map legacy), `populateClients` → API, `STATUT_LABELS` complets
+- [x] Audit routes backend : toutes les routes appelées côté frontend sont implémentées (18 fichiers routes, cross-check exhaustif)
+- [x] `docs/DEPLOIEMENT.md` : mode opératoire 10 étapes (CF Pages + D1 + secrets + CI/CD + GitHub Actions + rollback + diagnostic)
+- [x] Build ✅ 71 modules / 248.05 kB + tests ✅ **114/114** (5 fichiers : authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16)
+- [x] Commits : `99a7f93` `98cf9b1` `1dbb3e5` `0393d32` `1274e4b`
+
+**État zéro dette technique auth** :
+```
+✅ 0 appel axios dans tout le projet
+✅ 0 ApiService (appels réels) — commentaires JSDoc seulement
+✅ 0 access_token / authHeaders / izigsm_token dans le code actif
+✅ Pattern uniforme : izigsm_session + apiGet/apiPost/apiPut globaux (app.js)
+```
+
 ### Sprint 2.26 ✅ — Déploiement Cloudflare Pages : D1AsKV (remplacement KV → D1)
 **Infrastructure déploiement : contournement blocage KV non supporté par gsk-hosted-deploy**
 - [x] Identifier blocage : `kv_namespaces` dans wrangler.jsonc → `KV namespace not found [code: 10041]`
@@ -445,15 +470,16 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.26.0 |
+| Version | 2.27.0 |
 | Build | `dist/_worker.js` 248.05 kB — 71 modules |
 | Dernière migration | `0024_kv_store.sql` ✅ Sprint 2.26 |
-| Dernier commit | `5edd1f3` Sprint 2.26 — D1AsKV, suppression KV binding, déploiement CF Pages |
+| Dernier commit | `1274e4b` Sprint 2.27 — fix tickets.js statuts FR + audit global frontend |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les controllers sont à 0 SQL direct |
+| Frontend Auth | ✅ **0 axios / 0 ApiService / 0 access_token** — pattern uniforme apiGet/apiPost/izigsm_session |
 | Déploiement production | ✅ `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` |
-| Tests | ✅ 61/61 Vitest (authService, boutiqueService, caisseService) |
+| Tests | ✅ **114/114** Vitest (authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16) |
 
 ---
 
