@@ -26,7 +26,7 @@ import {
   getRapportTechnicien,
 } from '../services/statsService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 
 const stats = new Hono<{ Bindings: Bindings }>()
 

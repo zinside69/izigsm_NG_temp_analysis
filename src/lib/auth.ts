@@ -289,7 +289,7 @@ function generateRefreshToken(): string {
  * @param refreshToken  Token généré par `generateTokenPair()`
  */
 export async function storeRefreshToken(
-  kv: KVNamespace, userId: number, refreshToken: string
+  kv: import("./d1kv").D1KVNamespace, userId: number, refreshToken: string
 ): Promise<void> {
   await kv.put(
     `refresh:${userId}:${refreshToken}`,
@@ -308,7 +308,7 @@ export async function storeRefreshToken(
  * @returns             `true` si le token existe en KV, `false` s'il est absent ou expiré
  */
 export async function validateRefreshToken(
-  kv: KVNamespace, userId: number, refreshToken: string
+  kv: import("./d1kv").D1KVNamespace, userId: number, refreshToken: string
 ): Promise<boolean> {
   const val = await kv.get(`refresh:${userId}:${refreshToken}`)
   return val !== null
@@ -328,7 +328,7 @@ export async function validateRefreshToken(
  * @param refreshToken  Token à supprimer
  */
 export async function revokeRefreshToken(
-  kv: KVNamespace, userId: number, refreshToken: string
+  kv: import("./d1kv").D1KVNamespace, userId: number, refreshToken: string
 ): Promise<void> {
   await kv.delete(`refresh:${userId}:${refreshToken}`)
 }
@@ -347,7 +347,7 @@ export async function revokeRefreshToken(
  * @param email Email de l'utilisateur (identifiant unique de l'OTP)
  * @param otp   Code OTP en clair généré par `generateOtp()`
  */
-export async function storeOtp(kv: KVNamespace, email: string, otp: string): Promise<void> {
+export async function storeOtp(kv: import("./d1kv").D1KVNamespace, email: string, otp: string): Promise<void> {
   const hash = await hashPassword(otp)
   await kv.put(`otp:${email}`, hash, { expirationTtl: 600 }) // 10 minutes
 }
@@ -361,7 +361,7 @@ export async function storeOtp(kv: KVNamespace, email: string, otp: string): Pro
  * @param otp   Code OTP saisi par l'utilisateur (6 chiffres)
  * @returns     `true` si l'OTP est valide et non expiré, `false` sinon
  */
-export async function verifyOtp(kv: KVNamespace, email: string, otp: string): Promise<boolean> {
+export async function verifyOtp(kv: import("./d1kv").D1KVNamespace, email: string, otp: string): Promise<boolean> {
   const stored = await kv.get(`otp:${email}`)
   if (!stored) return false
   const valid = await verifyPassword(otp, stored)

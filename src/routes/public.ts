@@ -24,7 +24,7 @@ import {
   getServicesPublics,
 } from '../services/publicService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 
 const pub = new Hono<{ Bindings: Bindings }>()
 

@@ -30,7 +30,7 @@ import { getClientEmailPrenom } from '../services/clientService'
 import { createGarantieFromTicket } from '../services/garantiesService'
 import { sendTicketCree, sendTicketTermine } from '../services/emailService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
 
 const tickets = new Hono<{ Bindings: Bindings; Variables: Variables }>()

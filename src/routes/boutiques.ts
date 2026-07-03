@@ -46,7 +46,7 @@ import {
   type UpdateSettingsInput,
 } from '../services/boutiqueService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
 
 const boutiques = new Hono<{ Bindings: Bindings; Variables: Variables }>()

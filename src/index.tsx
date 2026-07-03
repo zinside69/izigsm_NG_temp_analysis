@@ -21,19 +21,20 @@ import caisseRoutes        from './routes/caisse'
 import statsRoutes                from './routes/stats'
 import { reconditionnementRoutes, bonsAchatRoutes } from './routes/reconditionnement'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
+import { createD1KV, d1KvCleanup } from './lib/d1kv'
 
 /**
  * @module index
- * @version 2.22.0
- * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1 + KV).
+ * @version 2.26.0
+ * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1).
  *
- * Sprint 2.22 — Documentation P4 : JSDoc exhaustif sur tous les services et lib.
+ * Sprint 2.26 — Déploiement Cloudflare Pages : KV → D1AsKV pour compatibilité gsk-hosted.
  *
  * Architecture :
  * - HTML/CSS/JS dans dist/ → servis automatiquement par Cloudflare Pages CDN
  * - Hono Workers → gère uniquement les routes /api/*
  * - D1 (SQLite edge) → persistance de toutes les données
- * - KV → OTP (TTL 10min) + refresh tokens JWT (TTL 7j)
+ * - D1AsKV (`kv_store`) → émule KVNamespace pour OTP (TTL 10min), refresh tokens (TTL 7j), sessions PIN (TTL 15min)
  *
  * Routes disponibles :
  *   /api/auth/*         → Authentification (register, login, refresh, logout, me)
@@ -54,8 +55,8 @@ import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 
 type Bindings = {
   DB:         D1Database
-  KV:         KVNamespace
   JWT_SECRET: string
+  // KV supprimé — remplacé par D1AsKV (createD1KV) pour compatibilité gsk-hosted-deploy
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -68,13 +69,26 @@ app.use('/api/*', cors({
   credentials: true,
 }))
 
+// ─── Middleware global : injection D1AsKV + nettoyage TTL probabiliste ────────
+// Remplace c.env.KV par un objet D1AsKV sur chaque requête.
+// Nettoyage passif 1/100 requêtes (évite la surcharge D1).
+app.use('*', async (c, next) => {
+  // Injecter D1AsKV dans l'environnement sous la clé KV
+  ;(c.env as any).KV = createD1KV(c.env.DB)
+  // Nettoyage TTL probabiliste (1% des requêtes)
+  if (Math.random() < 0.01) {
+    d1KvCleanup(c.env.DB).catch(() => {}) // non bloquant
+  }
+  await next()
+})
+
 // ─── Health check (AVANT les routes avec :id dynamiques) ─────────────────────
 app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.21.0',
-    sprint:    '2.21 — P1 MVC : rachatService + personnelService + userService',
+    version:   '2.26.0',
+    sprint:    '2.26 — Déploiement CF Pages : D1AsKV (KV → D1)',
     timestamp: new Date().toISOString(),
   })
 })

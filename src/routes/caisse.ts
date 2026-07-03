@@ -36,7 +36,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 const caisse = new Hono<{ Bindings: Bindings }>()
 
 // ─── Helper contexte (même pattern que sav.ts) ────────────────────────────────

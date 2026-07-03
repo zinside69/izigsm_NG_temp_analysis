@@ -34,7 +34,7 @@ import { validateSav, validateSavStatut, validateGarantie } from '../lib/validat
 import { sendSavOuvert } from '../services/emailService'
 import { getClientEmailPrenom } from '../services/clientService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 
 const sav = new Hono<{ Bindings: Bindings }>()
 

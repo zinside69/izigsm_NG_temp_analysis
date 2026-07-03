@@ -48,7 +48,7 @@ import {
   STATUTS_RDV,
 } from '../services/agendaService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
 
 const agenda = new Hono<{ Bindings: Bindings; Variables: Variables }>()

@@ -29,7 +29,7 @@ import { validateAccessToken, type JwtPayload } from './auth'
 
 type Bindings = {
   DB:         D1Database
-  KV:         KVNamespace
+  KV:         import("../lib/d1kv").D1KVNamespace
   JWT_SECRET: string
 }
 

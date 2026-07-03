@@ -6,28 +6,21 @@
   "compatibility_flags": ["nodejs_compat"],
 
   // ── Cloudflare D1 (SQLite edge) ──────────────────────────────────────────
-  // Créer en prod : npx wrangler d1 create izigsm-production
-  // Remplacer database_id par la valeur retournée
+  // Auto-provisionné par gsk-hosted-deploy sous le nom "<worker>-db"
+  // L'id est réécrit côté serveur — ne pas modifier manuellement
   "d1_databases": [
     {
       "binding":       "DB",
       "database_name": "izigsm-production",
       "database_id":   "00000000-0000-0000-0000-000000000000"
     }
-  ],
-
-  // ── Cloudflare KV (OTP + Refresh tokens) ────────────────────────────────
-  // Créer en prod : npx wrangler kv:namespace create izigsm_KV
-  // Remplacer id et preview_id par les valeurs retournées
-  "kv_namespaces": [
-    {
-      "binding":     "KV",
-      "id":          "00000000000000000000000000000001",
-      "preview_id":  "00000000000000000000000000000002"
-    }
   ]
 
+  // ── KV supprimé ──────────────────────────────────────────────────────────
+  // KVNamespace non supporté par gsk-hosted-deploy (cap 1000/account partagé).
+  // Remplacé par D1AsKV : table kv_store dans D1 + wrapper createD1KV().
+  // Voir src/lib/d1kv.ts et migrations/0024_kv_store.sql
+
   // ── Secrets (ne jamais mettre en clair ici) ──────────────────────────────
-  // Configurer via : wrangler secret put JWT_SECRET
-  // En local : fichier .dev.vars (voir .dev.vars.example)
+  // Configurer via : gsk hosted secret_put --name JWT_SECRET --value "$JWT_SECRET"
 }

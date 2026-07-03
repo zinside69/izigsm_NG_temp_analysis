@@ -23,7 +23,7 @@ import {
   getEmailConfig,
 } from '../services/emailService'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
 const notifications = new Hono<{ Bindings: Bindings }>()
 
 notifications.use('*', authMiddleware)

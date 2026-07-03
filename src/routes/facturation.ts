@@ -20,7 +20,7 @@ import {
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
 type Variables = { user: any }
 
 const facturation = new Hono<{ Bindings: Bindings; Variables: Variables }>()

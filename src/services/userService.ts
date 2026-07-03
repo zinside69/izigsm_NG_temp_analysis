@@ -40,7 +40,7 @@ export type Action = typeof ACTIONS_VALIDES[number]
  */
 export async function setPIN(
   db:     D1Database,
-  kv:     KVNamespace,
+  kv:     import("../lib/d1kv").D1KVNamespace,
   userId: number,
   pin:    string
 ): Promise<void> {
@@ -69,7 +69,7 @@ export async function setPIN(
  */
 export async function verifyPIN(
   db:     D1Database,
-  kv:     KVNamespace,
+  kv:     import("../lib/d1kv").D1KVNamespace,
   userId: number,
   pin:    string
 ): Promise<void> {
@@ -96,7 +96,7 @@ export async function verifyPIN(
  */
 export async function deletePIN(
   db:     D1Database,
-  kv:     KVNamespace,
+  kv:     import("../lib/d1kv").D1KVNamespace,
   userId: number
 ): Promise<void> {
   await db.prepare(`
@@ -119,7 +119,7 @@ export async function deletePIN(
  */
 export async function getPINStatus(
   db:     D1Database,
-  kv:     KVNamespace,
+  kv:     import("../lib/d1kv").D1KVNamespace,
   userId: number
 ): Promise<{ pin_actif: boolean; session_active: boolean }> {
   const [row, session] = await Promise.all([
@@ -145,7 +145,7 @@ export async function getPINStatus(
  */
 export async function resetPINAdmin(
   db:        D1Database,
-  kv:        KVNamespace,
+  kv:        import("../lib/d1kv").D1KVNamespace,
   adminUser: { sub: number; role: string; boutique_id?: number | null },
   targetId:  number,
   pin:       string
