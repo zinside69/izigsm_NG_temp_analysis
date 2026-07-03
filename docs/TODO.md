@@ -1,509 +1,415 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.28 terminé — 3 juillet 2026
+> Mis à jour : Sprint 2.28 terminé + déploiement prod — 3 juillet 2026  
+> Version production : **v2.28.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **319/319** (8 suites Vitest)  
+> Build : 71 modules / 248.08 kB  
+> Git : branche `main`, dernier commit `fb77e3b`, tag `v2.28.0`
 
 ---
 
-## Sprints terminés
+## État technique global
+
+| Composant | État | Détail |
+|---|---|---|
+| **Backend Hono** | ✅ Complet | 18 fichiers routes, ~230 endpoints, 0 SQL dans les controllers |
+| **Services Model** | ✅ Complet | 17 services, P1 MVC strict respecté partout |
+| **Migrations D1** | ✅ 24 migrations | 0024_kv_store.sql = dernière |
+| **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
+| **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
+| **Tests Vitest** | ✅ 319/319 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65 |
+| **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
+| **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
+
+---
+
+## Sprints terminés ✅
 
 ### Sprint 2.1 ✅ — Facturation NF525 + Avoirs
-- [x] Migration 0010 : `locked`, `issued_at`, `tracking_token` sur factures + table `avoirs` + `lignes_avoir`
-- [x] `nextNumero()` étendu : `avoir → AV`, `rachat → LP`
+- [x] Migration 0010 : `locked`, `issued_at`, `tracking_token` sur factures + tables `avoirs` + `lignes_avoir`
+- [x] `nextNumero()` : `avoir → AV`, `rachat → LP`
 - [x] `POST /api/factures/:id/emettre` : locked=1, hash NF525, UUID tracking
 - [x] `GET/POST /api/avoirs`, `GET /api/avoirs/:id`
 - [x] Frontend `factures.js` : badges 🔒, bouton Émettre, modal Avoir
-- [x] Migration appliquée + build + tests + commit `2abcde7`
 
 ### Sprint 2.2 ✅ — Livre de police (Rachats)
 - [x] Migration 0011 : table `rachats` (30 colonnes) + 6 index
 - [x] `routes/rachats.ts` : GET list, GET :id, POST (validations art. 321-7 + doublon IMEI), PATCH /statut, GET /export CSV
-- [x] `public/rachats.html` + `public/static/js/rachats.js` (650 lignes)
+- [x] `public/rachats.html` + `public/static/js/rachats.js`
 - [x] `app.js` : `apiPatch` + sidebar "Livre de police"
-- [x] Migration appliquée + build + tests + commit
 
 ### Sprint 2.3 ✅ — PIN PBKDF2 + Sessions KV + Permissions granulaires
 - [x] Migration 0012 : `pin_hash`, `pin_actif` sur users + table `permissions`
 - [x] `routes/users.ts` : PIN set/verify/delete/status/reset + permissions GET/PUT
 - [x] `middleware.ts` : `requirePin` + `hasPermission()`
-- [x] `index.tsx` : `usersRoutes` monté, ordre routes corrigé
 - [x] `app.js` : `requirePinAction()` + `confirmPin()` modal global
-- [x] Migration appliquée + build + tests curl + commit `fde9a13`
-
-### Fix Design Patterns ✅ — Audit conformité Principes Core
-- [x] `users.ts` : suppression query SQL morte dans `GET /users`
-- [x] `rachats.js` + `factures.js` : `getBoutiqueId()` direct (sans ternaire défensif)
-- [x] `index.tsx` : health check remonté avant routes dynamiques
-- [x] `index.tsx` : version `2.3.0` + sprint à jour
-- [x] `app.js` : doublon `apiPut` supprimé
-- [x] `app.js` : `apiPostPublic()` + `apiBlobGet()` + flag `skipAuth`
-- [x] `register.js` : `fetch()` → `apiPostPublic()` (Principe 5)
-- [x] `rachats.js` : `fetch()` export → `apiBlobGet()` (Principe 5)
-- [x] Principes architecturaux enregistrés dans `.architecture/PRINCIPES.md`
-- [x] Commit `785a0ed`
 
 ### Sprint 2.4 ✅ — Catalogue services hiérarchique
-- [x] Migration 0013 : `categories_services` (arbre parent/enfant) + `services` (10 index)
-- [x] `src/services/servicesService.ts` : **premier Model layer** — toute logique SQL
-- [x] `src/lib/validators.ts` : validation centralisée (`validateService`, `validateCategorie`, `validateTicket`, `validateClient`)
-- [x] `src/routes/services.ts` : Controller pur — 0 SQL inline, délègue tout
-- [x] Endpoints : GET/POST/PUT/DELETE `/api/services` + `/api/services/categories` + GET `/api/services/catalogue` (arbre)
+- [x] Migration 0013 : `categories_services` + `services` (10 index)
+- [x] `src/services/servicesService.ts` : premier Model layer
+- [x] `src/routes/services.ts` : Controller pur — 0 SQL inline, 19 endpoints
 - [x] `public/services.html` : layout split sidebar/grille, modals catégorie + service, color picker
-- [x] `public/static/js/services.js` : rendu arbre, filtres, ApiService (Principe 5)
-- [x] Sidebar : entrée "Catalogue services"
-- [x] Migration appliquée + build (104KB, 44 modules) + tests + commit `eaee586`
-
----
-
-## Sprints à venir
-
-> ⚠️ **Plan révisé le 4 juin 2026** suite à l'analyse comparative CDC Manus vs monatelier.net.  
-> L'ordre a été ajusté selon : Priorités CDC (CRITIQUE > HAUTE > MOYENNE) + dépendances techniques + différenciateurs concurrentiels.  
-> Voir `docs/ANALYSE_COMPARATIVE_CDC.md` pour le détail.
-
----
 
 ### Sprint 2.5 ✅ — Fournisseurs + Bons de commande + CUMP
-**Modules CDC : MOD-10 (HAUTE) + MOD-04 CUMP (CRITIQUE)**
-- [x] Migration 0014 : tables `fournisseurs` + `bons_commande` + `lignes_bon_commande` + CUMP sur `produits`
-- [x] `src/services/fournisseursService.ts` (Model) — CRUD fournisseurs, CRUD BC, réception+CUMP, KPIs, À commander
-- [x] `src/lib/validators.ts` : `validateFournisseur()`, `validateBonCommande()` (avec validation par ligne)
-- [x] `src/routes/fournisseurs.ts` (Controller pur — 12 endpoints, 0 SQL)
-- [x] CUMP : `(stock×cump + qty×prix) / (stock+qty)` — calculé à la réception, mouvement `reception_commande`
-- [x] Vue "À commander" : produits dont `stock_actuel ≤ stock_minimum`
+- [x] Migration 0014 : `fournisseurs` + `bons_commande` + `lignes_bon_commande` + CUMP sur `produits`
+- [x] `src/services/fournisseursService.ts` : CRUD fournisseurs, CRUD BC, réception+CUMP, KPIs, À commander
+- [x] CUMP : `(stock×cump + qty×prix) / (stock+qty)` — calculé à la réception
 - [x] Numérotation BC : `BC-AAAA-XXXXX` via MAX séquentiel D1
-- [x] `public/fournisseurs.html` : 3 onglets (BC / Fournisseurs / À commander), KPIs, 3 modales
-- [x] `public/static/js/fournisseurs.js` : 650+ lignes, ApiService, pré-remplissage BC depuis À commander
+- [x] `public/fournisseurs.html` + `public/static/js/fournisseurs.js`
 - [x] Sidebar : entrée Fournisseurs + badge nb produits à commander
-- [x] Build ✅ (118.87 kB, 46 modules) + tests 10/10 ✅
 
-### Sprint 2.6 ✅ — Agenda / RDV + iCal
-**Modules CDC : MOD-08 (MOYENNE)**
-- [x] Migration 0015 : tables `rendez_vous` + `boutique_ical_tokens`
-- [x] `src/services/agendaService.ts` (Model) — CRUD, vue calendrier, KPIs, iCal
-- [x] `src/routes/agenda.ts` (Controller pur — 9 endpoints + iCal)
-- [x] Statuts : PENDING/SCHEDULED/DONE/NO_SHOW/CANCELLED/CONVERTED + machine à états
-- [x] Types : réparation/restitution/devis/diagnostic/autre
-- [x] Vue calendrier groupée par date (`GET /api/agenda/view`)
+### Sprint 2.6 ✅ — Agenda / RDV + iCal RFC 5545
+- [x] Migration 0015 : `rendez_vous` + `boutique_ical_tokens`
+- [x] `src/services/agendaService.ts` : CRUD, vue calendrier, KPIs, iCal
+- [x] Machine à états RDV : PENDING→SCHEDULED→DONE/NO_SHOW/CANCELLED/CONVERTED
 - [x] Export iCal RFC 5545 `GET /api/calendar/:token.ics` — public, sans auth
-- [x] Token iCal stable par boutique (`boutique_ical_tokens`)
-- [x] Fin auto-calculée depuis début + durée si non fournie
-- [x] `public/agenda.html` : vues semaine (grille horaire) + liste + 3 modales
-- [x] `public/static/js/agenda.js` : navigation semaine, KPIs, détail+actions
-- [x] Sidebar : entrée Agenda
-- [x] Fix route iCal : montée dans `index.tsx` avant routers avec `use('*', authMiddleware)`
-- [x] Build ✅ (133.00 kB, 48 modules) + tests 11/11 ✅
+- [x] `public/agenda.html` + `public/static/js/agenda.js`
 
-### Sprint 2.7 🔜 — Vitrine publique + Tracking token *(inchangé)*
-**Modules CDC : MOD-14 (MOYENNE) + MOD-01 tracking**
-- [ ] Page publique `/suivi/:token` (sans auth) — `public/suivi.html`
-- [ ] `src/routes/public.ts` : `GET /api/public/ticket/:token`
-- [ ] QR code sur fiche ticket (tracking_token)
-- [ ] Page vitrine `/pro/:slug` (placeholder)
-- [ ] `GET /api/public/catalogue/:slug` : catalogue services public
+### Sprint 2.7 ✅ — Vitrine publique + Tracking token
+- [x] Migration 0016 : colonnes vitrine sur `boutiques`
+- [x] `public/suivi.html` : page tracking public client (sans auth), timeline statuts
+- [x] `src/routes/public.ts` : `GET /api/public/ticket/:token`, `GET /api/public/boutique/:slug`, catalogue public
+- [x] QR code tracking_token sur fiche ticket
+- [x] `public/static/js/suivi.js` — affichage statut + timeline
 
-### Sprint 2.8 🔜 — Statuts tickets complets + Kanban 🔄 **(RÉVISÉ — était Caisse POS)**
-**Module CDC : MOD-01 (CRITIQUE) — Différenciateur monatelier.net**
-- [ ] 3 statuts manquants : `TO_ORDER`, `ORDERED`, `PARTS_RECEIVED`
-- [ ] Migration 0016 : `ALTER TABLE tickets` + contrainte statuts
-- [ ] Liaison `TO_ORDER` → vue "À commander" (Sprint 2.5)
-- [ ] `GET /api/tickets/kanban` : données groupées par statut
-- [ ] `public/tickets.html` : vue Kanban (8 colonnes, drag & drop JS)
-- [ ] Indicateurs ancienneté : vert (<2j), orange (3–7j), rouge (>7j), alerte (>14j)
-- [ ] Noms de statuts configurables (table `config_tenant`)
+### Sprint 2.8 ✅ — Statuts tickets complets + Kanban
+- [x] Migration 0017 : `priorite` + `date_commande_pieces` + `date_reception_pieces` sur tickets
+- [x] Statuts complets : `recu → en_diagnostic → attente_accord → a_commander → commande → pieces_recues → en_reparation → termine → livre / annule`
+- [x] `src/services/ticketService.ts` : `getKanban()`, `TRANSITIONS_TICKET`, `STATUT_CONFIG`
+- [x] `GET /api/tickets/kanban` : données groupées par statut + ancienneté couleur
+- [x] `public/kanban.html` + `public/static/js/kanban.js` : 9 colonnes, drag & drop JS natif, filtres technicien
+- [x] Indicateurs ancienneté : vert (<2j), orange (3–7j), rouge (>7j), alerte (>14j)
 
-### Sprint 2.9 🔜 — Numérotation configurable + Settings tenant 🔄 **(RÉVISÉ — était Flux métier)**
-**Modules CDC : MOD-02 numérotation + MOD-18 settings — Différenciateur monatelier.net**
-- [ ] Migration 0017 : table `config_tenant` (préfixe, séparateur, format_date, nb_chiffres)
-- [ ] `src/services/configService.ts` (Model)
-- [ ] `src/routes/config.ts` (Controller pur)
-- [ ] `nextNumero()` dynamique : utilise `config_tenant` + aperçu temps réel
-- [ ] Types d'appareils configurables (JSONB dans config)
-- [ ] `public/settings.html` : onboarding numérotation + types appareils
-- [ ] Photos R2 sur tickets (upload + stockage)
-- [ ] `src/services/photosService.ts` (Model)
+### Sprint 2.9 ✅ — Numérotation configurable + Settings tenant
+- [x] Migration 0018 : `prefix_ticket/facture/devis/avoir/rachat`, `format_numero`, `padding_numero`, `garantie_defaut_jours`, `delai_relance_jours`, `mention_facture`, `pied_de_page` sur `boutique_settings`
+- [x] `src/lib/db.ts` : `nextNumero()` lit `boutique_settings` pour préfixes + format
+- [x] `src/services/boutiqueService.ts` : `updateBoutiqueSettings()` avec COALESCE
+- [x] `public/settings.html` : 5 onglets (Général / Numérotation / Facturation / Paiements / Email)
+- [x] Aperçu temps réel numérotation dans le formulaire
 
-### Sprint 2.10 🔜 — SAV & Garanties 🔄 **(RÉVISÉ — était Export PDF)**
-**Module CDC : MOD-09 (MOYENNE) — Très visible chez monatelier.net**
-- [ ] Migration 0018 : tables `garanties` + `tickets_sav` + `retours_client` + `rma_fournisseurs`
-- [ ] `src/services/savService.ts` (Model)
-- [ ] `src/routes/sav.ts` (Controller pur)
-- [ ] Garanties depuis factures (`garantie_jours` sprint 2.4 est sur services, à lier)
-- [ ] Alertes garanties expirant < 30j / < 7j
-- [ ] Tickets SAV = workflow identique MOD-01
-- [ ] Retours client : échange / avoir / refus
-- [ ] RMA fournisseurs : suivi colis
-- [ ] `public/sav.html` + `public/static/js/sav.js`
+### Sprint 2.10 ✅ — SAV & Garanties
+- [x] Migration 0019 : `garanties` + `tickets_sav`
+- [x] `src/services/garantiesService.ts` : createGarantieFromTicket (idempotent), createGarantie, getGarantie, listGaranties, checkAndExpireGaranties, createSav, listSav, getSav, updateSavStatut, getKpisSav
+- [x] `TRANSITIONS_SAV` : machine à états SAV complète
+- [x] `src/routes/sav.ts` : 11 endpoints controller pur
+- [x] `public/sav.html` + `public/static/js/sav.js`
 
-### Sprint 2.11 🔜 — Notifications email + Automatisations 🔄 **(RÉVISÉ — était PWA)**
-**Module CDC : MOD-12 (HAUTE) — Différenciateur monatelier.net**
-- [ ] Intégration Resend API (`wrangler secret put RESEND_API_KEY`)
-- [ ] `src/services/notifService.ts` (Model)
-- [ ] Templates email : réception, pièces attendues, prêt à restituer, suivi lien
-- [ ] Automatisations : changement statut ticket → email client
-- [ ] Automatisation : facture émise → email client
-- [ ] Automatisation : anniversaire client (via cron externe ou ticket hebdo)
-- [ ] `public/communications.html` + gestion templates
+### Sprint 2.11 ✅ — Notifications email
+- [x] Migration 0020 : `email_logs`
+- [x] `src/services/emailService.ts` : sendEmail (Resend API), sendTicketStatus, sendDevisEmail, sendFactureEmail, sendRelance, listEmailLogs, getBoutiqueNomById
+- [x] `src/routes/notifications.ts` : stats, logs, test email, batch relances
+- [x] `public/notifications.html` : journal emails + stats + bouton test
+- [x] Hook statut ticket → email client (non-bloquant, fire & forget)
 
-### Sprint 2.12 🔜 — Caisse POS + Journal NF525 🔄 **(DÉPLACÉ depuis 2.8)**
-**Module CDC : MOD-13 (MOYENNE)**
-- [ ] Migration 0019 : table `sessions_caisse` + `journal_caisse`
-- [ ] `src/services/caisseService.ts` (Model)
-- [ ] `src/routes/caisse.ts` (Controller pur)
-- [ ] Journal NF525 : chaîne SHA-256 continue (même pattern que factures)
-- [ ] `requirePin` sur accès caisse (`acces_caisse`)
-- [ ] Multi-modes paiement (CB, espèces, chèque, virement)
-- [ ] `public/caisse.html` : interface POS tactile
-- [ ] QZ Tray (impression thermique) : optionnel, post-MVP
+### Sprint 2.12 ✅ — Caisse POS + Journal NF525
+- [x] Migration intégrée dans 0008 + extensions
+- [x] `src/services/caisseService.ts` : ouverture/fermeture session, encaissement, journal NF525, KPIs
+- [x] `src/routes/caisse.ts` : 13 endpoints
+- [x] `public/caisse.html` : interface POS tactile, multi-modes paiement
+- [x] `requirePin` sur accès caisse (`acces_caisse`)
 
 ### Sprint 2.13 ✅ — Export PDF + Dashboard graphiques réels
-**Module CDC : MOD-17 (HAUTE)**
-- [x] Export PDF factures/tickets (HTML → `window.print()`) — `printFacture()` + `printTicket()`
-- [x] `src/routes/stats.ts` : `/api/stats` extrait hors `index.tsx` ✅ — violation P1 résolue
-- [x] `src/services/statsService.ts` (Model) — 6 exports, injection DB
+- [x] Export PDF factures/tickets (HTML → `window.print()`)
+- [x] `src/services/statsService.ts` : 6 fonctions — KPIs CA, tickets par statut, top produits, rapport techniciens
+- [x] `src/routes/stats.ts` : 9 endpoints (KPIs, graphiques, techniciens, stock, factures, caisse)
 - [x] Dashboard : Chart.js — CA mensuel réel, tickets par statut, top produits
-- [x] Rapport activité par technicien (`/api/stats/techniciens`)
-- [x] 12 KPIs temps réel (`GET /api/stats`) — nb_clients, ca_mois, evolution_ca_pct
-- [x] Build ✅ + tests 6/6 ✅
+- [x] 12 KPIs temps réel
 
 ### Sprint 2.14 ✅ — PWA manifest + Service Worker
 - [x] `public/manifest.json` — app iziGSM, icônes 192×192 + 512×512
-- [x] `public/sw.js` : cache offline assets statiques (cache-first strategy)
-- [x] `<link rel="manifest">` injecté dans tous les HTML
+- [x] `public/sw.js` : cache offline assets statiques (cache-first)
 - [x] Install prompt (banner Android/iOS)
-- [x] Icônes PWA SVG générées
-- [x] Build ✅ + commit
-
-### Sprint correctif Design Pattern ✅ — Conformité P1/P2/P4
-**Audit post-Sprint 2.14 — violations identifiées et corrigées**
-- [x] P1 — Exception reporting documentée dans `statsService.ts` (bloc `⚠️ EXCEPTION ARCHITECTURE`)
-- [x] P4 — JSDoc `@param`/`@returns` sur les 6 exports de `statsService.ts`
-- [x] P4 — JSDoc sur `ctx()` + 6 handlers de `routes/stats.ts`
-- [x] P2 — `_money()`, `_fmtDate()`, `_fmtDateTime()` centralisés dans `app.js`
-- [x] P2 — Suppression `_money()` local dans `factures.js` + `dashboard.js`
-- [x] P2 — Suppression `_fmtDateTk()` local dans `tickets.js` → `_fmtDateTime()` de `app.js`
-- [x] P4 — `printFacture()` 180L → 3 fonctions : `_fetchFacturePrintData` + `_buildFactureHTML` + `_triggerPrint`
-- [x] P4 — `printTicket()` 155L → 3 fonctions : `_fetchTicketPrintData` + `_buildTicketHTML`
-- [x] P4 — JSDoc sur 14 fonctions de `dashboard.js`
-- [x] Build ✅ (197.52 kB) + tests T1–T6 ✅ 6/6 + commit `f915398`
 
 ### Sprint 2.15 ✅ — CRM étendu
-**Module CDC : MOD-07 (HAUTE)**
-- [x] `src/services/clientService.ts` (Model) — 9 fonctions : listClients, getClient, updateClient, deleteClient, addAppareil, getHistoriqueClient, importClients, getKpis, createClient
-- [x] Fix violation P1 : `JOIN tickets` cross-module → sous-requête `COUNT(*)` dans clientService
-- [x] `src/routes/clients.ts` : Controller pur 0 SQL — 8 endpoints, ctx() refactorisé
-- [x] `GET /api/clients/:id/historique` : historique consolidé (tickets + factures + rdv + KPIs)
+- [x] `src/services/clientService.ts` : 9 fonctions — listClients, getClient, updateClient, deleteClient, addAppareil, getHistoriqueClient, importClients, getKpis, createClient
+- [x] `GET /api/clients/:id/historique` : tickets + factures + RDV + KPIs
 - [x] `POST /api/clients/import-csv` : parsing côté client, mapping 9 colonnes, dédup email silencieux
-- [x] Fix montage Hono : `app.route('/api/clients')` (était `/api` → routing /:id cassé)
-- [x] Fix colonnes DB : `factures` (statut != ANNULE), `rachats` (pas de client_id → []), `rendez_vous` (type_rdv)
-- [x] `public/clients.html` : refonte complète — 4 KPIs, modal historique 4 onglets, modal import CSV 3 étapes
-- [x] `public/static/js/clients.js` : viewHistorique, doImportCsv, JSDoc P4 complet, CSV_FIELD_MAP 9 colonnes
-- [x] Build ✅ (201.22 kB, 58 modules) + tests 7/7 ✅ + commit `f621703`
+- [x] `public/clients.html` : 4 KPIs, modal historique 4 onglets, import CSV 3 étapes
 
 ### Sprint 2.16 ✅ — Reconditionnement + Bons d'achat
+- [x] Migration 0021 : `ordres_reconditionnement` + `bons_achat`
+- [x] `src/services/reconditionnementService.ts` : 14 fonctions — ordres + bons d'achat
+- [x] `terminerOrdre()` : crée produit occasion en stock
+- [x] `consommerBonAchat()` : déduction partielle/totale + audit
+- [x] `public/reconditionnement.html` + `public/static/js/reconditionnement.js`
 
-### Sprint 2.17 ✅ — Correction violations P1 : ticketService + stockService + fix dashboard KPIs
-**Backlog architectural P1**
-- [x] `src/services/ticketService.ts` créé (14 fonctions exportées, JSDoc P4) : `listTickets`, `getKanban`, `getTicketById`, `createTicket`, `updateTicket`, `updateStatutTicket` (machine à états), `deleteTicket` + helpers privés `genererTrackingToken`, `couleurAnciennete`
-- [x] `src/services/stockService.ts` créé (9 fonctions exportées, JSDoc P4) : `listProduits`, `getProduitById`, `createProduit`, `updateProduit`, `deleteProduit`, `enregistrerMouvement`, `listCategories`, `createCategorie`, `getKpisStock`
-- [x] `src/routes/tickets.ts` refactorisé : 0 SQL inline, 100% délégué à `ticketService`. Hooks cross-service conservés (garantie + email) — non bloquants
-- [x] `src/routes/stocks.ts` refactorisé : 0 SQL inline, 100% délégué à `stockService`. Nouveau endpoint `GET /api/produits/kpis`
-- [x] Build ✅ (225.24 kB, 62 modules) + tests 8/8 ✅ + commit `3b1405d`
-**Corrections bugs login / navigation (hors P1)**
-- [x] `public/login.html` : fausse auth hardcodée → `POST /api/auth/login` réel + redirect `/dashboard` sans `.html` — commit `a6c075a`
-- [x] `public/static/js/app.js` : 5× `/login.html` → `/login` (redirections logout/session expirée) — commit `953bf02`
-- [x] `public/static/js/personnel.js` + `sav.js` : `/login.html` → `/login` — commit `953bf02`
-- [x] `public/sw.js` : cache `v2.14` → `v2.17` — commit `953bf02`
-**Fix dashboard KPIs à 0 — commit `869d5ae`**
-- [x] Diagnostic : admin `boutique_id: null` → `getBoutiqueId()` retourne `null` → stats vides
-- [x] `public/login.html` : après login réussi, si `user.boutique_id === null`, appel `GET /api/boutiques` pour auto-sélectionner la première boutique et renseigner la session
-- [x] `public/static/js/app.js` : `apiGet()` auto-injecte `boutique_id` depuis `getBoutiqueId()` → tous les appels dashboard bénéficient du boutique_id sans modifier dashboard.js
-- [x] `seed.sql` : placeholders bcrypt → vrais hashes PBKDF2-SHA256 `Admin@2026!` pour tous les users de test
-**Modules CDC : MOD-05 (MOYENNE) + MOD-11 bons d'achat**
-- [x] Migration `0021` : table `ordres_reconditionnement` (colonne `cout_revient` générée) + table `bons_achat` (code BA-XXXXXXXX, expiration, machine statuts)
-- [x] `src/services/reconditionnementService.ts` (Model) — 14 fonctions : ordres (listOrdres, getOrdre, createOrdre, updateOrdre, updateStatutOrdre, terminerOrdre → crée produit occasion, getKpisReconditionnement) + bons (listBonsAchat, getBonAchat, createBonAchat, verifierBonAchat, consommerBonAchat partiel/total, annulerBonAchat)
-- [x] `src/routes/reconditionnement.ts` : **2 routers séparés** — `reconditionnementRoutes` (/api/reconditionnement, 7 endpoints) + `bonsAchatRoutes` (/api/bons-achat, 6 endpoints). Séparation évite collision `/:id` vs `/bons-achat/*`.
-- [x] `src/index.tsx` : montages explicites `app.route('/api/reconditionnement')` + `app.route('/api/bons-achat')` — version 2.16.0
-- [x] `public/reconditionnement.html` : 2 onglets (ordres + bons), 4 KPIs, modal CRUD ordre, modal terminer (prix + grade → produit créé), modal bon, modal vérification code caisse
-- [x] `public/static/js/reconditionnement.js` : View JSDoc P4 complet — switchTab, CRUD ordres, terminerOrdre, émission bon, verifierBon, annulerBon
-- [x] `public/static/js/app.js` sidebar : entrée « Reconditionnement » ajoutée
-- [x] Build ✅ (220.29 kB, 60 modules) + tests 8/8 ✅ + commit `81b00fa`
+### Sprint 2.17 ✅ — Conformité P1 MVC : ticketService + stockService + fix dashboard KPIs
+- [x] `src/services/ticketService.ts` : 9 fonctions exportées, JSDoc P4
+- [x] `src/services/stockService.ts` : 9 fonctions exportées
+- [x] `src/routes/tickets.ts` + `stocks.ts` refactorisés : 0 SQL inline
+- [x] Fix login → auto-sélection boutique_id si admin null
+- [x] Fix redirections `/login.html` → `/login` (5 occurrences)
+- [x] `seed.sql` : vrais hashes PBKDF2-SHA256
 
-### Sprint 2.18 ✅ — Correction bugs bloquants post-audit
-- [x] `src/services/garantiesService.ts` : alias SQL `to` (mot réservé SQLite) → `t_orig` dans `listSav()` + `getSav()` → fix `D1_ERROR SQLITE_ERROR` sur `GET /api/sav`
-- [x] `src/routes/public.ts` : mapping `STATUT_CLIENT` redesigné en clés minuscules alignées sur la machine à états (`recu`, `en_diagnostic`, `attente_accord`…) → `statut_label` en français dans la page suivi client
-- [x] `src/routes/boutiques.ts` : auto-génération slug à la création `POST /api/boutiques`
-- [x] `migrations/0022_slug_boutiques.sql` : `UPDATE boutiques SET slug` pour les boutiques existantes sans slug
-- [x] `seed.sql` : INSERT boutique avec slug `'izigsm-paris-11'` — cohérence après `db:reset`
-- [x] Build ✅ (225.68 kB, 62 modules) + tests 7/7 ✅ + commit `0ba5d22`
+### Sprint 2.18 ✅ — Corrections bugs bloquants
+- [x] Alias SQL `to` (mot réservé SQLite) → `t_orig` dans `listSav()` + `getSav()`
+- [x] `routes/public.ts` : mapping STATUT_CLIENT en clés minuscules
+- [x] `routes/boutiques.ts` : auto-génération slug à la création
+- [x] Migration 0022 : UPDATE slug boutiques existantes
 
 ### Sprint 2.19 ✅ — MOD-03 Devis : complétion complète
-**Modules CDC : MOD-03 Devis (HAUTE)**
-- [x] `migrations/0023_devis_public_token.sql` : `ALTER TABLE devis` → colonnes `public_token`, `envoye_le`, `repondu_le`, `signature_client` + index unique `idx_devis_public_token`
-- [x] `src/services/devisService.ts` (Model — 8 fonctions) :
-  - Machine à états `draft → envoye → accepte|refuse|expire|annule` (transitions validées)
-  - `listDevis()` : liste paginée avec filtres statut/client/search
-  - `getDevis()` : détail + lignes JOIN
-  - `createDevis()` : numéro séquentiel + `public_token` hex 32 via Web Crypto
-  - `updateDevis()` : modification (draft uniquement)
-  - `updateStatutDevis()` : machine à états avec flag `fromPublic`
-  - `convertirDevis()` : copie lignes → facture (liaison `devis_id`)
-  - `getDevisByToken()` : accès public sans auth
-  - `getStatsDevis()` : agrégats KPIs (total/envoyes/acceptes/montants/taux)
-  - `expireDevisPerimes()` : batch expiration date_validite dépassée
-- [x] `src/routes/facturation.ts` : section devis réécrite — 3 routes SQL inline → 9 routes (0 SQL, délègue à devisService) + import emailService pour `/envoyer`
-- [x] `src/routes/public.ts` : 2 nouveaux endpoints (sans auth, CORS `*`) :
-  - `GET /api/public/devis/:token` : consultation client avec statut_label FR + `peut_repondre` + vérification expiration
-  - `POST /api/public/devis/:token/repondre` : accepter/refuser + enregistrement `signature_client`
-- [x] `public/devis.html` : KPIs stats, filtres statuts (valeurs minuscules alignées API), modal détail complet, modal création/édition refactorisé (champ TVA)
-- [x] `public/static/js/devis.js` : réécriture complète 31 kB — `loadDevisStats()`, `openDevisDetail()`, `openEditDevis()`, `envoyerDevis()`, `changerStatutDevis()`, `annulerDevis()`, badges `devisBadge()`, boutons d'action selon statut
-- [x] Build ✅ (239.49 kB, 63 modules) + tests 8/8 ✅ + commit (Sprint 2.19)
+- [x] Migration 0023 : `public_token`, `envoye_le`, `repondu_le`, `signature_client` sur devis
+- [x] `src/services/devisService.ts` : machine à états draft→envoye→accepte/refuse/expire/annule
+- [x] `GET/POST /api/public/devis/:token/repondre` — sans auth, CORS *
+- [x] `public/devis-public.html` : page autonome client — Accepter/Refuser
 
-### Sprint 2.20 ✅ — MOD-02 Factures/Avoirs : Model layer + page publique devis
-**Modules CDC : MOD-02 Facturation (CRITIQUE) + MOD-03 Devis page client**
-- [x] `public/devis-public.html` : page autonome sans auth (TailwindCSS CDN) — sections loading/error/devis/repondu
-  - Lecture `public_token` depuis URL (`/devis-public/TOKEN` ou `?token=TOKEN`)
-  - Boutons Accepter/Refuser → `POST /api/public/devis/:token/repondre`
-  - Confirmation inline sans rechargement, badge statut coloré, lignes tableau + totaux
-- [x] `src/services/factureService.ts` (Model P1 — 7 fonctions, 0 SQL dans routes) :
-  - `listFactures()` : liste paginée avec filtres statut/client
-  - `getFacture()` : détail + lignes + paiements (Promise.all parallèle)
-  - `ajouterPaiement()` : paiement + calcul statut (payee/partiellement_payee) + audit
-  - `emettreFacture()` : verrouillage NF525 + SHA-256 + tracking_token (CGI art. 289)
-  - `listAvoirs()` : liste paginée avec filtres
-  - `getAvoir()` : détail + lignes
-  - `createAvoir()` : création avec chaîne NF525 obligatoire (facture doit être locked)
-- [x] `src/routes/facturation.ts` : section Factures/Avoirs refactorisée — 36 SQL inline → 6 routes controller pures (0 SQL)
-  - Import `enregistrerTransaction` restauré pour la route `PUT /devis/:id/convertir`
-- [x] `src/index.tsx` : version → `2.20.0`
-- [x] Build ✅ (241.41 kB, 64 modules) + tests 8/8 ✅ + commit (Sprint 2.20)
+### Sprint 2.20 ✅ — MOD-02 Facturation : Model layer complet
+- [x] `src/services/factureService.ts` : 7 fonctions — listFactures, getFacture, ajouterPaiement, emettreFacture, listAvoirs, getAvoir, createAvoir
+- [x] `routes/facturation.ts` : 36 SQL inline → 6 routes controller pures (0 SQL)
 
 ### Sprint 2.21 ✅ — Conformité P1 MVC : rachatService + personnelService + userService
-**Principe P1 Modularité : routes = Controller pur (0 SQL), services = Model**
-- [x] `src/services/rachatService.ts` (Model P1 — 5 fonctions) :
-  - `listRachats()` : liste paginée + filtres (statut, search 6 champs, dates)
-  - `getRachat()` : détail + opérateur + boutique (JOIN triple)
-  - `createRachat()` : vérification doublon IMEI + `nextNumero(LP)` + audit
-  - `updateStatutRachat()` : machine à états statut + audit
-  - `exportLivrePolice()` : données brutes pour CSV réglementaire art. 321-7
-  - Constantes exportées : `PIECES_VALIDES`, `ETATS_VALIDES`, `MODES_PAIEMENT_VALIDES`, `STATUTS_VALIDES`
-- [x] `src/services/personnelService.ts` (Model P1 — 8 fonctions) :
-  - `listEmployes()` : liste + statut pointage temps réel + heures aujourd'hui
-  - `getEmploye()` : détail + 50 derniers pointages (Promise.all)
-  - `createEmploye()` / `updateEmploye()` / `desactiverEmploye()` : CRUD employés
-  - `pointer()` : machine à états pointage (absent→en_poste↔pause→termine)
-  - `pointagesAujourdhui()` : pointages du jour + calcul heures JS (sans SQL complexe)
-  - `rapportPointage()` : présences sur période
-  - `statutsTempsReel()` : statuts groupés + résumé chiffré
-  - Constantes exportées : `TRANSITIONS_POINTAGE`, `STATUT_LABELS`
-- [x] `src/services/userService.ts` (Model P1 — 8 fonctions) :
-  - `setPIN()` / `verifyPIN()` / `deletePIN()` / `getPINStatus()` : cycle de vie PIN PBKDF2
-  - `resetPINAdmin()` : réinitialisation admin avec contrôle accès boutique
-  - `getPermissions()` : map action → bool avec défaut tout-autorisé
-  - `setPermissions()` : upsert batch avec whitelist `ACTIONS_VALIDES` (8 actions)
-  - `listUsers()` : tous ou filtré boutique selon rôle admin/manager
-- [x] `src/routes/rachats.ts` refactorisé : 12 SQL inline → 0 (5 routes controller pures)
-- [x] `src/routes/personnel.ts` refactorisé : 12 SQL inline → 0 (9 routes controller pures)
-- [x] `src/routes/users.ts` refactorisé : 11 SQL inline → 0 (7 routes controller pures)
-- [x] `src/index.tsx` : version `2.20.0` → `2.21.0`, sprint mis à jour
-- [x] Build ✅ (244.23 kB, 67 modules) + tests 8/8 ✅ + commit (Sprint 2.21)
+- [x] `src/services/rachatService.ts` : 5 fonctions + constantes PIECES_VALIDES/ETATS_VALIDES
+- [x] `src/services/personnelService.ts` : 8 fonctions + TRANSITIONS_POINTAGE
+- [x] `src/services/userService.ts` : 8 fonctions (PIN cycle de vie + permissions)
+- [x] Routes rachats/personnel/users refactorisées : 35 SQL inline → 0
 
-### Sprint 2.23 ✅ — Conformité P1 MVC : authService + boutiqueService + validation iCal
-**Principe P1 Modularité : derniers controllers SQL → services dédiés (0 SQL dans tous les controllers)**
-- [x] Lire `src/routes/auth.ts` — inventaire 9 SQL inline
-- [x] Créer `src/services/authService.ts` — 8 fonctions SQL + JSDoc P4-DOC complet
-  - `findUserByEmail`, `findUserByEmailFull`, `findUserById`, `findUserWithProfile`
-  - `createBoutiqueWithSettings`, `createUser`, `activateUser`, `findUserByEmailAfterActivation`
-  - Interfaces TypeScript : `UserWithRole`, `UserFull`, `UserProfile`
-- [x] Réécrire `src/routes/auth.ts` — controller pur (0 SQL, 9 `.prepare` → 0)
-- [x] Lire `src/routes/boutiques.ts` — inventaire 12 SQL inline
-- [x] Créer `src/services/boutiqueService.ts` — 8 fonctions SQL + JSDoc P4-DOC complet
-  - `listAllBoutiques`, `listBoutiqueForUser`, `getBoutiqueById`, `getBoutiqueSettings`
-  - `createBoutique`, `updateBoutique`, `updateBoutiqueSettings`, `getStatsBoutique`
-  - 5 interfaces TypeScript exportées : `Boutique`, `BoutiqueSettings`, `StatsBoutique`, `CreateBoutiqueInput`, `UpdateBoutiqueInput`, `UpdateSettingsInput`
-- [x] Réécrire `src/routes/boutiques.ts` — controller pur (0 SQL, 12 `.prepare` → 0)
-- [x] Valider route iCal `GET /api/calendar/:token.ics` — RFC 5545, Content-Type text/calendar ✅
-- [x] Build ✅ 69 modules (+2), 246.44 kB, 0 erreur TypeScript
-- [x] Tests 8/8 ✅ (register, verify-otp, login, me, boutiques, iCal)
-- [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
-- [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
+### Sprint 2.23 ✅ — Conformité P1 MVC : authService + boutiqueService
+- [x] `src/services/authService.ts` : 8 fonctions + 3 interfaces TypeScript
+- [x] `src/services/boutiqueService.ts` : 8 fonctions + 6 interfaces TypeScript
+- [x] Routes auth/boutiques refactorisées : 21 SQL inline → 0
+- [x] Validation route iCal `GET /api/calendar/:token.ics` — RFC 5545 ✅
 
-### Sprint 2.28 ✅ — Tests Vitest : garantiesService + agendaService + fournisseursService
-**Objectif : compléter la couverture tests des services SAV/agenda/achats**
-- [x] `tests/garantiesService.test.ts` : **65 tests** — TRANSITIONS_SAV, createGarantieFromTicket (idempotence, dateFin JS, settings), createGarantie, getGarantie, listGaranties (filtres statut/search/expires_soon/client_id), checkAndExpireGaranties, createSav (erreurs garantie expirée/consommée/introuvable, ticket SAV, marque consommée), listSav (alias t_orig/ts), getSav (4 JOIN), updateSavStatut (transitions complètes), getKpisSav (5 requêtes parallèles, taux_retour_pct)
-- [x] `tests/agendaService.test.ts` : **75 tests** — STATUTS_RDV/TYPES_RDV, listRendezVous (7 filtres), getRendezVous, createRendezVous (fin auto, ical_token hex 32, user_id fallback, statut/type/couleur defaults), updateRendezVous, updateStatutRdv (machine à états 6 statuts), deleteRendezVous (soft delete), getAgendaView (groupement par date, CANCELLED exclus), getKpisAgenda (5 req, taux_honore), getOrCreateIcalToken, generateIcal (RFC 5545 CRLF, VCALENDAR, VEVENT, UID stable, DTSTART/DTEND format UTC)
-- [x] `tests/fournisseursService.test.ts` : **65 tests** — listFournisseurs, getFournisseur, createFournisseur (trim, auditLog), updateFournisseur (COALESCE), deleteFournisseur (soft), listBonsCommande (4 filtres), getBonCommande (bc + lignes), createBonCommande (numérotation BC-AAAA-NNNNN, calcul HT/TTC, TVA custom, lignes insérées, auditLog), updateStatutBonCommande (4 statuts valides, statut invalide Error), receptionnerBonCommande (CUMP standard + stock_avant=0, mouvement stock, BC→received, qty≤0 ignorée, sans produit_id), getKpisFournisseurs (2 req), getProduitsACommander (alerte rupture/bas, quantite_suggere)
-- [x] Audit `qualirepar.html` + `modules.html` : **0 dette** (0 axios, 0 ApiService, 0 authHeaders) — qualirepar.js en mode localStorage (backend futur), modules.html inline JS UI uniquement
-- [x] Build ✅ 71 modules + tests ✅ **319/319** (8 fichiers : authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65)
-- [x] `src/index.tsx` : version 2.28.0
-- [x] Commits : `bc54e6e` `fea49b0` `b241470` `41067fe`
-- [x] `gsk hosted deploy` → action `cc3077d7-...` → **code: "completed"** ✅ (13 assets uploadés, 288.23 KiB / 62.78 KiB gzip, Worker version `4649d6c2`)
-- [x] `GET /api/health` → ✅ `version: "2.28.0"` en production
-- [x] Tag git `v2.28.0` posé sur commit `41067fe`
-
-### Sprint 2.27 ✅ — Audit global frontend : ApiService → apiGet/apiPost + fixes tickets + stats
-**Objectif : 0 ApiService, 0 axios, 0 helper auth obsolète dans tout le frontend**
-- [x] `public/stats.html` : page analytics complète 4 onglets (CA / Tickets / Techniciens / Produits) — Chart.js 4 onglets, 6 endpoints `/api/stats/*`, pattern auth session standard
-- [x] `app.js` : +entrée sidebar `stats` (📈 Statistiques) + `notifications` (✉️) déjà présente
-- [x] `public/static/js/kanban.js` : 6× ApiService → apiGet/apiPut + session localStorage
-- [x] `public/static/js/caisse.js` : 9× axios → apiGet/apiPost + suppression helpers `token/headers/boutique`
-- [x] `public/static/js/personnel.js` : 4× axios → apiGet/apiPost + suppression helpers `getToken/authHeaders`
-- [x] `public/static/js/sav.js` : fonctions locales `apiGet/apiPost/apiPut` + `fetch()` → globales app.js (suppression bloc 19 lignes)
-- [x] `public/static/js/dashboard.js` : `access_token` JWT → `izigsm_session` pour `_setUser()`
-- [x] `public/static/js/factures.js` : `authHeaders()` morte supprimée
-- [x] `public/agenda.html` : CDN axios inutile retiré (`agenda.js` utilisait déjà apiGet)
-- [x] `public/static/js/tickets.js` : statuts FR 10 valeurs, `allTicketsCache` pour edit/view, `changeStatus` direct (sans map legacy), `populateClients` → API, `STATUT_LABELS` complets
-- [x] Audit routes backend : toutes les routes appelées côté frontend sont implémentées (18 fichiers routes, cross-check exhaustif)
-- [x] `docs/DEPLOIEMENT.md` : mode opératoire 10 étapes (CF Pages + D1 + secrets + CI/CD + GitHub Actions + rollback + diagnostic)
-- [x] Build ✅ 71 modules / 248.05 kB + tests ✅ **114/114** (5 fichiers : authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16)
-- [x] Commits : `99a7f93` `98cf9b1` `1dbb3e5` `0393d32` `1274e4b`
-
-**État zéro dette technique auth** :
-```
-✅ 0 appel axios dans tout le projet
-✅ 0 ApiService (appels réels) — commentaires JSDoc seulement
-✅ 0 access_token / authHeaders / izigsm_token dans le code actif
-✅ Pattern uniforme : izigsm_session + apiGet/apiPost/apiPut globaux (app.js)
-```
-
-### Sprint 2.26 ✅ — Déploiement Cloudflare Pages : D1AsKV (remplacement KV → D1)
-**Infrastructure déploiement : contournement blocage KV non supporté par gsk-hosted-deploy**
-- [x] Identifier blocage : `kv_namespaces` dans wrangler.jsonc → `KV namespace not found [code: 10041]`
-- [x] Créer `migrations/0024_kv_store.sql` : table `kv_store (key PK, value, expires_at)` + index TTL partiel
-- [x] Créer `src/lib/d1kv.ts` : interface `D1KVNamespace` + `createD1KV()` + `d1KvCleanup()`
-  - `get()` : lecture + TTL passif (DELETE si expiré)
-  - `put()` : upsert ON CONFLICT avec `expires_at = now + expirationTtl`
-  - `delete()` : suppression idempotente
-  - `d1KvCleanup()` : purge batch toutes clés expirées
-- [x] Modifier `src/index.tsx` : middleware D1AsKV avant toutes les routes, nettoyage actif 1%, version 2.26.0
-- [x] Modifier `wrangler.jsonc` : suppression bloc `kv_namespaces`
-- [x] Migrer `KVNamespace` → `D1KVNamespace` dans auth.ts, middleware.ts, userService.ts + 18 routes
-- [x] Build ✅ 71 modules + tests 61/61 ✅ + commit `5edd1f3`
-- [x] `gsk hosted deploy` → action `6f3ef9d7-...` → **code: "completed"** ✅
-- [x] 24 migrations appliquées automatiquement en production
-- [x] `gsk hosted secret_put JWT_SECRET` → ✅ configuré
-- [x] `GET /api/health` → ✅ version 2.26.0
-- [x] `POST /api/auth/register` + `verify-otp` + `login` → ✅ auth end-to-end avec D1KV (refresh tokens + OTP)
-- [x] `GET /api/calendar/:token.ics` → ✅ RFC 5545 valide — **objectif principal iCal validé**
-- [x] Docs + commit final Sprint 2.26
-
-**URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
-**URL iCal demo** : `/api/calendar/a9f5fb0c7e2438ce93b81d8d429557eb.ics`
+### Sprint 2.24 ✅ — Stats avancées + page analytics
+- [x] `public/stats.html` : 4 onglets (CA / Tickets / Techniciens / Produits) — Chart.js
+- [x] `src/routes/stats.ts` : 6 endpoints `/api/stats/*`
 
 ### Sprint 2.25 ✅ — Conformité P1 MVC : purge SQL résiduel (16 → 0 `.prepare` dans routes/)
-**Principe P1 Modularité : 0 SQL dans tous les controllers — objectif global atteint**
-- [x] Audit : 16 `.prepare` répartis sur 5 fichiers (`public.ts` 7, `tickets.ts` 3, `notifications.ts` 3, `facturation.ts` 2, `sav.ts` 1)
-- [x] Créer `src/services/publicService.ts` — 7 fonctions + 7 interfaces TypeScript JSDoc P4
-  - `getTicketPublicByToken` · `getBoutiquePublicBySlug` · `getStatsBoutiquePublic`
-  - `getBoutiqueIdBySlug` · `getCategoriesPubliques` · `getServicesPublics`
-- [x] Ajouter `getClientEmailPrenom()` dans `clientService.ts` (lookup léger email+prénom pour hooks email)
-- [x] Ajouter `getTicketBoutiqueId()` + `getTicketAvecClient()` dans `ticketService.ts` (hooks statut termine)
-- [x] Ajouter `getDevisPourNf525()` + `updateFactureHash()` dans `factureService.ts` (conversion devis→facture NF525)
-- [x] Ajouter `listEmailLogs()` + `getBoutiqueNomById()` dans `emailService.ts` (logs paginés + nom boutique test email)
-- [x] Ajouter `saveSignatureDevis()` dans `devisService.ts` (UPDATE signature client public)
-- [x] Refactoriser `routes/public.ts` — 7 `.prepare` → 0, imports publicService + saveSignatureDevis
-- [x] Refactoriser `routes/tickets.ts` — 3 `.prepare` → 0, imports ticketService + clientService
-- [x] Refactoriser `routes/notifications.ts` — 3 `.prepare` → 0, imports listEmailLogs + getBoutiqueNomById
-- [x] Refactoriser `routes/facturation.ts` — 2 `.prepare` → 0, imports getDevisPourNf525 + updateFactureHash
-- [x] Refactoriser `routes/sav.ts` — 1 `.prepare` → 0, import getClientEmailPrenom
-- [x] Audit final : `grep -rn ".prepare(" src/routes/` → **0 résultat** ✅
-- [x] Build ✅ (70 modules, 247.05 kB) + tests 61/61 ✅ + commit Sprint 2.25
+- [x] `src/services/publicService.ts` : 7 fonctions — ticket public, boutique slug, stats boutique, catalogue public
+- [x] `clientService.ts` : + `getClientEmailPrenom()`
+- [x] `ticketService.ts` : + `getTicketBoutiqueId()` + `getTicketAvecClient()`
+- [x] `factureService.ts` : + `getDevisPourNf525()` + `updateFactureHash()`
+- [x] `emailService.ts` : + `listEmailLogs()` + `getBoutiqueNomById()`
+- [x] **P1 MVC : 0 SQL dans aucun controller** — objectif global atteint
+
+### Sprint 2.26 ✅ — Déploiement Cloudflare : D1AsKV (remplacement KV → D1)
+- [x] Migration 0024 : `kv_store (key PK, value, expires_at)` + index TTL partiel
+- [x] `src/lib/d1kv.ts` : `D1KVNamespace`, `createD1KV()`, TTL passif + `d1KvCleanup()`
+- [x] Suppression `kv_namespaces` de wrangler.jsonc (blocage gsk-hosted-deploy KV non supporté)
+- [x] Migration `KVNamespace` → `D1KVNamespace` dans auth.ts, middleware.ts, userService.ts + 18 routes
+- [x] **Premier déploiement prod réussi** — action `6f3ef9d7`, 24 migrations appliquées
+- [x] `gsk hosted secret_put JWT_SECRET` ✅
+- [x] Auth end-to-end validé (register + verify-otp + login)
+- [x] `GET /api/calendar/:token.ics` → RFC 5545 validé
+
+### Sprint 2.27 ✅ — Audit global frontend : ApiService → apiGet/apiPost (zéro dette auth)
+- [x] `public/stats.html` : page analytics complète 4 onglets
+- [x] `kanban.js` : 6× ApiService → apiGet/apiPut
+- [x] `caisse.js` : 9× axios → apiGet/apiPost
+- [x] `personnel.js` : 4× axios → apiGet/apiPost
+- [x] `sav.js` : fonctions locales apiGet/apiPost supprimées → globales app.js
+- [x] `dashboard.js` : access_token JWT → izigsm_session
+- [x] `tickets.js` : statuts FR 10 valeurs, STATUT_LABELS complets
+- [x] Audit routes backend × frontend : 18 fichiers routes, cross-check exhaustif
+- [x] `docs/DEPLOIEMENT.md` : mode opératoire 10 étapes
+- [x] **Zéro dette** : 0 axios, 0 ApiService, 0 access_token/authHeaders dans tout le frontend
+- [x] 319 tests (5 suites nouvelles + 3 héritées)
+
+### Sprint 2.28 ✅ — Tests Vitest : garantiesService + agendaService + fournisseursService
+- [x] `tests/garantiesService.test.ts` : **65 tests** — TRANSITIONS_SAV, createGarantieFromTicket (idempotence, dateFin JS, settings 90j/180j), createGarantie, getGarantie, listGaranties (filtres SQL dynamiques via __getCalls), checkAndExpireGaranties, createSav (3 erreurs + ticket SAV + marque consommée), listSav (alias t_orig/ts), getSav (4 JOIN), updateSavStatut (transitions complètes), getKpisSav (5 requêtes parallèles, taux_retour_pct)
+- [x] `tests/agendaService.test.ts` : **75 tests** — STATUTS_RDV/TYPES_RDV, listRendezVous (7 filtres), getRendezVous, createRendezVous (fin auto, ical_token hex 32, user_id fallback), updateRendezVous, updateStatutRdv (machine à états 6 statuts), deleteRendezVous (soft delete), getAgendaView (groupement date, CANCELLED exclus), getKpisAgenda (5 req, taux_honore), getOrCreateIcalToken, generateIcal (RFC 5545 CRLF, VCALENDAR, VEVENT, UID stable, DTSTART UTC)
+- [x] `tests/fournisseursService.test.ts` : **65 tests** — listFournisseurs, getFournisseur, createFournisseur (trim, auditLog), updateFournisseur (COALESCE), deleteFournisseur (soft), listBonsCommande (4 filtres), getBonCommande, createBonCommande (numérotation BC-AAAA-NNNNN, calcul HT/TTC, TVA custom, auditLog), updateStatutBonCommande (4 statuts valides), receptionnerBonCommande (CUMP standard + stock=0, mouvement stock, BC→received), getKpisFournisseurs, getProduitsACommander
+- [x] Audit `qualirepar.html` + `modules.html` : 0 dette (0 axios, 0 ApiService)
+- [x] Build ✅ 71 modules / 248.08 kB + tests ✅ **319/319**
+- [x] **Déploiement prod** — action `cc3077d7`, version `4649d6c2`, health ✅ v2.28.0
+- [x] Tag git `v2.28.0`
 
 ---
 
-### Sprint 2.24 ✅ — Tests automatisés Vitest : authService + boutiqueService + caisseService
-**Infrastructure qualité : couverture unitaire des Model layers P1**
-- [x] Installer Vitest 4.1.9 + `@vitest/coverage-v8` — compatible ES Modules, env node
-- [x] Créer `vitest.config.ts` — env node, globals, coverage v8 (seuils 70% lignes/fonctions, 60% branches)
-- [x] Créer `tests/setup.ts` — vérification Web Crypto API disponible (Node 18+ natif)
-- [x] Créer `tests/helpers/mockD1.ts` — mock D1Database en mémoire
-  - `.prepare().bind().first<T>()` / `.all<T>()` / `.run()`
-  - SQL normalisé (`.replace(/\s+/g, ' ').trim()`) comme clé de matching
-  - API test préfixée `__` : `__setResponse`, `__setResponseFn`, `__setListFn`, `__getCalls`, `__reset`
-- [x] Créer `tests/helpers/mockKV.ts` — mock KVNamespace en mémoire (Map string→string)
-  - API TTL simulée : `__expire`, `__set`, `__keys`, `__reset`
-- [x] Créer `tests/authService.test.ts` — **23/23 ✅**
-  - `findUserByEmail` (3) · `findUserByEmailFull` (2) · `findUserById` (3) · `findUserWithProfile` (3)
-  - `createBoutiqueWithSettings` (4) · `createUser` (4) · `activateUser` (2) · `findUserByEmailAfterActivation` (2)
-- [x] Créer `tests/boutiqueService.test.ts` — **24/24 ✅**
-  - `listAllBoutiques` (2) · `listBoutiqueForUser` (3) · `getBoutiqueById` (2) · `getBoutiqueSettings` (2)
-  - `createBoutique` (4) · `updateBoutique` (3) · `updateBoutiqueSettings` (4) · `getStatsBoutique` (4)
-- [x] Créer `tests/caisseService.test.ts` — **14/14 ✅**
-  - `getHashPrecedent` (3) — hash genèse 64 zéros + hash existant
-  - `verifierIntegriteChaine` (6) — SHA-256 réel NF525, détection fraude, chaîne 3 tx, filtres dates
-  - `getKpisCaisse` (2) — fallback 0, KPIs jour (5 requêtes parallèles)
-  - `listClotures` (3) — JOIN users, tableau vide, paramètres transmis
-- [x] Ajouter scripts `package.json` : `"test": "vitest run"`, `"test:watch": "vitest"`, `"test:coverage": "vitest run --coverage"`
-- [x] Suite complète `npm test` → **61/61 ✅** (3 fichiers, 1.36s)
-- [x] Build ✅ (69 modules, 246.44 kB — identique Sprint 2.23, 0 régression)
-- [x] Commit Sprint 2.24
+## Sprints à venir — Plan priorisé
 
-**Note : `createVente()` / `enregistrerEncaissement()` non couverts** — dépendant de `nextNumero()`
-(table `parametres_numerotation`). Réservés aux tests d'intégration futurs (`tests/integration/`).
+> Priorités : 🔴 P0 Bloquant / 🟠 P1 Haute / 🟡 P2 Moyenne / 🔵 P3 Basse
 
 ---
 
-### Sprint 2.22 ✅ — Documentation P4 : JSDoc exhaustif (services + lib + routes)
-**Principe P4 Lisibilité : JSDoc obligatoire sur toutes les fonctions exportées**
-- [x] `src/services/agendaService.ts` : `@module` + JSDoc 10 fonctions + 5 helpers privés (machine états RDV, iCal RFC 5545)
-- [x] `src/services/caisseService.ts` : `@module` NF525 + JSDoc 8 fonctions + interfaces + `buildDonneesHash` FORMAT FIGÉ
-- [x] `src/services/emailService.ts` : `@module` stratégie non-bloquante + JSDoc 8 fonctions + logique décision `sendEmail`
-- [x] `src/services/garantiesService.ts` : `@module` machine états SAV + alias SQL + JSDoc 10 fonctions
-- [x] `src/services/fournisseursService.ts` : `@module` CUMP + JSDoc 12 fonctions + formule CUMP documentée
-- [x] `src/services/servicesService.ts` : `@module` arbre hiérarchique + JSDoc 10 fonctions
-- [x] `src/lib/db.ts` : `@module` + JSDoc 7 fonctions (nextNumero atomicité, parsePagination, auditLog)
-- [x] `src/lib/nf525.ts` : `@module` légal LFR2015 + `sha256` Web Crypto + `buildCanonicalData` FORMAT FIGÉ + `clotureJournaliere`
-- [x] `src/lib/middleware.ts` : `@module` RBAC + JSDoc complet sur 5 fonctions/middlewares
-- [x] `src/lib/auth.ts` : `@module` PBKDF2/JWT/KV + JSDoc 12 fonctions dont `timingSafeEqual`, `signJwt`, `storeOtp`, `generateOtp`
-- [x] `src/routes/caisse.ts` : `@module` + JSDoc 7 handlers + `validateVente` + `ctx()`
-- [x] `src/routes/boutiques.ts` : `@module` + JSDoc 8 handlers (CRUD, settings, stats, NF525)
-- [x] `src/routes/agenda.ts` : `@module` machine états + JSDoc 9 handlers
-- [x] `src/routes/auth.ts` : `@module` flux auth + JSDoc 6 handlers (séquences détaillées + notes sécurité)
-- [x] `src/routes/services.ts` : `@module` arbre + JSDoc 10 handlers (catalogue, categories, services)
-- [x] `src/index.tsx` : `@version 2.22.0`
-- [x] Build ✅ (244.26 kB, 67 modules, 0 erreur TypeScript) + commit `ac116be` (Sprint 2.22)
+### Sprint 2.29 🔜 — Tests Vitest : couverture services restants
+**Objectif : atteindre 500+ tests, couvrir les services critiques non testés**
+
+Services à couvrir (0 test actuellement) :
+- [ ] `tests/ticketService.test.ts` : **~60 tests** — listTickets (filtres), getKanban (groupement+ancienneté), getTicketById (JOINs), createTicket (tracking_token, numero BC), updateTicket, updateStatut (machine à états 10 statuts), deleteTicket, getTicketBoutiqueId, getTicketAvecClient
+- [ ] `tests/stockService.test.ts` : **~40 tests** — listProduits (filtres+pagination), getProduitById, createProduit, updateProduit, deleteProduit (soft), enregistrerMouvement (entree/sortie/ajustement+CUMP), listCategories, createCategorie, getKpisStock
+- [ ] `tests/devisService.test.ts` : **~45 tests** — listDevis, getDevis, createDevis (public_token hex32, nextNumero), updateDevis (draft uniquement), updateStatutDevis (machine états), convertirDevis (copie lignes→facture), getDevisByToken, getStatsDevis, expireDevisPerimes
+- [ ] `tests/factureService.test.ts` : **~35 tests** — listFactures, getFacture (lignes+paiements parallèle), ajouterPaiement (calcul statut payee/partiel), emettreFacture (NF525 locked+hash+tracking), listAvoirs, getAvoir, createAvoir (NF525 obligatoire)
 
 ---
 
-## Backlog violations architecturales (à corriger au fil des sprints)
+### Sprint 2.30 🔜 — Tests services secondaires + reconditionnementService
+**Objectif : couverture complète tous les services**
 
-| Priorité | Fichier | Violation | Sprint cible |
-|---|---|---|---|
-| ✅ Résolu | ~~`src/index.tsx`~~ | ~~`/api/stats` SQL inline multi-module~~ | ✅ Résolu Sprint 2.13 |
-| ✅ Résolu | ~~`app.js` doublon~~ | ~~`apiPut` déclaré deux fois~~ | ✅ Résolu Fix DP |
-| ✅ Résolu | ~~`routes/clients.ts` l.41~~ | ~~`JOIN tickets` cross-module~~ | ✅ Résolu Sprint 2.15 |
-| ✅ Résolu | ~~`routes/clients.ts`~~ | ~~Pas de couche `clientService.ts`~~ | ✅ Résolu Sprint 2.15 |
-| ✅ Résolu | ~~`routes/*.ts` (anciens)~~ | ~~Documentation fonctions insuffisante~~ | ✅ Résolu Sprint 2.22 |
-| ✅ Résolu | ~~`routes/tickets.ts`~~ | ~~Pas de couche `ticketService.ts`~~ | ✅ Résolu Sprint 2.17 |
-| ✅ Résolu | ~~`routes/stocks.ts`~~ | ~~Pas de couche `stockService.ts`~~ | ✅ Résolu Sprint 2.17 |
+- [ ] `tests/clientService.test.ts` : **~35 tests** — CRUD, historique (tickets+factures+rdv), importClients (dédup email), getKpis, addAppareil
+- [ ] `tests/personnelService.test.ts` : **~35 tests** — CRUD employés, pointer (machine états pointage), pointagesAujourdhui, rapportPointage, statutsTempsReel, TRANSITIONS_POINTAGE
+- [ ] `tests/reconditionnementService.test.ts` : **~40 tests** — CRUD ordres, updateStatutOrdre, terminerOrdre (crée produit occasion), CRUD bons d'achat, verifierBonAchat, consommerBonAchat (partiel+total), annulerBonAchat
+- [ ] `tests/publicService.test.ts` : **~25 tests** — getTicketPublicByToken, getBoutiquePublicBySlug, getStatsBoutiquePublic, getCategoriesPubliques, getServicesPublics
 
 ---
 
-## État technique courant
+### Sprint 2.31 🔜 — MOD-14 Vitrine publique : prise de RDV en ligne
+**Module CDC : MOD-14 (MOYENNE) — Différenciateur concurrentiel**
 
-| Élément | Valeur |
-|---|---|
-| Version | 2.28.0 |
-| Build | `dist/_worker.js` 248.05 kB — 71 modules |
-| Dernière migration | `0024_kv_store.sql` ✅ Sprint 2.26 |
-| Dernier commit | `b241470` Sprint 2.28 — fournisseursService 65 tests |
-| Branche | `main` |
-| PM2 | `izigsm` online — port 3000 |
-| Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les controllers sont à 0 SQL direct |
-| Frontend Auth | ✅ **0 axios / 0 ApiService / 0 access_token** — pattern uniforme apiGet/apiPost/izigsm_session |
-| Déploiement production | ✅ `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` |
-| Tests | ✅ **319/319** Vitest (authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65) |
+État actuel :
+- `public/suivi.html` ✅ — tracking token client OK
+- `public/static/js/publicService.ts` ✅ — getStatsBoutiquePublic OK
+- **Manque** : formulaire de prise de RDV en ligne (sans auth)
+
+À faire :
+- [ ] `POST /api/public/rdv` : creation RDV public sans auth → statut PENDING, email confirmation fire-and-forget
+- [ ] `GET /api/public/boutique/:slug/disponibilites` : créneaux libres par date
+- [ ] `public/rdv-public.html` : page de prise de RDV en ligne (choix service + date + créneaux dispo)
+- [ ] `public/static/js/rdv-public.js` : formulaire 3 étapes (service / date+heure / coordonnées)
+- [ ] Lien depuis `suivi.html` et page vitrine `/pro/:slug` vers formulaire RDV
 
 ---
 
-## Couverture CDC par priorité (état Sprint 2.4)
+### Sprint 2.32 🔜 — MOD-12 Automatisations email : triggers statut → client
+**Module CDC : MOD-12 (HAUTE) — Rétention client**
 
-| Priorité CDC | Modules | Couverture moyenne |
+État actuel :
+- `emailService.ts` ✅ — sendEmail Resend, sendTicketStatus, sendDevisEmail, sendFactureEmail
+- `notifications.ts` ✅ — stats, logs, test, batch relances
+- `RESEND_API_KEY` en secret prod ✅ (configuré Sprint 2.26)
+- **Manque** : trigger automatique sur chaque changement statut ticket → email client
+
+À faire :
+- [ ] `ticketService.ts` : `updateStatut()` → appel non-bloquant `emailService.sendTicketStatus()` si statut in ['termine', 'pret', 'livre']
+- [ ] Templates email enrichis : HTML responsive avec logo + couleur statut + lien suivi
+- [ ] `agendaService.ts` : `updateStatutRdv()` → email confirmation si SCHEDULED
+- [ ] `createSav()` → email "Ticket SAV ouvert" au client
+- [ ] Paramètre boutique `notif_email_statut` (on/off) dans `boutique_settings`
+- [ ] Migration 0025 : `notif_email_statut BOOLEAN DEFAULT 1` sur `boutique_settings`
+- [ ] `public/settings.html` onglet Email : toggle activation notifications automatiques
+
+---
+
+### Sprint 2.33 🔜 — MOD-17 Rapports avancés : exports Excel + rapports périodiques
+**Module CDC : MOD-17 (HAUTE)**
+
+État actuel :
+- `statsService.ts` ✅ — KPIs CA, tickets, techniciens, stock, caisse
+- `public/stats.html` ✅ — 4 onglets graphiques Chart.js
+- **Manque** : export Excel, rapport PDF période, rapport comptable
+
+À faire :
+- [ ] `GET /api/stats/export/csv?type=tickets&from=&to=` : export CSV tickets par période
+- [ ] `GET /api/stats/export/csv?type=ca&from=&to=` : export CSV chiffre d'affaires
+- [ ] `GET /api/stats/export/csv?type=techniciens&from=&to=` : rapport activité techniciens
+- [ ] `GET /api/stats/rapport-comptable` : totaux TVA par taux + modes paiement pour l'expert-comptable
+- [ ] `public/stats.html` : boutons "Exporter CSV" sur chaque onglet
+- [ ] Filtres date from/to dans l'UI stats (actuellement mois courant uniquement)
+
+---
+
+### Sprint 2.34 🔜 — MOD-04 Stock : familles produits + import catalogue fournisseur CSV
+**Module CDC : MOD-04 (CRITIQUE)**
+
+État actuel :
+- `stockService.ts` ✅ — CRUD produits, mouvements, CUMP, KPIs
+- CUMP ✅ calculé à réception BC
+- **Manque** : familles produits (pièce/accessoire/appareil/consommable), import catalogue CSV
+
+À faire :
+- [ ] Migration 0025 (ou 0026) : `famille TEXT DEFAULT 'piece'` sur `produits` (pièce/accessoire/appareil/consommable)
+- [ ] `stockService.ts` : `listProduits()` → filtre par famille
+- [ ] `public/stock.html` : filtre famille + badge couleur par famille
+- [ ] `POST /api/produits/import-csv` : import catalogue fournisseur (colonnes : SKU, nom, prix, stock, famille)
+- [ ] `stockService.ts` : `importCatalogueCsv()` avec dédup SKU (UPSERT)
+
+---
+
+### Sprint 2.35 🔜 — OAuth Google + réinitialisation mot de passe
+**Module CDC : MOD-18 (HAUTE) — Friction login réduite**
+
+- [ ] `POST /api/auth/reset-password-request` : envoi email lien réinitialisation (token OTP D1KV, TTL 1h)
+- [ ] `POST /api/auth/reset-password` : vérification token + nouveau mot de passe PBKDF2
+- [ ] `public/reset-password.html` : formulaire email + formulaire nouveau mdp
+- [ ] OAuth Google (P2) : `POST /api/auth/google` — exchange code Google → JWT iziGSM
+  - [ ] Migration : `google_id TEXT` sur `users`
+  - [ ] `authService.ts` : `findOrCreateGoogleUser()`
+  - [ ] `public/login.html` : bouton "Se connecter avec Google" (CDN Google Identity)
+  - [ ] Secret : `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+
+---
+
+### Sprint 2.36 🔜 — Photos tickets R2 + upload AJAX
+**Module CDC : MOD-01 (CRITIQUE) — Upload photos avant/après**
+
+- [ ] Activer R2 dans `wrangler.jsonc` : `r2_buckets` binding `R2`
+- [ ] `gsk hosted` : créer bucket R2 (nécessite approbation utilisateur)
+- [ ] `src/services/photosService.ts` : `uploadPhoto(r2, ticketId, buffer, mime)` → clé `tickets/:id/photos/:uuid`, `listPhotos(db, ticketId)`, `deletePhoto(r2, db, photoId)`
+- [ ] Migration 0026 : table `ticket_photos (id, ticket_id, r2_key, url, type [avant/apres], created_at)`
+- [ ] `src/routes/tickets.ts` : `POST /api/tickets/:id/photos`, `GET /api/tickets/:id/photos`, `DELETE /api/tickets/:id/photos/:photoId`
+- [ ] `public/tickets.html` : zone drag & drop upload (JPEG/PNG ≤5MB), galerie avant/après
+- [ ] `public/static/js/tickets.js` : `uploadPhoto()`, `loadPhotos()`, compression canvas avant upload
+
+---
+
+### Sprint 2.37 🔜 — RGPD + Archivage tickets
+**Module CDC : MOD-01 + conformité légale**
+
+- [ ] `GET /api/clients/:id/export` : export JSON complet données client (RGPD droit d'accès)
+- [ ] `DELETE /api/clients/:id/purge` : anonymisation RGPD (pseudonymiser nom/email/tel, conserver factures)
+- [ ] Migration : `archived_at DATETIME` sur `tickets`
+- [ ] `POST /api/tickets/:id/archiver` : archivage ticket terminé depuis > 90 jours
+- [ ] `GET /api/tickets?archived=true` : liste tickets archivés
+- [ ] Tâche batch : `checkAndArchiveTickets()` — tickets `livre` depuis > 90j → `archived_at`
+
+---
+
+## Fonctionnalités hors périmètre MVP (post-v3)
+
+| Fonctionnalité | Priorité | Raison |
 |---|---|---|
-| CRITIQUE (MOD-01, 02, 04) | Tickets ⚠️, Facturation ✅, Stock ⚠️ + CUMP ✅ | ~58% |
-| HAUTE (MOD-03, 06, 07, 10, 12, 17) | Devis ⚠️, Rachats ✅, CRM ⚠️, Achats ✅, Notifs ❌, Rapports ⚠️ | ~45% |
-| HAUTE (MOD-15, 18) | Catalogue ✅, Équipe ✅ | ~68% |
-| MOYENNE (MOD-05, 08, 09, 13, 14, 16) | Tous ❌ | ~0% |
-| **Global** | **18 modules** | **~38%** |
+| SMS Twilio | P3 | Coût + complexité, email suffisant MVP |
+| WhatsApp Business API | P3 | API payante, non prioritaire |
+| Signature eIDAS certifiée | P3 | Tiers de confiance (Yousign), Sprint 4 |
+| Paiement Stripe en ligne | P3 | Intégration complexe, hors atelier traditionnel |
+| Multi-boutiques réseau (cockpit) | P3 | Infrastructure supplémentaire |
+| Import Mobilax / Utopya API | P3 | Partenariats à négocier |
+| Scanner codes-barres | P3 | QZ Tray ou WebUSB, Sprint 4 |
+| Chatbot RDV IA | P3 | Post-MVP, Cloudflare AI Workers |
+| Tableaux de bord personnalisables | P3 | Nice-to-have |
+| WebSockets temps réel | P3 | Durable Objects CF, post-MVP |
 
-*Référence : `docs/ANALYSE_COMPARATIVE_CDC.md` pour le détail module par module.*
+---
+
+## Résumé coverage CDC (état v2.28.0)
+
+| Module CDC | Priorité | Couverture | Statut |
+|---|---|---|---|
+| MOD-01 Tickets + Kanban | CRITIQUE | ~90% | ✅ Complet (manque photos R2, archivage auto) |
+| MOD-02 Facturation NF525 | CRITIQUE | ~92% | ✅ Complet (manque rapport comptable CSV) |
+| MOD-03 Devis + page publique | HAUTE | ~88% | ✅ Complet (manque eIDAS, relance auto) |
+| MOD-04 Stock + CUMP | CRITIQUE | ~80% | ⚠️ CUMP ✅, manque familles + import CSV |
+| MOD-05 Reconditionnement | MOYENNE | ~90% | ✅ Complet |
+| MOD-06 Rachats (livre de police) | HAUTE | ~92% | ✅ Complet |
+| MOD-07 CRM Clients | HAUTE | ~85% | ✅ Complet (manque parrainage, RGPD purge) |
+| MOD-08 Agenda/RDV + iCal | MOYENNE | ~88% | ✅ Complet (manque RDV en ligne public) |
+| MOD-09 SAV + Garanties | MOYENNE | ~85% | ✅ Complet |
+| MOD-10 Fournisseurs + BC + CUMP | HAUTE | ~90% | ✅ Complet |
+| MOD-12 Notifications email | HAUTE | ~70% | ⚠️ Infra OK, manque triggers automatiques |
+| MOD-13 Caisse POS NF525 | MOYENNE | ~85% | ✅ Complet |
+| MOD-14 Vitrine publique | MOYENNE | ~60% | ⚠️ Tracking ✅, manque RDV en ligne |
+| MOD-15 Catalogue services | HAUTE | ~80% | ✅ Complet (manque liaison modèle appareil) |
+| MOD-17 Rapports/Exports | HAUTE | ~65% | ⚠️ Dashboard ✅, manque exports CSV/PDF période |
+| MOD-18 Équipe/Pointage | MOYENNE | ~88% | ✅ Complet (manque OAuth Google, reset mdp) |
+
+**Couverture globale estimée CDC : ~84%**
+
+---
+
+## Secrets Cloudflare configurés en production
+
+| Secret | Statut | Usage |
+|---|---|---|
+| `JWT_SECRET` | ✅ Configuré | Auth JWT HMAC-SHA256 |
+| `RESEND_API_KEY` | ✅ Configuré | Emails transactionnels |
+
+Secrets à configurer pour fonctionnalités futures :
+```bash
+gsk hosted secret_put GOOGLE_CLIENT_ID       # Sprint 2.35 OAuth
+gsk hosted secret_put GOOGLE_CLIENT_SECRET   # Sprint 2.35 OAuth
+gsk hosted secret_put TWILIO_ACCOUNT_SID     # Post-MVP SMS
+gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
+```
+
+---
+
+*Dernière mise à jour : 3 juillet 2026 — Sprint 2.28 clôturé, v2.28.0 en production*
