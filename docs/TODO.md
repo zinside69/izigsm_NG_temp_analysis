@@ -1,7 +1,7 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour automatiquement à chaque avancement de sprint.
-> Dernière mise à jour : Sprint 2.27+ terminé — 3 juillet 2026
+> Dernière mise à jour : Sprint 2.28 terminé — 3 juillet 2026
 
 ---
 
@@ -328,6 +328,16 @@
 - [x] Commit `e4f52a2` Sprint 2.23 — 4 fichiers, +889/-182 lignes
 - [x] Mettre à jour `docs/TODO.md` + `docs/JOURNAL_MODIFICATIONS.md`
 
+### Sprint 2.28 ✅ — Tests Vitest : garantiesService + agendaService + fournisseursService
+**Objectif : compléter la couverture tests des services SAV/agenda/achats**
+- [x] `tests/garantiesService.test.ts` : **65 tests** — TRANSITIONS_SAV, createGarantieFromTicket (idempotence, dateFin JS, settings), createGarantie, getGarantie, listGaranties (filtres statut/search/expires_soon/client_id), checkAndExpireGaranties, createSav (erreurs garantie expirée/consommée/introuvable, ticket SAV, marque consommée), listSav (alias t_orig/ts), getSav (4 JOIN), updateSavStatut (transitions complètes), getKpisSav (5 requêtes parallèles, taux_retour_pct)
+- [x] `tests/agendaService.test.ts` : **75 tests** — STATUTS_RDV/TYPES_RDV, listRendezVous (7 filtres), getRendezVous, createRendezVous (fin auto, ical_token hex 32, user_id fallback, statut/type/couleur defaults), updateRendezVous, updateStatutRdv (machine à états 6 statuts), deleteRendezVous (soft delete), getAgendaView (groupement par date, CANCELLED exclus), getKpisAgenda (5 req, taux_honore), getOrCreateIcalToken, generateIcal (RFC 5545 CRLF, VCALENDAR, VEVENT, UID stable, DTSTART/DTEND format UTC)
+- [x] `tests/fournisseursService.test.ts` : **65 tests** — listFournisseurs, getFournisseur, createFournisseur (trim, auditLog), updateFournisseur (COALESCE), deleteFournisseur (soft), listBonsCommande (4 filtres), getBonCommande (bc + lignes), createBonCommande (numérotation BC-AAAA-NNNNN, calcul HT/TTC, TVA custom, lignes insérées, auditLog), updateStatutBonCommande (4 statuts valides, statut invalide Error), receptionnerBonCommande (CUMP standard + stock_avant=0, mouvement stock, BC→received, qty≤0 ignorée, sans produit_id), getKpisFournisseurs (2 req), getProduitsACommander (alerte rupture/bas, quantite_suggere)
+- [x] Audit `qualirepar.html` + `modules.html` : **0 dette** (0 axios, 0 ApiService, 0 authHeaders) — qualirepar.js en mode localStorage (backend futur), modules.html inline JS UI uniquement
+- [x] Build ✅ 71 modules + tests ✅ **319/319** (8 fichiers : authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65)
+- [x] `src/index.tsx` : version 2.28.0
+- [x] Commits : `bc54e6e` `fea49b0` `b241470`
+
 ### Sprint 2.27 ✅ — Audit global frontend : ApiService → apiGet/apiPost + fixes tickets + stats
 **Objectif : 0 ApiService, 0 axios, 0 helper auth obsolète dans tout le frontend**
 - [x] `public/stats.html` : page analytics complète 4 onglets (CA / Tickets / Techniciens / Produits) — Chart.js 4 onglets, 6 endpoints `/api/stats/*`, pattern auth session standard
@@ -470,16 +480,16 @@
 
 | Élément | Valeur |
 |---|---|
-| Version | 2.27.0 |
+| Version | 2.28.0 |
 | Build | `dist/_worker.js` 248.05 kB — 71 modules |
 | Dernière migration | `0024_kv_store.sql` ✅ Sprint 2.26 |
-| Dernier commit | `1274e4b` Sprint 2.27 — fix tickets.js statuts FR + audit global frontend |
+| Dernier commit | `b241470` Sprint 2.28 — fournisseursService 65 tests |
 | Branche | `main` |
 | PM2 | `izigsm` online — port 3000 |
 | Conformité DP | ✅ P1 P2 P3 P4 P5 — **backlog violations complètement soldé** — tous les controllers sont à 0 SQL direct |
 | Frontend Auth | ✅ **0 axios / 0 ApiService / 0 access_token** — pattern uniforme apiGet/apiPost/izigsm_session |
 | Déploiement production | ✅ `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` |
-| Tests | ✅ **114/114** Vitest (authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16) |
+| Tests | ✅ **319/319** Vitest (authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65) |
 
 ---
 
