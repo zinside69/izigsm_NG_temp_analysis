@@ -28,12 +28,8 @@ const KanbanApp = (() => {
 
   // ─── Init ───────────────────────────────────────────────────────────────────
   async function init() {
-    // Attendre que ApiService soit dispo (chargé par app.js)
-    if (typeof ApiService === 'undefined') {
-      setTimeout(init, 100);
-      return;
-    }
-    const user = ApiService.getUser();
+    const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null');
+    if (!user) { setTimeout(init, 100); return; }
     if (!user) { window.location.href = '/index.html'; return; }
     _boutiqueId = user.boutique_id;
     await refresh();
@@ -43,7 +39,7 @@ const KanbanApp = (() => {
   async function refresh() {
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : '';
-      const resp   = await ApiService.get(`/api/tickets/kanban${params}`);
+      const resp   = await apiGet(`/api/tickets/kanban${params}`);
       if (!resp.success) throw new Error(resp.error || 'Erreur API');
       _colonnes = resp.colonnes || [];
       _stats    = resp.stats    || {};
@@ -213,7 +209,7 @@ const KanbanApp = (() => {
 
     // Appel API
     try {
-      const resp = await ApiService.put(`/api/tickets/${_dragSrc.ticketId}/statut`, {
+      const resp = await apiPut(`/api/tickets/${_dragSrc.ticketId}/statut`, {
         statut: statutDest,
         commentaire: `Déplacé via Kanban : ${_dragSrc.statutSrc} → ${statutDest}`
       });
@@ -233,7 +229,7 @@ const KanbanApp = (() => {
   async function openTicket(id) {
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : '';
-      const resp   = await ApiService.get(`/api/tickets/${id}${params}`);
+      const resp   = await apiGet(`/api/tickets/${id}${params}`);
       if (!resp.success) throw new Error(resp.error);
       const t = resp.data;
 
@@ -348,7 +344,7 @@ const KanbanApp = (() => {
   // ─── Changement statut depuis modal ─────────────────────────────────────────
   async function changeStatut(id, statut) {
     try {
-      const resp = await ApiService.put(`/api/tickets/${id}/statut`, {
+      const resp = await apiPut(`/api/tickets/${id}/statut`, {
         statut,
         commentaire: `Changement via Kanban modal → ${statut}`
       });
@@ -367,7 +363,7 @@ const KanbanApp = (() => {
   // ─── Changement priorité ─────────────────────────────────────────────────────
   async function changePriorite(id, priorite) {
     try {
-      const resp = await ApiService.put(`/api/tickets/${id}`, { priorite });
+      const resp = await apiPut(`/api/tickets/${id}`, { priorite });
       if (resp.success) {
         showToast(`✅ Priorité → ${priorite}`, 'success');
         closeModal();
