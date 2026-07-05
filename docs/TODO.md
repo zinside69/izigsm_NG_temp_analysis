@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.29 clôturé — 5 juillet 2026  
-> Version production : **v2.29.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **463/463** (11 suites Vitest)  
+> Mis à jour : Sprint 2.30 clôturé — 5 juillet 2026  
+> Version production : **v2.30.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **607/607** (15 suites Vitest)  
 > Build : 71 modules / 248.08 kB  
-> Git : branche `main`, tag `v2.29.0`, déploiement ✅ action `925f6b76` Worker `8e6e5fb0`
+> Git : branche `main`, tag `v2.30.0`, déploiement ✅
 
 ---
 
@@ -17,7 +17,7 @@
 | **Migrations D1** | ✅ 24 migrations | 0024_kv_store.sql = dernière |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
-| **Tests Vitest** | ✅ 463/463 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, **stockService 45, devisService 58, factureService 41** |
+| **Tests Vitest** | ✅ 607/607 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, **clientService 38, personnelService 36, reconditionnementService 50, publicService 20** |
 | **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
 | **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
 
@@ -233,13 +233,15 @@
 
 ---
 
-### Sprint 2.30 🔜 — Tests services secondaires + reconditionnementService
-**Objectif : couverture complète tous les services**
+### Sprint 2.30 ✅ — Tests services secondaires + reconditionnementService
+**607/607 tests (15 suites) — +144 tests ce sprint**
 
-- [ ] `tests/clientService.test.ts` : **~35 tests** — CRUD, historique (tickets+factures+rdv), importClients (dédup email), getKpis, addAppareil
-- [ ] `tests/personnelService.test.ts` : **~35 tests** — CRUD employés, pointer (machine états pointage), pointagesAujourdhui, rapportPointage, statutsTempsReel, TRANSITIONS_POINTAGE
-- [ ] `tests/reconditionnementService.test.ts` : **~40 tests** — CRUD ordres, updateStatutOrdre, terminerOrdre (crée produit occasion), CRUD bons d'achat, verifierBonAchat, consommerBonAchat (partiel+total), annulerBonAchat
-- [ ] `tests/publicService.test.ts` : **~25 tests** — getTicketPublicByToken, getBoutiquePublicBySlug, getStatsBoutiquePublic, getCategoriesPubliques, getServicesPublics
+- [x] `tests/clientService.test.ts` : **38 tests** — CRUD, historique (tickets+factures+rdv, rachats=vide), importClients (dédup email, UNIQUE constraint), getKpis, addAppareil
+- [x] `tests/personnelService.test.ts` : **36 tests** — CRUD employés, pointer (machine états TRANSITIONS_POINTAGE, JOURNEE_TERMINEE, TRANSITION_INVALIDE), pointagesAujourdhui (calcul heures JS), rapportPointage, statutsTempsReel
+- [x] `tests/reconditionnementService.test.ts` : **50 tests** — CRUD ordres, updateStatutOrdre (SQL dynamique date_debut/date_fin), terminerOrdre (produit existant ou nouveau OCC-), CRUD bons d’achat, verifierBonAchat (5 guards), consommerBonAchat (partiel+total), annulerBonAchat
+- [x] `tests/publicService.test.ts` : **20 tests** — getTicketPublicByToken, getBoutiquePublicBySlug, getStatsBoutiquePublic (fallback 0), getCategoriesPubliques, getServicesPublics
+- [x] **607/607 tests** (15 suites, 7.2s)
+- [x] Version bump v2.30.0
 
 ---
 
@@ -413,4 +415,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 5 juillet 2026 — Sprint 2.29 clôturé, v2.29.0 en production — Sprint 2.30 à démarrer*
+*Dernière mise à jour : 5 juillet 2026 — Sprint 2.30 clôturé, v2.30.0 en production — Sprint 2.31 à démarrer*
