@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.28 terminé + déploiement prod — 3 juillet 2026  
-> Version production : **v2.28.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **319/319** (8 suites Vitest)  
+> Mis à jour : Sprint 2.29 terminé — 5 juillet 2026  
+> Version production : **v2.29.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **463/463** (11 suites Vitest)  
 > Build : 71 modules / 248.08 kB  
-> Git : branche `main`, dernier commit `fb77e3b`, tag `v2.28.0`
+> Git : branche `main`, tag `v2.29.0`
 
 ---
 
@@ -17,7 +17,7 @@
 | **Migrations D1** | ✅ 24 migrations | 0024_kv_store.sql = dernière |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
-| **Tests Vitest** | ✅ 319/319 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65 |
+| **Tests Vitest** | ✅ 463/463 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, **stockService 45, devisService 58, factureService 41** |
 | **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
 | **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
 
@@ -221,14 +221,15 @@
 
 ---
 
-### Sprint 2.29 🔜 — Tests Vitest : couverture services restants
-**Objectif : atteindre 500+ tests, couvrir les services critiques non testés**
+### Sprint 2.29 ✅ — Tests Vitest : couverture services critiques
+**463/463 tests (11 suites) — +144 tests ce sprint**
 
-Services à couvrir (0 test actuellement) :
-- [ ] `tests/ticketService.test.ts` : **~60 tests** — listTickets (filtres), getKanban (groupement+ancienneté), getTicketById (JOINs), createTicket (tracking_token, numero BC), updateTicket, updateStatut (machine à états 10 statuts), deleteTicket, getTicketBoutiqueId, getTicketAvecClient
-- [ ] `tests/stockService.test.ts` : **~40 tests** — listProduits (filtres+pagination), getProduitById, createProduit, updateProduit, deleteProduit (soft), enregistrerMouvement (entree/sortie/ajustement+CUMP), listCategories, createCategorie, getKpisStock
-- [ ] `tests/devisService.test.ts` : **~45 tests** — listDevis, getDevis, createDevis (public_token hex32, nextNumero), updateDevis (draft uniquement), updateStatutDevis (machine états), convertirDevis (copie lignes→facture), getDevisByToken, getStatsDevis, expireDevisPerimes
-- [ ] `tests/factureService.test.ts` : **~35 tests** — listFactures, getFacture (lignes+paiements parallèle), ajouterPaiement (calcul statut payee/partiel), emettreFacture (NF525 locked+hash+tracking), listAvoirs, getAvoir, createAvoir (NF525 obligatoire)
+- [x] `tests/stockService.test.ts` : **45 tests** — listProduits (5 filtres, pagination), getProduitById (mouvements), createProduit (+mouvement initial si stock>0), updateProduit (COALESCE, guard), deleteProduit (soft), enregistrerMouvement (4 types, delta effectif ajustement, stock insuffisant), listCategories, createCategorie, getKpisStock (5 champs, fallback 0)
+- [x] `tests/devisService.test.ts` : **58 tests** — listDevis (5 filtres, exclut annule), getDevis, createDevis (public_token hex32, totaux calculés, guard lignes vides), updateDevis (guard draft+introuvable, upsertLignes conditionnel), updateStatutDevis (machine états 6 statuts, extras envoye_le/repondu_le, fromPublic), convertirDevis (3 guards, INSERT facture, copie lignes, auditLog), getDevisByToken, getStatsDevis (taux_conversion), expireDevisPerimes, saveSignatureDevis (tronqué 1000 chars)
+- [x] `tests/factureService.test.ts` : **41 tests** — listFactures (3 filtres, Promise.all), getFacture (3 requêtes parallèles), ajouterPaiement (guard locked, statut payee/partiellement_payee, INSERT paiement), emettreFacture (guard locked, NF525 SHA-256, UUID tracking_token), listAvoirs (3 filtres), getAvoir, createAvoir (4 guards, NF525, batch lignes_avoir, UPDATE hash), getDevisPourNf525, updateFactureHash
+- [x] Build ✅ + **463/463 tests** (11 suites, 4.5s)
+- [x] Version bump v2.29.0
+- [ ] Déploiement prod v2.29.0 (à faire)
 
 ---
 
