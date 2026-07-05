@@ -28,7 +28,7 @@ import {
 
 // ─── SQL normalisés ───────────────────────────────────────────────────────────
 
-const SQL_TICKET_TOKEN = `SELECT t.id, t.numero, t.tracking_token, t.statut, t.appareil_marque, t.appareil_modele, t.description_panne, t.diagnostic, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.date_livraison, c.prenom AS client_prenom, c.nom AS client_nom, b.nom AS boutique_nom, b.telephone AS boutique_telephone, b.email AS boutique_email, b.adresse AS boutique_adresse, b.ville AS boutique_ville FROM tickets t JOIN clients c ON c.id = t.client_id JOIN boutiques b ON b.id = t.boutique_id WHERE t.tracking_token = ? AND t.actif = 1`
+const SQL_TICKET_TOKEN = `SELECT t.id, t.numero, t.tracking_token, t.statut, t.appareil_marque, t.appareil_modele, t.description_panne, t.diagnostic, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.date_livraison, c.prenom AS client_prenom, c.nom AS client_nom, b.nom AS boutique_nom, b.telephone AS boutique_telephone, b.email AS boutique_email, b.adresse AS boutique_adresse, b.ville AS boutique_ville, b.slug AS boutique_slug FROM tickets t JOIN clients c ON c.id = t.client_id JOIN boutiques b ON b.id = t.boutique_id WHERE t.tracking_token = ? AND t.actif = 1`
 
 const SQL_BOUTIQUE_SLUG = `SELECT id, nom, siret, adresse, code_postal, ville, telephone, email, site_web, logo_url, description, horaires, slug, facebook_url, instagram_url, google_maps_url FROM boutiques WHERE slug = ? AND actif = 1`
 

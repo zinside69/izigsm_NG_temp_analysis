@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.30 clôturé — 5 juillet 2026  
-> Version production : **v2.30.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Mis à jour : Sprint 2.31 clôturé — 5 juillet 2026  
+> Version production : **v2.31.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
 > Build : 71 modules / 248.08 kB  
-> Git : branche `main`, tag `v2.30.0`, déploiement ✅
+> Git : branche `main`, tag `v2.31.0`, déploiement ✅
 
 ---
 
@@ -246,21 +246,20 @@
 
 ---
 
-### Sprint 2.31 🔜 — MOD-14 Vitrine publique : prise de RDV en ligne
+### Sprint 2.31 ✅ — MOD-14 Vitrine publique : prise de RDV en ligne
 **Module CDC : MOD-14 (MOYENNE) — Différenciateur concurrentiel**
 
-État actuel :
-- `public/suivi.html` ✅ — tracking token client OK
-- `public/static/js/publicService.ts` ✅ — getStatsBoutiquePublic OK
-- **Manque** : formulaire de prise de RDV en ligne (sans auth)
-
-À faire :
-- [ ] `POST /api/public/rdv` : creation RDV public sans auth → statut PENDING, email confirmation fire-and-forget
-- [ ] `GET /api/public/boutique/:slug/disponibilites` : créneaux libres par date
-- [ ] `public/rdv-public.html` : page de prise de RDV en ligne (choix service + date + créneaux dispo)
-- [ ] `public/static/js/rdv-public.js` : formulaire 3 étapes (service / date+heure / coordonnées)
-- [ ] Lien depuis `suivi.html` et page vitrine `/pro/:slug` vers formulaire RDV
-
+- [x] Migration `0025_rdv_public.sql` : table `boutique_creneaux` + index `idx_rdv_boutique_debut`
+- [x] `publicService.ts` : `getDisponibilites(db, boutiqueId, date)` — génère slots depuis plages horaires, filtre occupés + passés
+- [x] `publicService.ts` : `createRdvPublic(db, boutiqueId, body)` — statut PENDING, ical_token, validations
+- [x] `routes/public.ts` : `GET /api/public/boutique/:slug/disponibilites?date=YYYY-MM-DD`
+- [x] `routes/public.ts` : `POST /api/public/rdv` (sans auth, CORS *)
+- [x] `public/rdv-public.html` : formulaire 3 étapes (service → calendrier+créneaux → coordonnées) + page confirmation
+- [x] `public/suivi.html` : bouton « Prendre un nouveau rendez-vous » (slug injecté dynamiquement depuis la réponse ticket)
+- [x] `publicService.ts` : `getTicketPublicByToken` — ajout `b.slug AS boutique_slug` dans le SELECT
+- [x] Fix `tests/publicService.test.ts` : SQL_TICKET_TOKEN mis à jour (+boutique_slug)
+- [x] **607/607 tests** (15 suites)
+- [x] Version bump v2.31.0
 ---
 
 ### Sprint 2.32 🔜 — MOD-12 Automatisations email : triggers statut → client
@@ -416,4 +415,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 5 juillet 2026 — Sprint 2.30 clôturé, v2.30.0 en production — Sprint 2.31 à démarrer*
+*Dernière mise à jour : 5 juillet 2026 — Sprint 2.31 clôturé, v2.31.0 en production — Sprint 2.32 à démarrer*

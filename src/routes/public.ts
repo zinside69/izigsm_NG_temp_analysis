@@ -97,12 +97,14 @@ pub.get('/ticket/:token', async (c) => {
         date_promesse:  ticket.date_promesse,
         date_livraison: ticket.date_livraison,
         client_prenom:  ticket.client_prenom,
+        boutique_slug: ticket.boutique_slug,
         boutique: {
           nom:       ticket.boutique_nom,
           telephone: ticket.boutique_telephone,
           email:     ticket.boutique_email,
           adresse:   ticket.boutique_adresse,
           ville:     ticket.boutique_ville,
+          slug:      ticket.boutique_slug,
         }
       }
     })
@@ -313,6 +315,83 @@ pub.post('/devis/:token/repondre', async (c) => {
   } catch (e: any) {
     console.error('[public/devis/repondre]', e?.message ?? e)
     return c.json({ success: false, error: e.message ?? 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── Disponibilités (MOD-14) ──────────────────────────────────────────────────
+
+/**
+ * GET /api/public/boutique/:slug/disponibilites?date=YYYY-MM-DD
+ * Créneaux disponibles pour une date donnée.
+ *
+ * @param slug - Slug de la boutique
+ * @query date - Date au format YYYY-MM-DD (défaut : demain)
+ * @returns    Liste de créneaux disponibles
+ */
+pub.get('/boutique/:slug/disponibilites', async (c) => {
+  try {
+    const slug     = c.req.param('slug').toLowerCase()
+    const boutique = await getBoutiqueIdBySlug(c.env.DB, slug)
+    if (!boutique)
+      return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
+
+    // Date par défaut = demain
+    let date = c.req.query('date') ?? ''
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      date = tomorrow.toISOString().slice(0, 10)
+    }
+
+    const creneaux = await getDisponibilites(c.env.DB, boutique.id, date)
+
+    return c.json({
+      success:  true,
+      boutique: { id: boutique.id, nom: boutique.nom, slug },
+      date,
+      creneaux,
+    })
+  } catch (e: any) {
+    console.error('[disponibilites]', e?.message ?? e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+/**
+ * POST /api/public/rdv
+ * Crée un rendez-vous public (sans authentification).
+ *
+ * @body  `{ slug, debut, duree_minutes?, nom_client, telephone_client?, email_client?, service_nom?, notes?, type_rdv? }`
+ * @returns `{ success, data: { id, debut, fin, titre } }`
+ */
+pub.post('/rdv', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}))
+
+    const { slug } = body
+    if (!slug)
+      return c.json({ success: false, error: 'slug de la boutique requis.' }, 400)
+
+    const boutique = await getBoutiqueIdBySlug(c.env.DB, slug.toLowerCase())
+    if (!boutique)
+      return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
+
+    const rdv = await createRdvPublic(c.env.DB, boutique.id, body)
+
+    return c.json({
+      success: true,
+      message: 'Votre demande de rendez-vous a été enregistrée. L\u2019équipe vous confirmera rapidement.',
+      data: {
+        id:    rdv.id,
+        debut: rdv.debut,
+        fin:   rdv.fin,
+        titre: rdv.titre,
+      }
+    }, 201)
+  } catch (e: any) {
+    const status = e.message?.includes('requis') || e.message?.includes('futur') ? 400 : 500
+    console.error('[public/rdv]', e?.message ?? e)
+    return c.json({ success: false, error: e.message ?? 'Erreur serveur.' }, status)
   }
 })
 

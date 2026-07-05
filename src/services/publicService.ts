@@ -38,6 +38,7 @@ export interface TicketPublic {
   boutique_email:    string | null
   boutique_adresse:  string | null
   boutique_ville:    string | null
+  boutique_slug:     string | null
 }
 
 /** Infos publiques d'une boutique (vitrine). */
@@ -127,7 +128,8 @@ export async function getTicketPublicByToken(
       b.telephone AS boutique_telephone,
       b.email    AS boutique_email,
       b.adresse  AS boutique_adresse,
-      b.ville    AS boutique_ville
+      b.ville    AS boutique_ville,
+      b.slug     AS boutique_slug
     FROM   tickets t
     JOIN   clients  c ON c.id = t.client_id
     JOIN   boutiques b ON b.id = t.boutique_id
@@ -246,4 +248,196 @@ export async function getServicesPublics(
   `).bind(boutiqueId).all<ServicePublic>()
 
   return rows.results ?? []
+}
+
+// ─── Prise de RDV public (MOD-14) ────────────────────────────────────────────
+
+/** Créneau horaire disponible retourné au client. */
+export interface CreneauDisponible {
+  debut:         string   // "YYYY-MM-DD HH:MM"
+  fin:           string   // "YYYY-MM-DD HH:MM"
+  duree_minutes: number
+}
+
+/** Résultat d'une création de RDV public. */
+export interface RdvPublicResult {
+  id:           number
+  ical_token:   string
+  debut:        string
+  fin:          string
+  titre:        string
+}
+
+/**
+ * Retourne les créneaux disponibles pour une boutique sur une date donnée.
+ *
+ * Algorithme :
+ *  1. Charger les plages horaires configurées pour ce jour de semaine
+ *  2. Générer tous les slots (durée = duree_slot de la plage)
+ *  3. Charger les RDV existants non-annulés sur cette date
+ *  4. Éliminer les slots déjà occupés (chevauchement)
+ *  5. Éliminer les slots dans le passé
+ *
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @param date       - Date cible au format "YYYY-MM-DD"
+ * @returns          Liste de créneaux disponibles (peut être vide)
+ */
+export async function getDisponibilites(
+  db:         D1Database,
+  boutiqueId: number,
+  date:       string
+): Promise<CreneauDisponible[]> {
+  // Jour de semaine ISO (1=Lundi, 7=Dimanche) depuis la date fournie
+  const dateObj    = new Date(date + 'T12:00:00Z') // midi UTC évite les pb de timezone
+  const dayOfWeek  = dateObj.getDay() || 7          // 0 (dimanche) → 7
+
+  // 1. Plages horaires configurées pour ce jour
+  const creneauxRows = await db.prepare(`
+    SELECT heure_debut, heure_fin, duree_slot
+    FROM boutique_creneaux
+    WHERE boutique_id = ? AND jour_semaine = ? AND actif = 1
+    ORDER BY heure_debut ASC
+  `).bind(boutiqueId, dayOfWeek).all<{ heure_debut: string; heure_fin: string; duree_slot: number }>()
+
+  const plages = creneauxRows.results ?? []
+  if (plages.length === 0) return []
+
+  // 2. Générer tous les slots possibles
+  const slots: { debut: string; fin: string; duree: number }[] = []
+  for (const plage of plages) {
+    const [hd, md] = plage.heure_debut.split(':').map(Number)
+    const [hf, mf] = plage.heure_fin.split(':').map(Number)
+    const debutMin = hd * 60 + md
+    const finMin   = hf * 60 + mf
+    const duree    = plage.duree_slot
+
+    for (let t = debutMin; t + duree <= finMin; t += duree) {
+      const dH  = String(Math.floor(t / 60)).padStart(2, '0')
+      const dM  = String(t % 60).padStart(2, '0')
+      const fH  = String(Math.floor((t + duree) / 60)).padStart(2, '0')
+      const fM  = String((t + duree) % 60).padStart(2, '0')
+      slots.push({
+        debut: `${date} ${dH}:${dM}`,
+        fin:   `${date} ${fH}:${fM}`,
+        duree,
+      })
+    }
+  }
+
+  // 3. RDV existants non-annulés sur cette date
+  const rdvRows = await db.prepare(`
+    SELECT debut, fin
+    FROM rendez_vous
+    WHERE boutique_id = ? AND actif = 1
+      AND DATE(debut) = ?
+      AND statut NOT IN ('CANCELLED')
+    ORDER BY debut ASC
+  `).bind(boutiqueId, date).all<{ debut: string; fin: string }>()
+
+  const rdvExistants = rdvRows.results ?? []
+
+  // 4 & 5. Filtrer : slot non occupé ET dans le futur
+  const now = Date.now()
+  const disponibles: CreneauDisponible[] = []
+
+  for (const slot of slots) {
+    // Passé ?
+    const slotTs = new Date(slot.debut.replace(' ', 'T') + ':00Z').getTime()
+    if (slotTs <= now) continue
+
+    // Chevauchement avec un RDV existant ?
+    const occupe = rdvExistants.some(rdv => {
+      const rdvDebut = rdv.debut.slice(0, 16)  // "YYYY-MM-DD HH:MM"
+      const rdvFin   = rdv.fin.slice(0, 16)
+      return slot.debut < rdvFin && slot.fin > rdvDebut
+    })
+    if (occupe) continue
+
+    disponibles.push({
+      debut:         slot.debut,
+      fin:           slot.fin,
+      duree_minutes: slot.duree,
+    })
+  }
+
+  return disponibles
+}
+
+/**
+ * Crée un rendez-vous public (sans authentification).
+ *
+ * Le RDV est créé avec :
+ *  - `statut = 'PENDING'`  → attend confirmation de la boutique
+ *  - `type_rdv = 'reparation'` par défaut (ou body.type_rdv)
+ *  - `client_id = null` (client non enregistré)
+ *  - `nom_client`, `telephone_client` renseignés depuis le formulaire
+ *  - `ical_token` généré pour identification
+ *
+ * Validations :
+ *  - `debut` obligatoire et dans le futur
+ *  - `nom_client` ou `telephone_client` requis
+ *  - `service_nom` utilisé comme titre si `titre` absent
+ *
+ * @param db         - Instance D1Database
+ * @param boutiqueId - ID de la boutique
+ * @param body       - Données du formulaire public
+ * @returns          `RdvPublicResult` avec id + ical_token
+ * @throws           Error si validation échoue ou insertion échoue
+ */
+export async function createRdvPublic(
+  db:         D1Database,
+  boutiqueId: number,
+  body:       any
+): Promise<RdvPublicResult> {
+  const { debut, duree_minutes, nom_client, telephone_client, email_client,
+          service_nom, notes, type_rdv } = body
+
+  // Validations
+  if (!debut) throw new Error('La date/heure du rendez-vous est requise.')
+  if (!nom_client && !telephone_client)
+    throw new Error('Nom ou téléphone du client requis.')
+
+  const debutTs = new Date(debut.replace(' ', 'T') + ':00Z').getTime()
+  if (isNaN(debutTs) || debutTs <= Date.now())
+    throw new Error('La date du rendez-vous doit être dans le futur.')
+
+  const duree = Number(duree_minutes) || 30
+  // Calcul de fin
+  const debutDate = new Date(debut.replace(' ', 'T') + ':00Z')
+  debutDate.setMinutes(debutDate.getMinutes() + duree)
+  const fin = debutDate.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '').slice(0, 16)
+
+  // Titre = service_nom ou "RDV en ligne"
+  const titre = (service_nom || 'RDV en ligne').slice(0, 120)
+
+  // Token unique (Web Crypto)
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  const result = await db.prepare(`
+    INSERT INTO rendez_vous
+      (boutique_id, client_id, ticket_id, user_id,
+       titre, description, debut, fin, duree_minutes,
+       statut, type_rdv,
+       nom_client, telephone_client,
+       rappel_minutes, ical_token, couleur, notes)
+    VALUES (?,NULL,NULL,NULL,?,?,?,?,?,'PENDING',?,?,?,60,?,'#F59E0B',?)
+    RETURNING id, ical_token, debut, fin, titre
+  `).bind(
+    boutiqueId,
+    titre,
+    email_client ? `Email : ${email_client}` : null,
+    debut,
+    `${debut.slice(0, 10)} ${fin.slice(11)}`,
+    duree,
+    type_rdv || 'reparation',
+    (nom_client || '').slice(0, 100),
+    (telephone_client || '').slice(0, 30),
+    token,
+    (notes || '').slice(0, 500) || null
+  ).first<RdvPublicResult>()
+
+  if (!result?.id) throw new Error('Erreur lors de la création du rendez-vous.')
+  return result
 }

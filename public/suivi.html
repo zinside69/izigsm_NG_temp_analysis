@@ -111,6 +111,14 @@
       <div id="contact-boutique" class="space-y-2"></div>
     </div>
 
+    <!-- Prise de RDV en ligne -->
+    <div id="rdv-btn-section" class="hidden">
+      <a id="rdv-link" href="#"
+        class="block w-full text-center bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 rounded-xl transition-colors">
+        <i class="fas fa-calendar-plus mr-2"></i>Prendre un nouveau rendez-vous
+      </a>
+    </div>
+
     <!-- Bouton retour -->
     <button onclick="resetRecherche()"
       class="w-full bg-white/20 hover:bg-white/30 text-white font-semibold py-3 rounded-xl border border-white/30 transition-colors">
@@ -254,6 +262,14 @@ function renderTicket(t) {
   if (b.email)     contacts.push(infoRow('fa-envelope','Email',`<a href="mailto:${b.email}" class="text-blue-600">${b.email}</a>`))
   if (b.adresse)   contacts.push(infoRow('fa-map-marker-alt','Adresse', `${b.adresse}${b.ville ? ', ' + b.ville : ''}`))
   document.getElementById('contact-boutique').innerHTML = contacts.join('')
+
+  // Bouton prise de RDV (si slug disponible dans les données boutique)
+  if (t.boutique_slug) {
+    const rdvSection = document.getElementById('rdv-btn-section')
+    const rdvLink    = document.getElementById('rdv-link')
+    rdvLink.href = `/rdv-public.html?slug=${encodeURIComponent(t.boutique_slug)}`
+    rdvSection.classList.remove('hidden')
+  }
 }
 
 function renderTimeline(statut) {
