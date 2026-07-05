@@ -229,7 +229,33 @@
 - [x] `tests/factureService.test.ts` : **41 tests** — listFactures (3 filtres, Promise.all), getFacture (3 requêtes parallèles), ajouterPaiement (guard locked, statut payee/partiellement_payee, INSERT paiement), emettreFacture (guard locked, NF525 SHA-256, UUID tracking_token), listAvoirs (3 filtres), getAvoir, createAvoir (4 guards, NF525, batch lignes_avoir, UPDATE hash), getDevisPourNf525, updateFactureHash
 - [x] Build ✅ + **463/463 tests** (11 suites, 4.5s)
 - [x] Version bump v2.29.0
-- [ ] Déploiement prod v2.29.0 (à faire)
+- [ ] **Déploiement prod v2.29.0 (à faire)** — voir tâche bloquée ci-dessous
+
+---
+
+### 🚧 TÂCHE BLOQUÉE — Déploiement v2.29.0 en attente
+
+> **Contexte** : Sprint 2.29 terminé, code committé (`a223578`), tagué `v2.29.0`.  
+> **Problème** : `gsk hosted deploy` timeout systématiquement à 60-90s côté sandbox réseau.  
+> **La commande n'a pas pu s'exécuter jusqu'au bout.**
+
+**Pour reprendre :**
+```bash
+cd /home/user/webapp
+# Le dist/ est présent (version 2.28, mais le health endpoint retourne la version depuis index.tsx compilé)
+# Il faut rebuild avant de déployer :
+npm run build  # si le réseau est disponible + timeout > 300s
+gsk --project-id 8096d010-efde-413e-a481-72226566aa0b hosted deploy
+# Approuver la pending_action quand elle apparaît
+# Vérifier : curl https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com/api/health
+# Attendu : version: "2.29.0"
+```
+
+**État git :**
+- Branche : `main`
+- Commit à déployer : `a223578`
+- Tag : `v2.29.0`
+- Prod actuelle : v2.28.0 (commit `41067fe`, tag `v2.28.0`)
 
 ---
 
