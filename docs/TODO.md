@@ -242,6 +242,7 @@
 - [x] `tests/publicService.test.ts` : **20 tests** — getTicketPublicByToken, getBoutiquePublicBySlug, getStatsBoutiquePublic (fallback 0), getCategoriesPubliques, getServicesPublics
 - [x] **607/607 tests** (15 suites, 7.2s)
 - [x] Version bump v2.30.0
+- [x] **Déploiement prod v2.30.0** — Worker `b4a426bb`, health ✅ v2.30.0
 
 ---
 
