@@ -260,6 +260,7 @@
 - [x] Fix `tests/publicService.test.ts` : SQL_TICKET_TOKEN mis à jour (+boutique_slug)
 - [x] **607/607 tests** (15 suites)
 - [x] Version bump v2.31.0
+- [x] **Déploiement prod v2.31.0** — Worker `f2ad1b1d`, health ✅ v2.31.0
 ---
 
 ### Sprint 2.32 🔜 — MOD-12 Automatisations email : triggers statut → client
