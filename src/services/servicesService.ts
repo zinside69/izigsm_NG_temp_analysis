@@ -404,66 +404,72 @@ export async function getCatalogueArbre(
 // ─── Marques d'appareils ──────────────────────────────────────────────────────
 
 export interface MarqueAppareil {
-  id:          number
-  boutique_id: number
-  nom:         string
-  logo_url:    string | null
-  ordre:       number
-  actif:       number
-  nb_modeles?: number
+  id:           number
+  nom:          string
+  brand_slug:   string | null
+  logo_url:     string | null
+  device_count: number
+  source:       string
+  ordre:        number
+  actif:        number
+  synced_at:    string | null
+  nb_modeles?:  number
 }
 
 export interface ModeleAppareil {
   id:          number
-  boutique_id: number
   marque_id:   number
   marque_nom?: string
   nom:         string
+  phone_slug:  string | null
   type:        string
   annee:       number | null
+  image_url:   string | null
+  source:      string
   actif:       number
 }
 
 /**
- * Liste toutes les marques actives d'une boutique, triées par `ordre` puis `nom`.
+ * Liste toutes les marques actives du référentiel global, triées par `ordre` puis `nom`.
  * Inclut le compte de modèles actifs associés (`nb_modeles`).
+ * Référentiel global Sprint 2.39 — plus de boutique_id.
  */
 export async function listMarques(
-  db: D1Database, boutiqueId: number
+  db: D1Database
 ): Promise<MarqueAppareil[]> {
   const rows = await db.prepare(`
     SELECT m.*,
            COUNT(mo.id) AS nb_modeles
     FROM   marques_appareils m
     LEFT JOIN modeles_appareils mo ON mo.marque_id = m.id AND mo.actif = 1
-    WHERE  m.boutique_id = ? AND m.actif = 1
+    WHERE  m.actif = 1
     GROUP  BY m.id
     ORDER  BY m.ordre ASC, m.nom ASC
-  `).bind(boutiqueId).all()
+  `).all()
   return rows.results as MarqueAppareil[]
 }
 
 /**
- * Crée une marque d'appareil.
- * Contrainte UNIQUE (boutique_id, nom) — lève une erreur si doublon.
+ * Crée une marque dans le référentiel global.
+ * Contrainte UNIQUE sur brand_slug — lève une erreur si doublon.
  */
 export async function createMarque(
   db: D1Database,
-  data: { boutique_id: number; nom: string; logo_url?: string; ordre?: number },
+  data: { nom: string; logo_url?: string; ordre?: number; brand_slug?: string },
   userId: number
 ): Promise<number> {
   const result = await db.prepare(`
-    INSERT INTO marques_appareils (boutique_id, nom, logo_url, ordre)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO marques_appareils (nom, logo_url, ordre, brand_slug, source)
+    VALUES (?, ?, ?, ?, 'manual')
     RETURNING id
   `).bind(
-    data.boutique_id,
     data.nom.trim(),
-    data.logo_url ?? null,
-    data.ordre    ?? 0
+    data.logo_url   ?? null,
+    data.ordre      ?? 0,
+    data.brand_slug ?? null
   ).first<{ id: number }>()
 
-  await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_MARQUE', entite_type: 'marque_appareil', entite_id: result?.id })
+  await auditLog(db, { user_id: userId, action: 'CREATE_MARQUE', entite_type: 'marque_appareil', entite_id: result?.id })
   return result?.id ?? 0
 }
 
@@ -501,17 +507,16 @@ export async function deleteMarque(
 // ─── Modèles d'appareils ──────────────────────────────────────────────────────
 
 /**
- * Liste les modèles actifs d'une boutique.
- * Filtrage optionnel par `marque_id` ou `search` (nom).
- * Retourne `marque_nom` en jointure.
+ * Liste les modèles actifs du référentiel global.
+ * Filtrage optionnel par `marque_id`, `search` (nom), `type`, `limit`.
+ * Référentiel global Sprint 2.39 — plus de boutique_id.
  */
 export async function listModeles(
   db: D1Database,
-  boutiqueId: number,
-  query: { marque_id?: number; search?: string; type?: string } = {}
+  query: { marque_id?: number; search?: string; type?: string; limit?: number } = {}
 ): Promise<ModeleAppareil[]> {
-  const conditions = ['mo.boutique_id = ?', 'mo.actif = 1']
-  const bindings: any[] = [boutiqueId]
+  const conditions = ['mo.actif = 1']
+  const bindings: any[] = []
 
   if (query.marque_id) {
     conditions.push('mo.marque_id = ?')
@@ -527,6 +532,8 @@ export async function listModeles(
     bindings.push(s, s)
   }
 
+  const limitClause = query.limit ? `LIMIT ${parseInt(String(query.limit), 10)}` : 'LIMIT 500'
+
   const rows = await db.prepare(`
     SELECT mo.*,
            ma.nom AS marque_nom
@@ -534,33 +541,34 @@ export async function listModeles(
     JOIN   marques_appareils ma ON ma.id = mo.marque_id
     WHERE  ${conditions.join(' AND ')}
     ORDER  BY ma.nom ASC, mo.nom ASC
+    ${limitClause}
   `).bind(...bindings).all()
 
   return rows.results as ModeleAppareil[]
 }
 
 /**
- * Crée un modèle rattaché à une marque.
- * Contrainte UNIQUE (boutique_id, marque_id, nom).
+ * Crée un modèle manuellement dans le référentiel global.
+ * Contrainte UNIQUE (marque_id, nom).
  */
 export async function createModele(
   db: D1Database,
-  data: { boutique_id: number; marque_id: number; nom: string; type?: string; annee?: number },
+  data: { marque_id: number; nom: string; type?: string; annee?: number; phone_slug?: string },
   userId: number
 ): Promise<number> {
   const result = await db.prepare(`
-    INSERT INTO modeles_appareils (boutique_id, marque_id, nom, type, annee)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO modeles_appareils (marque_id, nom, type, annee, phone_slug, source)
+    VALUES (?, ?, ?, ?, ?, 'manual')
     RETURNING id
   `).bind(
-    data.boutique_id,
     data.marque_id,
     data.nom.trim(),
-    data.type  ?? 'smartphone',
-    data.annee ?? null
+    data.type       ?? 'smartphone',
+    data.annee      ?? null,
+    data.phone_slug ?? null
   ).first<{ id: number }>()
 
-  await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_MODELE', entite_type: 'modele_appareil', entite_id: result?.id })
+  await auditLog(db, { user_id: userId, action: 'CREATE_MODELE', entite_type: 'modele_appareil', entite_id: result?.id })
   return result?.id ?? 0
 }
 

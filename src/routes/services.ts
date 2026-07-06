@@ -57,6 +57,10 @@ import {
   listModeles, createModele, updateModele, deleteModele,
   getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices,
 } from '../services/servicesService'
+import {
+  syncBrands, syncModelesByBrand, syncSelectedBrands,
+  getLastSyncStatus, getCatalogStats,
+} from '../services/phoneCatalogService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -328,31 +332,95 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MARQUES D'APPAREILS (Sprint 2.38)
+// SYNCHRONISATION PHONE-SPECS-API (Sprint 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** GET /api/services/marques — Liste des marques actives avec nb_modeles */
-services.get('/services/marques', async (c) => {
-  const user       = c.get('user')
-  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
-  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+/**
+ * GET /api/services/catalog/stats
+ * Stats globales du référentiel (nb marques, modèles, dernière sync).
+ */
+services.get('/services/catalog/stats', async (c) => {
+  const stats = await getCatalogStats(c.env.DB)
+  return c.json({ success: true, data: stats })
+})
 
-  const data = await listMarques(c.env.DB, boutiqueId)
+/**
+ * GET /api/services/catalog/sync-status
+ * Statut de sync par marque (dernière sync, nb modèles, erreurs éventuelles).
+ * Admin uniquement.
+ */
+services.get('/services/catalog/sync-status', requireRole('admin'), async (c) => {
+  const data = await getLastSyncStatus(c.env.DB)
   return c.json({ success: true, data })
 })
 
-/** POST /api/services/marques — Créer une marque */
+/**
+ * POST /api/services/catalog/sync-brands
+ * Importe toutes les marques depuis phone-specs-api (sans modèles).
+ * Idempotent — INSERT OR IGNORE sur brand_slug.
+ * Admin uniquement.
+ */
+services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) => {
+  const result = await syncBrands(c.env.DB)
+  return c.json({ success: true, data: result, message: `${result.inserted} marques ajoutées, ${result.skipped} existantes.` })
+})
+
+/**
+ * POST /api/services/catalog/sync-modeles/:slug
+ * Synchronise les modèles d'une marque depuis phone-specs-api.
+ * Récupère toutes les pages en parallèle (pattern PHP legacy).
+ * Admin uniquement.
+ *
+ * @param slug  brand_slug ex: "apple-phones-48"
+ */
+services.post('/services/catalog/sync-modeles/:slug', requireRole('admin'), async (c) => {
+  const slug   = c.req.param('slug')
+  const result = await syncModelesByBrand(c.env.DB, slug)
+
+  if (result.status === 'error') {
+    return c.json({ success: false, error: result.error, data: result }, 422)
+  }
+  return c.json({
+    success: true,
+    data:    result,
+    message: `${result.modeles_added} modèles ajoutés sur ${result.modeles_total} (${result.pages_fetched} pages).`,
+  })
+})
+
+/**
+ * POST /api/services/catalog/sync-selected
+ * Synchronise les modèles d'une sélection de marques.
+ * Body : { slugs: string[] }
+ * Admin uniquement.
+ */
+services.post('/services/catalog/sync-selected', requireRole('admin'), async (c) => {
+  const body = await c.req.json()
+  if (!Array.isArray(body.slugs) || body.slugs.length === 0) {
+    return c.json({ success: false, error: 'slugs[] requis.' }, 400)
+  }
+  const result = await syncSelectedBrands(c.env.DB, body.slugs)
+  return c.json({ success: true, data: result })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MARQUES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** GET /api/services/marques — Liste des marques actives globales avec nb_modeles */
+services.get('/services/marques', async (c) => {
+  const data = await listMarques(c.env.DB)
+  return c.json({ success: true, data })
+})
+
+/** POST /api/services/marques — Créer une marque manuellement */
 services.post('/services/marques', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 
   if (!body.nom?.trim()) return c.json({ success: false, error: 'Le nom de la marque est requis.' }, 400)
 
-  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
-  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-
   try {
-    const id = await createMarque(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+    const id = await createMarque(c.env.DB, body, user.sub)
     return c.json({ success: true, id, message: 'Marque créée.' }, 201)
   } catch (e: any) {
     if (e?.message?.includes('UNIQUE')) return c.json({ success: false, error: 'Cette marque existe déjà.' }, 409)
@@ -380,37 +448,31 @@ services.delete('/services/marques/:id', requireRole('admin', 'manager'), async 
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODÈLES D'APPAREILS (Sprint 2.38)
+// MODÈLES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** GET /api/services/modeles — Liste des modèles (filtrables par marque_id, search, type) */
+/** GET /api/services/modeles — Liste des modèles (filtrables par marque_id, search, type, limit) */
 services.get('/services/modeles', async (c) => {
-  const user       = c.get('user')
-  const query      = c.req.query()
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
-  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-
-  const data = await listModeles(c.env.DB, boutiqueId, {
+  const query = c.req.query()
+  const data  = await listModeles(c.env.DB, {
     marque_id: query.marque_id ? parseInt(query.marque_id, 10) : undefined,
     search:    query.search,
     type:      query.type,
+    limit:     query.limit ? parseInt(query.limit, 10) : undefined,
   })
   return c.json({ success: true, data })
 })
 
-/** POST /api/services/modeles — Créer un modèle */
+/** POST /api/services/modeles — Créer un modèle manuellement */
 services.post('/services/modeles', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 
-  if (!body.nom?.trim())   return c.json({ success: false, error: 'Le nom du modèle est requis.' }, 400)
-  if (!body.marque_id)     return c.json({ success: false, error: 'marque_id est requis.' }, 400)
-
-  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
-  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+  if (!body.nom?.trim()) return c.json({ success: false, error: 'Le nom du modèle est requis.' }, 400)
+  if (!body.marque_id)   return c.json({ success: false, error: 'marque_id est requis.' }, 400)
 
   try {
-    const id = await createModele(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+    const id = await createModele(c.env.DB, body, user.sub)
     return c.json({ success: true, id, message: 'Modèle créé.' }, 201)
   } catch (e: any) {
     if (e?.message?.includes('UNIQUE')) return c.json({ success: false, error: 'Ce modèle existe déjà pour cette marque.' }, 409)

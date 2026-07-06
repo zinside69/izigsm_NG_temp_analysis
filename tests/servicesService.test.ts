@@ -1,7 +1,7 @@
 /**
  * @file tests/servicesService.test.ts
  * @description Tests unitaires — src/services/servicesService.ts
- * Sprint 2.38 — Référentiel marques/modèles + liaison services
+ * Sprint 2.39 — Référentiel global marques/modèles (sans boutique_id)
  *
  * Couverture :
  *   Catégories existantes (smoke tests) :
@@ -46,8 +46,8 @@ import {
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const MARQUE_ROW = { id: 1, boutique_id: 1, nom: 'Apple', logo_url: null, ordre: 0, actif: 1, nb_modeles: 3 }
-const MODELE_ROW = { id: 10, boutique_id: 1, marque_id: 1, marque_nom: 'Apple', nom: 'iPhone 14 Pro', type: 'smartphone', annee: 2022, actif: 1 }
+const MARQUE_ROW = { id: 1, nom: 'Apple', brand_slug: 'apple-phones-48', logo_url: null, device_count: 120, source: 'api', ordre: 0, actif: 1, synced_at: null, nb_modeles: 3 }
+const MODELE_ROW = { id: 10, marque_id: 1, marque_nom: 'Apple', nom: 'iPhone 14 Pro', type: 'smartphone', annee: 2022, phone_slug: 'apple_iphone_14_pro-11860', source: 'api', actif: 1 }
 const SERVICE_SUGGESTION = {
   id: 5, nom: 'Remplacement écran', description: null, reference: 'SVC-001',
   tva_taux: 20, garantie_jours: 90, duree_minutes: 60,
@@ -58,13 +58,13 @@ const CAT_ROW = { id: 2, boutique_id: 1, parent_id: null, nom: 'Téléphones', d
 
 // ─── SQL constants ────────────────────────────────────────────────────────────
 
-const SQL_LIST_MARQUES = `SELECT m.*, COUNT(mo.id) AS nb_modeles FROM marques_appareils m LEFT JOIN modeles_appareils mo ON mo.marque_id = m.id AND mo.actif = 1 WHERE m.boutique_id = ? AND m.actif = 1 GROUP BY m.id ORDER BY m.ordre ASC, m.nom ASC`
+const SQL_LIST_MARQUES = `SELECT m.*, COUNT(mo.id) AS nb_modeles FROM marques_appareils m LEFT JOIN modeles_appareils mo ON mo.marque_id = m.id AND mo.actif = 1 WHERE m.actif = 1 GROUP BY m.id ORDER BY m.ordre ASC, m.nom ASC`
 
-const SQL_LIST_MODELES_BASE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.boutique_id = ? AND mo.actif = 1 ORDER BY ma.nom ASC, mo.nom ASC`
+const SQL_LIST_MODELES_BASE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.actif = 1 ORDER BY ma.nom ASC, mo.nom ASC LIMIT 500`
 
-const SQL_LIST_MODELES_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.boutique_id = ? AND mo.actif = 1 AND mo.marque_id = ? ORDER BY ma.nom ASC, mo.nom ASC`
+const SQL_LIST_MODELES_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.actif = 1 AND mo.marque_id = ? ORDER BY ma.nom ASC, mo.nom ASC LIMIT 500`
 
-const SQL_LIST_MODELES_MARQUE_TYPE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.boutique_id = ? AND mo.actif = 1 AND mo.marque_id = ? AND mo.type = ? ORDER BY ma.nom ASC, mo.nom ASC`
+const SQL_LIST_MODELES_MARQUE_TYPE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.actif = 1 AND mo.marque_id = ? AND mo.type = ? ORDER BY ma.nom ASC, mo.nom ASC LIMIT 500`
 
 const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif, sm.prix_ht_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 ORDER BY c.nom ASC, s.nom ASC`
 
@@ -148,8 +148,8 @@ describe('listMarques()', () => {
   })
 
   it('retourne les marques avec nb_modeles', async () => {
-    db.__setListResponse(SQL_LIST_MARQUES, [MARQUE_ROW, { ...MARQUE_ROW, id: 2, nom: 'Samsung', nb_modeles: 7 }])
-    const res = await listMarques(db, 1)
+    db.__setListResponse(SQL_LIST_MARQUES, [MARQUE_ROW, { ...MARQUE_ROW, id: 2, nom: 'Samsung', brand_slug: 'samsung-phones-9', nb_modeles: 7 }])
+    const res = await listMarques(db)
     expect(res).toHaveLength(2)
     expect(res[0].nom).toBe('Apple')
     expect((res[0] as any).nb_modeles).toBe(3)
@@ -157,7 +157,7 @@ describe('listMarques()', () => {
 
   it('retourne tableau vide si aucune marque', async () => {
     db.__setListResponse(SQL_LIST_MARQUES, [])
-    const res = await listMarques(db, 1)
+    const res = await listMarques(db)
     expect(res).toEqual([])
   })
 })
@@ -171,18 +171,18 @@ describe('createMarque()', () => {
 
   beforeEach(() => {
     db = createMockD1()
-    db.__setResponse('INSERT INTO marques_appareils (boutique_id, nom, logo_url, ordre) VALUES (?, ?, ?, ?) RETURNING id', { id: 3 })
+    db.__setResponse('INSERT INTO marques_appareils (nom, logo_url, ordre, brand_slug, source) VALUES (?, ?, ?, ?, \'manual\') RETURNING id', { id: 3 })
     db.__setResponse('INSERT INTO audit_logs', null)
   })
 
   it('retourne l\'id de la marque créée', async () => {
-    const id = await createMarque(db, { boutique_id: 1, nom: 'Apple' }, 42)
+    const id = await createMarque(db, { nom: 'Apple' }, 42)
     expect(id).toBe(3)
   })
 
   it('retourne 0 si INSERT échoue (null result)', async () => {
-    db.__setResponse('INSERT INTO marques_appareils (boutique_id, nom, logo_url, ordre) VALUES (?, ?, ?, ?) RETURNING id', null)
-    const id = await createMarque(db, { boutique_id: 1, nom: 'Test' }, 42)
+    db.__setResponse('INSERT INTO marques_appareils (nom, logo_url, ordre, brand_slug, source) VALUES (?, ?, ?, ?, \'manual\') RETURNING id', null)
+    const id = await createMarque(db, { nom: 'Test' }, 42)
     expect(id).toBe(0)
   })
 })
@@ -237,7 +237,7 @@ describe('listModeles()', () => {
 
   it('sans filtre — retourne tous les modèles avec marque_nom', async () => {
     db.__setListResponse(SQL_LIST_MODELES_BASE, [MODELE_ROW])
-    const res = await listModeles(db, 1)
+    const res = await listModeles(db)
     expect(res).toHaveLength(1)
     expect(res[0].nom).toBe('iPhone 14 Pro')
     expect(res[0].marque_nom).toBe('Apple')
@@ -245,20 +245,20 @@ describe('listModeles()', () => {
 
   it('filtre par marque_id', async () => {
     db.__setListResponse(SQL_LIST_MODELES_MARQUE, [MODELE_ROW])
-    const res = await listModeles(db, 1, { marque_id: 1 })
+    const res = await listModeles(db, { marque_id: 1 })
     expect(res).toHaveLength(1)
   })
 
   it('filtre par marque_id + type', async () => {
     db.__setListResponse(SQL_LIST_MODELES_MARQUE_TYPE, [MODELE_ROW])
-    const res = await listModeles(db, 1, { marque_id: 1, type: 'smartphone' })
+    const res = await listModeles(db, { marque_id: 1, type: 'smartphone' })
     expect(res).toHaveLength(1)
     expect(res[0].type).toBe('smartphone')
   })
 
   it('retourne tableau vide si aucun modèle', async () => {
     db.__setListResponse(SQL_LIST_MODELES_BASE, [])
-    const res = await listModeles(db, 1)
+    const res = await listModeles(db)
     expect(res).toEqual([])
   })
 })
@@ -272,17 +272,17 @@ describe('createModele()', () => {
 
   beforeEach(() => {
     db = createMockD1()
-    db.__setResponse('INSERT INTO modeles_appareils (boutique_id, marque_id, nom, type, annee) VALUES (?, ?, ?, ?, ?) RETURNING id', { id: 15 })
+    db.__setResponse('INSERT INTO modeles_appareils (marque_id, nom, type, annee, phone_slug, source) VALUES (?, ?, ?, ?, ?, \'manual\') RETURNING id', { id: 15 })
     db.__setResponse('INSERT INTO audit_logs', null)
   })
 
   it('retourne l\'id du modèle créé', async () => {
-    const id = await createModele(db, { boutique_id: 1, marque_id: 1, nom: 'iPhone 15' }, 42)
+    const id = await createModele(db, { marque_id: 1, nom: 'iPhone 15' }, 42)
     expect(id).toBe(15)
   })
 
   it('utilise smartphone comme type par défaut', async () => {
-    const id = await createModele(db, { boutique_id: 1, marque_id: 1, nom: 'Test' }, 42)
+    const id = await createModele(db, { marque_id: 1, nom: 'Test' }, 42)
     expect(id).toBe(15)
   })
 })

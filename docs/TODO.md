@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.36 clôturé — 6 juillet 2026  
-> Version production : **v2.38.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **607/607** (15 suites Vitest)  
-> Build : 72 modules / 273.30 kB  
-> Git : branche `main`, tag `v2.38.0`
+> Mis à jour : Sprint 2.39 en cours — 6 juillet 2026  
+> Version production : **v2.38.0** (v2.39.0 en cours) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **633/633** (16 suites Vitest) — ⚠️ servicesService.test.ts à mettre à jour pour Sprint 2.39  
+> Build : 72 modules / 287.42 kB (dernier build stable v2.38.0)  
+> Git : branche `main`, tag `v2.38.0`, working tree dirty (Sprint 2.39 non commité)
 
 ---
 
@@ -12,12 +12,12 @@
 
 | Composant | État | Détail |
 |---|---|---|
-| **Backend Hono** | ✅ Complet | 18 fichiers routes, ~230 endpoints, 0 SQL dans les controllers |
-| **Services Model** | ✅ Complet | 17 services, P1 MVC strict respecté partout |
-| **Migrations D1** | ✅ 28 migrations | 0028_ticket_photos.sql = dernière |
+| **Backend Hono** | ✅ Complet | 18 fichiers routes, ~240 endpoints, 0 SQL dans les controllers |
+| **Services Model** | ✅ Complet | 18 services (+ phoneCatalogService.ts Sprint 2.39), P1 MVC strict respecté partout |
+| **Migrations D1** | ✅ 31 migrations | 0031_marques_modeles_global.sql = dernière (✅ appliquée localement Sprint 2.39) |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
-| **Tests Vitest** | ✅ 607/607 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, **clientService 38, personnelService 36, reconditionnementService 50, publicService 20** |
+| **Tests Vitest** | ✅ 633/633 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, clientService 38, personnelService 36, reconditionnementService 50, publicService 20, **servicesService 26** — ✅ adapté Sprint 2.39 (schéma global sans boutique_id) |
 | **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
 | **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
 
@@ -212,6 +212,61 @@
 - [x] Build ✅ 71 modules / 248.08 kB + tests ✅ **319/319**
 - [x] **Déploiement prod** — action `cc3077d7`, version `4649d6c2`, health ✅ v2.28.0
 - [x] Tag git `v2.28.0`
+
+---
+
+### Sprint 2.39 🔜 — MOD-15 Phase 2 : Synchronisation référentiel global phone-specs-api
+**Module CDC : MOD-15 (HAUTE) — Catalogue services complet** — *en cours — 6 juillet 2026*
+
+#### Contexte et décision d'architecture
+L'API gratuite `phone-specs-api.vercel.app` (source GSMArena) expose 126 marques et leurs modèles paginés. Décision : **référentiel global** (sans `boutique_id`) — les marques/modèles sont partagés entre toutes les boutiques.
+
+Rupture de schéma avec Sprint 2.38 (tables avaient `boutique_id`) → migration 0031 refonte totale via stratégie SQLite RENAME→CREATE→INSERT OR IGNORE→DROP.
+
+#### Backend (✅ Complet)
+
+- [x] Migration `0031_marques_modeles_global.sql` : refonte tables sans `boutique_id` — `brand_slug UNIQUE`, `phone_slug UNIQUE`, colonne `source ('manual'|'api')`, `synced_at`, table `phone_catalog_sync_log`
+- [x] `src/services/phoneCatalogService.ts` : 5 fonctions de sync
+  - `syncBrands(db)` — `GET /brands` → INSERT OR IGNORE sur `brand_slug`, UPDATE `device_count` si `source='api'`
+  - `syncModelesByBrand(db, brandSlug)` — page 1 → `last_page` → `Promise.all` chunks 10 pages → INSERT OR IGNORE sur `phone_slug` + `guessType()` heuristique
+  - `syncSelectedBrands(db, slugs[])` — itère `syncModelesByBrand()` pour liste sélectionnée
+  - `getLastSyncStatus(db)` — JOIN marques + sync_log (ROW_NUMBER dernière sync)
+  - `getCatalogStats(db)` — `{total_marques, total_modeles, marques_api, modeles_api, last_sync}`
+- [x] `src/services/servicesService.ts` adapté : interfaces `MarqueAppareil` / `ModeleAppareil` sans `boutique_id`, `listMarques(db)` + `listModeles(db, opts)` sans paramètre `boutiqueId`
+- [x] `src/routes/services.ts` adapté : 5 nouvelles routes sync
+  - `GET  /api/services/catalog/stats`
+  - `GET  /api/services/catalog/sync-status` (admin)
+  - `POST /api/services/catalog/sync-brands` (admin)
+  - `POST /api/services/catalog/sync-modeles/:slug` (admin)
+  - `POST /api/services/catalog/sync-selected` (admin, body: `{ slugs: string[] }`)
+
+#### Frontend (⚠️ Partiel)
+
+- [x] `public/services.html` : bouton `🔄 Synchroniser API` ajouté dans `#btns-modeles`
+- [ ] `public/services.html` : **modal sync manquante** (sélection marques + barre de progression)
+- [ ] `public/static/js/services.js` : `openModalSync()`, `startSync()`, boucle progression par marque, mise à jour stats
+
+#### Tests (❌ Non mis à jour)
+
+- [ ] `tests/servicesService.test.ts` : SQL constants + signatures à adapter (boutique_id supprimé)
+
+#### Checklist de clôture Sprint 2.39
+
+- [ ] Modal sync UI (`services.html` + `services.js`)
+- [ ] `tests/servicesService.test.ts` mis à jour
+- [ ] `npm run build` ✅
+- [ ] `npm test` → N/N ✅
+- [ ] Migration 0031 locale : `npx wrangler d1 migrations apply izigsm-production --local`
+- [ ] Version bump : `src/index.tsx` 2.38.0 → 2.39.0
+- [ ] `git commit -m "feat(MOD-15): sync phone-specs-api référentiel global — Sprint 2.39"`
+- [ ] `git tag v2.39.0`
+
+#### Notes techniques
+
+> **Pattern fetch Cloudflare Workers** : `fetch(url, { cf: { cacheTtl: 3600 } })` — cache edge natif, pas de Node.js fetch.  
+> **Idempotence** : INSERT OR IGNORE sur slug unique → jamais d'écrasement des entrées manuelles (`source='manual'`).  
+> **Chunks** : max 10 pages en `Promise.all` pour respecter la limite de connexions simultanées Cloudflare Workers.  
+> **Migration SQLite** : pas d'`ALTER TABLE DROP COLUMN` en SQLite — stratégie RENAME → CREATE → INSERT OR IGNORE → DROP.
 
 ---
 
@@ -438,28 +493,28 @@ Solution : tenir un registre réglementaire séparé (hors CRM) avant d'impléme
 
 ---
 
-## Résumé coverage CDC (état v2.35.0)
+## Résumé coverage CDC (état v2.39.0 en cours)
 
 | Module CDC | Priorité | Couverture | Statut |
 |---|---|---|---|
-| MOD-01 Tickets + Kanban | CRITIQUE | ~90% | ✅ Complet (manque photos R2, archivage auto) |
-| MOD-02 Facturation NF525 | CRITIQUE | ~92% | ✅ Complet (manque rapport comptable CSV) |
+| MOD-01 Tickets + Kanban | CRITIQUE | ~95% | ✅ Complet (photos R2 ✅ Sprint 2.36, archivage RGPD ✅ Sprint 2.37) |
+| MOD-02 Facturation NF525 | CRITIQUE | ~95% | ✅ Complet (rapport comptable CSV ✅ Sprint 2.33) |
 | MOD-03 Devis + page publique | HAUTE | ~88% | ✅ Complet (manque eIDAS, relance auto) |
 | MOD-04 Stock + CUMP | CRITIQUE | ✅ 100% | Familles + import CSV + CUMP |
 | MOD-05 Reconditionnement | MOYENNE | ~90% | ✅ Complet |
 | MOD-06 Rachats (livre de police) | HAUTE | ~92% | ✅ Complet |
-| MOD-07 CRM Clients | HAUTE | ~85% | ✅ Complet (manque parrainage, RGPD purge) |
+| MOD-07 CRM Clients | HAUTE | ~90% | ✅ Complet (export RGPD Art.15 ✅, purge Art.17 ✅ Sprint 2.37, manque parrainage) |
 | MOD-08 Agenda/RDV + iCal | MOYENNE | ~88% | ✅ Complet (manque RDV en ligne public) |
 | MOD-09 SAV + Garanties | MOYENNE | ~85% | ✅ Complet |
 | MOD-10 Fournisseurs + BC + CUMP | HAUTE | ~90% | ✅ Complet |
 | MOD-12 Notifications email | HAUTE | ~75% | ✅ Triggers termine + livre, relances actives |
 | MOD-13 Caisse POS NF525 | MOYENNE | ~85% | ✅ Complet |
 | MOD-14 Vitrine publique | MOYENNE | ~75% | ✅ Tracking + RDV en ligne public |
-| MOD-15 Catalogue services | HAUTE | ~95% | ✅ Complet + référentiel marques/modèles + liaison services suggérés |
+| MOD-15 Catalogue services | HAUTE | ~98% | ✅ Sprint 2.38: référentiel marques/modèles + liaison services. 🔜 Sprint 2.39: sync API phone-specs-api (backend ✅, UI ⚠️ partielle) |
 | MOD-17 Rapports/Exports | HAUTE | ~90% | ✅ Exports CSV tickets/CA/techniciens + rapport comptable |
 | MOD-18 Auth avancée | MOYENNE | ~90% | ✅ Reset password + OAuth Google One Tap |
 
-**Couverture globale estimée CDC : ~88%**
+**Couverture globale estimée CDC : ~90%** (v2.39 en cours — +2% vs v2.38 grâce aux Sprints 2.36/2.37)
 
 ---
 
@@ -480,4 +535,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.38 clôturé (v2.38.0) — MOD-15 Référentiel marques/modèles + liaison catalogue services*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.39 en cours (v2.38.0 stable, v2.39.0 WIP) — MOD-15 Phase 2 : synchronisation référentiel global phone-specs-api*

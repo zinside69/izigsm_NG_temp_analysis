@@ -703,6 +703,242 @@ async function removeLiaison(serviceId) {
   await refreshLiaisonList(modeleId);
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SYNC API PHONE-SPECS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Cache des données de statut sync (marques + nb modèles + dernière sync) */
+let _syncData        = [];
+let _syncDataFiltered = [];
+let _syncInProgress  = false;
+
+/**
+ * Ouvre la modale de synchronisation API.
+ * Charge le statut via GET /api/services/catalog/sync-status.
+ */
+async function openModalSync() {
+  // Reset de l'UI
+  _showSyncStep('select');
+  document.getElementById('sync-btn-start').style.display  = '';
+  document.getElementById('sync-btn-cancel').style.display = '';
+  document.getElementById('sync-btn-close').style.display  = 'none';
+  document.getElementById('sync-log').innerHTML            = '';
+  document.getElementById('sync-progress-bar').style.width = '0%';
+
+  openModal('modal-sync');
+  await _loadSyncStatus();
+}
+
+/**
+ * Charge la liste des marques disponibles (sync-status) pour les afficher.
+ */
+async function _loadSyncStatus() {
+  const listEl = document.getElementById('sync-marques-list');
+  listEl.innerHTML = `<div class="empty-state" style="padding:16px;"><div class="es-icon">⏳</div><div class="es-title">Chargement…</div></div>`;
+
+  const res = await apiGet('/api/services/catalog/sync-status');
+  if (!res.ok && !res.data) {
+    // Fallback : utiliser la liste des marques locales si l'endpoint renvoie une erreur
+    _syncData = _marques.map(m => ({
+      id: m.id,
+      nom: m.nom,
+      brand_slug: m.brand_slug || null,
+      nb_modeles: m.nb_modeles || 0,
+      synced_at: m.synced_at || null,
+    }));
+  } else {
+    _syncData = Array.isArray(res.data) ? res.data : (res.data?.data || _marques.map(m => ({
+      id: m.id, nom: m.nom, brand_slug: m.brand_slug || null,
+      nb_modeles: m.nb_modeles || 0, synced_at: m.synced_at || null,
+    })));
+  }
+
+  // Filtrer les marques sans brand_slug (elles ne peuvent pas être syncées)
+  _syncData = _syncData.filter(m => m.brand_slug);
+  _syncDataFiltered = [..._syncData];
+  _renderSyncMarques();
+}
+
+/**
+ * Rend la liste checkboxes des marques dans la modale sync.
+ */
+function _renderSyncMarques() {
+  const listEl    = document.getElementById('sync-marques-list');
+  const countEl   = document.getElementById('sync-count-label');
+
+  if (!_syncDataFiltered.length) {
+    listEl.innerHTML = `
+      <div class="empty-state" style="padding:16px;">
+        <div class="es-icon">📭</div>
+        <div class="es-title">Aucune marque avec brand_slug</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
+          Importez d'abord les marques via
+          <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="importAllBrands()">
+            📥 Importer toutes les marques
+          </button>
+        </div>
+      </div>`;
+    countEl.textContent = '0 sélectionnée(s)';
+    return;
+  }
+
+  listEl.innerHTML = _syncDataFiltered.map(m => {
+    const syncedLabel = m.synced_at
+      ? `<span style="font-size:11px;color:#16a34a;">✓ synced ${_relativeDate(m.synced_at)}</span>`
+      : `<span style="font-size:11px;color:#94a3b8;">non synced</span>`;
+    return `
+      <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;
+                    border-radius:6px;cursor:pointer;font-size:13px;color:#374151;"
+             onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="sync-cb" data-slug="${escHtml(m.brand_slug)}"
+          style="width:15px;height:15px;cursor:pointer;" onchange="_updateSyncCount()">
+        <span style="flex:1;font-weight:500;">${escHtml(m.nom)}</span>
+        <span style="font-size:11px;color:#94a3b8;margin-right:6px;">${m.nb_modeles || 0} modèles</span>
+        ${syncedLabel}
+      </label>`;
+  }).join('');
+
+  _updateSyncCount();
+}
+
+/** Met à jour le compteur de sélection */
+function _updateSyncCount() {
+  const checked = document.querySelectorAll('.sync-cb:checked').length;
+  document.getElementById('sync-count-label').textContent = `${checked} sélectionnée(s)`;
+}
+
+/** Tout sélectionner / désélectionner */
+function syncSelectAll(checked) {
+  document.querySelectorAll('.sync-cb').forEach(cb => { cb.checked = checked; });
+  _updateSyncCount();
+}
+
+/** Filtre la liste de marques dans la modale */
+function syncFilterMarques(q) {
+  const lq = q.toLowerCase().trim();
+  _syncDataFiltered = lq
+    ? _syncData.filter(m => m.nom.toLowerCase().includes(lq))
+    : [..._syncData];
+  _renderSyncMarques();
+}
+
+/**
+ * Import de toutes les marques depuis l'API (POST /api/services/catalog/sync-brands).
+ * Accessible depuis le lien dans l'empty state.
+ */
+async function importAllBrands() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ Import…';
+  const res = await apiPost('/api/services/catalog/sync-brands', {});
+  if (res.ok || res.success) {
+    showFlash(`Marques importées !`, 'success');
+    await loadMarques();        // rafraîchir la liste principale
+    await _loadSyncStatus();    // rafraîchir la liste sync
+  } else {
+    showFlash(res.error || 'Erreur lors de l\'import.', 'error');
+    btn.disabled = false;
+    btn.textContent = '📥 Importer toutes les marques';
+  }
+}
+
+/**
+ * Lance la synchronisation séquentielle des marques sélectionnées.
+ */
+async function startSync() {
+  const slugs = [...document.querySelectorAll('.sync-cb:checked')]
+    .map(cb => cb.dataset.slug)
+    .filter(Boolean);
+
+  if (!slugs.length) { showFlash('Sélectionnez au moins une marque.', 'error'); return; }
+
+  _syncInProgress = true;
+  _showSyncStep('progress');
+  document.getElementById('sync-btn-start').style.display  = 'none';
+  document.getElementById('sync-btn-cancel').style.display = 'none';
+
+  const logEl  = document.getElementById('sync-log');
+  const barEl  = document.getElementById('sync-progress-bar');
+  const lblEl  = document.getElementById('sync-progress-label');
+  const total  = slugs.length;
+  let   done   = 0;
+  let   totalAdded = 0;
+  let   totalErrors = 0;
+
+  const _log = (msg, color = '#374151') => {
+    logEl.innerHTML += `<div style="color:${color};padding:1px 0;">${escHtml(msg)}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  _log(`Début — ${total} marque(s) à synchroniser`);
+
+  for (const slug of slugs) {
+    const marqueNom = _syncData.find(m => m.brand_slug === slug)?.nom || slug;
+    _log(`⏳ Sync ${marqueNom}…`, '#6366f1');
+
+    try {
+      const res = await apiPost(`/api/services/catalog/sync-modeles/${slug}`, {});
+      if (res.ok || res.success) {
+        const added = res.data?.added ?? res.added ?? 0;
+        const total_modeles = res.data?.total ?? res.total ?? 0;
+        totalAdded += added;
+        _log(`  ✓ ${marqueNom} — ${added} nouveau(x) / ${total_modeles} total`, '#059669');
+      } else {
+        totalErrors++;
+        _log(`  ✗ ${marqueNom} — ${res.error || 'erreur inconnue'}`, '#ef4444');
+      }
+    } catch (err) {
+      totalErrors++;
+      _log(`  ✗ ${marqueNom} — exception: ${err.message}`, '#ef4444');
+    }
+
+    done++;
+    const pct = Math.round((done / total) * 100);
+    barEl.style.width     = `${pct}%`;
+    lblEl.textContent     = `${done} / ${total}`;
+  }
+
+  _log(`─────────────────────────────────────────`);
+  _log(`Terminé — ${totalAdded} modèle(s) ajouté(s), ${totalErrors} erreur(s)`, totalErrors ? '#f59e0b' : '#059669');
+
+  // Afficher le résumé
+  _syncInProgress = false;
+  document.getElementById('sync-summary-text').textContent =
+    `${totalAdded} modèle(s) ajouté(s) · ${total - totalErrors} marque(s) ok · ${totalErrors} erreur(s)`;
+  _showSyncStep('done');
+  document.getElementById('sync-btn-close').style.display = '';
+
+  // Rafraîchir les listes
+  await loadMarques();
+  if (_selectedMarque) await loadModeles(_selectedMarque);
+}
+
+/** Ferme la modale sync et remet en état initial */
+function closeSyncModal() {
+  closeModal('modal-sync');
+  _showSyncStep('select');
+  document.getElementById('sync-btn-start').style.display  = '';
+  document.getElementById('sync-btn-cancel').style.display = '';
+  document.getElementById('sync-btn-close').style.display  = 'none';
+}
+
+/** Affiche l'étape souhaitée dans la modale sync */
+function _showSyncStep(step) {
+  ['select', 'progress', 'done'].forEach(s => {
+    const el = document.getElementById(`sync-step-${s}`);
+    if (el) el.style.display = (s === step) ? '' : 'none';
+  });
+}
+
+/** Formatte une date ISO en "il y a X j" */
+function _relativeDate(iso) {
+  if (!iso) return '';
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 3600)   return `il y a ${Math.round(diff / 60)} min`;
+  if (diff < 86400)  return `il y a ${Math.round(diff / 3600)} h`;
+  return `il y a ${Math.round(diff / 86400)} j`;
+}
+
 window.switchTab         = switchTab;
 window.openModalMarque   = openModalMarque;
 window.saveMarque        = saveMarque;
@@ -715,3 +951,11 @@ window.filterModeles     = filterModeles;
 window.openModalLiaison  = openModalLiaison;
 window.addLiaison        = addLiaison;
 window.removeLiaison     = removeLiaison;
+// Sync API
+window.openModalSync     = openModalSync;
+window.startSync         = startSync;
+window.closeSyncModal    = closeSyncModal;
+window.syncSelectAll     = syncSelectAll;
+window.syncFilterMarques = syncFilterMarques;
+window.importAllBrands   = importAllBrands;
+window._updateSyncCount  = _updateSyncCount;

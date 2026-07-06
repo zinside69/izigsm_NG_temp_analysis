@@ -127,6 +127,7 @@
           <div id="btns-modeles" style="display:none;gap:8px;">
             <button class="btn btn-secondary" onclick="openModalMarque()">＋ Marque</button>
             <button class="btn btn-primary"   onclick="openModalModele()">＋ Modèle</button>
+            <button class="btn" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="openModalSync()">🔄 Synchroniser API</button>
           </div>
           <div class="topbar-avatar" id="topbar-avatar">U</div>
         </div>
@@ -327,6 +328,67 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-modele')">Annuler</button>
         <button class="btn btn-primary"   onclick="saveModele()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal Sync API phone-specs ────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-sync">
+    <div class="modal" style="max-width:680px;">
+      <div class="modal-title">🔄 Synchroniser depuis phone-specs-api</div>
+
+      <!-- Étape 1 : sélection des marques -->
+      <div id="sync-step-select">
+        <p style="font-size:13px;color:#64748b;margin-bottom:12px;">
+          Sélectionnez les marques à synchroniser. Les modèles existants ne seront
+          <strong>pas écrasés</strong> (INSERT OR IGNORE sur le slug).
+        </p>
+
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="syncSelectAll(true)">Tout sélectionner</button>
+          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="syncSelectAll(false)">Tout désélectionner</button>
+          <input type="search" class="form-control" id="sync-search-marque"
+            placeholder="🔍 Filtrer…" style="width:160px;font-size:12px;"
+            oninput="syncFilterMarques(this.value)">
+          <span style="margin-left:auto;font-size:12px;color:#64748b;" id="sync-count-label">0 sélectionnée(s)</span>
+        </div>
+
+        <div id="sync-marques-list"
+          style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding:4px;">
+          <div class="empty-state" style="padding:16px;">
+            <div class="es-icon">⏳</div><div class="es-title">Chargement…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Étape 2 : progression (affichée pendant la sync) -->
+      <div id="sync-step-progress" style="display:none;">
+        <div style="font-size:13px;color:#374151;font-weight:600;margin-bottom:8px;">
+          Progression : <span id="sync-progress-label">0 / 0</span>
+        </div>
+        <div style="background:#e2e8f0;border-radius:999px;height:8px;margin-bottom:14px;overflow:hidden;">
+          <div id="sync-progress-bar"
+            style="height:8px;background:#4f46e5;border-radius:999px;transition:width .3s;width:0%;"></div>
+        </div>
+        <div id="sync-log"
+          style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+                 padding:10px 12px;font-size:12px;font-family:monospace;
+                 max-height:200px;overflow-y:auto;color:#374151;"></div>
+      </div>
+
+      <!-- Étape 3 : résumé final -->
+      <div id="sync-step-done" style="display:none;">
+        <div style="text-align:center;padding:16px 0 8px;">
+          <div style="font-size:36px;margin-bottom:8px;">✅</div>
+          <div style="font-weight:700;font-size:15px;color:#059669;">Synchronisation terminée</div>
+          <div style="font-size:13px;color:#64748b;margin-top:6px;" id="sync-summary-text"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="sync-btn-cancel" onclick="closeModal('modal-sync')">Annuler</button>
+        <button class="btn btn-primary"   id="sync-btn-start"  onclick="startSync()">🚀 Lancer la sync</button>
+        <button class="btn btn-secondary" id="sync-btn-close"  onclick="closeSyncModal()" style="display:none;">Fermer</button>
       </div>
     </div>
   </div>
