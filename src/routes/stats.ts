@@ -24,6 +24,10 @@ import {
   getTopProduits,
   getActiviteRecente,
   getRapportTechnicien,
+  exportCsvTickets,
+  exportCsvCa,
+  exportCsvTechniciens,
+  getRapportComptable,
 } from '../services/statsService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
@@ -158,6 +162,83 @@ stats.get('/stats/techniciens', requireRole('admin', 'gerant'), async (c) => {
   try {
     const { db, boutiqueId } = ctx(c)
     const data = await getRapportTechnicien(db, boutiqueId)
+    return c.json({ success: true, data })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
+// ─── GET /api/stats/export/csv — Exports CSV ─────────────────────────────────
+
+/**
+ * Génère un fichier CSV téléchargeable pour les types : tickets, ca, techniciens.
+ * Les paramètres from/to sont optionnels (défauts : mois courant ou -30 jours).
+ *
+ * @query type   — 'tickets' | 'ca' | 'techniciens'
+ * @query from   — YYYY-MM-DD (optionnel)
+ * @query to     — YYYY-MM-DD (optionnel)
+ * @query boutique_id (optionnel)
+ * @returns text/csv avec Content-Disposition attachment
+ */
+stats.get('/stats/export/csv', requireRole('admin', 'gerant', 'technicien'), async (c) => {
+  try {
+    const { db, boutiqueId } = ctx(c)
+    const q    = new URL(c.req.url).searchParams
+    const type = q.get('type') ?? 'tickets'
+    const from = q.get('from') ?? undefined
+    const to   = q.get('to')   ?? undefined
+
+    if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+    let csv  = ''
+    let name = ''
+
+    if (type === 'tickets') {
+      csv  = await exportCsvTickets(db, boutiqueId, from, to)
+      name = `tickets_${from ?? 'debut'}_${to ?? 'fin'}.csv`
+    } else if (type === 'ca') {
+      csv  = await exportCsvCa(db, boutiqueId, from, to)
+      name = `ca_${from ?? 'debut'}_${to ?? 'fin'}.csv`
+    } else if (type === 'techniciens') {
+      csv  = await exportCsvTechniciens(db, boutiqueId, from, to)
+      name = `techniciens_${from ?? 'debut'}_${to ?? 'fin'}.csv`
+    } else {
+      return c.json({ success: false, error: `Type inconnu : ${type}. Valeurs : tickets, ca, techniciens.` }, 400)
+    }
+
+    return new Response(csv, {
+      headers: {
+        'Content-Type':        'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${name}"`,
+      },
+    })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
+// ─── GET /api/stats/rapport-comptable — Synthèse TVA + modes paiement ────────
+
+/**
+ * Synthèse comptable sur une période : totaux TVA par taux + ventilation
+ * par mode de paiement. Accès restreint admin/gérant.
+ *
+ * @query from  — YYYY-MM-DD (optionnel, défaut : 1er du mois courant)
+ * @query to    — YYYY-MM-DD (optionnel, défaut : aujourd'hui)
+ * @query boutique_id (optionnel)
+ * @returns { success, data: { periode, nb_factures, total_ht, total_tva,
+ *            total_ttc, par_tva, par_mode_paiement } }
+ */
+stats.get('/stats/rapport-comptable', requireRole('admin', 'gerant'), async (c) => {
+  try {
+    const { db, boutiqueId } = ctx(c)
+    const q    = new URL(c.req.url).searchParams
+    const from = q.get('from') ?? undefined
+    const to   = q.get('to')   ?? undefined
+
+    if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+    const data = await getRapportComptable(db, boutiqueId, from, to)
     return c.json({ success: true, data })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)

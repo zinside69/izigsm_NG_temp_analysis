@@ -330,6 +330,279 @@ export async function getActiviteRecente(db: D1Database, boutiqueId: number, lim
   return all.slice(0, limit)
 }
 
+// ─── Exports CSV ──────────────────────────────────────────────────────────────
+
+/**
+ * Helper interne : convertit un tableau d'objets en chaîne CSV RFC 4180.
+ * Échappe les guillemets et les virgules, ajoute BOM UTF-8.
+ */
+function toCSV(rows: Record<string, any>[], headers: { key: string; label: string }[]): string {
+  const BOM  = '\uFEFF'
+  const sep  = ','
+  const esc  = (v: any): string => {
+    const s = v == null ? '' : String(v)
+    return s.includes(sep) || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s
+  }
+  const head = headers.map(h => esc(h.label)).join(sep)
+  const body = rows.map(r => headers.map(h => esc(r[h.key])).join(sep)).join('\r\n')
+  return `${BOM}${head}\r\n${body}`
+}
+
+/**
+ * Export CSV des tickets sur une période.
+ * Inclut : numéro, statut, appareil, client, technicien, dates, prix.
+ *
+ * @param db         Instance D1Database
+ * @param boutiqueId ID boutique
+ * @param from       Date début ISO (YYYY-MM-DD) — défaut : -30 jours
+ * @param to         Date fin ISO (YYYY-MM-DD) — défaut : aujourd'hui
+ * @returns Contenu CSV UTF-8 BOM
+ */
+export async function exportCsvTickets(
+  db:         D1Database,
+  boutiqueId: number,
+  from?:      string,
+  to?:        string
+): Promise<string> {
+  const dateFrom = from ?? "date('now','-30 days')"
+  const dateTo   = to   ?? "date('now')"
+
+  const rows = await db.prepare(`
+    SELECT
+      t.numero,
+      t.statut,
+      t.appareil_marque,
+      t.appareil_modele,
+      t.description_panne,
+      t.diagnostic,
+      c.nom   || ' ' || c.prenom  AS client,
+      c.email                     AS client_email,
+      c.telephone                 AS client_tel,
+      u.prenom || ' ' || u.nom    AS technicien,
+      ROUND(t.prix_estime, 2)     AS prix_estime,
+      ROUND(t.prix_final,  2)     AS prix_final,
+      DATE(t.created_at)          AS date_creation,
+      DATE(t.updated_at)          AS date_modification,
+      t.date_promesse
+    FROM tickets t
+    LEFT JOIN clients c ON c.id = t.client_id
+    LEFT JOIN users   u ON u.id = t.technicien_id
+    WHERE t.boutique_id = ?
+      AND DATE(t.created_at) BETWEEN ? AND ?
+    ORDER BY t.created_at DESC
+    LIMIT 5000
+  `).bind(
+    boutiqueId,
+    from ?? new Date(Date.now() - 30*86400000).toISOString().slice(0,10),
+    to   ?? new Date().toISOString().slice(0,10)
+  ).all<any>()
+
+  return toCSV(rows.results ?? [], [
+    { key: 'numero',            label: 'N° Ticket'          },
+    { key: 'statut',            label: 'Statut'             },
+    { key: 'appareil_marque',   label: 'Marque'             },
+    { key: 'appareil_modele',   label: 'Modèle'             },
+    { key: 'description_panne', label: 'Panne déclarée'     },
+    { key: 'diagnostic',        label: 'Diagnostic'         },
+    { key: 'client',            label: 'Client'             },
+    { key: 'client_email',      label: 'Email client'       },
+    { key: 'client_tel',        label: 'Tél. client'        },
+    { key: 'technicien',        label: 'Technicien'         },
+    { key: 'prix_estime',       label: 'Prix estimé (€)'    },
+    { key: 'prix_final',        label: 'Prix final (€)'     },
+    { key: 'date_creation',     label: 'Date création'      },
+    { key: 'date_modification', label: 'Dernière modif.'    },
+    { key: 'date_promesse',     label: 'Date promesse'      },
+  ])
+}
+
+/**
+ * Export CSV du chiffre d'affaires (factures payées) sur une période.
+ * Inclut : numéro, client, date, montants HT/TTC, mode paiement.
+ *
+ * @param db         Instance D1Database
+ * @param boutiqueId ID boutique
+ * @param from       Date début ISO — défaut : début du mois courant
+ * @param to         Date fin ISO — défaut : aujourd'hui
+ * @returns Contenu CSV UTF-8 BOM
+ */
+export async function exportCsvCa(
+  db:         D1Database,
+  boutiqueId: number,
+  from?:      string,
+  to?:        string
+): Promise<string> {
+  const rows = await db.prepare(`
+    SELECT
+      f.numero,
+      c.nom  || ' ' || c.prenom  AS client,
+      c.email                    AS client_email,
+      DATE(f.date_emission)      AS date_emission,
+      DATE(f.date_echeance)      AS date_echeance,
+      ROUND(f.total_ht,   2)     AS total_ht,
+      ROUND(f.total_tva,  2)     AS total_tva,
+      ROUND(f.total_ttc,  2)     AS total_ttc,
+      f.mode_paiement,
+      f.statut,
+      COALESCE(f.notes, '')      AS notes
+    FROM factures f
+    LEFT JOIN clients c ON c.id = f.client_id
+    WHERE f.boutique_id = ?
+      AND f.statut = 'payee'
+      AND DATE(f.date_emission) BETWEEN ? AND ?
+    ORDER BY f.date_emission DESC
+    LIMIT 5000
+  `).bind(
+    boutiqueId,
+    from ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10),
+    to   ?? new Date().toISOString().slice(0,10)
+  ).all<any>()
+
+  return toCSV(rows.results ?? [], [
+    { key: 'numero',        label: 'N° Facture'       },
+    { key: 'client',        label: 'Client'           },
+    { key: 'client_email',  label: 'Email'            },
+    { key: 'date_emission', label: 'Date émission'    },
+    { key: 'date_echeance', label: 'Date échéance'    },
+    { key: 'total_ht',      label: 'Montant HT (€)'   },
+    { key: 'total_tva',     label: 'TVA (€)'          },
+    { key: 'total_ttc',     label: 'Montant TTC (€)'  },
+    { key: 'mode_paiement', label: 'Mode paiement'    },
+    { key: 'statut',        label: 'Statut'           },
+    { key: 'notes',         label: 'Notes'            },
+  ])
+}
+
+/**
+ * Export CSV d'activité des techniciens sur une période.
+ * Inclut : nom, total tickets, terminés, en cours, délai moyen, CA associé.
+ *
+ * @param db         Instance D1Database
+ * @param boutiqueId ID boutique
+ * @param from       Date début ISO — défaut : -30 jours
+ * @param to         Date fin ISO — défaut : aujourd'hui
+ * @returns Contenu CSV UTF-8 BOM
+ */
+export async function exportCsvTechniciens(
+  db:         D1Database,
+  boutiqueId: number,
+  from?:      string,
+  to?:        string
+): Promise<string> {
+  const rows = await db.prepare(`
+    SELECT
+      u.prenom || ' ' || u.nom AS technicien,
+      r.nom                    AS role,
+      COUNT(t.id)              AS total_tickets,
+      SUM(CASE WHEN t.statut IN ('termine','livre') THEN 1 ELSE 0 END)                         AS termines,
+      SUM(CASE WHEN t.statut NOT IN ('livre','annule','termine') THEN 1 ELSE 0 END)            AS en_cours,
+      ROUND(AVG(
+        CASE WHEN t.statut IN ('termine','livre')
+          THEN julianday(t.updated_at) - julianday(t.created_at)
+          ELSE NULL END
+      ), 1)                    AS delai_moyen_jours,
+      ROUND(COALESCE(SUM(t.prix_final), 0), 2) AS ca_genere
+    FROM users u
+    LEFT JOIN roles  r ON r.id  = u.role_id
+    LEFT JOIN tickets t ON t.technicien_id = u.id
+      AND t.boutique_id = ?
+      AND DATE(t.created_at) BETWEEN ? AND ?
+    WHERE u.boutique_id = ? AND u.actif = 1
+      AND r.nom IN ('admin','gerant','technicien')
+    GROUP BY u.id
+    ORDER BY total_tickets DESC
+  `).bind(
+    boutiqueId,
+    from ?? new Date(Date.now() - 30*86400000).toISOString().slice(0,10),
+    to   ?? new Date().toISOString().slice(0,10),
+    boutiqueId
+  ).all<any>()
+
+  return toCSV(rows.results ?? [], [
+    { key: 'technicien',       label: 'Technicien'          },
+    { key: 'role',             label: 'Rôle'                },
+    { key: 'total_tickets',    label: 'Total tickets'       },
+    { key: 'termines',         label: 'Terminés'            },
+    { key: 'en_cours',         label: 'En cours'            },
+    { key: 'delai_moyen_jours',label: 'Délai moyen (jours)' },
+    { key: 'ca_genere',        label: 'CA généré (€)'       },
+  ])
+}
+
+/**
+ * Rapport comptable : totaux TVA par taux + ventilation par mode paiement.
+ * Destiné à l'expert-comptable — agrège les factures payées sur une période.
+ *
+ * @param db         Instance D1Database
+ * @param boutiqueId ID boutique
+ * @param from       Date début ISO — défaut : début du mois courant
+ * @param to         Date fin ISO — défaut : aujourd'hui
+ * @returns { periode, totaux, par_tva, par_mode_paiement, nb_factures }
+ */
+export async function getRapportComptable(
+  db:         D1Database,
+  boutiqueId: number,
+  from?:      string,
+  to?:        string
+) {
+  const dateFrom = from ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10)
+  const dateTo   = to   ?? new Date().toISOString().slice(0,10)
+
+  const [totaux, parTva, parMode] = await Promise.all([
+    // Totaux globaux
+    db.prepare(`
+      SELECT
+        COUNT(*)                   AS nb_factures,
+        ROUND(SUM(total_ht),  2)   AS total_ht,
+        ROUND(SUM(total_tva), 2)   AS total_tva,
+        ROUND(SUM(total_ttc), 2)   AS total_ttc
+      FROM factures
+      WHERE boutique_id = ? AND statut = 'payee'
+        AND DATE(date_emission) BETWEEN ? AND ?
+    `).bind(boutiqueId, dateFrom, dateTo).first<any>(),
+
+    // Ventilation par taux de TVA (depuis lignes_document)
+    db.prepare(`
+      SELECT
+        ROUND(ld.tva_taux, 2)     AS taux_tva,
+        ROUND(SUM(ld.total_ht),  2) AS base_ht,
+        ROUND(SUM(ld.total_ttc - ld.total_ht), 2) AS montant_tva,
+        ROUND(SUM(ld.total_ttc), 2) AS total_ttc
+      FROM lignes_document ld
+      JOIN factures f ON f.id = ld.document_id AND ld.document_type = 'facture'
+      WHERE f.boutique_id = ? AND f.statut = 'payee'
+        AND DATE(f.date_emission) BETWEEN ? AND ?
+      GROUP BY ROUND(ld.tva_taux, 2)
+      ORDER BY taux_tva ASC
+    `).bind(boutiqueId, dateFrom, dateTo).all<any>(),
+
+    // Ventilation par mode de paiement
+    db.prepare(`
+      SELECT
+        COALESCE(mode_paiement, 'non renseigné') AS mode,
+        COUNT(*)                                  AS nb,
+        ROUND(SUM(total_ttc), 2)                  AS total_ttc
+      FROM factures
+      WHERE boutique_id = ? AND statut = 'payee'
+        AND DATE(date_emission) BETWEEN ? AND ?
+      GROUP BY mode_paiement
+      ORDER BY total_ttc DESC
+    `).bind(boutiqueId, dateFrom, dateTo).all<any>(),
+  ])
+
+  return {
+    periode:            { from: dateFrom, to: dateTo },
+    nb_factures:        totaux?.nb_factures      ?? 0,
+    total_ht:           totaux?.total_ht         ?? 0,
+    total_tva:          totaux?.total_tva        ?? 0,
+    total_ttc:          totaux?.total_ttc        ?? 0,
+    par_tva:            parTva.results            ?? [],
+    par_mode_paiement:  parMode.results           ?? [],
+  }
+}
+
 // ─── Rapport activité par technicien ─────────────────────────────────────────
 
 /**

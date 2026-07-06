@@ -42,6 +42,20 @@
     /* Barre de progression */
     .progress-bar { height: 6px; border-radius: 3px; background: #e5e7eb; overflow: hidden; }
     .progress-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+
+    /* Filtres date */
+    .date-input { border: 1px solid #e5e7eb; border-radius: 8px; padding: 5px 10px;
+                  font-size: .8rem; color: #374151; background: white; cursor: pointer;
+                  transition: border-color .15s; }
+    .date-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+
+    /* Bouton export */
+    .btn-export { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+                  border-radius: 8px; font-size: .8rem; font-weight: 600; cursor: pointer;
+                  border: 1px solid #d1fae5; background: #f0fdf4; color: #15803d;
+                  transition: all .15s; }
+    .btn-export:hover { background: #dcfce7; border-color: #86efac; }
+    .btn-export:active { transform: scale(.97); }
   </style>
 </head>
 <body>
@@ -62,12 +76,20 @@
         </h1>
         <p class="text-sm text-gray-500 mt-1">Analytiques détaillées — CA, tickets, techniciens, clients</p>
       </div>
-      <!-- Sélecteur période -->
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500 font-medium">Période :</span>
-        <button class="period-btn active" data-period="3" onclick="Stats.setPeriod(3, this)">3 mois</button>
-        <button class="period-btn" data-period="6" onclick="Stats.setPeriod(6, this)">6 mois</button>
-        <button class="period-btn" data-period="12" onclick="Stats.setPeriod(12, this)">12 mois</button>
+      <!-- Filtres date + sélecteur période -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-gray-500 font-medium">Du :</label>
+          <input type="date" id="filter-from" class="date-input" onchange="Stats.setDateRange()">
+          <label class="text-xs text-gray-500 font-medium">Au :</label>
+          <input type="date" id="filter-to" class="date-input" onchange="Stats.setDateRange()">
+        </div>
+        <div class="flex items-center gap-1">
+          <span class="text-xs text-gray-400">|</span>
+          <button class="period-btn active" data-period="3" onclick="Stats.setPeriod(3, this)">3 m</button>
+          <button class="period-btn" data-period="6" onclick="Stats.setPeriod(6, this)">6 m</button>
+          <button class="period-btn" data-period="12" onclick="Stats.setPeriod(12, this)">12 m</button>
+        </div>
       </div>
     </div>
 
@@ -131,8 +153,8 @@
         </div>
       </div>
 
-      <!-- Répartition par type de document -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Répartition par type de document + rapport comptable -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div class="card p-6">
           <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">
             <i class="fas fa-chart-pie text-purple-400 mr-2"></i>Répartition CA par type
@@ -149,6 +171,44 @@
             <div class="skeleton h-6 w-full"></div>
             <div class="skeleton h-6 w-5/6"></div>
             <div class="skeleton h-6 w-4/6"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rapport comptable + export CA -->
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide">
+            <i class="fas fa-calculator text-indigo-400 mr-2"></i>Synthèse comptable
+          </h2>
+          <button class="btn-export" onclick="Stats.exportCsv('ca')">
+            <i class="fas fa-file-csv"></i>Exporter CA (CSV)
+          </button>
+        </div>
+        <div id="rapport-comptable-content">
+          <div class="grid grid-cols-3 gap-4 mb-4">
+            <div class="text-center p-4 bg-gray-50 rounded-xl">
+              <div class="text-xs text-gray-400 mb-1">Factures payées</div>
+              <div class="text-2xl font-bold text-gray-800" id="rc-nb-factures">—</div>
+            </div>
+            <div class="text-center p-4 bg-indigo-50 rounded-xl">
+              <div class="text-xs text-gray-400 mb-1">Total HT</div>
+              <div class="text-2xl font-bold text-indigo-700" id="rc-total-ht">—</div>
+            </div>
+            <div class="text-center p-4 bg-green-50 rounded-xl">
+              <div class="text-xs text-gray-400 mb-1">Total TTC</div>
+              <div class="text-2xl font-bold text-green-700" id="rc-total-ttc">—</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs font-bold text-gray-500 uppercase mb-2">TVA par taux</div>
+              <div id="rc-par-tva" class="space-y-1"></div>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-gray-500 uppercase mb-2">Par mode de paiement</div>
+              <div id="rc-par-mode" class="space-y-1"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -209,10 +269,15 @@
           <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide">
             <i class="fas fa-clock text-gray-400 mr-2"></i>Activité récente
           </h2>
-          <button onclick="Stats.refreshActivite()"
-            class="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
-            <i class="fas fa-sync mr-1"></i>Actualiser
-          </button>
+          <div class="flex items-center gap-3">
+            <button class="btn-export" onclick="Stats.exportCsv('tickets')">
+              <i class="fas fa-file-csv"></i>Exporter tickets (CSV)
+            </button>
+            <button onclick="Stats.refreshActivite()"
+              class="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
+              <i class="fas fa-sync mr-1"></i>Actualiser
+            </button>
+          </div>
         </div>
         <div id="activite-list" class="divide-y divide-gray-50">
           <div class="p-4 text-center text-gray-400 text-sm">Chargement…</div>
@@ -270,9 +335,14 @@
 
       <!-- Graphique charge par technicien -->
       <div class="card p-6">
-        <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">
-          <i class="fas fa-chart-bar text-purple-400 mr-2"></i>Tickets terminés par technicien (mois en cours)
-        </h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide">
+            <i class="fas fa-chart-bar text-purple-400 mr-2"></i>Tickets terminés par technicien
+          </h2>
+          <button class="btn-export" onclick="Stats.exportCsv('techniciens')">
+            <i class="fas fa-file-csv"></i>Exporter techniciens (CSV)
+          </button>
+        </div>
         <div class="relative" style="height: 240px">
           <canvas id="chart-techniciens"></canvas>
         </div>
@@ -335,6 +405,8 @@
     let _boutiqueId = null
     let _period     = 3  // mois affichés sur les graphiques
     let _tab        = 'ca'
+    let _from       = null  // filtre date début (YYYY-MM-DD)
+    let _to         = null  // filtre date fin   (YYYY-MM-DD)
 
     // Instances Chart.js
     const _charts = {}
@@ -345,6 +417,19 @@
       const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null')
       if (!user) { setTimeout(init, 150); return; }
       _boutiqueId = user.boutique_id
+
+      // Initialiser filtres date : mois courant par défaut
+      const now  = new Date()
+      const y    = now.getFullYear()
+      const m    = String(now.getMonth() + 1).padStart(2, '0')
+      const d    = String(now.getDate()).padStart(2, '0')
+      _from = `${y}-${m}-01`
+      _to   = `${y}-${m}-${d}`
+      const fFrom = document.getElementById('filter-from')
+      const fTo   = document.getElementById('filter-to')
+      if (fFrom) fFrom.value = _from
+      if (fTo)   fTo.value   = _to
+
       await loadAll()
     }
 
@@ -356,6 +441,7 @@
         loadTopProduits(),
         loadActivite(),
         loadTechniciens(),
+        loadRapportComptable(),
       ])
     }
 
@@ -366,6 +452,19 @@
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
       loadCaMensuel()
+    }
+
+    // ─── Filtres date ─────────────────────────────────────────────────────────
+
+    function setDateRange() {
+      const fFrom = document.getElementById('filter-from')
+      const fTo   = document.getElementById('filter-to')
+      _from = fFrom?.value || null
+      _to   = fTo?.value   || null
+      // Recharger les données dépendantes de la période
+      loadCaMensuel()
+      loadRapportComptable()
+      if (_tab === 'techniciens') loadTechniciens()
     }
 
     // ─── Onglets ──────────────────────────────────────────────────────────────
@@ -382,9 +481,10 @@
         }
       })
       // Lazy load selon l'onglet activé
-      if (tab === 'produits') loadTopProduits()
+      if (tab === 'produits')    loadTopProduits()
       if (tab === 'techniciens') loadTechniciens()
-      if (tab === 'tickets') { loadTicketsStatut(); loadActivite() }
+      if (tab === 'tickets')   { loadTicketsStatut(); loadActivite() }
+      if (tab === 'ca')          loadRapportComptable()
     }
 
     // ─── KPIs Dashboard ───────────────────────────────────────────────────────
@@ -713,8 +813,101 @@
       return icons[type] || icons.default
     }
 
+    // ─── Export CSV ───────────────────────────────────────────────────────────
+
+    async function exportCsv(type) {
+      try {
+        const qs = new URLSearchParams()
+        qs.set('type', type)
+        if (_boutiqueId) qs.set('boutique_id', _boutiqueId)
+        if (_from) qs.set('from', _from)
+        if (_to)   qs.set('to',   _to)
+
+        const token = typeof getToken === 'function' ? getToken() : ''
+        const resp  = await fetch(`/api/stats/export/csv?${qs}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        })
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}))
+          alert(`Erreur export : ${err.error ?? resp.status}`)
+          return
+        }
+        const blob = await resp.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        // Extraire nom de fichier depuis Content-Disposition ou construire
+        const cd   = resp.headers.get('Content-Disposition') ?? ''
+        const fnm  = cd.match(/filename="([^"]+)"/)?.[1]
+          ?? `${type}_${_from ?? 'debut'}_${_to ?? 'fin'}.csv`
+        a.href     = url
+        a.download = fnm
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } catch (e) {
+        alert(`Erreur lors de l'export : ${e.message}`)
+        console.error('Export CSV', e)
+      }
+    }
+
+    // ─── Rapport comptable ────────────────────────────────────────────────────
+
+    async function loadRapportComptable() {
+      try {
+        const qs = new URLSearchParams()
+        if (_boutiqueId) qs.set('boutique_id', _boutiqueId)
+        if (_from) qs.set('from', _from)
+        if (_to)   qs.set('to',   _to)
+        const r = await apiGet(`/api/stats/rapport-comptable?${qs}`)
+        if (!r.success) return
+        const d = r.data
+
+        const nbEl  = document.getElementById('rc-nb-factures')
+        const htEl  = document.getElementById('rc-total-ht')
+        const ttcEl = document.getElementById('rc-total-ttc')
+        if (nbEl)  nbEl.textContent  = d.nb_factures ?? 0
+        if (htEl)  htEl.textContent  = eur(d.total_ht)
+        if (ttcEl) ttcEl.textContent = eur(d.total_ttc)
+
+        // TVA par taux
+        const tvaEl = document.getElementById('rc-par-tva')
+        if (tvaEl) {
+          if (!d.par_tva?.length) {
+            tvaEl.innerHTML = '<p class="text-xs text-gray-400 italic">Aucune donnée.</p>'
+          } else {
+            tvaEl.innerHTML = d.par_tva.map(t => `
+              <div class="flex justify-between items-center text-sm py-1 border-b border-gray-50">
+                <span class="text-gray-600">TVA ${t.taux_tva}%</span>
+                <span class="font-medium text-gray-800">Base HT : ${eur(t.base_ht)}</span>
+                <span class="text-indigo-600 font-semibold">${eur(t.montant_tva)}</span>
+              </div>`).join('')
+          }
+        }
+
+        // Par mode de paiement
+        const modeEl = document.getElementById('rc-par-mode')
+        if (modeEl) {
+          if (!d.par_mode_paiement?.length) {
+            modeEl.innerHTML = '<p class="text-xs text-gray-400 italic">Aucune donnée.</p>'
+          } else {
+            const modeIcons = { carte: '💳', especes: '💵', cheque: '📄', virement: '🏦', autre: '💰' }
+            modeEl.innerHTML = d.par_mode_paiement.map(m => {
+              const icon = modeIcons[m.mode?.toLowerCase()] ?? '💰'
+              return `
+              <div class="flex justify-between items-center text-sm py-1 border-b border-gray-50">
+                <span class="text-gray-600">${icon} ${escHtml(m.mode)}</span>
+                <span class="text-xs text-gray-400">${m.nb} facture${m.nb > 1 ? 's' : ''}</span>
+                <span class="font-semibold text-green-700">${eur(m.total_ttc)}</span>
+              </div>`
+            }).join('')
+          }
+        }
+      } catch (e) { console.error('Rapport comptable', e) }
+    }
+
     // ─── API publique ─────────────────────────────────────────────────────────
-    return { init, switchTab, setPeriod, refreshActivite }
+    return { init, switchTab, setPeriod, setDateRange, refreshActivite, exportCsv }
 
   })()
 

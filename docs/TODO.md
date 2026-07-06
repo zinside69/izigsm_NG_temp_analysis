@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.32 clôturé — 6 juillet 2026  
-> Version production : **v2.32.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Mis à jour : Sprint 2.33 clôturé — 6 juillet 2026  
+> Version production : **v2.33.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
 > Build : 71 modules / 248.08 kB  
-> Git : branche `main`, tag `v2.32.0`, déploiement ✅
+> Git : branche `main`, tag `v2.33.0`, déploiement ✅
 
 ---
 
@@ -279,21 +279,24 @@
 
 ---
 
-### Sprint 2.33 🔜 — MOD-17 Rapports avancés : exports Excel + rapports périodiques
+### Sprint 2.33 ✅ — MOD-17 Rapports avancés : exports CSV + rapport comptable
 **Module CDC : MOD-17 (HAUTE)**
 
-État actuel :
-- `statsService.ts` ✅ — KPIs CA, tickets, techniciens, stock, caisse
-- `public/stats.html` ✅ — 4 onglets graphiques Chart.js
-- **Manque** : export Excel, rapport PDF période, rapport comptable
-
-À faire :
-- [ ] `GET /api/stats/export/csv?type=tickets&from=&to=` : export CSV tickets par période
-- [ ] `GET /api/stats/export/csv?type=ca&from=&to=` : export CSV chiffre d'affaires
-- [ ] `GET /api/stats/export/csv?type=techniciens&from=&to=` : rapport activité techniciens
-- [ ] `GET /api/stats/rapport-comptable` : totaux TVA par taux + modes paiement pour l'expert-comptable
-- [ ] `public/stats.html` : boutons "Exporter CSV" sur chaque onglet
-- [ ] Filtres date from/to dans l'UI stats (actuellement mois courant uniquement)
+- [x] `statsService.ts` : `toCSV()` helper (BOM UTF-8, RFC 4180, échappement guillemets)
+- [x] `statsService.ts` : `exportCsvTickets(db, boutiqueId, from?, to?)` — tickets + client + technicien
+- [x] `statsService.ts` : `exportCsvCa(db, boutiqueId, from?, to?)` — factures payées HT/TVA/TTC
+- [x] `statsService.ts` : `exportCsvTechniciens(db, boutiqueId, from?, to?)` — rapport activité équipe
+- [x] `statsService.ts` : `getRapportComptable(db, boutiqueId, from?, to?)` — TVA par taux + modes paiement
+- [x] `routes/stats.ts` : `GET /api/stats/export/csv?type=tickets|ca|techniciens&from=&to=` → text/csv
+- [x] `routes/stats.ts` : `GET /api/stats/rapport-comptable?from=&to=` → JSON (admin/gérant)
+- [x] `public/stats.html` : filtres date `from`/`to` dans le header (mois courant par défaut)
+- [x] `public/stats.html` : bouton "Exporter CA (CSV)" dans onglet CA + widget rapport comptable
+- [x] `public/stats.html` : bouton "Exporter tickets (CSV)" dans onglet Tickets
+- [x] `public/stats.html` : bouton "Exporter techniciens (CSV)" dans onglet Techniciens
+- [x] `public/stats.html` : `loadRapportComptable()` + `exportCsv(type)` — fetch avec JWT, download blob
+- [x] **607/607 tests** (15 suites — aucune régression)
+- [x] Version bump v2.33.0
+- [x] **Déploiement prod v2.33.0**
 
 ---
 
@@ -412,4 +415,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.32 clôturé, v2.32.0 en production — Sprint 2.33 à planifier*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.33 clôturé, v2.33.0 en production — Sprint 2.34 à démarrer*
