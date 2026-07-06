@@ -88,7 +88,7 @@ app.get('/api/health', (c) => {
     status:    'ok',
     app:       'iziGSM',
     version:   '2.32.0',
-    sprint:    '2.31 — MOD-14 RDV en ligne : getDisponibilites, createRdvPublic, rdv-public.html (3 étapes)',
+    sprint:    '2.32 — MOD-12 Email automatique statut livre : sendTicketLivre, hook tickets route',
     timestamp: new Date().toISOString(),
   })
 })
