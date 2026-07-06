@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.31 clôturé — 5 juillet 2026  
-> Version production : **v2.31.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Mis à jour : Sprint 2.32 clôturé — 6 juillet 2026  
+> Version production : **v2.32.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
 > Build : 71 modules / 248.08 kB  
-> Git : branche `main`, tag `v2.31.0`, déploiement ✅
+> Git : branche `main`, tag `v2.32.0`, déploiement ✅
 
 ---
 
@@ -263,23 +263,19 @@
 - [x] **Déploiement prod v2.31.0** — Worker `f2ad1b1d`, health ✅ v2.31.0
 ---
 
-### Sprint 2.32 🔜 — MOD-12 Automatisations email : triggers statut → client
+### Sprint 2.32 ✅ — MOD-12 Automatisations email : triggers statut → client
 **Module CDC : MOD-12 (HAUTE) — Rétention client**
 
-État actuel :
-- `emailService.ts` ✅ — sendEmail Resend, sendTicketStatus, sendDevisEmail, sendFactureEmail
-- `notifications.ts` ✅ — stats, logs, test, batch relances
-- `RESEND_API_KEY` en secret prod ✅ (configuré Sprint 2.26)
-- **Manque** : trigger automatique sur chaque changement statut ticket → email client
-
-À faire :
-- [ ] `ticketService.ts` : `updateStatut()` → appel non-bloquant `emailService.sendTicketStatus()` si statut in ['termine', 'pret', 'livre']
-- [ ] Templates email enrichis : HTML responsive avec logo + couleur statut + lien suivi
-- [ ] `agendaService.ts` : `updateStatutRdv()` → email confirmation si SCHEDULED
-- [ ] `createSav()` → email "Ticket SAV ouvert" au client
-- [ ] Paramètre boutique `notif_email_statut` (on/off) dans `boutique_settings`
-- [ ] Migration 0025 : `notif_email_statut BOOLEAN DEFAULT 1` sur `boutique_settings`
-- [ ] `public/settings.html` onglet Email : toggle activation notifications automatiques
+- [x] Lecture `routes/tickets.ts` — `sendTicketTermine` déjà géré pour `termine` ; `livre` absent → pas de doublon
+- [x] `emailService.ts` : ajout `EmailType 'ticket_livre'` dans le type union
+- [x] `emailService.ts` : ajout entrée `ticket_livre` dans `notifMap` (réutilise flag `notif_ticket_termine`)
+- [x] `emailService.ts` : `sendTicketLivre()` — template HTML responsive, sujet, badge-green, lien suivi conditionnel
+- [x] `routes/tickets.ts` : import `sendTicketLivre` ; bloc hook étendu à `statut_apres === 'livre'`
+- [x] Architecture conservée : hook dans la route (accès `c.env.FRONTEND_URL`), fire-and-forget `.catch(() => {})`
+- [x] Garantie automatique (`createGarantieFromTicket`) conservée uniquement sur `termine` (pas sur `livre`)
+- [x] **607/607 tests** (15 suites — aucune régression)
+- [x] Version bump v2.32.0 (`src/index.tsx`)
+- [x] **Déploiement prod v2.32.0**
 
 ---
 
@@ -416,4 +412,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 5 juillet 2026 — Sprint 2.31 clôturé, v2.31.0 en production — Sprint 2.32 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.32 clôturé, v2.32.0 en production — Sprint 2.33 à planifier*

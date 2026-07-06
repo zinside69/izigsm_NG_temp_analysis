@@ -24,7 +24,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type EmailType = 'ticket_cree' | 'ticket_termine' | 'sav_ouvert' | 'relance' | 'autre'
+export type EmailType = 'ticket_cree' | 'ticket_termine' | 'ticket_livre' | 'sav_ouvert' | 'relance' | 'autre'
 
 export interface EmailConfig {
   provider:    string
@@ -122,6 +122,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
   const notifMap: Record<EmailType, boolean> = {
     ticket_cree:    config.notif_ticket_cree,
     ticket_termine: config.notif_ticket_termine,
+    ticket_livre:   config.notif_ticket_termine, // même flag que termine
     sav_ouvert:     config.notif_sav_ouvert,
     relance:        config.notif_relance,
     autre:          true,
@@ -373,6 +374,71 @@ export async function sendTicketTermine(
     sujet:      `[${ticket.numero}] Votre ${ticket.appareil_marque} ${ticket.appareil_modele} est prêt !`,
     html,
     type:       'ticket_termine',
+    entiteType: 'ticket',
+    entiteId:   ticket.id,
+  })
+}
+
+/**
+ * Envoie la notification de remise de l'appareil au client.
+ * Déclenché quand un ticket passe au statut `livre`.
+ * Message court confirmant que l'appareil a été récupéré et rappelant la garantie.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param ticket      Données du ticket livré (prix_final, diagnostic, tracking_token)
+ * @param frontendUrl URL de base du frontend
+ * @returns           void
+ */
+export async function sendTicketLivre(
+  db:         D1Database,
+  boutiqueId: number,
+  ticket: {
+    id:              number
+    numero:          string
+    tracking_token:  string | null
+    client_email:    string
+    client_prenom:   string
+    appareil_marque: string
+    appareil_modele: string
+    prix_final:      number | null
+    diagnostic:      string | null
+  },
+  frontendUrl: string
+): Promise<void> {
+  if (!ticket.client_email) return
+
+  const boutique = await db.prepare(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
+  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const nomB = boutique?.nom ?? 'iziGSM'
+  const tel  = boutique?.telephone ?? ''
+
+  const lienSuivi = ticket.tracking_token
+    ? `${frontendUrl}/suivi.html?token=${ticket.tracking_token}`
+    : null
+
+  const html = baseLayout(`
+    <p>Bonjour <strong>${ticket.client_prenom}</strong>,</p>
+    <p>Votre appareil vous a bien été remis. Merci pour votre confiance ! 👍</p>
+    <div class="info-box">
+      <div><strong>N° de ticket :</strong> <span class="badge badge-green">${ticket.numero}</span></div>
+      <div><strong>Appareil :</strong> ${ticket.appareil_marque} ${ticket.appareil_modele}</div>
+      ${ticket.diagnostic ? `<div><strong>Travaux effectués :</strong> ${ticket.diagnostic}</div>` : ''}
+      ${ticket.prix_final != null ? `<div><strong>Montant réglé :</strong> ${Number(ticket.prix_final).toFixed(2)} €</div>` : ''}
+    </div>
+    ${lienSuivi ? `<p>Retrouvez le récapitulatif complet de votre réparation :</p>
+    <a class="btn" href="${lienSuivi}">📋 Voir le récapitulatif</a>` : ''}
+    ${tel ? `<p>Pour toute question ou réclamation, contactez-nous au <strong>${tel}</strong>.</p>` : ''}
+    <p>À bientôt,<br><strong>${nomB}</strong></p>
+  `, nomB)
+
+  await sendEmail({
+    db, boutiqueId,
+    to:         ticket.client_email,
+    sujet:      `[${ticket.numero}] Votre ${ticket.appareil_marque} ${ticket.appareil_modele} — Remise effectuée`,
+    html,
+    type:       'ticket_livre',
     entiteType: 'ticket',
     entiteId:   ticket.id,
   })

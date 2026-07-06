@@ -28,7 +28,7 @@ import {
 } from '../services/ticketService'
 import { getClientEmailPrenom } from '../services/clientService'
 import { createGarantieFromTicket } from '../services/garantiesService'
-import { sendTicketCree, sendTicketTermine } from '../services/emailService'
+import { sendTicketCree, sendTicketTermine, sendTicketLivre } from '../services/emailService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
@@ -196,24 +196,30 @@ tickets.put('/:id/statut', async (c) => {
       db, id, user.sub, statut as StatutTicket, commentaire
     )
 
-    // ── Hooks à la clôture (statut 'termine') — non bloquants ────────────────
+    // ── Hooks à la clôture (statut 'termine' ou 'livre') — non bloquants ────
     let garantieCreee: any = null
-    if (statut_apres === 'termine') {
+    if (statut_apres === 'termine' || statut_apres === 'livre') {
       const ticketRow = await getTicketBoutiqueId(db, id)
 
       if (ticketRow) {
-        // Garantie automatique
-        try {
-          garantieCreee = await createGarantieFromTicket(db, id, ticketRow.boutique_id)
-        } catch { /* non bloquant */ }
+        if (statut_apres === 'termine') {
+          // Garantie automatique uniquement à la clôture 'termine'
+          try {
+            garantieCreee = await createGarantieFromTicket(db, id, ticketRow.boutique_id)
+          } catch { /* non bloquant */ }
+        }
 
-        // Email notification
+        // Email notification (termine ou livre)
         try {
           const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
           const tFull = await getTicketAvecClient(db, id)
 
           if (tFull?.client_email) {
-            sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl).catch(() => {})
+            if (statut_apres === 'termine') {
+              sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl).catch(() => {})
+            } else {
+              sendTicketLivre(db, ticketRow.boutique_id, tFull, frontendUrl).catch(() => {})
+            }
           }
         } catch { /* non bloquant */ }
       }
