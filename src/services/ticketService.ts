@@ -11,13 +11,15 @@
  *   Depuis tout état non terminal → annule
  *
  * Fonctions exportées :
- *   listTickets(db, boutiqueId, opts)              — Liste paginée avec filtres
+ *   listTickets(db, boutiqueId, opts)              — Liste paginée avec filtres (dont archived)
  *   getKanban(db, boutiqueId)                      — Vue Kanban groupée par statut
  *   getTicketById(db, id)                          — Fiche complète (+ historique + photos)
  *   createTicket(db, boutiqueId, userId, data)     — Création + historique initial
  *   updateTicket(db, id, userId, data)             — Mise à jour champs éditables
  *   updateStatut(db, id, userId, statut, comment)  — Machine à états + champs date
  *   deleteTicket(db, id, userId)                   — Soft delete (actif = 0)
+ *   archiveTicket(db, id, userId)                  — Sprint 2.37 : archivage manuel ticket terminal
+ *   checkAndArchiveTickets(db, boutiqueId, days)   — Sprint 2.37 : batch auto-archivage 90j
  *   getTicketBoutiqueId(db, id)                    — Résout ticket → boutique_id (hook termine)
  *   getTicketAvecClient(db, id)                    — Données ticket + email client (hook email)
  */
@@ -66,6 +68,7 @@ export interface ListTicketsOpts {
   technicien?:   number
   client_id?:    number
   search?:       string
+  archived?:     boolean   // Sprint 2.37 — true = tickets archivés seulement
   limit?:        number
   offset?:       number
   page?:         number
@@ -176,8 +179,15 @@ export async function listTickets(
     limit: String(opts.limit ?? 20),
   })
 
+  // Sprint 2.37 : archived = true → tickets archivés ; par défaut → tickets non archivés
   const conditions: string[] = ['t.boutique_id = ?', 't.actif = 1']
   const bindings:   any[]    = [boutiqueId]
+
+  if (opts.archived) {
+    conditions.push('t.archived_at IS NOT NULL')
+  } else {
+    conditions.push('t.archived_at IS NULL')
+  }
 
   if (opts.statut) {
     conditions.push('t.statut = ?')
@@ -589,6 +599,78 @@ export async function getTicketBoutiqueId(
  * @param id - ID du ticket
  * @returns  Données ticket + client_email + client_prenom, ou `null`
  */
+// ─── Archivage (Sprint 2.37) ─────────────────────────────────────────────────
+
+/**
+ * Archive manuellement un ticket.
+ * Conditions : ticket actif, non encore archivé, statut terminal (livre ou annule).
+ *
+ * @param db     — Instance D1Database
+ * @param id     — ID du ticket
+ * @param userId — ID utilisateur qui archive
+ * @throws si ticket introuvable, déjà archivé, ou statut non terminal
+ */
+export async function archiveTicket(
+  db:     D1Database,
+  id:     number,
+  userId: number
+): Promise<void> {
+  const ticket = await db.prepare(
+    `SELECT id, statut, archived_at, actif FROM tickets WHERE id = ? AND actif = 1`
+  ).bind(id).first<{ id: number; statut: string; archived_at: string | null; actif: number }>()
+
+  if (!ticket)            throw new Error(`Ticket #${id} introuvable.`)
+  if (ticket.archived_at) throw new Error(`Ticket #${id} déjà archivé.`)
+  if (!['livre', 'annule'].includes(ticket.statut))
+    throw new Error(`Seuls les tickets livrés ou annulés peuvent être archivés (statut actuel : ${ticket.statut}).`)
+
+  await db.prepare(
+    `UPDATE tickets SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).bind(id).run()
+
+  await auditLog(db, {
+    user_id:     userId,
+    action:      'ARCHIVE_TICKET',
+    entite_type: 'ticket',
+    entite_id:   id,
+    avant:       { statut: ticket.statut, archived_at: null },
+    apres:       { archived_at: 'NOW' },
+  })
+}
+
+/**
+ * Batch auto-archivage : archive tous les tickets livrés ou annulés
+ * dont la dernière mise à jour remonte à plus de `days` jours (défaut : 90j).
+ * Appelé périodiquement via le hook probabiliste du middleware global.
+ *
+ * @param db         — Instance D1Database
+ * @param boutiqueId — ID boutique ciblée (ou 0 pour toutes les boutiques)
+ * @param days       — Seuil en jours (défaut 90)
+ * @returns          — Nombre de tickets archivés
+ */
+export async function checkAndArchiveTickets(
+  db:         D1Database,
+  boutiqueId: number,
+  days:       number = 90
+): Promise<number> {
+  const conditions = boutiqueId > 0
+    ? `boutique_id = ${boutiqueId} AND`
+    : ''
+
+  const result = await db.prepare(`
+    UPDATE tickets
+    SET    archived_at = CURRENT_TIMESTAMP,
+           updated_at  = CURRENT_TIMESTAMP
+    WHERE  ${conditions}
+           actif       = 1
+      AND  archived_at IS NULL
+      AND  statut      IN ('livre', 'annule')
+      AND  updated_at <= datetime('now', '-' || ? || ' days')
+  `).bind(days).run()
+
+  return (result.meta.changes as number) ?? 0
+}
+
 export async function getTicketAvecClient(
   db: D1Database,
   id: number

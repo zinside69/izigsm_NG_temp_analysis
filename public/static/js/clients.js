@@ -294,6 +294,7 @@ async function deleteClient(id) {
 async function viewHistorique(id) {
   const c = _clients.find(x => x.id == id);
   if (!c) return;
+  _rgpdClientId = id;  // Sprint 2.37 — capture pour export/purge RGPD
 
   _setText('hist-title', _esc(_fullName(c)));
   _setText('hist-subtitle', c.email || c.telephone || '');
@@ -840,6 +841,74 @@ function _clearClientForm() {
   if (pays) pays.value = 'France';
 }
 
+// ─── RGPD (Sprint 2.37) ───────────────────────────────────────────────────────
+
+/** ID du client actuellement ouvert dans le modal historique (Sprint 2.37) */
+let _rgpdClientId = null;
+
+/**
+ * exportRgpd — Déclenche le téléchargement JSON (Art. 15 RGPD)
+ */
+async function exportRgpd() {
+  if (!_rgpdClientId) return;
+  try {
+    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
+    const token   = session.accessToken || session.access_token || '';
+    const res = await fetch(`/api/clients/${_rgpdClientId}/export-rgpd`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const blob     = await res.blob();
+    const filename = `rgpd_client_${_rgpdClientId}_${new Date().toISOString().slice(0,10)}.json`;
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(`Erreur export RGPD : ${err.message}`);
+  }
+}
+
+/**
+ * purgeRgpd — Anonymisation RGPD irréversible (Art. 17 RGPD)
+ */
+async function purgeRgpd() {
+  if (!_rgpdClientId) return;
+  const ok = confirm(
+    '⚠️ PURGE RGPD — Action irréversible\n\n' +
+    'Les données personnelles de ce client (nom, email, téléphone, adresse) ' +
+    'seront anonymisées définitivement.\n\n' +
+    'L\'historique comptable (tickets, factures) est conservé sans données personnelles.\n\n' +
+    'Confirmer ?'
+  );
+  if (!ok) return;
+
+  try {
+    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
+    const token   = session.accessToken || session.access_token || '';
+    const res = await fetch(`/api/clients/${_rgpdClientId}/purge`, {
+      method:  'DELETE',
+      headers: {
+        'Content-Type':  'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok || !r.success) throw new Error(r.error || `HTTP ${res.status}`);
+    alert('✅ Client anonymisé (RGPD Art. 17). Les données personnelles ont été supprimées.');
+    closeModal('modal-historique');
+    await loadClients();
+  } catch (err) {
+    alert(`Erreur purge RGPD : ${err.message}`);
+  }
+}
+
 // ─── Exposition globale ───────────────────────────────────────────────────────
 window.loadClients       = loadClients;
 window.openNewClient     = openNewClient;
@@ -855,3 +924,5 @@ window.openImportCsv     = openImportCsv;
 window.onCsvFileSelect   = onCsvFileSelect;
 window.resetCsvImport    = resetCsvImport;
 window.doImportCsv       = doImportCsv;
+window.exportRgpd        = exportRgpd;
+window.purgeRgpd         = purgeRgpd;

@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour : Sprint 2.36 clôturé — 6 juillet 2026  
-> Version production : **v2.36.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Version production : **v2.37.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
 > Build : 72 modules / 273.30 kB  
-> Git : branche `main`, tag `v2.36.0`
+> Git : branche `main`, tag `v2.37.0`
 
 ---
 
@@ -353,15 +353,19 @@ npm run build && gsk hosted deploy
 
 ---
 
-### Sprint 2.37 🔜 — RGPD + Archivage tickets
-**Module CDC : MOD-01 + conformité légale**
+### Sprint 2.37 ✅ — RGPD + Archivage tickets
+**Module CDC : MOD-01 + conformité légale** — *6 juillet 2026*
 
-- [ ] `GET /api/clients/:id/export` : export JSON complet données client (RGPD droit d'accès)
-- [ ] `DELETE /api/clients/:id/purge` : anonymisation RGPD (pseudonymiser nom/email/tel, conserver factures)
-- [ ] Migration : `archived_at DATETIME` sur `tickets`
-- [ ] `POST /api/tickets/:id/archiver` : archivage ticket terminé depuis > 90 jours
-- [ ] `GET /api/tickets?archived=true` : liste tickets archivés
-- [ ] Tâche batch : `checkAndArchiveTickets()` — tickets `livre` depuis > 90j → `archived_at`
+- [x] `GET /api/clients/:id/export-rgpd` : export JSON complet données client (RGPD Art. 15 droit d'accès)
+- [x] `DELETE /api/clients/:id/purge` : anonymisation RGPD (pseudonymiser nom/email/tel, conserver factures)
+- [x] Migration `0029_tickets_archivage_rgpd.sql` : `archived_at DATETIME` + 2 index sur `tickets`
+- [x] `POST /api/tickets/:id/archiver` : archivage manuel ticket terminal (livre/annule)
+- [x] `GET /api/tickets?archived=true` : liste tickets archivés
+- [x] `checkAndArchiveTickets()` — batch auto-archivage tickets livre/annule > 90j (hook 1% GET /tickets)
+- [x] UI `clients.html` : footer RGPD dans modal historique (Export + Purge)
+- [x] UI `tickets.html` : bouton "📦 Archivés" + bouton "Archiver" conditionnel dans modal
+- [x] Tests 607/607 ✅ — ticketService.test.ts mis à jour (SQL constants + archived_at IS NULL)
+- [x] Version bump v2.37.0
 
 ---
 
@@ -424,4 +428,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.36 clôturé (v2.36.0) — Sprint 2.37 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.37 clôturé (v2.37.0) — RGPD + Archivage tickets*

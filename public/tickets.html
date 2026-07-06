@@ -113,6 +113,12 @@
             <option value="Moyenne">Moyenne</option>
             <option value="Basse">Basse</option>
           </select>
+          <!-- Filtre archivés (Sprint 2.37) -->
+          <button id="btn-toggle-archived" onclick="toggleArchived()"
+                  style="min-height:38px;padding:0 14px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;font:inherit;font-size:0.88rem;color:#6b7280;cursor:pointer;display:flex;align-items:center;gap:6px;"
+                  title="Afficher/masquer les tickets archivés">
+            📦 Archivés
+          </button>
         </div>
 
         <!-- Tableau -->
@@ -362,9 +368,17 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('modal-ticket-detail')">Fermer</button>
-        <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
+      <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" onclick="closeModal('modal-ticket-detail')">Fermer</button>
+          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
+          <!-- Bouton Archiver (Sprint 2.37) — visible seulement si statut terminal -->
+          <button id="btn-archiver-ticket" class="btn btn-sm" onclick="archiverTicket()"
+                  style="display:none;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;"
+                  title="Archiver ce ticket (livré/annulé depuis > 90j)">
+            📦 Archiver
+          </button>
+        </div>
         <button class="btn btn-accent" id="btn-create-devis" onclick="createDevisFromTicket()">Créer un devis →</button>
       </div>
     </div>

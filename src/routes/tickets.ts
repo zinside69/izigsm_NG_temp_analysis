@@ -22,6 +22,8 @@ import {
   updateTicket,
   updateStatutTicket,
   deleteTicket,
+  archiveTicket,
+  checkAndArchiveTickets,
   getTicketBoutiqueId,
   getTicketAvecClient,
   type StatutTicket,
@@ -79,7 +81,8 @@ tickets.get('/kanban', async (c) => {
 // ── GET /api/tickets ──────────────────────────────────────────────────────────
 /**
  * Liste paginée des tickets avec filtres.
- * @query boutique_id, statut?, technicien?, client_id?, search?, page?, limit?
+ * @query boutique_id, statut?, technicien?, client_id?, search?, archived?, page?, limit?
+ * @query archived=true — retourne les tickets archivés (Sprint 2.37)
  * @returns { success, data, pagination }
  */
 tickets.get('/', async (c) => {
@@ -88,16 +91,44 @@ tickets.get('/', async (c) => {
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
+  // Sprint 2.37 : batch auto-archivage probabiliste (1% des requêtes)
+  if (Math.random() < 0.01) {
+    checkAndArchiveTickets(db, boutiqueId, 90).catch(() => {})
+  }
+
   const result = await listTickets(db, boutiqueId, {
     statut:     query.statut     ?? undefined,
     technicien: query.technicien ? parseInt(query.technicien, 10) : undefined,
     client_id:  query.client_id  ? parseInt(query.client_id,  10) : undefined,
     search:     query.search     ?? undefined,
+    archived:   query.archived   === 'true',
     page:       query.page       ? parseInt(query.page,       10) : undefined,
     limit:      query.limit      ? parseInt(query.limit,      10) : undefined,
   })
 
   return c.json({ success: true, ...result })
+})
+
+// ── POST /api/tickets/:id/archiver (Sprint 2.37) ──────────────────────────────
+/**
+ * Archive manuellement un ticket terminal (livre ou annule).
+ * Réservé admin/manager.
+ * @param id — ID du ticket
+ * @returns { success, message }
+ */
+tickets.post('/:id/archiver', requireRole('admin', 'manager'), async (c) => {
+  const { user, db } = ctx(c)
+  const id = parseInt(c.req.param('id'), 10)
+
+  try {
+    await archiveTicket(db, id, user.sub)
+    return c.json({ success: true, message: `Ticket #${id} archivé.` })
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404
+                 : err.message.includes('déjà')        ? 409
+                 : 422
+    return c.json({ success: false, error: err.message }, status)
+  }
 })
 
 // ── GET /api/tickets/:id ──────────────────────────────────────────────────────

@@ -470,3 +470,138 @@ export async function countTicketsByClient(
   ).bind(clientId).first<{ cnt: number }>()
   return row?.cnt ?? 0
 }
+
+// ─── RGPD (Sprint 2.37) ───────────────────────────────────────────────────────
+
+/**
+ * Export RGPD complet d'un client (droit d'accès — Art. 15 RGPD).
+ * Retourne un JSON structuré : données personnelles + tickets + factures + RDV + appareils.
+ * Les données sensibles (password_hash, etc.) ne sont jamais incluses.
+ *
+ * @param db       - Instance D1Database
+ * @param clientId - ID du client
+ * @returns        Objet JSON complet ou null si client introuvable
+ */
+export async function exportClientRgpd(
+  db:       D1Database,
+  clientId: number
+): Promise<object | null> {
+  const client = await getClientById(db, clientId)
+  if (!client) return null
+
+  const [tickets, factures, rdv, appareils] = await Promise.all([
+    db.prepare(`
+      SELECT id, numero, statut, description_panne, diagnostic,
+             appareil_marque, appareil_modele, imei, prix_estime, prix_final,
+             date_reception, date_promesse, created_at, updated_at, archived_at
+      FROM   tickets
+      WHERE  client_id = ? AND actif = 1
+      ORDER  BY created_at DESC
+    `).bind(clientId).all(),
+
+    db.prepare(`
+      SELECT f.id, f.numero, f.statut, f.total_ht, f.total_tva, f.total_ttc,
+             f.issued_at, f.created_at
+      FROM   factures f
+      WHERE  f.client_id = ?
+      ORDER  BY f.created_at DESC
+    `).bind(clientId).all(),
+
+    db.prepare(`
+      SELECT id, type_rdv AS type, statut, debut, fin, description, created_at
+      FROM   rendez_vous
+      WHERE  client_id = ? AND actif = 1
+      ORDER  BY debut DESC
+    `).bind(clientId).all(),
+
+    db.prepare(`
+      SELECT id, marque, modele, imei, numero_serie, couleur, notes, created_at
+      FROM   appareils_client
+      WHERE  client_id = ?
+      ORDER  BY created_at DESC
+    `).bind(clientId).all(),
+  ])
+
+  return {
+    export_date:   new Date().toISOString(),
+    rgpd_base:     'Règlement UE 2016/679 — Art. 15 (droit d\'accès)',
+    client: {
+      id:          client.id,
+      prenom:      client.prenom,
+      nom:         client.nom,
+      email:       client.email,
+      telephone:   client.telephone,
+      adresse:     client.adresse,
+      code_postal: client.code_postal,
+      ville:       client.ville,
+      pays:        client.pays,
+      notes:       client.notes,
+      created_at:  client.created_at,
+    },
+    tickets:     tickets.results   ?? [],
+    factures:    factures.results  ?? [],
+    rendez_vous: rdv.results       ?? [],
+    appareils:   appareils.results ?? [],
+  }
+}
+
+/**
+ * Anonymisation RGPD d'un client (droit à l'effacement — Art. 17 RGPD).
+ * Pseudonymise les données personnelles (nom, email, tel, adresse).
+ * Conserve intact l'historique comptable (factures, tickets) par obligation légale.
+ * Soft-delete le compte client (actif = 0).
+ *
+ * @param db       - Instance D1Database
+ * @param clientId - ID du client
+ * @param userId   - ID de l'utilisateur qui effectue la purge
+ * @throws si client introuvable ou déjà anonymisé
+ */
+export async function purgeClient(
+  db:       D1Database,
+  clientId: number,
+  userId:   number
+): Promise<void> {
+  const client = await db.prepare(
+    'SELECT id, prenom, nom, email, actif FROM clients WHERE id = ?'
+  ).bind(clientId).first<{ id: number; prenom: string; nom: string; email: string | null; actif: number }>()
+
+  if (!client)        throw new Error(`Client #${clientId} introuvable.`)
+  if (!client.actif)  throw new Error(`Client #${clientId} déjà supprimé.`)
+  if (client.prenom === 'Anonymisé')
+    throw new Error(`Client #${clientId} déjà anonymisé.`)
+
+  const anon = `RGPD-${clientId}`
+
+  await db.prepare(`
+    UPDATE clients SET
+      prenom       = 'Anonymisé',
+      nom          = ?,
+      email        = NULL,
+      telephone    = NULL,
+      adresse      = NULL,
+      code_postal  = NULL,
+      ville        = NULL,
+      notes        = NULL,
+      actif        = 0,
+      updated_at   = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(anon, clientId).run()
+
+  // Anonymiser aussi les appareils liés (IMEI est une donnée personnelle)
+  await db.prepare(`
+    UPDATE appareils_client SET
+      imei          = NULL,
+      numero_serie  = NULL,
+      notes         = NULL
+    WHERE client_id = ?
+  `).bind(clientId).run()
+
+  await auditLog(db, {
+    user_id:     userId,
+    action:      'RGPD_PURGE_CLIENT',
+    entite_type: 'client',
+    entite_id:   clientId,
+    avant:       { prenom: client.prenom, nom: client.nom, email: client.email },
+    apres:       { prenom: 'Anonymisé', nom: anon, email: null },
+  })
+}

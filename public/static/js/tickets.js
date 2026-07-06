@@ -22,6 +22,7 @@ async function loadTickets() {
     const boutiqueId = getBoutiqueId();
     const params = { limit: 100 };
     if (boutiqueId) params.boutique_id = boutiqueId;
+    if (_showArchived) params.archived = 'true';  // Sprint 2.37
 
     const result = await apiGet('/api/tickets', params);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
@@ -222,6 +223,15 @@ function viewTicket(id) {
   `;
   window._currentTicketId = id;
   _currentPhotoTicketId   = id;  // Sprint 2.36 — photos
+
+  // Sprint 2.37 — afficher le bouton Archiver si statut terminal
+  const btnArchiver = document.getElementById('btn-archiver-ticket');
+  if (btnArchiver) {
+    const isTerminal = ['Terminé', 'Annulé'].includes(ticket.status) ||
+                       ['livre', 'annule'].includes(ticket.statut || '');
+    btnArchiver.style.display = isTerminal ? 'inline-flex' : 'none';
+  }
+
   // Réinitialiser l'onglet sur "Informations" à chaque ouverture
   switchDetailTab('detail-info');
   openModal('modal-ticket-detail');
@@ -703,6 +713,51 @@ async function populateClients() {
 }
 
 function esc(s) { return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ======================== ARCHIVAGE + RGPD (Sprint 2.37) ========================
+
+let _showArchived = false;
+
+/**
+ * toggleArchived — bascule entre tickets actifs et tickets archivés
+ */
+async function toggleArchived() {
+  _showArchived = !_showArchived;
+  const btn = document.getElementById('btn-toggle-archived');
+  if (btn) {
+    btn.style.background     = _showArchived ? '#f0fdf4' : '#fff';
+    btn.style.color          = _showArchived ? '#16a34a' : '#6b7280';
+    btn.style.borderColor    = _showArchived ? '#86efac' : '#e5e7eb';
+    btn.textContent          = _showArchived ? '📦 Archivés ✓' : '📦 Archivés';
+  }
+  await loadTickets();
+}
+
+/**
+ * archiverTicket — archive manuellement le ticket courant (POST /api/tickets/:id/archiver)
+ */
+async function archiverTicket() {
+  const id = window._currentTicketId;
+  if (!id) return;
+  if (!confirm(`Archiver le ticket #${id} ?\n\nIl sera déplacé dans l'archive et n'apparaîtra plus dans la liste principale.`)) return;
+
+  try {
+    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
+    const token   = session.accessToken || session.access_token || '';
+    const res = await fetch(`/api/tickets/${id}/archiver`, {
+      method:  'POST',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+
+    showToast(`Ticket #${id} archivé avec succès.`, 'success');
+    closeModal('modal-ticket-detail');
+    await loadTickets();
+  } catch (err) {
+    showToast(err.message || 'Erreur archivage.', 'error');
+  }
+}
 
 // ======================== PHOTOS TICKETS (Sprint 2.36) ========================
 

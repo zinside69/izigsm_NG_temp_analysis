@@ -254,6 +254,20 @@
         <i class="fas fa-spinner fa-spin" style="font-size:1.4rem;color:var(--primary)"></i>
       </div>
     </div>
+    <!-- Footer RGPD (Sprint 2.37) -->
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportRgpd()" title="Télécharger toutes les données (Art. 15 RGPD)">
+          📥 Export RGPD
+        </button>
+        <button class="btn btn-sm" onclick="purgeRgpd()"
+                style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;font-size:.82rem;"
+                title="Anonymiser définitivement (Art. 17 RGPD)">
+          🗑 Purge RGPD
+        </button>
+      </div>
+      <button class="btn btn-secondary" onclick="closeModal('modal-historique')">Fermer</button>
+    </div>
   </div>
 </div>
 

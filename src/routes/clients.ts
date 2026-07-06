@@ -29,6 +29,8 @@ import {
   addAppareil,
   getHistoriqueClient,
   importClients,
+  exportClientRgpd,
+  purgeClient,
 } from '../services/clientService'
 
 type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
@@ -289,6 +291,82 @@ clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), as
 
   const result = await addAppareil(db, id, body)
   return c.json({ success: true, id: result.id, message: 'Appareil ajouté.' }, 201)
+})
+
+// ─── RGPD (Sprint 2.37) ───────────────────────────────────────────────────────
+
+// ── GET /api/clients/:id/export-rgpd ─────────────────────────────────────────
+/**
+ * Export RGPD complet des données d'un client (Art. 15 — droit d'accès).
+ * Retourne un JSON téléchargeable : données personnelles + tickets + factures + RDV + appareils.
+ * Réservé admin/manager.
+ *
+ * @param id — ID du client
+ * @returns JSON complet avec Content-Disposition attachment
+ */
+clients.get('/:id/export-rgpd', requireRole('admin', 'manager'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+  const id = parseInt(c.req.param('id'), 10)
+
+  const existing = await getClientById(db, id)
+  if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+  if (!canAccessClient(user, existing, boutiqueId))
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  const data = await exportClientRgpd(db, id)
+  if (!data) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+
+  const filename = `rgpd_client_${id}_${new Date().toISOString().slice(0, 10)}.json`
+  const json     = JSON.stringify(data, null, 2)
+
+  return new Response(json, {
+    headers: {
+      'Content-Type':        'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+})
+
+// ── DELETE /api/clients/:id/purge ─────────────────────────────────────────────
+/**
+ * Purge RGPD d'un client (Art. 17 — droit à l'effacement).
+ * Pseudonymise les données personnelles. Conserve l'historique comptable.
+ * Réservé admin uniquement — action irréversible.
+ *
+ * @param id — ID du client
+ * @body confirm: true (obligatoire pour éviter les purges accidentelles)
+ * @returns { success, message }
+ */
+clients.delete('/:id/purge', requireRole('admin'), async (c) => {
+  const { user, db, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+  const id = parseInt(c.req.param('id'), 10)
+
+  // Double confirmation obligatoire
+  let body: any = {}
+  try { body = await c.req.json() } catch { /* body optionnel */ }
+  if (body.confirm !== true) {
+    return c.json({
+      success: false,
+      error:   'Confirmation requise. Envoyez { "confirm": true } pour procéder à la purge RGPD.',
+    }, 422)
+  }
+
+  const existing = await getClientById(db, id)
+  if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+  if (!canAccessClient(user, existing, boutiqueId))
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  try {
+    await purgeClient(db, id, user.sub)
+    return c.json({ success: true, message: `Client #${id} anonymisé (RGPD Art. 17).` })
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404
+                 : err.message.includes('déjà')        ? 409
+                 : 422
+    return c.json({ success: false, error: err.message }, status)
+  }
 })
 
 export default clients
