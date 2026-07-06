@@ -1,7 +1,7 @@
 # Gap Analysis — iziGSM vs CDC
-> **Version** : 3.0 (mis à jour v2.28.0)  
-> **Date** : 3 juillet 2026  
-> **État implémentation** : Sprint 2.28 ✅ — v2.28.0 en production  
+> **Version** : 4.0 (mis à jour v2.39 WIP)  
+> **Date** : 6 juillet 2026  
+> **État implémentation** : Sprint 2.39 en cours — v2.38.0 en production  
 > **URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
 
 ---
@@ -282,30 +282,50 @@
 
 ---
 
-## Compteur Global de Couverture (v2.28.0)
+## MODULE R — Catalogue marques/modèles (Sprint 2.38-2.39)
+
+| Réf | Fonctionnalité | Statut | Sprint | Détail |
+|-----|----------------|--------|--------|--------|
+| R01 | Référentiel marques (global, sans boutique) | ✅ | 2.39 | `marques_appareils` sans `boutique_id` — `brand_slug UNIQUE` |
+| R02 | Référentiel modèles (global) | ✅ | 2.39 | `modeles_appareils` — `phone_slug UNIQUE`, `source`, `synced_at` |
+| R03 | Liaison services ↔ modèles (M2M) | ✅ | 2.38 | `service_modeles` pivot + prix override COALESCE |
+| R04 | Sync marques depuis phone-specs-api | ✅ | 2.39 | `syncBrands()` — INSERT OR IGNORE, UPDATE device_count si source='api' |
+| R05 | Sync modèles par marque (paginé) | ✅ | 2.39 | `syncModelesByBrand()` — chunks 10 pages, `guessType()` heuristique |
+| R06 | Sync sélection de marques | ✅ | 2.39 | `syncSelectedBrands()` — itère syncModelesByBrand() |
+| R07 | Log sync par marque | ✅ | 2.39 | `phone_catalog_sync_log` (status, modeles_added, error_msg) |
+| R08 | Autocomplete modèle dans tickets | ✅ | 2.38 | Debounce 300ms + suggestions services pré-configurés |
+| R09 | UI modal sync (sélection + progression) | ⚠️ | 2.39 | Bouton ajouté, modal + barre progression manquantes |
+| R10 | Stats référentiel | ✅ | 2.39 | `getCatalogStats()` + `GET /api/services/catalog/stats` |
+
+---
+
+## Compteur Global de Couverture (v2.39 WIP)
 
 | Module | Total items | ✅ Implémenté | ⚠️ Partiel | ❌ Absent |
 |--------|-------------|--------------|-----------|---------|
-| A Auth | 10 | 7 | 0 | 3 |
-| B Boutiques | 8 | 6 | 0 | 2 |
-| C Clients CRM | 11 | 7 | 0 | 4 |
-| D Tickets | 12 | 10 | 0 | 2 |
-| E Stock | 10 | 6 | 0 | 4 |
-| F Facturation | 11 | 8 | 0 | 3 |
-| G Devis | 8 | 6 | 0 | 2 |
+| A Auth | 10 | 9 | 0 | 1 |
+| B Boutiques | 8 | 7 | 0 | 1 |
+| C Clients CRM | 11 | 9 | 0 | 2 |
+| D Tickets | 12 | 12 | 0 | 0 |
+| E Stock | 10 | 8 | 0 | 2 |
+| F Facturation | 11 | 9 | 0 | 2 |
+| G Devis | 8 | 7 | 0 | 1 |
 | H SAV/Garanties | 8 | 6 | 0 | 2 |
 | I Fournisseurs | 8 | 7 | 0 | 1 |
-| J Agenda | 10 | 8 | 0 | 2 |
+| J Agenda | 10 | 10 | 0 | 0 |
 | K Caisse POS | 6 | 5 | 0 | 1 |
-| L Notifications | 11 | 7 | 0 | 4 |
+| L Notifications | 11 | 9 | 0 | 2 |
 | M Personnel | 7 | 5 | 0 | 2 |
-| N Vitrine | 6 | 4 | 0 | 2 |
+| N Vitrine | 6 | 5 | 0 | 1 |
 | O Reconditionnement | 6 | 6 | 0 | 0 |
-| P Rapports | 7 | 3 | 0 | 4 |
-| Q Sécurité | 10 | 6 | 2 | 2 |
-| **TOTAL** | **149** | **113** | **2** | **34** |
+| P Rapports | 7 | 6 | 0 | 1 |
+| Q Sécurité | 10 | 8 | 2 | 0 |
+| R Catalogue marques | 10 | 9 | 1 | 0 |
+| **TOTAL** | **159** | **137** | **3** | **19** |
 
-**Couverture v2.28.0 : 113/149 = ~76% — soit +65 points depuis la v2.4.0 (11%)**
+**Couverture v2.39 WIP : 137/159 = ~86% — soit +10 points vs v2.28.0 (76%)**
+
+> Post-MVP exclus (SMS, WhatsApp, Stripe, scanner CB, WebSockets, cockpit multi-sites) : couverture effective sprint-par-sprint ~90%.
 
 ---
 
@@ -315,11 +335,11 @@
 |---|---|---|
 | `JWT_SECRET` | ✅ Configuré | Auth JWT |
 | `RESEND_API_KEY` | ✅ Configuré | Emails Resend |
-| `GOOGLE_CLIENT_ID` | ❌ À configurer | Sprint 2.35 OAuth |
-| `GOOGLE_CLIENT_SECRET` | ❌ À configurer | Sprint 2.35 OAuth |
+| `GOOGLE_CLIENT_ID` | ⚠️ À confirmer | Sprint 2.35 OAuth (configurer via `gsk hosted secret_put`) |
+| `GOOGLE_CLIENT_SECRET` | ❌ Non utilisé | Tokeninfo ne nécessite pas le secret |
 | `TWILIO_*` | ❌ Post-MVP | SMS |
 | `STRIPE_*` | ❌ Post-MVP | Paiement en ligne |
 
 ---
 
-*Gap Analysis v3.0 — iziGSM v2.28.0 — 3 juillet 2026*
+*Gap Analysis v4.0 — iziGSM v2.39 WIP (v2.38.0 prod) — 6 juillet 2026*

@@ -1,8 +1,8 @@
 # iziGSM — Architecture des Modules & Liens Fonctionnels
 
-> **Version** : 2.0  
-> **Mise à jour** : 3 juillet 2026 — v2.28.0  
-> **Stack** : Hono TypeScript + Cloudflare Workers + D1 SQLite + D1KV (remplacement KV) + R2 (planifié Sprint 2.36)
+> **Version** : 2.1  
+> **Mise à jour** : 6 juillet 2026 — v2.39 WIP  
+> **Stack** : Hono TypeScript + Cloudflare Workers + D1 SQLite + D1KV + R2 (Sprint 2.36) + phone-specs-api (Sprint 2.39)
 
 ---
 
@@ -64,9 +64,11 @@
 │  ├─ agenda.ts        → /api/agenda/* + /api/calendar/*.ics          │
 │  │                                           (12 endpoints)         │
 │  ├─ users.ts         → /api/users/*          (16 endpoints)         │
-│  ├─ services.ts      → /api/services/* + /api/services/categories/* │
-│  │                                           (19 endpoints)         │
-│  ├─ tickets.ts       → /api/tickets/*        (8 endpoints)          │
+│  ├─ services.ts      → /api/services/* + /api/services/catalog/*   │
+│  │                   marques, modèles, liaison, sync phone-specs-api │
+│  │                                           (35 endpoints)         │
+│  ├─ tickets.ts       → /api/tickets/*        (13 endpoints)         │
+│  │                   photos R2, archivage RGPD, archived filter      │
 │  ├─ stocks.ts        → /api/produits/* + /api/categories/*          │
 │  │                                           (10 endpoints)         │
 │  ├─ sav.ts           → /api/garanties/* + /api/sav/*               │
@@ -74,7 +76,8 @@
 │  ├─ notifications.ts → /api/notifications/*  (8 endpoints)          │
 │  ├─ caisse.ts        → /api/caisse/*         (13 endpoints)         │
 │  ├─ stats.ts         → /api/stats/*          (9 endpoints)          │
-│  ├─ clients.ts       → /api/clients/*        (9 endpoints)          │
+│  ├─ clients.ts       → /api/clients/*        (11 endpoints)         │
+│  │                   + export-rgpd Art.15, purge Art.17              │
 │  ├─ personnel.ts     → /api/employes/* + /api/pointage/*            │
 │  │                                           (14 endpoints)         │
 │  └─ boutiques.ts     → /api/boutiques/*      (15 endpoints)         │
@@ -98,7 +101,8 @@
 │  ├─ userService.ts          — 8 fonctions PIN + permissions         │
 │  ├─ rachatService.ts        — 5 fonctions livre de police           │
 │  ├─ reconditionnementService.ts — 14 fonctions ordres + bons achat  │
-│  ├─ servicesService.ts      — catalogue services hiérarchique       │
+│  ├─ servicesService.ts      — catalogue + marques/modèles (global)  │
+│  ├─ phoneCatalogService.ts  — 5 fonctions sync phone-specs-api       │
 │  └─ publicService.ts        — 7 fonctions vitrine publique sans auth│
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ D1 prepare().bind().run() — SQLite edge
@@ -107,13 +111,13 @@
 │  CLOUDFLARE D1 — SQLite distribué (même PoP que le Worker)          │
 │  DB name : 8096d010-efde-413e-a481-72226566aa0b-db                  │
 │  DB ID   : 85f74dc6-ff36-47ac-a673-a4d65a7f624f                    │
-│  24 migrations appliquées                                           │
+│  31 migrations (0031 non encore appliquée localement)              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Schéma de base de données — Tables (24 migrations)
+## 2. Schéma de base de données — Tables (31 migrations)
 
 | Migration | Tables créées / modifiées | Sprint |
 |-----------|--------------------------|--------|
@@ -141,6 +145,13 @@
 | 0022 | UPDATE slug boutiques existantes | 2.18 |
 | 0023 | `public_token`, `envoye_le`, `repondu_le`, `signature_client` sur devis | 2.19 |
 | 0024 | `kv_store` (remplacement KV natif CF) | 2.26 |
+| 0025 | `boutique_creneaux` + index RDV public | 2.31 |
+| 0026 | `famille TEXT` sur `produits` | 2.34 |
+| 0027 | `google_id TEXT` sur `users` | 2.35 |
+| 0028 | `ticket_photos` (r2_key, type_photo, mime, taille) | 2.36 |
+| 0029 | `archived_at DATETIME` sur `tickets` + 2 index | 2.37 |
+| 0030 | `marques_appareils`, `modeles_appareils` (avec boutique_id) — remplacé par 0031 | 2.38 |
+| 0031 | Refonte globale `marques_appareils` + `modeles_appareils` sans `boutique_id` + `phone_catalog_sync_log` | 2.39 |
 
 ---
 
@@ -166,7 +177,7 @@
 
 ---
 
-## 4. Flux métier opérationnels (v2.28.0)
+## 4. Flux métier opérationnels (v2.39 WIP)
 
 ### Flux A — Réparation standard (le plus fréquent)
 ```
@@ -245,9 +256,36 @@ Technicien ouvre caisse
       → total_theorique vs total_reel → écart
 ```
 
+### Flux F — Sync référentiel marques/modèles phone-specs-api (Sprint 2.39)
+```
+Admin déclenche sync
+  → POST /api/services/catalog/sync-brands (admin)
+      → GET phone-specs-api.vercel.app/brands
+          → cf: { cacheTtl: 3600 } — cache Cloudflare edge 1h
+      → Pour chaque marque :
+          INSERT OR IGNORE INTO marques_appareils (brand_slug)
+          UPDATE device_count WHERE source='api'
+      → Retourne { total: 126, added: N, updated: M }
+  → POST /api/services/catalog/sync-selected { slugs: ["apple","samsung",...] }
+      → Pour chaque slug : syncModelesByBrand(db, slug)
+          → GET /brands/{slug}?page=1 → last_page
+          → Promise.all pages [2..last_page] par chunks de 10
+          → Concat phones[]
+          → guessType(nom) → 'smartphone'|'tablette'|'montre'|'pc'
+          → INSERT OR IGNORE INTO modeles_appareils (phone_slug)
+          → INSERT OR REPLACE INTO phone_catalog_sync_log
+      → Retourne { brand, added: N, total: T, status: 'success'|'error' }
+  → GET /api/services/catalog/stats
+      → { total_marques, total_modeles, marques_api, modeles_api, last_sync }
+```
+
+**Idempotence** : INSERT OR IGNORE sur `brand_slug` UNIQUE et `phone_slug` UNIQUE.  
+**Protection données manuelles** : UPDATE device_count/synced_at uniquement si `source='api'`.  
+**Cloudflare Workers** : `fetch(url, { cf: { cacheTtl: 3600 } })` — pas de Node.js fetch.
+
 ---
 
-## 5. Endpoints API — Inventaire complet (v2.28.0)
+## 5. Endpoints API — Inventaire complet (v2.39)
 
 ### Auth — `/api/auth/*`
 ```

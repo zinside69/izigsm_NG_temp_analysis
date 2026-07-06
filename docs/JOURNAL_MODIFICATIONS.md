@@ -6,6 +6,167 @@
 
 ---
 
+## Sprint 2.39 — MOD-15 Phase 2 : Sync référentiel global phone-specs-api
+
+**Commit** : ⚠️ NON COMMITÉ — Sprint en cours  
+**Date** : 6 juillet 2026  
+**Version** : 2.39.0 (WIP — v2.38.0 en production)
+
+### Contexte
+
+Décision d'architecture : le référentiel marques/modèles devient **global** (sans `boutique_id`) pour pouvoir être partagé entre toutes les boutiques. Rupture de schéma vs Sprint 2.38.
+
+L'API gratuite `phone-specs-api.vercel.app` (source GSMArena) expose 126 marques et leurs modèles paginés via `GET /brands` et `GET /brands/{slug}?page=N`.
+
+Stratégie migration SQLite : RENAME table ancienne → CREATE table nouvelle → INSERT OR IGNORE → DROP ancienne (SQLite ne supporte pas ALTER DROP COLUMN).
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0031_marques_modeles_global.sql` | 🆕 créé | Refonte tables sans `boutique_id` — `brand_slug UNIQUE`, `phone_slug UNIQUE`, col `source ('manual'\|'api')`, `synced_at`, table `phone_catalog_sync_log` |
+| `src/services/phoneCatalogService.ts` | 🆕 créé | 5 fonctions : `syncBrands()`, `syncModelesByBrand()`, `syncSelectedBrands()`, `getLastSyncStatus()`, `getCatalogStats()` |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/servicesService.ts` | ✏️ modifié | Interfaces `MarqueAppareil`/`ModeleAppareil` sans `boutique_id` — `listMarques(db)` + `listModeles(db, opts)` sans paramètre `boutiqueId` |
+| `src/routes/services.ts` | ✏️ modifié | +5 routes sync catalog : `GET /catalog/stats`, `GET /catalog/sync-status`, `POST /catalog/sync-brands`, `POST /catalog/sync-modeles/:slug`, `POST /catalog/sync-selected` |
+| `public/services.html` | ✏️ modifié (partiel) | Bouton `🔄 Synchroniser API` ajouté dans `#btns-modeles` — modal sync manquante |
+
+### Fichiers à mettre à jour (non encore modifiés)
+
+| Fichier | Action | Description |
+|---|---|---|
+| `tests/servicesService.test.ts` | ⚠️ à modifier | SQL constants + signatures à adapter (boutique_id supprimé) |
+| `public/services.html` | ⚠️ à compléter | Modal sync (sélection marques + barre progression) |
+| `public/static/js/services.js` | ⚠️ à créer | `openModalSync()`, `startSync()`, boucle progression, stats |
+| `src/index.tsx` | ⚠️ à bumper | 2.38.0 → 2.39.0 |
+
+### Architecture phoneCatalogService
+
+```
+syncBrands(db)
+  → GET phone-specs-api.vercel.app/brands
+  → Pour chaque marque : INSERT OR IGNORE INTO marques_appareils (brand_slug)
+  → UPDATE device_count WHERE source='api' (protège source='manual')
+  → Retourne { total, added, updated }
+
+syncModelesByBrand(db, brandSlug)
+  → GET /brands/{slug}?page=1 → last_page
+  → Promise.all pages 2..N par chunks de 10
+  → Concat tous phones[]
+  → Pour chaque modèle : guessType() + INSERT OR IGNORE INTO modeles_appareils (phone_slug)
+  → Log dans phone_catalog_sync_log
+
+guessType(nom: string): 'smartphone'|'tablette'|'montre'|'pc'
+  → ipad/tab → tablette
+  → watch/gear/band → montre
+  → book/laptop/pad → pc
+  → default → smartphone
+```
+
+---
+
+## Sprint 2.38 — MOD-15 : Référentiel marques/modèles + liaison catalogue services
+
+**Commit** : `04e02f0` — feat(MOD-15): référentiel marques/modèles + liaison services — Sprint 2.38  
+**Date** : 6 juillet 2026  
+**Version** : 2.38.0
+
+### Contexte
+
+Implémentation du référentiel marques/modèles d'appareils avec liaison M2M services ↔ modèles (prix override par modèle). Autocomplete dans tickets pour suggérer les services pré-configurés au modèle sélectionné.
+
+> ⚠️ **Rupture Sprint 2.39** : les tables créées ici (`boutique_id` présent) ont été refondues par migration 0031.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0030_marques_modeles_appareils.sql` | 🆕 créé | `marques_appareils`, `modeles_appareils` (avec boutique_id — remplacé par 0031), `service_modeles` pivot M2M |
+| `tests/servicesService.test.ts` | 🆕 créé | 26 tests — listMarques, createMarque, updateMarque, deleteMarque, listModeles (3 variantes), createModele, updateModele, deleteModele, getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/servicesService.ts` | ✏️ modifié | +10 fonctions marques/modèles/liaison |
+| `src/routes/services.ts` | ✏️ modifié | +11 routes CRUD marques/modèles/liaison |
+| `public/services.html` | ✏️ modifié | Onglet `📱 Marques & Modèles` — liste marques + grille modèles + modal liaison services |
+| `public/tickets.html` | ✏️ modifié | Autocomplete champ Modèle + suggestions services pré-configurés |
+| `public/static/js/services.js` | ✏️ modifié | `switchTab()`, CRUD marques/modèles, `openModalLiaison()` |
+| `public/static/js/tickets.js` | ✏️ modifié | `onModeleInput()`, `selectModeleFromSuggestion()`, `loadServicesSuggestionsForModele()` |
+| `src/index.tsx` | ✏️ modifié | Version 2.37.0 → 2.38.0 |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.38 ✅ ajouté, header v2.38.0, 633/633 tests |
+
+---
+
+## Sprint 2.37 — RGPD + Archivage tickets
+
+**Commit** : `(commit après Sprint 2.38)` — feat(RGPD): archivage tickets + export/purge clients — Sprint 2.37  
+**Date** : 6 juillet 2026  
+**Version** : 2.37.0
+
+### Contexte
+
+Implémentation des droits RGPD fondamentaux : export données client (Art. 15), anonymisation (Art. 17), et archivage automatique des tickets terminés depuis plus de 90 jours (Art. 5.1.e limitation de conservation).
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0029_tickets_archivage_rgpd.sql` | 🆕 créé | `ALTER TABLE tickets ADD COLUMN archived_at DATETIME` + 2 index (`idx_tickets_archived_at`, `idx_tickets_boutique_archived`) |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/ticketService.ts` | ✏️ modifié | `archiveTicket()`, `checkAndArchiveTickets()` (batch auto 90j, hook 1%), filtre `AND t.archived_at IS NULL` dans `listTickets()` + `COUNT` |
+| `src/services/clientService.ts` | ✏️ modifié | `exportClientRgpd()` (Art. 15 — JSON complet), `purgeClient()` (Art. 17 — pseudonymisation nom/email/tel, conservation factures) |
+| `src/routes/tickets.ts` | ✏️ modifié | `POST /api/tickets/:id/archiver`, `GET /api/tickets?archived=true`, hook batch 1% |
+| `src/routes/clients.ts` | ✏️ modifié | `GET /api/clients/:id/export-rgpd`, `DELETE /api/clients/:id/purge` |
+| `public/clients.html` | ✏️ modifié | Footer RGPD dans modal-historique (boutons Export + Purge) |
+| `public/tickets.html` | ✏️ modifié | Bouton `📦 Archivés` (toggle liste) + bouton `Archiver` conditionnel dans modal (statut livre/annule) |
+| `public/static/js/clients.js` | ✏️ modifié | `exportRgpd()`, `purgeRgpd()`, `_rgpdClientId` |
+| `public/static/js/tickets.js` | ✏️ modifié | `toggleArchived()`, `archiverTicket()` |
+| `tests/ticketService.test.ts` | ✏️ modifié | `SQL_COUNT` + `SQL_LIST` mis à jour avec `AND t.archived_at IS NULL` |
+| `src/index.tsx` | ✏️ modifié | Version 2.36.0 → 2.37.0 |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.37 ✅, section RGPD phase 2 (durées légales), header v2.37.0 |
+
+---
+
+## Sprint 2.36 — Photos tickets R2 + upload AJAX
+
+**Commit** : `(commit tag v2.36.0)` — feat(MOD-01): photos tickets R2 + upload drag&drop — Sprint 2.36  
+**Date** : 6 juillet 2026  
+**Version** : 2.36.0
+
+### Contexte
+
+Upload de photos avant/après pour les tickets de réparation, stockées dans Cloudflare R2. Interface drag & drop dans le modal de détail ticket avec galerie en 3 sections, compression canvas côté client, lightbox et proxy R2 pour l'affichage sécurisé.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0028_ticket_photos.sql` | 🆕 créé | Table `ticket_photos` (id, ticket_id, r2_key, nom_fichier, type_photo, mime_type, taille, created_at, created_by) + 2 index |
+| `src/services/photosService.ts` | 🆕 créé | `uploadPhoto()` (R2 put + D1 insert + audit), `listPhotos()`, `getPhotoById()`, `deletePhoto()` (R2 + D1), `getTicketForPhoto()`. Types `TypePhoto`, constantes `MIME_AUTORISES` / `TAILLE_MAX` |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/routes/tickets.ts` | ✏️ modifié | `GET /api/tickets/:id/photos`, `POST /api/tickets/:id/photos` (multipart + body brut), `GET /api/tickets/:id/photos/:photoId/view` (proxy R2), `DELETE /api/tickets/:id/photos/:photoId` |
+| `wrangler.jsonc` | ✏️ modifié | Binding `PHOTOS: R2Bucket` → bucket `izigsm-photos` |
+| `src/index.tsx` | ✏️ modifié | `PHOTOS?: R2Bucket` dans Bindings, version 2.35.0 → 2.36.0 |
+| `public/tickets.html` | ✏️ modifié | Onglet Photos dans modal détail — drag & drop, select avant/apres/autre, galerie 3 sections, progress bar, lightbox, avertissement R2 absent |
+| `public/static/js/tickets.js` | ✏️ modifié | `switchDetailTab()`, `loadPhotos()`, `renderGallery()`, `buildPhotoThumb()`, `processPhotoFile()`, `compressImage()` (canvas max 1400px q:0.82), `uploadPhoto()`, `deletePhotoConfirm()`, `openLightbox()`, `closeLightbox()`, `showToast()` |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.36 ✅, header v2.36.0 |
+
+---
+
 ## Fix UX — Placeholder login (post-Sprint 2.35)
 
 **Commit** : `e1e21c7` — fix(UX): remplacer placeholder jean@monatelier.fr par votre@email.fr  

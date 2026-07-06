@@ -2,8 +2,8 @@
 
 **Projet :** Plateforme izigsm — Gestion d'ateliers de réparation  
 **URL cible :** https://izigsm.fr  
-**Version :** 1.0  
-**Date :** Juin 2026  
+**Version :** 1.1 (mis à jour Sprint 2.39)  
+**Date :** Juin 2026 (MAJ juillet 2026)  
 **Destinataire :** Équipe de développement  
 
 ---
@@ -855,11 +855,13 @@ Ces routes sont publiques (pas d'authentification requise). Elles alimentent les
 
 ---
 
-### 5.17 MOD-17 : Catalogue de services
+### 5.17 MOD-17 : Catalogue de services et Référentiel appareils
 
 **Priorité : HAUTE**
 
-#### Structure
+> ✅ **Implémenté** : Sprint 2.38 (CRUD marques/modèles + liaison) + Sprint 2.39 (sync référentiel global phone-specs-api).
+
+#### Structure catalogue
 
 ```mermaid
 graph TB
@@ -878,6 +880,28 @@ graph TB
 ```
 
 Chaque service possède un prix de vente HT et un prix de revient HT permettant le calcul de marge.
+
+#### Référentiel global marques/modèles (Sprint 2.39)
+
+Le référentiel est **global** (sans `boutique_id`) — partagé entre toutes les boutiques de l'instance.
+
+- **Source `'manual'`** : entrées créées par l'admin via CRUD — jamais écrasées par la sync automatique.
+- **Source `'api'`** : synchronisées depuis `phone-specs-api.vercel.app` (source GSMArena, 126 marques).
+
+**API externe** : `GET /brands` → liste marques · `GET /brands/{slug}?page=N` → modèles paginés (`last_page` + `phones[]`).
+
+**Règles d'import** :
+1. INSERT OR IGNORE sur `brand_slug UNIQUE` / `phone_slug UNIQUE` — idempotence totale.
+2. UPDATE `device_count` uniquement si `source='api'` — protège les données manuelles.
+3. `guessType()` heuristique : `ipad/tab` → tablette · `watch/gear` → montre · `book/laptop` → pc · default → smartphone.
+4. Chunks de 10 pages en `Promise.all` (contrainte Workers — pas de connexions illimitées).
+5. Log par marque dans `phone_catalog_sync_log`.
+
+#### Liaison services ↔ modèles
+
+Table pivot `service_modeles` avec `prix_override` (NULL = utiliser le prix du service parent). Permet de définir un prix spécifique par modèle d'appareil.
+
+**Autocomplete tickets** : champ "Modèle" dans la création de ticket — debounce 300ms, suggestions des services pré-configurés pour le modèle sélectionné.
 
 ---
 
@@ -976,9 +1000,11 @@ graph LR
 | SMTP (configurable) | SMTP/TLS | Envoi emails |
 | SMS Gateway | HTTPS/REST | Envoi SMS |
 | QZ Tray | WSS local | Impression thermique |
-| iCal | webcal:// | Sync calendrier |
-| Signature eIDAS | HTTPS/REST | Signature devis |
-| Export comptable | Email + pièces jointes | Envoi périodique |
+| iCal | webcal:// | Sync calendrier RFC 5545 — ✅ implémenté |
+| **phone-specs-api** | HTTPS/REST | Référentiel marques/modèles GSMArena — ✅ Sprint 2.39 |
+| **Resend API** | HTTPS/REST | Emails transactionnels — ✅ implémenté |
+| Signature eIDAS | HTTPS/REST | Signature devis — ❌ post-MVP (Yousign) |
+| Export comptable | Email + pièces jointes | Envoi périodique — ❌ post-MVP |
 
 ### 7.2 API publiques exposées
 
@@ -996,10 +1022,10 @@ graph LR
 
 | Paramètre | Valeur |
 |-----------|--------|
-| Hébergement | Cloud provider Europe (AWS eu-west, GCP europe-west, OVH) |
-| Base de données | PostgreSQL 15+ (recommandé) |
-| Cache | Redis 7+ |
-| Object Storage | S3-compatible (documents, photos, logos) |
+| Hébergement | **Cloudflare Pages/Workers** (edge mondial — implémenté) |
+| Base de données | **Cloudflare D1** SQLite (implémenté) — PostgreSQL post-MVP si scale |
+| Cache / Sessions | **D1AsKV** (implémenté) — Redis post-MVP si scale |
+| Object Storage | **Cloudflare R2** (implémenté Sprint 2.36) — S3-compatible |
 | CDN | Pour assets statiques SPA |
 | CI/CD | Pipeline automatisé (tests, build, deploy) |
 | Monitoring | APM + alerting (erreurs, latence, disponibilité) |
@@ -1025,4 +1051,5 @@ graph LR
 
 ---
 
-*Document généré le 1er juin 2026 — Version 1.0*
+*Document généré le 1er juin 2026 — Version 1.0*  
+*Mis à jour le 6 juillet 2026 — Version 1.1 — Sprint 2.39 : stack technique réelle Cloudflare Workers, MOD-17 référentiel global + sync phone-specs-api*
