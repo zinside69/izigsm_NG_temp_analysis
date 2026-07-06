@@ -1,6 +1,7 @@
 /**
  * stockService.ts — Model layer pour la gestion des produits et du stock
  * Sprint 2.17 — Extraction depuis routes/stocks.ts (violation P1 résolue)
+ * Sprint 2.34 — MOD-04 : familles produits + import catalogue CSV fournisseur
  *
  * Périmètre : produits, catégories, mouvements de stock.
  * Aucun SQL ne doit subsister dans routes/stocks.ts après ce sprint.
@@ -15,13 +16,17 @@
  *   listCategories(db, boutiqueId)                  — Catégories + nb_produits
  *   createCategorie(db, boutiqueId, data)           — Création catégorie
  *   getKpisStock(db, boutiqueId)                    — KPIs : valeur stock, ruptures, alertes
+ *   importCatalogueCsv(db, boutiqueId, userId, csv) — Import/UPSERT catalogue fournisseur CSV
  */
 
 import { parsePagination, auditLog } from '../lib/db'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type TypeMouvement = 'entree' | 'sortie' | 'ajustement' | 'inventaire'
+export type TypeMouvement  = 'entree' | 'sortie' | 'ajustement' | 'inventaire'
+export type FamilleProduit = 'piece' | 'accessoire' | 'appareil' | 'consommable'
+
+export const FAMILLES: FamilleProduit[] = ['piece', 'accessoire', 'appareil', 'consommable']
 
 export interface ProduitRow {
   id:                   number
@@ -31,6 +36,7 @@ export interface ProduitRow {
   nom:                  string
   marque:               string | null
   description:          string | null
+  famille:              FamilleProduit
   prix_achat_ht:        number
   prix_achat_cump:      number
   prix_vente_ht:        number
@@ -47,6 +53,7 @@ export interface ProduitRow {
 
 export interface ListProduitsOpts {
   categorie_id?: number
+  famille?:      FamilleProduit | string
   stock_bas?:    boolean
   search?:       string
   limit?:        number
@@ -59,6 +66,7 @@ export interface CreateProduitData {
   sku?:                  string | null
   marque?:               string | null
   categorie_id?:         number | null
+  famille?:              FamilleProduit
   prix_achat_ht?:        number
   prix_vente_ht?:        number
   tva_taux?:             number
@@ -74,6 +82,7 @@ export interface UpdateProduitData {
   sku?:                  string | null
   marque?:               string | null
   categorie_id?:         number | null
+  famille?:              FamilleProduit
   prix_achat_ht?:        number
   prix_vente_ht?:        number
   tva_taux?:             number
@@ -133,6 +142,10 @@ export async function listProduits(
   if (opts.categorie_id) {
     conditions.push('p.categorie_id = ?')
     bindings.push(opts.categorie_id)
+  }
+  if (opts.famille && FAMILLES.includes(opts.famille as FamilleProduit)) {
+    conditions.push('p.famille = ?')
+    bindings.push(opts.famille)
   }
   if (opts.stock_bas) {
     conditions.push('p.stock_actuel <= p.stock_minimum')
@@ -230,11 +243,14 @@ export async function createProduit(
   userId: number,
   data: CreateProduitData
 ): Promise<{ id: number }> {
+  const famille = FAMILLES.includes(data.famille as FamilleProduit)
+    ? data.famille! : 'piece'
+
   const result = await db.prepare(`
     INSERT INTO produits
-      (boutique_id, categorie_id, sku, nom, marque, prix_achat_ht, prix_vente_ht, tva_taux,
+      (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
        stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -242,6 +258,7 @@ export async function createProduit(
     data.sku                   ?? null,
     data.nom,
     data.marque                ?? null,
+    famille,
     data.prix_achat_ht         ?? 0,
     data.prix_vente_ht         ?? 0,
     data.tva_taux              ?? 20,
@@ -295,12 +312,16 @@ export async function updateProduit(
     .first()
   if (!existing) throw new Error('Produit introuvable.')
 
+  const familleUpd = data.famille && FAMILLES.includes(data.famille as FamilleProduit)
+    ? data.famille : null
+
   await db.prepare(`
     UPDATE produits SET
       nom          = COALESCE(?, nom),
       sku          = COALESCE(?, sku),
       marque       = COALESCE(?, marque),
       categorie_id = COALESCE(?, categorie_id),
+      famille      = COALESCE(?, famille),
       prix_achat_ht= COALESCE(?, prix_achat_ht),
       prix_vente_ht= COALESCE(?, prix_vente_ht),
       tva_taux     = COALESCE(?, tva_taux),
@@ -314,6 +335,7 @@ export async function updateProduit(
     data.sku          ?? null,
     data.marque       ?? null,
     data.categorie_id ?? null,
+    familleUpd,
     data.prix_achat_ht ?? null,
     data.prix_vente_ht ?? null,
     data.tva_taux      ?? null,
@@ -473,6 +495,163 @@ export async function createCategorie(
 /**
  * Calcule les KPIs de stock d'une boutique.
  *
+// ─── Import catalogue CSV ─────────────────────────────────────────────────────
+
+/**
+ * Parse et importe un catalogue produits depuis un CSV fournisseur.
+ *
+ * Format CSV (1ère ligne = en-têtes, séparateur , ou ;) :
+ *   sku, nom, prix_achat_ht, prix_vente_ht, stock_actuel, famille, tva_taux, marque, fournisseur
+ *
+ * Règles métier :
+ *   - SKU connu → UPDATE (nom, prix, famille, fournisseur) + ajustement stock si différent
+ *   - SKU absent/inconnu → INSERT nouveau produit
+ *   - Colonne obligatoire : nom
+ *   - Famille validée contre FAMILLES, défaut 'piece' si invalide
+ *   - Limite 500 lignes par import (anti-abus)
+ */
+export async function importCatalogueCsv(
+  db:         D1Database,
+  boutiqueId: number,
+  userId:     number,
+  csvText:    string
+): Promise<{ imported: number; updated: number; skipped: number; errors: string[] }> {
+  const lines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  if (lines.length < 2) throw new Error('CSV vide ou sans données.')
+
+  const sep = lines[0].includes(';') ? ';' : ','
+
+  function parseLine(line: string): string[] {
+    const fields: string[] = []
+    let cur = '', inQ = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
+        else inQ = !inQ
+      } else if (ch === sep && !inQ) {
+        fields.push(cur.trim()); cur = ''
+      } else {
+        cur += ch
+      }
+    }
+    fields.push(cur.trim())
+    return fields
+  }
+
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/^\uFEFF/, '').trim())
+  const idx     = (name: string) => headers.indexOf(name)
+
+  const iSku     = idx('sku')
+  const iNom     = idx('nom')
+  const iPaHt    = idx('prix_achat_ht')
+  const iPvHt    = idx('prix_vente_ht')
+  const iStock   = idx('stock_actuel')
+  const iFamille = idx('famille')
+  const iTva     = idx('tva_taux')
+  const iMarque  = idx('marque')
+  const iFourn   = idx('fournisseur')
+
+  if (iNom === -1) throw new Error('Colonne "nom" obligatoire introuvable dans le CSV.')
+
+  const dataLines = lines.slice(1).filter(l => l.trim() !== '').slice(0, 500)
+
+  let imported = 0, updated = 0, skipped = 0
+  const errors: string[] = []
+
+  for (let li = 0; li < dataLines.length; li++) {
+    const row = parseLine(dataLines[li])
+    const num = li + 2
+
+    try {
+      const nom = row[iNom]?.trim()
+      if (!nom) { skipped++; errors.push(`Ligne ${num} : nom manquant — ignorée.`); continue }
+
+      const sku     = iSku    >= 0 && row[iSku]?.trim()   ? row[iSku].trim()  : null
+      const paHt    = iPaHt   >= 0 ? parseFloat(row[iPaHt]  ?? '0') || 0  : 0
+      const pvHt    = iPvHt   >= 0 ? parseFloat(row[iPvHt]  ?? '0') || 0  : 0
+      const stock   = iStock  >= 0 ? parseInt(row[iStock]   ?? '0', 10) || 0 : 0
+      const tva     = iTva    >= 0 ? parseFloat(row[iTva]   ?? '20') || 20 : 20
+      const marque  = iMarque >= 0 ? row[iMarque]?.trim() || null : null
+      const fourn   = iFourn  >= 0 ? row[iFourn]?.trim()  || null : null
+      const famRaw  = iFamille >= 0 ? row[iFamille]?.trim().toLowerCase() : ''
+      const famille = FAMILLES.includes(famRaw as FamilleProduit) ? (famRaw as FamilleProduit) : 'piece'
+
+      if (sku) {
+        const existing = await db
+          .prepare('SELECT id, stock_actuel FROM produits WHERE boutique_id = ? AND sku = ? AND actif = 1 LIMIT 1')
+          .bind(boutiqueId, sku)
+          .first<{ id: number; stock_actuel: number }>()
+
+        if (existing) {
+          await db.prepare(`
+            UPDATE produits SET
+              nom           = ?,
+              famille       = ?,
+              prix_achat_ht = ?,
+              prix_vente_ht = ?,
+              tva_taux      = ?,
+              marque        = COALESCE(?, marque),
+              fournisseur   = COALESCE(?, fournisseur),
+              updated_at    = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, existing.id).run()
+
+          if (stock > 0 && stock !== existing.stock_actuel) {
+            await db.prepare(`
+              INSERT INTO mouvements_stock
+                (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
+              VALUES (?, ?, 'inventaire', ?, ?, ?, ?, 'Import catalogue CSV')
+            `).bind(existing.id, boutiqueId, stock - existing.stock_actuel,
+                    existing.stock_actuel, stock, userId).run()
+            await db.prepare('UPDATE produits SET stock_actuel = ? WHERE id = ?')
+              .bind(stock, existing.id).run()
+          }
+
+          updated++
+          continue
+        }
+      }
+
+      // INSERT nouveau produit
+      const res = await db.prepare(`
+        INSERT INTO produits
+          (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
+           tva_taux, stock_actuel, stock_minimum, fournisseur)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 5, ?)
+        RETURNING id
+      `).bind(boutiqueId, sku, nom, marque, famille, paHt, pvHt, tva, stock, fourn)
+        .first<{ id: number }>()
+
+      if (res && stock > 0) {
+        await db.prepare(`
+          INSERT INTO mouvements_stock
+            (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
+          VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
+        `).bind(res.id, boutiqueId, stock, stock, userId).run()
+      }
+
+      imported++
+    } catch (e: any) {
+      skipped++
+      errors.push(`Ligne ${num} : ${e.message}`)
+    }
+  }
+
+  await auditLog(db, {
+    boutique_id: boutiqueId,
+    user_id:     userId,
+    action:      'IMPORT_CATALOGUE_CSV',
+    entite_type: 'produit',
+    details:     JSON.stringify({ imported, updated, skipped }),
+  })
+
+  return { imported, updated, skipped, errors }
+}
+
+// ─── KPIs stock ───────────────────────────────────────────────────────────────
+
+/**
  * @param db          — Instance D1Database
  * @param boutiqueId  — ID boutique
  * @returns           — { nb_produits, nb_ruptures, nb_alertes, valeur_stock_ht, valeur_stock_cump }

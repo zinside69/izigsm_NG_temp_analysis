@@ -9,6 +9,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stock — iziGSM</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    .famille-filters { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn-famille {
+      padding:5px 14px; border-radius:20px; border:1.5px solid #e5e7eb;
+      background:#fff; font-size:.82rem; font-weight:500; cursor:pointer;
+      transition:all .15s; color:var(--text-muted);
+    }
+    .btn-famille:hover { border-color:#6366f1; color:#6366f1; }
+    .btn-famille.active { color:#fff; border-color:transparent; }
+    .btn-famille[data-f=""].active          { background:#6366f1; }
+    .btn-famille[data-f="piece"].active     { background:#7c3aed; }
+    .btn-famille[data-f="accessoire"].active{ background:#2563eb; }
+    .btn-famille[data-f="appareil"].active  { background:#059669; }
+    .btn-famille[data-f="consommable"].active{ background:#d97706; }
+
+    .badge-famille-piece      { background:#ede9fe; color:#7c3aed; border:1px solid #c4b5fd; }
+    .badge-famille-accessoire { background:#dbeafe; color:#2563eb; border:1px solid #93c5fd; }
+    .badge-famille-appareil   { background:#d1fae5; color:#059669; border:1px solid #6ee7b7; }
+    .badge-famille-consommable{ background:#fef3c7; color:#d97706; border:1px solid #fcd34d; }
+    .badge-famille-default    { background:#f3f4f6; color:#6b7280; border:1px solid #e5e7eb; }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -23,118 +44,205 @@
       </header>
       <main class="page-content">
         <div class="page-header">
-          <div><h1>Stock de pièces</h1><p>Gérez votre inventaire de pièces détachées</p></div>
+          <div><h1>Stock</h1><p>Gérez votre inventaire de produits et pièces détachées</p></div>
           <div class="page-header-actions">
-            <button class="btn btn-secondary btn-sm">📥 Importer</button>
-            <button class="btn btn-primary" onclick="openNewPart()">+ Nouvelle pièce</button>
+            <button class="btn btn-secondary btn-sm" onclick="openImportCsv()">📥 Importer CSV</button>
+            <button class="btn btn-primary" onclick="openNewStock()">+ Nouveau produit</button>
           </div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;">
           <div class="kpi-card">
             <div class="kpi-label">Références</div>
-            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-refs">48</div>
+            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-refs">—</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Valeur stock</div>
-            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-stock-val">3 240 €</div>
+            <div class="kpi-value" style="font-size:1.6rem;" id="kpi-stock-val">—</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Alertes seuil bas</div>
-            <div class="kpi-value" style="font-size:1.6rem;color:var(--red);" id="kpi-alerts">3</div>
+            <div class="kpi-value" style="font-size:1.6rem;color:var(--red);" id="kpi-alerts">—</div>
             <div class="kpi-delta down">À commander</div>
+          </div>
+        </div>
+
+        <!-- Filtres famille -->
+        <div style="margin-bottom:14px;">
+          <div class="famille-filters" id="famille-filters">
+            <button class="btn-famille active" data-f="" onclick="filterFamille(this)">Toutes</button>
+            <button class="btn-famille" data-f="piece" onclick="filterFamille(this)">🔧 Pièce</button>
+            <button class="btn-famille" data-f="accessoire" onclick="filterFamille(this)">🔌 Accessoire</button>
+            <button class="btn-famille" data-f="appareil" onclick="filterFamille(this)">📱 Appareil</button>
+            <button class="btn-famille" data-f="consommable" onclick="filterFamille(this)">🧴 Consommable</button>
           </div>
         </div>
 
         <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
           <div class="search-input" style="flex:1;max-width:300px;">
             <span class="search-icon">🔍</span>
-            <input type="text" placeholder="Rechercher une pièce…" oninput="filterParts(this.value)">
+            <input type="text" id="search-stock" placeholder="Rechercher un produit…" oninput="applyFilters()">
           </div>
-          <select onchange="filterCategory(this.value)" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
+          <select id="filter-category" onchange="applyFilters()" style="min-height:38px;border:1px solid #e5e7eb;border-radius:10px;padding:0 12px;font:inherit;font-size:0.88rem;background:#fff;">
             <option value="">Toutes catégories</option>
-            <option value="Écran">Écrans</option>
-            <option value="Batterie">Batteries</option>
-            <option value="Connecteur">Connecteurs</option>
-            <option value="Coque">Coques</option>
-            <option value="Autre">Autres</option>
           </select>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-outline" data-filter-stock="all" onclick="applyFilters()">Tous</button>
+            <button class="btn btn-sm btn-outline" data-filter-stock="low" onclick="applyFilters()">⚠ Stock bas</button>
+            <button class="btn btn-sm btn-outline" data-filter-stock="out" onclick="applyFilters()">❌ Rupture</button>
+          </div>
         </div>
 
         <div class="table-card">
           <table>
             <thead>
               <tr>
-                <th>Référence</th>
-                <th>Nom</th>
+                <th>Nom / Référence</th>
+                <th>Famille</th>
                 <th>Catégorie</th>
-                <th>Compatibilité</th>
                 <th>Stock</th>
-                <th>Seuil</th>
-                <th>Prix achat</th>
-                <th>Prix vente</th>
+                <th>Statut</th>
+                <th>Prix vente HT</th>
+                <th>Valeur</th>
+                <th>Fournisseur</th>
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="stock-table"></tbody>
+            <tbody id="stock-tbody"></tbody>
           </table>
         </div>
       </main>
     </div>
   </div>
 
-  <!-- Modal Pièce -->
-  <div class="modal-overlay" id="modal-part">
+  <!-- Modal Nouveau/Modifier produit -->
+  <div class="modal-overlay" id="modal-stock">
     <div class="modal">
       <div class="modal-header">
-        <h2>Nouvelle pièce</h2>
-        <button class="modal-close" onclick="closeModal('modal-part')">✕</button>
+        <h2 id="modal-stock-title">Nouveau produit</h2>
+        <button class="modal-close" onclick="closeModal('modal-stock')">✕</button>
       </div>
       <div class="modal-body">
+        <input type="hidden" id="stock-id">
         <div class="form-grid">
           <div class="form-field">
-            <label>Référence</label>
-            <input type="text" id="p-ref" placeholder="SCR-IPH14-001">
+            <label>SKU / Référence</label>
+            <input type="text" id="stock-reference" placeholder="SCR-IPH14-001">
           </div>
           <div class="form-field">
             <label>Nom *</label>
-            <input type="text" id="p-name" placeholder="Écran iPhone 14" required>
+            <input type="text" id="stock-name" placeholder="Écran iPhone 14" required>
           </div>
           <div class="form-field">
-            <label>Catégorie</label>
-            <select id="p-cat">
-              <option>Écran</option>
-              <option>Batterie</option>
-              <option>Connecteur</option>
-              <option>Coque</option>
-              <option>Autre</option>
+            <label>Famille</label>
+            <select id="stock-famille">
+              <option value="piece">🔧 Pièce détachée</option>
+              <option value="accessoire">🔌 Accessoire</option>
+              <option value="appareil">📱 Appareil</option>
+              <option value="consommable">🧴 Consommable</option>
             </select>
           </div>
           <div class="form-field">
-            <label>Compatibilité</label>
-            <input type="text" id="p-compat" placeholder="iPhone 14 / 14 Pro">
+            <label>Catégorie</label>
+            <select id="stock-category">
+              <option value="">— Aucune —</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Marque</label>
+            <input type="text" id="stock-marque" placeholder="Apple, Samsung…">
+          </div>
+          <div class="form-field">
+            <label>Fournisseur</label>
+            <input type="text" id="stock-supplier" placeholder="Nom du fournisseur">
           </div>
           <div class="form-field">
             <label>Quantité en stock</label>
-            <input type="number" id="p-qty" min="0" value="0">
+            <input type="number" id="stock-qty" min="0" value="0">
           </div>
           <div class="form-field">
             <label>Seuil d'alerte</label>
-            <input type="number" id="p-threshold" min="0" value="2">
+            <input type="number" id="stock-min-qty" min="0" value="2">
           </div>
           <div class="form-field">
-            <label>Prix d'achat (€)</label>
-            <input type="number" id="p-buy" min="0" step="0.01" placeholder="0.00">
+            <label>Prix d'achat HT (€)</label>
+            <input type="number" id="stock-price-buy" min="0" step="0.01" placeholder="0.00">
           </div>
           <div class="form-field">
             <label>Prix de vente HT (€)</label>
-            <input type="number" id="p-sell" min="0" step="0.01" placeholder="0.00">
+            <input type="number" id="stock-price" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-field" style="grid-column:1/-1;">
+            <label>Notes</label>
+            <input type="text" id="stock-notes" placeholder="Compatibilités, remarques…">
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('modal-part')">Annuler</button>
-        <button class="btn btn-primary" onclick="savePart()">Enregistrer</button>
+        <button class="btn btn-secondary" onclick="closeModal('modal-stock')">Annuler</button>
+        <button class="btn btn-primary" onclick="saveStock()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ajustement de stock -->
+  <div class="modal-overlay" id="modal-adjust-stock">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h2>Ajuster le stock</h2>
+        <button class="modal-close" onclick="closeModal('modal-adjust-stock')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;">Produit : <strong id="adjust-stock-name"></strong></p>
+        <p style="margin-bottom:16px;">Stock actuel : <strong id="adjust-current-qty"></strong></p>
+        <div class="form-field" style="margin-bottom:12px;">
+          <label>Opération</label>
+          <select id="adjust-operation">
+            <option value="add">➕ Entrée stock</option>
+            <option value="remove">➖ Sortie stock</option>
+            <option value="set">🔄 Définir exactement</option>
+          </select>
+        </div>
+        <div class="form-field" style="margin-bottom:12px;">
+          <label>Quantité</label>
+          <input type="number" id="adjust-qty" min="1" placeholder="0">
+        </div>
+        <div class="form-field">
+          <label>Motif</label>
+          <input type="text" id="adjust-reason" placeholder="Réception commande, casse…">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-adjust-stock')">Annuler</button>
+        <button class="btn btn-primary" onclick="confirmAdjustStock()">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Import CSV -->
+  <div class="modal-overlay" id="modal-import-csv">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h2>Importer un catalogue CSV</h2>
+        <button class="modal-close" onclick="closeModal('modal-import-csv')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:.87rem;color:var(--text-muted);margin-bottom:14px;">
+          Format attendu : colonnes séparées par <code>,</code> ou <code>;</code>.<br>
+          Colonnes reconnues : <code>sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
+          tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre</code>.<br>
+          UPSERT sur SKU — max 500 lignes par import.
+        </p>
+        <div class="form-field" style="margin-bottom:14px;">
+          <label>Fichier CSV</label>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:block;width:100%;padding:6px 0;">
+        </div>
+        <div id="import-preview" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:.82rem;max-height:120px;overflow-y:auto;font-family:monospace;white-space:pre-wrap;"></div>
+        <div id="import-result" style="display:none;margin-top:14px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-import-csv')">Annuler</button>
+        <button class="btn btn-primary" id="btn-confirm-import" onclick="confirmImportCsv()">Importer</button>
       </div>
     </div>
   </div>

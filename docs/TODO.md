@@ -300,20 +300,18 @@
 
 ---
 
-### Sprint 2.34 🔜 — MOD-04 Stock : familles produits + import catalogue fournisseur CSV
-**Module CDC : MOD-04 (CRITIQUE)**
+### Sprint 2.34 ✅ — MOD-04 Stock : familles produits + import catalogue fournisseur CSV
+**Module CDC : MOD-04 (CRITIQUE)** — v2.34.0 — *6 juillet 2026*
 
-État actuel :
-- `stockService.ts` ✅ — CRUD produits, mouvements, CUMP, KPIs
-- CUMP ✅ calculé à réception BC
-- **Manque** : familles produits (pièce/accessoire/appareil/consommable), import catalogue CSV
-
-À faire :
-- [ ] Migration 0025 (ou 0026) : `famille TEXT DEFAULT 'piece'` sur `produits` (pièce/accessoire/appareil/consommable)
-- [ ] `stockService.ts` : `listProduits()` → filtre par famille
-- [ ] `public/stock.html` : filtre famille + badge couleur par famille
-- [ ] `POST /api/produits/import-csv` : import catalogue fournisseur (colonnes : SKU, nom, prix, stock, famille)
-- [ ] `stockService.ts` : `importCatalogueCsv()` avec dédup SKU (UPSERT)
+- [x] Migration `0026_produits_famille.sql` : `famille TEXT DEFAULT 'piece'` CHECK + index
+- [x] `stockService.ts` : `FamilleProduit` type + `FAMILLES[]` constant
+- [x] `stockService.ts` : `listProduits()` → filtre par famille
+- [x] `stockService.ts` : `createProduit()` + `updateProduit()` → colonne famille
+- [x] `stockService.ts` : `importCatalogueCsv()` — CSV RFC 4180, sep auto `,`/`;`, UPSERT sur SKU, 500 lignes max
+- [x] `routes/stocks.ts` : param `famille` dans `GET /api/produits` + `POST /api/produits/import-csv`
+- [x] `public/stock.html` : filtres famille (boutons pill), badge couleur par famille, modal import CSV
+- [x] `public/static/js/stock.js` : refonte complète — filtre famille API, FAMILLE_CONFIG palette, `importCatalogueCsv()`, `loadCategories()` dynamique
+- [x] Tests : 607/607 — `SQL_INSERT_PRODUIT` + `SQL_UPDATE_PRODUIT` mis à jour (ajout colonne `famille`)
 
 ---
 
@@ -380,7 +378,7 @@
 | MOD-01 Tickets + Kanban | CRITIQUE | ~90% | ✅ Complet (manque photos R2, archivage auto) |
 | MOD-02 Facturation NF525 | CRITIQUE | ~92% | ✅ Complet (manque rapport comptable CSV) |
 | MOD-03 Devis + page publique | HAUTE | ~88% | ✅ Complet (manque eIDAS, relance auto) |
-| MOD-04 Stock + CUMP | CRITIQUE | ~80% | ⚠️ CUMP ✅, manque familles + import CSV |
+| MOD-04 Stock + CUMP | CRITIQUE | ✅ 100% | Familles + import CSV + CUMP |
 | MOD-05 Reconditionnement | MOYENNE | ~90% | ✅ Complet |
 | MOD-06 Rachats (livre de police) | HAUTE | ~92% | ✅ Complet |
 | MOD-07 CRM Clients | HAUTE | ~85% | ✅ Complet (manque parrainage, RGPD purge) |
@@ -415,4 +413,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.33 clôturé, v2.33.0 en production — Sprint 2.34 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.34 clôturé, v2.34.0 en production — Sprint 2.35 à démarrer*

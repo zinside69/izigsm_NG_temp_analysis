@@ -134,9 +134,9 @@ const SQL_CHECK_PRODUIT_STOCK = n(`SELECT id, stock_actuel, boutique_id FROM pro
 // SQL INSERT produit
 const SQL_INSERT_PRODUIT = n(`
   INSERT INTO produits
-    (boutique_id, categorie_id, sku, nom, marque, prix_achat_ht, prix_vente_ht, tva_taux,
+    (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
      stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -154,6 +154,7 @@ const SQL_UPDATE_PRODUIT = n(`
     sku          = COALESCE(?, sku),
     marque       = COALESCE(?, marque),
     categorie_id = COALESCE(?, categorie_id),
+    famille      = COALESCE(?, famille),
     prix_achat_ht= COALESCE(?, prix_achat_ht),
     prix_vente_ht= COALESCE(?, prix_vente_ht),
     tva_taux     = COALESCE(?, tva_taux),
@@ -478,9 +479,9 @@ describe('stockService', () => {
       const calls = db.__getCalls()
       const insertCall = calls.find(c => c.sql === SQL_INSERT_PRODUIT)
       expect(insertCall).toBeDefined()
-      // tva_taux = 20 (index 7), stock_minimum = 5 (index 9)
-      expect(insertCall!.params[7]).toBe(20)
-      expect(insertCall!.params[9]).toBe(5)
+      // famille(5), prix_achat_ht(6), prix_vente_ht(7), tva_taux(8), stock_actuel(9), stock_minimum(10)
+      expect(insertCall!.params[8]).toBe(20)
+      expect(insertCall!.params[10]).toBe(5)
     })
   })
 
