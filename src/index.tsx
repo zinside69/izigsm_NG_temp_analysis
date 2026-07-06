@@ -89,7 +89,7 @@ app.get('/api/health', (c) => {
     status:    'ok',
     app:       'iziGSM',
     version:   '2.39.0',
-    sprint:    '2.36 — MOD-01 Photos tickets R2 (avant/après)',
+    sprint:    '2.39 — MOD-15 Phase 2 : sync référentiel global phone-specs-api',
     timestamp: new Date().toISOString(),
   })
 })
