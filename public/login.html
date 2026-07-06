@@ -41,7 +41,7 @@
               <input type="password" id="login-password" name="password" required autocomplete="current-password">
             </div>
             <div style="text-align:right;margin-bottom:22px;">
-              <a href="#" style="color:var(--primary);font-size:0.88rem;font-weight:600;">Mot de passe oublié ?</a>
+              <a href="/reset-password.html" style="color:var(--primary);font-size:0.88rem;font-weight:600;">Mot de passe oublié ?</a>
             </div>
             <button type="submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;">
               Se connecter
@@ -50,9 +50,13 @@
 
           <div class="separator" style="margin:20px 0;">OU</div>
 
-          <div class="oauth-box" onclick="alert('OAuth Google — non disponible en démo')">
-            <span class="oauth-logo">G</span>
-            Continuer avec Google
+          <!-- Google One Tap — chargé dynamiquement si GOOGLE_CLIENT_ID disponible -->
+          <div id="google-btn-container" style="display:flex;justify-content:center;margin-bottom:8px;min-height:44px;">
+            <!-- Le bouton Google est injecté ici par initGoogleOneTap() -->
+            <div id="google-btn-fallback" class="oauth-box" style="cursor:not-allowed;opacity:.6;">
+              <span class="oauth-logo">G</span>
+              Google (non configuré)
+            </div>
           </div>
 
           <p style="text-align:center;margin:20px 0 0;color:#667085;font-size:0.9rem;">
@@ -137,6 +141,109 @@
         btn.textContent = 'Se connecter';
       }
     });
+  </script>
+  <!-- Google Identity Services (One Tap) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    /**
+     * Initialise Google One Tap si GOOGLE_CLIENT_ID est exposé via /api/auth/config.
+     * Fallback gracieux : si non configuré, le bouton fallback reste visible.
+     */
+    async function initGoogleOneTap() {
+      try {
+        const res  = await fetch('/api/auth/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (!cfg.googleClientId) return;
+
+        // Remplacer le bouton fallback
+        document.getElementById('google-btn-fallback').style.display = 'none';
+
+        // Attendre que la lib Google soit chargée
+        await new Promise(resolve => {
+          if (window.google?.accounts) { resolve(); return; }
+          const check = setInterval(() => {
+            if (window.google?.accounts) { clearInterval(check); resolve(); }
+          }, 100);
+          setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+        });
+
+        if (!window.google?.accounts) return;
+
+        // Initialiser Google Identity Services
+        google.accounts.id.initialize({
+          client_id:         cfg.googleClientId,
+          callback:          handleGoogleCredential,
+          auto_select:       false,
+          cancel_on_tap_outside: true,
+        });
+
+        // Rendre le bouton Google dans le container
+        google.accounts.id.renderButton(
+          document.getElementById('google-btn-container'),
+          {
+            theme:     'outline',
+            size:      'large',
+            text:      'continue_with',
+            shape:     'rectangular',
+            logo_alignment: 'left',
+            width:     368,
+          }
+        );
+      } catch (_) { /* non bloquant */ }
+    }
+
+    async function handleGoogleCredential(response) {
+      const flash = document.getElementById('flash-area');
+      flash.style.display = 'none';
+
+      try {
+        const res  = await fetch('/api/auth/google', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ credential: response.credential }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.accessToken) {
+          const user = data.user;
+          let boutiqueId   = user.boutique_id   ?? null;
+          let boutiqueName = null;
+
+          if (!boutiqueId) {
+            try {
+              const bRes  = await fetch('/api/boutiques', { headers: { Authorization: `Bearer ${data.accessToken}` } });
+              const bData = await bRes.json();
+              if (bData.success && bData.data?.length > 0) {
+                boutiqueId   = bData.data[0].id;
+                boutiqueName = bData.data[0].nom;
+              }
+            } catch (_) {}
+          }
+
+          localStorage.setItem('izigsm_token',         data.accessToken);
+          localStorage.setItem('izigsm_refresh_token', data.refreshToken);
+          localStorage.setItem('izigsm_session', JSON.stringify({
+            name:          `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+            email:         user.email,
+            role:          user.role,
+            boutique_id:   boutiqueId,
+            boutique_name: boutiqueName || 'Mon Atelier',
+            company:       boutiqueName || 'Mon Atelier',
+          }));
+          window.location.href = '/dashboard';
+        } else {
+          flash.style.display = 'block';
+          flash.innerHTML = `<div class="flash error">❌ ${data.error || 'Erreur Google OAuth.'}</div>`;
+        }
+      } catch (err) {
+        flash.style.display = 'block';
+        flash.innerHTML = `<div class="flash error">❌ Erreur réseau : ${err.message}</div>`;
+      }
+    }
+
+    // Lancer l'init après chargement
+    window.addEventListener('DOMContentLoaded', initGoogleOneTap);
   </script>
   <script src="/static/js/pwa.js"></script>
 </body>

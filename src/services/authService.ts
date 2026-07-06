@@ -259,6 +259,95 @@ export async function activateUser(
   ).bind(email).run()
 }
 
+// ─── updatePasswordHash ───────────────────────────────────────────────────────
+
+/**
+ * Met à jour le hash du mot de passe d'un utilisateur actif.
+ * Appelé après validation du token de réinitialisation.
+ *
+ * @param db            Instance D1Database
+ * @param userId        ID de l'utilisateur
+ * @param passwordHash  Nouveau hash PBKDF2-SHA256
+ */
+export async function updatePasswordHash(
+  db: D1Database,
+  userId: number,
+  passwordHash: string
+): Promise<void> {
+  await db.prepare(
+    'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1'
+  ).bind(passwordHash, userId).run()
+}
+
+// ─── findUserByGoogleId ───────────────────────────────────────────────────────
+
+/**
+ * Recherche un utilisateur par son google_id (OAuth Google).
+ *
+ * @param db       Instance D1Database
+ * @param googleId Identifiant Google (sub du JWT Google)
+ * @returns        UserWithRole ou null si introuvable
+ */
+export async function findUserByGoogleId(
+  db: D1Database,
+  googleId: string
+): Promise<UserWithRole | null> {
+  return db.prepare(`
+    SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.google_id = ? AND u.actif = 1
+  `).bind(googleId).first<UserWithRole>()
+}
+
+// ─── linkGoogleId ─────────────────────────────────────────────────────────────
+
+/**
+ * Associe un google_id à un utilisateur existant (liaison compte existant).
+ *
+ * @param db       Instance D1Database
+ * @param userId   ID de l'utilisateur
+ * @param googleId Identifiant Google (sub du JWT Google)
+ */
+export async function linkGoogleId(
+  db: D1Database,
+  userId: number,
+  googleId: string
+): Promise<void> {
+  await db.prepare(
+    'UPDATE users SET google_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(googleId, userId).run()
+}
+
+// ─── createGoogleUser ─────────────────────────────────────────────────────────
+
+/**
+ * Crée un utilisateur via OAuth Google (compte directement actif, sans mot de passe).
+ * `actif = 1` et `email_verifie = 1` car Google garantit l'email.
+ * `password_hash = ''` — l'utilisateur ne peut pas se connecter par mot de passe.
+ *
+ * @param db       Instance D1Database
+ * @param email    Email Google vérifié
+ * @param prenom   Prénom issu du profil Google (given_name)
+ * @param nom      Nom issu du profil Google (family_name)
+ * @param googleId Sub Google unique
+ * @returns        ID du nouvel utilisateur, null si échec
+ */
+export async function createGoogleUser(
+  db: D1Database,
+  email: string,
+  prenom: string,
+  nom: string,
+  googleId: string
+): Promise<number | null> {
+  const result = await db.prepare(`
+    INSERT INTO users (email, password_hash, prenom, nom, google_id, role_id, actif, email_verifie)
+    VALUES (?, '', ?, ?, ?, 2, 1, 1)
+    RETURNING id
+  `).bind(email, prenom, nom, googleId).first<{ id: number }>()
+
+  return result?.id ?? null
+}
+
 // ─── findUserByEmailAfterActivation ───────────────────────────────────────────
 
 /**

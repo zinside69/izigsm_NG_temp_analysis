@@ -52,12 +52,31 @@ import {
   createUser,
   activateUser,
   findUserByEmailAfterActivation,
+  updatePasswordHash,
+  findUserByGoogleId,
+  linkGoogleId,
+  createGoogleUser,
 } from '../services/authService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any }
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+// ─── GET /api/auth/config ─────────────────────────────────────────────────────
+
+/**
+ * GET /api/auth/config
+ * Expose la configuration publique d'authentification côté client.
+ * Retourne uniquement les valeurs non-secrètes (Client ID public Google).
+ * Pas d'authentification requise — endpoint public.
+ *
+ * @returns 200 { success: true, googleClientId: string | null }
+ */
+auth.get('/config', (c) => {
+  const googleClientId = (c.env as any).GOOGLE_CLIENT_ID ?? null
+  return c.json({ success: true, googleClientId })
+})
 
 // ─── POST /api/auth/register ──────────────────────────────────────────────────
 
@@ -354,6 +373,206 @@ auth.get('/me', authMiddleware, async (c) => {
   const profile = await findUserWithProfile(c.env.DB, user.sub)
   if (!profile) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
   return c.json({ success: true, user: profile })
+})
+
+// ─── POST /api/auth/reset-password-request ───────────────────────────────────
+
+/**
+ * POST /api/auth/reset-password-request
+ * Démarre le flux de réinitialisation mot de passe.
+ *
+ * Génère un token UUID hex (64 chars) stocké en KV clé `reset:{email}` TTL 1h.
+ * Envoie un email fire-and-forget avec le lien de réinitialisation.
+ *
+ * Sécurité : réponse identique si email inconnu (anti-énumération).
+ *
+ * Body JSON : { "email": "user@example.com" }
+ * @returns 200 { success: true, message } — toujours, même si email inconnu
+ */
+auth.post('/reset-password-request', async (c) => {
+  try {
+    const { email } = await c.req.json().catch(() => ({}))
+    if (!email || !validateEmail(email))
+      return c.json({ success: false, error: 'Email invalide.' }, 400)
+
+    // Anti-énumération : même réponse quelle que soit l'existence de l'email
+    const user = await findUserByEmail(c.env.DB, email)
+
+    if (user) {
+      // Générer token réinitialisation 32 octets → hex 64 chars
+      const bytes = crypto.getRandomValues(new Uint8Array(32))
+      const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
+      // Stocker en KV — TTL 1h
+      await c.env.KV.put(`reset:${email}`, JSON.stringify({ userId: user.id, token }), { expirationTtl: 3600 })
+
+      // Lien de réinitialisation
+      const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
+      const resetLink = `${frontendUrl}/reset-password.html?token=${token}&email=${encodeURIComponent(email)}`
+
+      // Fire-and-forget email (emailService si disponible)
+      try {
+        const { sendEmail } = await import('../services/emailService')
+        await sendEmail(c.env.DB, user.id, email, 'autre', {
+          subject: 'Réinitialisation de votre mot de passe iziGSM',
+          htmlBody: `
+            <div style="font-family:sans-serif;max-width:520px;margin:auto;">
+              <h2 style="color:#6366f1;">Réinitialisation de mot de passe</h2>
+              <p>Vous avez demandé à réinitialiser votre mot de passe iziGSM.</p>
+              <p style="margin:24px 0;">
+                <a href="${resetLink}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;"
+                >Réinitialiser mon mot de passe</a>
+              </p>
+              <p style="color:#667085;font-size:.88rem;">Ce lien expire dans <strong>1 heure</strong>.<br>
+              Si vous n'avez pas fait cette demande, ignorez cet email.</p>
+              <p style="color:#667085;font-size:.82rem;">Ou copiez ce lien : ${resetLink}</p>
+            </div>`,
+        })
+      } catch (_) { /* non bloquant */ }
+
+      await auditLog(c.env.DB, { user_id: user.id, action: 'RESET_PASSWORD_REQUEST', entite_type: 'user', entite_id: user.id })
+    }
+
+    return c.json({ success: true, message: 'Si cet email est enregistré, un lien de réinitialisation a été envoyé.' })
+  } catch (e) {
+    console.error('[reset-password-request]', e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── POST /api/auth/reset-password ────────────────────────────────────────────
+
+/**
+ * POST /api/auth/reset-password
+ * Finalise la réinitialisation du mot de passe avec le token reçu par email.
+ *
+ * Vérifie le token en KV, met à jour le hash PBKDF2, révoque le token (usage unique).
+ *
+ * Body JSON : { "email": "user@example.com", "token": "...", "password": "nouveauMdp" }
+ * @returns 200 { success: true, message }
+ * @returns 400 si token invalide/expiré ou password < 8 chars
+ */
+auth.post('/reset-password', async (c) => {
+  try {
+    const { email, token, password } = await c.req.json().catch(() => ({}))
+
+    if (!email || !token || !password)
+      return c.json({ success: false, error: 'email, token et password requis.' }, 400)
+    if (password.length < 8)
+      return c.json({ success: false, error: 'Mot de passe minimum 8 caractères.' }, 400)
+
+    // Vérifier le token en KV
+    const raw = await c.env.KV.get(`reset:${email}`)
+    if (!raw)
+      return c.json({ success: false, error: 'Lien invalide ou expiré. Veuillez refaire la demande.' }, 400)
+
+    const stored = JSON.parse(raw) as { userId: number; token: string }
+    if (stored.token !== token)
+      return c.json({ success: false, error: 'Lien invalide ou expiré.' }, 400)
+
+    // Nouveau hash PBKDF2
+    const newHash = await hashPassword(password)
+    await updatePasswordHash(c.env.DB, stored.userId, newHash)
+
+    // Révoquer le token (usage unique)
+    await c.env.KV.delete(`reset:${email}`)
+
+    await auditLog(c.env.DB, { user_id: stored.userId, action: 'RESET_PASSWORD', entite_type: 'user', entite_id: stored.userId })
+
+    return c.json({ success: true, message: 'Mot de passe réinitialisé. Vous pouvez vous connecter.' })
+  } catch (e) {
+    console.error('[reset-password]', e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── POST /api/auth/google ────────────────────────────────────────────────────
+
+/**
+ * POST /api/auth/google
+ * Authentifie (ou crée) un utilisateur via Google OAuth One Tap.
+ *
+ * Reçoit le JWT Google (credential), le vérifie via l'endpoint tokeninfo de Google,
+ * puis :
+ *   - Si google_id connu → connexion directe
+ *   - Si email connu mais sans google_id → liaison du compte existant
+ *   - Sinon → création d'un nouveau compte (actif, email vérifié)
+ *
+ * Nécessite le secret GOOGLE_CLIENT_ID configuré en environnement.
+ *
+ * Body JSON : { "credential": "<JWT Google One Tap>" }
+ * @returns 200 { success, accessToken, refreshToken, expiresIn, user }
+ * @returns 400 si credential manquant ou invalid
+ * @returns 503 si GOOGLE_CLIENT_ID absent
+ */
+auth.post('/google', async (c) => {
+  try {
+    const googleClientId = (c.env as any).GOOGLE_CLIENT_ID
+    if (!googleClientId)
+      return c.json({ success: false, error: 'OAuth Google non configuré sur ce serveur.' }, 503)
+
+    const { credential } = await c.req.json().catch(() => ({}))
+    if (!credential)
+      return c.json({ success: false, error: 'credential Google requis.' }, 400)
+
+    // Vérification du JWT Google via tokeninfo (léger, sans lib)
+    const tokenInfoRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+    )
+    if (!tokenInfoRes.ok)
+      return c.json({ success: false, error: 'Token Google invalide.' }, 400)
+
+    const googlePayload = await tokenInfoRes.json() as {
+      sub: string; email: string; given_name?: string; family_name?: string;
+      email_verified?: string; aud?: string;
+    }
+
+    // Vérifier que le token est bien destiné à notre app
+    if (googlePayload.aud !== googleClientId)
+      return c.json({ success: false, error: 'Token Google non valide pour cette application.' }, 400)
+    if (googlePayload.email_verified !== 'true')
+      return c.json({ success: false, error: 'Email Google non vérifié.' }, 400)
+
+    const googleId = googlePayload.sub
+    const email    = googlePayload.email
+    const prenom   = googlePayload.given_name  || email.split('@')[0]
+    const nom      = googlePayload.family_name || ''
+
+    // 1. Chercher par google_id
+    let user = await findUserByGoogleId(c.env.DB, googleId)
+
+    if (!user) {
+      // 2. Chercher par email — liaison d'un compte existant
+      const existing = await findUserByEmailFull(c.env.DB, email)
+      if (existing) {
+        await linkGoogleId(c.env.DB, existing.id, googleId)
+        user = await findUserById(c.env.DB, existing.id)
+      } else {
+        // 3. Créer un nouveau compte Google
+        const newUserId = await createGoogleUser(c.env.DB, email, prenom, nom, googleId)
+        if (!newUserId)
+          return c.json({ success: false, error: 'Erreur création compte.' }, 500)
+        user = await findUserById(c.env.DB, newUserId)
+        await auditLog(c.env.DB, { user_id: newUserId, action: 'REGISTER_GOOGLE', entite_type: 'user', entite_id: newUserId })
+      }
+    }
+
+    if (!user)
+      return c.json({ success: false, error: 'Erreur authentification Google.' }, 500)
+
+    const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
+    await storeRefreshToken(c.env.KV, user.id, tokens.refreshToken)
+    await auditLog(c.env.DB, { boutique_id: user.boutique_id, user_id: user.id, action: 'LOGIN_GOOGLE' })
+
+    return c.json({
+      success: true,
+      ...tokens,
+      user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role, boutique_id: user.boutique_id }
+    })
+  } catch (e) {
+    console.error('[auth/google]', e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
 })
 
 export default auth

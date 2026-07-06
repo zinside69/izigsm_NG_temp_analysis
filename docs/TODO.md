@@ -315,17 +315,19 @@
 
 ---
 
-### Sprint 2.35 🔜 — OAuth Google + réinitialisation mot de passe
-**Module CDC : MOD-18 (HAUTE) — Friction login réduite**
+### Sprint 2.35 ✅ — OAuth Google + réinitialisation mot de passe
+**Module CDC : MOD-18 (HAUTE)** — v2.35.0 — *6 juillet 2026*
 
-- [ ] `POST /api/auth/reset-password-request` : envoi email lien réinitialisation (token OTP D1KV, TTL 1h)
-- [ ] `POST /api/auth/reset-password` : vérification token + nouveau mot de passe PBKDF2
-- [ ] `public/reset-password.html` : formulaire email + formulaire nouveau mdp
-- [ ] OAuth Google (P2) : `POST /api/auth/google` — exchange code Google → JWT iziGSM
-  - [ ] Migration : `google_id TEXT` sur `users`
-  - [ ] `authService.ts` : `findOrCreateGoogleUser()`
-  - [ ] `public/login.html` : bouton "Se connecter avec Google" (CDN Google Identity)
-  - [ ] Secret : `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+- [x] Migration `0027_users_google_id.sql` : `ALTER TABLE users ADD COLUMN google_id TEXT` + index unique partiel
+- [x] `authService.ts` : `updatePasswordHash()`, `findUserByGoogleId()`, `linkGoogleId()`, `createGoogleUser()`
+- [x] `routes/auth.ts` : `GET /api/auth/config` (expose `GOOGLE_CLIENT_ID` public), `POST /api/auth/reset-password-request` (KV TTL 1h + email fire-and-forget), `POST /api/auth/reset-password` (vérif token + PBKDF2 + révocation), `POST /api/auth/google` (tokeninfo Google + find/link/create)
+- [x] `public/reset-password.html` : 4 états (demande / envoyé / nouveau mdp / confirmé + lien invalide), jauge force mdp
+- [x] `public/login.html` : lien "Mot de passe oublié" → `/reset-password.html` ; bouton Google One Tap via CDN GSI + fallback gracieux si `GOOGLE_CLIENT_ID` absent
+- [x] Tests : 607/607 — zéro régression
+
+**Configuration requise en production :**
+- Secret `GOOGLE_CLIENT_ID` : `wrangler pages secret put GOOGLE_CLIENT_ID`
+- Origines autorisées dans Google Cloud Console : domaine Pages.dev + domaine custom
 
 ---
 
@@ -413,4 +415,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.34 clôturé, v2.34.0 en production — Sprint 2.35 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.35 clôturé, v2.35.0 en production — Sprint 2.36 à démarrer*
