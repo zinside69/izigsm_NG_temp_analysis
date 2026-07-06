@@ -14,7 +14,7 @@
 |---|---|---|
 | **Backend Hono** | ✅ Complet | 18 fichiers routes, ~230 endpoints, 0 SQL dans les controllers |
 | **Services Model** | ✅ Complet | 17 services, P1 MVC strict respecté partout |
-| **Migrations D1** | ✅ 24 migrations | 0024_kv_store.sql = dernière |
+| **Migrations D1** | ✅ 27 migrations | 0027_users_google_id.sql = dernière |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
 | **Tests Vitest** | ✅ 607/607 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, **clientService 38, personnelService 36, reconditionnementService 50, publicService 20** |
@@ -373,7 +373,7 @@
 
 ---
 
-## Résumé coverage CDC (état v2.28.0)
+## Résumé coverage CDC (état v2.35.0)
 
 | Module CDC | Priorité | Couverture | Statut |
 |---|---|---|---|
@@ -387,14 +387,14 @@
 | MOD-08 Agenda/RDV + iCal | MOYENNE | ~88% | ✅ Complet (manque RDV en ligne public) |
 | MOD-09 SAV + Garanties | MOYENNE | ~85% | ✅ Complet |
 | MOD-10 Fournisseurs + BC + CUMP | HAUTE | ~90% | ✅ Complet |
-| MOD-12 Notifications email | HAUTE | ~70% | ⚠️ Infra OK, manque triggers automatiques |
+| MOD-12 Notifications email | HAUTE | ~75% | ✅ Triggers termine + livre, relances actives |
 | MOD-13 Caisse POS NF525 | MOYENNE | ~85% | ✅ Complet |
-| MOD-14 Vitrine publique | MOYENNE | ~60% | ⚠️ Tracking ✅, manque RDV en ligne |
+| MOD-14 Vitrine publique | MOYENNE | ~75% | ✅ Tracking + RDV en ligne public |
 | MOD-15 Catalogue services | HAUTE | ~80% | ✅ Complet (manque liaison modèle appareil) |
-| MOD-17 Rapports/Exports | HAUTE | ~65% | ⚠️ Dashboard ✅, manque exports CSV/PDF période |
-| MOD-18 Équipe/Pointage | MOYENNE | ~88% | ✅ Complet (manque OAuth Google, reset mdp) |
+| MOD-17 Rapports/Exports | HAUTE | ~90% | ✅ Exports CSV tickets/CA/techniciens + rapport comptable |
+| MOD-18 Auth avancée | MOYENNE | ~90% | ✅ Reset password + OAuth Google One Tap |
 
-**Couverture globale estimée CDC : ~84%**
+**Couverture globale estimée CDC : ~88%**
 
 ---
 
@@ -405,14 +405,14 @@
 | `JWT_SECRET` | ✅ Configuré | Auth JWT HMAC-SHA256 |
 | `RESEND_API_KEY` | ✅ Configuré | Emails transactionnels |
 
-Secrets à configurer pour fonctionnalités futures :
+Secrets à configurer :
 ```bash
-gsk hosted secret_put GOOGLE_CLIENT_ID       # Sprint 2.35 OAuth
-gsk hosted secret_put GOOGLE_CLIENT_SECRET   # Sprint 2.35 OAuth
+gsk hosted secret_put GOOGLE_CLIENT_ID       # OAuth Google One Tap (Sprint 2.35)
+gsk hosted secret_put FRONTEND_URL           # Liens emails reset-password (Sprint 2.35)
 gsk hosted secret_put TWILIO_ACCOUNT_SID     # Post-MVP SMS
 gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 ```
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.35 clôturé, v2.35.0 en production — Sprint 2.36 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.35 clôturé (v2.35.0), fix placeholder commit e1e21c7 — Sprint 2.36 à démarrer*

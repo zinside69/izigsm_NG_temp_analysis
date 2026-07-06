@@ -6,6 +6,105 @@
 
 ---
 
+## Fix UX — Placeholder login (post-Sprint 2.35)
+
+**Commit** : `e1e21c7` — fix(UX): remplacer placeholder jean@monatelier.fr par votre@email.fr  
+**Date** : 6 juillet 2026
+
+| Fichier | Action | Description |
+|---|---|---|
+| `public/login.html` | ✏️ modifié | `placeholder="jean@monatelier.fr"` → `placeholder="votre@email.fr"` |
+| `public/register.html` | ✏️ modifié | Même correction placeholder email |
+| `public/reset-password.html` | ✏️ modifié | Même correction placeholder email |
+
+---
+
+## Sprint 2.35 — MOD-18 OAuth Google + reset password
+
+**Commit** : `807c87e` — feat(MOD-18): reset password + OAuth Google One Tap — Sprint 2.35  
+**Date** : 6 juillet 2026  
+**Version** : 2.35.0
+
+### Contexte
+Ajout de deux fonctionnalités d'authentification avancée : réinitialisation de mot de passe par email (token D1KV TTL 1h, usage unique, anti-énumération) et connexion Google One Tap (CDN GSI, vérification tokeninfo, liaison compte existant ou création automatique).
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0027_users_google_id.sql` | 🆕 créé | `ALTER TABLE users ADD COLUMN google_id TEXT` + index unique partiel `WHERE google_id IS NOT NULL` |
+| `public/reset-password.html` | 🆕 créé | Page 4 états : demande email / lien envoyé / nouveau mot de passe + jauge force / confirmation. Détection auto état via URLSearchParams (token + email). |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/authService.ts` | ✏️ modifié | +4 fonctions : `updatePasswordHash()`, `findUserByGoogleId()`, `linkGoogleId()`, `createGoogleUser()` |
+| `src/routes/auth.ts` | ✏️ modifié | +4 routes : `GET /api/auth/config` (expose GOOGLE_CLIENT_ID), `POST /api/auth/reset-password-request` (token KV TTL 1h + email), `POST /api/auth/reset-password` (vérif + PBKDF2 + révocation), `POST /api/auth/google` (tokeninfo + find/link/create) |
+| `public/login.html` | ✏️ modifié | Lien "Mot de passe oublié" → `/reset-password.html` ; bouton Google One Tap CDN GSI + `initGoogleOneTap()` + `handleGoogleCredential()` |
+| `src/index.tsx` | ✏️ modifié | Version 2.34.0 → 2.35.0, sprint label |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.35 ✅, secrets production mis à jour |
+
+### Architecture reset-password
+
+```
+POST /api/auth/reset-password-request
+  → generer token 32 bytes hex (64 chars)
+  → D1KV.put(`reset:{email}`, JSON{token, email}, TTL 3600s)
+  → Resend.send(lien FRONTEND_URL/reset-password.html?token=...&email=...)
+  → réponse identique si email inconnu (anti-énumération)
+
+POST /api/auth/reset-password
+  → D1KV.get(`reset:{email}`) → vérif stored.token === token
+  → updatePasswordHash(userId, await PBKDF2(newPassword))
+  → D1KV.delete(`reset:{email}`) — usage unique
+  → auditLog RESET_PASSWORD
+```
+
+### Architecture OAuth Google
+
+```
+GET /api/auth/config → { googleClientId }  (non secret, public)
+
+POST /api/auth/google { credential }
+  → fetch tokeninfo Google → vérif aud + email_verified
+  → findUserByGoogleId → trouvé → login direct
+  → findUserByEmail → trouvé → linkGoogleId + login
+  → createGoogleUser (password_hash='', actif=1, email_verifie=1)
+  → generateTokenPair + storeRefreshToken + auditLog LOGIN_GOOGLE
+```
+
+---
+
+## Sprint 2.34 — MOD-04 Stock familles + import catalogue CSV
+
+**Commit** : `432de4f` — feat(MOD-04): familles produits + import catalogue CSV — Sprint 2.34  
+**Date** : 6 juillet 2026  
+**Version** : 2.34.0
+
+### Contexte
+Extension du module stock : typage fort des produits par famille (pièce/accessoire/appareil/consommable) avec filtres UI + badges couleur, et import de catalogue fournisseur au format CSV avec UPSERT sur SKU.
+
+### Fichiers créés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `migrations/0026_produits_famille.sql` | 🆕 créé | `ALTER TABLE produits ADD COLUMN famille TEXT NOT NULL DEFAULT 'piece' CHECK (famille IN ('piece','accessoire','appareil','consommable'))` + `CREATE INDEX idx_produits_famille ON produits(boutique_id, famille)` |
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/stockService.ts` | ✏️ modifié | Export `FamilleProduit` type union + `FAMILLES[]` constant. Ajout `famille` dans `ProduitRow`, `ListProduitsOpts`, `CreateProduitData`, `UpdateProduitData`. `listProduits()` filtre par famille. `createProduit()` + `updateProduit()` incluent la colonne famille. Nouvelle fonction `importCatalogueCsv()` : CSV RFC 4180, sep auto `,`/`;`, BOM UTF-8 strip, UPSERT sur SKU, 500 lignes max. Correction JSDoc `getKpisStock` (ouverture `/**` manquante). |
+| `src/routes/stocks.ts` | ✏️ modifié | Import `importCatalogueCsv` + `FamilleProduit`. Param `famille` dans `GET /api/produits`. Nouvelle route `POST /api/produits/import-csv` (avant `/:id` pour éviter conflit routing). Accepte `text/csv` ou JSON `{ csvContent }`. |
+| `public/stock.html` | ✏️ modifié | Refonte complète : filtres famille pills (Toutes/Pièce/Accessoire/Appareil/Consommable), colonne Famille dans tableau, badges CSS couleur par famille, modal import CSV 3 étapes. |
+| `public/static/js/stock.js` | ✏️ modifié | Refonte complète : `FAMILLE_CONFIG` palette (piece=violet, accessoire=bleu, appareil=vert, consommable=orange), `filterFamille()`, `familleBadge()`, `loadCategories()` dynamique via API, `openImportCsv()`, `confirmImportCsv()`. |
+| `tests/stockService.test.ts` | ✏️ modifié | `SQL_INSERT_PRODUIT` + `SQL_UPDATE_PRODUIT` mis à jour (ajout colonne `famille`). Indices params ajustés : `[7]→[8]`, `[9]→[10]`. |
+| `src/index.tsx` | ✏️ modifié | Version 2.33.0 → 2.34.0, sprint label |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.34 ✅ |
+
+---
+
 ## Sprint 2.26
 
 **Titre** : Déploiement Cloudflare Pages — D1AsKV (remplacement KV binding par D1)
