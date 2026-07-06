@@ -84,6 +84,23 @@
     .color-grid { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
     .color-swatch { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:border-color .15s; }
     .color-swatch.selected, .color-swatch:hover { border-color:#1e293b; }
+
+    /* ── Onglets ── */
+    .tab-btn { padding:6px 14px; border:none; background:transparent; cursor:pointer; font-size:13px; color:#64748b; border-radius:6px; transition:all .15s; font-weight:500; }
+    .tab-btn.active, .tab-btn:hover { background:#ede9fe; color:#6366f1; }
+    .tab-btn.active { font-weight:700; }
+
+    /* ── Marques & Modèles ── */
+    .marque-item { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:13.5px; color:#374151; transition:background .15s; border:1px solid transparent; }
+    .marque-item:hover { background:#f1f5f9; }
+    .marque-item.active { background:#ede9fe; border-color:#c4b5fd; color:#6366f1; font-weight:600; }
+    .marque-actions { display:none; gap:4px; }
+    .marque-item:hover .marque-actions { display:flex; }
+    .modele-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px; transition:box-shadow .15s; }
+    .modele-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .modele-card-title { font-weight:600; font-size:14px; color:#1e293b; margin-bottom:4px; }
+    .modele-card-meta  { font-size:12px; color:#64748b; display:flex; gap:8px; }
+    .modele-card-actions { display:flex; gap:6px; margin-top:10px; }
   </style>
 </head>
 <body>
@@ -95,16 +112,28 @@
       <div class="topbar" style="padding:0 24px; flex-shrink:0;">
         <div class="topbar-left">
           <h1 class="page-title">🛠 Catalogue services</h1>
+          <nav style="display:flex; gap:4px; margin-left:20px;">
+            <button class="tab-btn active" id="tab-services" onclick="switchTab('services')">🛠 Services</button>
+            <button class="tab-btn"        id="tab-modeles"  onclick="switchTab('modeles')">📱 Marques &amp; Modèles</button>
+          </nav>
         </div>
         <div class="topbar-right" style="display:flex; gap:10px; align-items:center;">
-          <button class="btn btn-secondary" onclick="openModalCategorie()">＋ Catégorie</button>
-          <button class="btn btn-primary" onclick="openModalService()">＋ Service</button>
+          <!-- Boutons Services -->
+          <div id="btns-services" style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="openModalCategorie()">＋ Catégorie</button>
+            <button class="btn btn-primary"   onclick="openModalService()">＋ Service</button>
+          </div>
+          <!-- Boutons Modèles -->
+          <div id="btns-modeles" style="display:none;gap:8px;">
+            <button class="btn btn-secondary" onclick="openModalMarque()">＋ Marque</button>
+            <button class="btn btn-primary"   onclick="openModalModele()">＋ Modèle</button>
+          </div>
           <div class="topbar-avatar" id="topbar-avatar">U</div>
         </div>
       </div>
 
-      <!-- Corps -->
-      <div class="catalogue-layout" style="flex:1; min-height:0;">
+      <!-- Onglet Services -->
+      <div id="pane-services" class="catalogue-layout" style="flex:1; min-height:0;">
         <!-- Sidebar catégories -->
         <aside class="catalogue-sidebar" id="sidebar-categories">
           <div class="cat-item active" data-cat="all" onclick="filterByCategorie(null, this)">
@@ -131,6 +160,31 @@
             </div>
           </div>
         </section>
+      </div>
+
+      <!-- Onglet Marques & Modèles -->
+      <div id="pane-modeles" style="display:none; flex:1; overflow:auto; padding:24px;">
+        <div style="display:grid; grid-template-columns:280px 1fr; gap:24px; height:100%;">
+
+          <!-- Colonne Marques -->
+          <div>
+            <div style="font-weight:700; font-size:13px; color:#64748b; text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px;">Marques</div>
+            <div id="marques-list" style="display:flex; flex-direction:column; gap:4px;">
+              <div class="empty-state" style="padding:20px;"><div class="es-icon">⏳</div></div>
+            </div>
+          </div>
+
+          <!-- Colonne Modèles de la marque sélectionnée -->
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <div id="modeles-title" style="font-weight:700; font-size:13px; color:#64748b; text-transform:uppercase; letter-spacing:.06em;">Sélectionner une marque</div>
+              <input type="search" class="form-control" id="modeles-search" placeholder="🔍 Filtrer modèles…"
+                style="width:180px; display:none;" oninput="filterModeles(this.value)">
+            </div>
+            <div id="modeles-list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:12px;">
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -213,6 +267,93 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-service')">Annuler</button>
         <button class="btn btn-primary" onclick="saveService()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal Marque ───────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-marque">
+    <div class="modal">
+      <div class="modal-title" id="modal-marque-title">Nouvelle marque</div>
+      <input type="hidden" id="marque-id">
+      <div class="form-group">
+        <label class="form-label">Nom <span class="req">*</span></label>
+        <input type="text" class="form-control" id="marque-nom" placeholder="Ex : Apple, Samsung…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">URL logo (optionnel)</label>
+        <input type="url" class="form-control" id="marque-logo" placeholder="https://…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ordre d'affichage</label>
+        <input type="number" class="form-control" id="marque-ordre" min="0" value="0">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-marque')">Annuler</button>
+        <button class="btn btn-primary"   onclick="saveMarque()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal Modèle ────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-modele">
+    <div class="modal">
+      <div class="modal-title" id="modal-modele-title">Nouveau modèle</div>
+      <input type="hidden" id="modele-id">
+      <div class="form-group">
+        <label class="form-label">Marque <span class="req">*</span></label>
+        <select class="form-control" id="modele-marque-id"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nom <span class="req">*</span></label>
+        <input type="text" class="form-control" id="modele-nom" placeholder="Ex : iPhone 14 Pro">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-control" id="modele-type">
+            <option value="smartphone">📱 Smartphone</option>
+            <option value="tablette">📟 Tablette</option>
+            <option value="pc">💻 PC / Laptop</option>
+            <option value="console">🎮 Console</option>
+            <option value="autre">📦 Autre</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Année de sortie</label>
+          <input type="number" class="form-control" id="modele-annee" min="2000" max="2030" placeholder="Ex : 2023">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-modele')">Annuler</button>
+        <button class="btn btn-primary"   onclick="saveModele()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal Liaison services ↔ modèle ────────────────────────────── -->
+  <div class="modal-overlay" id="modal-liaison">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-title" id="modal-liaison-title">Services suggérés</div>
+      <input type="hidden" id="liaison-modele-id">
+
+      <div style="margin-bottom:16px;">
+        <label class="form-label">Ajouter un service</label>
+        <div style="display:flex; gap:8px;">
+          <select class="form-control" id="liaison-service-select" style="flex:1;"></select>
+          <input type="number" class="form-control" id="liaison-prix-specifique"
+            min="0" step="0.01" placeholder="Prix HT spécifique (€)" style="width:180px;">
+          <button class="btn btn-primary" onclick="addLiaison()">＋</button>
+        </div>
+        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">Laisser le prix vide pour utiliser le prix catalogue.</div>
+      </div>
+
+      <div id="liaison-services-list" style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto;">
+        <div class="empty-state" style="padding:16px;"><div class="es-icon">🔗</div><div class="es-title">Aucun service lié</div></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-liaison')">Fermer</button>
       </div>
     </div>
   </div>

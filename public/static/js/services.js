@@ -424,3 +424,294 @@ document.addEventListener('click', (e) => {
     e.target.classList.remove('open');
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ONGLETS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function switchTab(tab) {
+  const isServices = tab === 'services';
+  document.getElementById('pane-services').style.display = isServices ? '' : 'none';
+  document.getElementById('pane-modeles').style.display  = isServices ? 'none' : '';
+  document.getElementById('btns-services').style.display = isServices ? 'flex' : 'none';
+  document.getElementById('btns-modeles').style.display  = isServices ? 'none' : 'flex';
+  document.getElementById('tab-services').classList.toggle('active', isServices);
+  document.getElementById('tab-modeles').classList.toggle('active', !isServices);
+
+  if (!isServices && !_marquesLoaded) loadMarques();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MARQUES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _marques        = [];
+let _selectedMarque = null;
+let _marquesLoaded  = false;
+
+async function loadMarques() {
+  const res = await apiGet('/api/services/marques');
+  _marques = res.data || [];
+  _marquesLoaded = true;
+  renderMarques();
+  if (_marques.length > 0) selectMarque(_marques[0].id);
+}
+
+function renderMarques() {
+  const el = document.getElementById('marques-list');
+  if (!_marques.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:20px;"><div class="es-icon">📱</div><div class="es-title">Aucune marque</div><div class="es-desc">Cliquez sur "＋ Marque" pour commencer.</div></div>`;
+    return;
+  }
+  el.innerHTML = _marques.map(m => `
+    <div class="marque-item ${m.id === _selectedMarque ? 'active' : ''}" id="marque-row-${m.id}" onclick="selectMarque(${m.id})">
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${m.logo_url ? `<img src="${escHtml(m.logo_url)}" style="width:20px;height:20px;object-fit:contain;border-radius:3px;" onerror="this.style.display='none'">` : '<span style="font-size:18px;">📱</span>'}
+        <span>${escHtml(m.nom)}</span>
+        <span style="font-size:11px;color:#94a3b8;background:#f1f5f9;border-radius:10px;padding:1px 7px;">${m.nb_modeles || 0}</span>
+      </div>
+      <div class="marque-actions">
+        <button class="btn" style="padding:2px 8px;font-size:12px;" onclick="event.stopPropagation();openModalMarque(${m.id})">✏️</button>
+        <button class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="event.stopPropagation();deleteMarque(${m.id})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectMarque(id) {
+  _selectedMarque = id;
+  renderMarques();
+  const marque = _marques.find(m => m.id === id);
+  document.getElementById('modeles-title').textContent = marque ? `Modèles — ${marque.nom}` : 'Modèles';
+  document.getElementById('modeles-search').style.display = 'block';
+  loadModeles(id);
+}
+
+// ── Modal Marque ──────────────────────────────────────────────────────────────
+
+function openModalMarque(id = null) {
+  const m = id ? _marques.find(x => x.id === id) : null;
+  document.getElementById('modal-marque-title').textContent = m ? 'Modifier la marque' : 'Nouvelle marque';
+  document.getElementById('marque-id').value    = m?.id    || '';
+  document.getElementById('marque-nom').value   = m?.nom   || '';
+  document.getElementById('marque-logo').value  = m?.logo_url || '';
+  document.getElementById('marque-ordre').value = m?.ordre ?? 0;
+  document.getElementById('modal-marque').classList.add('open');
+}
+
+async function saveMarque() {
+  const id   = document.getElementById('marque-id').value;
+  const nom  = document.getElementById('marque-nom').value.trim();
+  if (!nom) return alert('Le nom est requis.');
+
+  const body = {
+    nom,
+    logo_url: document.getElementById('marque-logo').value.trim() || null,
+    ordre:    parseInt(document.getElementById('marque-ordre').value, 10) || 0,
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/services/marques/${id}` : '/api/services/marques';
+  const res = method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body);
+
+  if (!res.success) return alert(res.error || 'Erreur lors de l\'enregistrement.');
+  closeModal('modal-marque');
+  await loadMarques();
+}
+
+async function deleteMarque(id) {
+  const m = _marques.find(x => x.id === id);
+  if (!confirm(`Désactiver la marque "${m?.nom}" et tous ses modèles ?`)) return;
+  await apiDelete(`/api/services/marques/${id}`);
+  await loadMarques();
+  if (_selectedMarque === id) {
+    _selectedMarque = null;
+    document.getElementById('modeles-list').innerHTML = '';
+    document.getElementById('modeles-title').textContent = 'Sélectionner une marque';
+    document.getElementById('modeles-search').style.display = 'none';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODÈLES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _modeles     = [];
+let _modelesFull = [];
+
+const TYPE_LABELS = { smartphone:'📱', tablette:'📟', pc:'💻', console:'🎮', autre:'📦' };
+
+async function loadModeles(marqueId) {
+  const res  = await apiGet(`/api/services/modeles?marque_id=${marqueId}`);
+  _modeles     = res.data || [];
+  _modelesFull = [..._modeles];
+  renderModeles();
+}
+
+function renderModeles() {
+  const el = document.getElementById('modeles-list');
+  if (!_modeles.length) {
+    el.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px;"><div class="es-icon">📦</div><div class="es-title">Aucun modèle</div><div class="es-desc">Cliquez sur "＋ Modèle" pour en ajouter.</div></div>`;
+    return;
+  }
+  el.innerHTML = _modeles.map(mo => `
+    <div class="modele-card">
+      <div class="modele-card-title">${TYPE_LABELS[mo.type] || '📦'} ${escHtml(mo.nom)}</div>
+      <div class="modele-card-meta">
+        <span>${escHtml(mo.marque_nom || '')}</span>
+        ${mo.annee ? `<span>· ${mo.annee}</span>` : ''}
+        <span>· ${mo.type}</span>
+      </div>
+      <div class="modele-card-actions">
+        <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
+          onclick="openModalLiaison(${mo.id}, '${escHtml(mo.nom)}')">🔗 Services</button>
+        <button class="btn" style="font-size:12px;padding:4px 10px;"
+          onclick="openModalModele(${mo.id})">✏️</button>
+        <button class="btn btn-danger" style="font-size:12px;padding:4px 10px;"
+          onclick="deleteModele(${mo.id})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterModeles(q) {
+  const lq = q.toLowerCase();
+  _modeles = lq ? _modelesFull.filter(m => m.nom.toLowerCase().includes(lq)) : [..._modelesFull];
+  renderModeles();
+}
+
+// ── Modal Modèle ──────────────────────────────────────────────────────────────
+
+function openModalModele(id = null) {
+  const mo = id ? _modelesFull.find(x => x.id === id) : null;
+  document.getElementById('modal-modele-title').textContent = mo ? 'Modifier le modèle' : 'Nouveau modèle';
+  document.getElementById('modele-id').value     = mo?.id    || '';
+  document.getElementById('modele-nom').value    = mo?.nom   || '';
+  document.getElementById('modele-annee').value  = mo?.annee || '';
+
+  // Remplir le select marques
+  const sel = document.getElementById('modele-marque-id');
+  sel.innerHTML = _marques.map(m =>
+    `<option value="${m.id}" ${m.id === (mo?.marque_id ?? _selectedMarque) ? 'selected' : ''}>${escHtml(m.nom)}</option>`
+  ).join('');
+
+  const typeEl = document.getElementById('modele-type');
+  typeEl.value = mo?.type || 'smartphone';
+
+  document.getElementById('modal-modele').classList.add('open');
+}
+
+async function saveModele() {
+  const id      = document.getElementById('modele-id').value;
+  const nom     = document.getElementById('modele-nom').value.trim();
+  const marqueId = parseInt(document.getElementById('modele-marque-id').value, 10);
+  if (!nom)     return alert('Le nom est requis.');
+  if (!marqueId) return alert('La marque est requise.');
+
+  const body = {
+    nom,
+    marque_id: marqueId,
+    type:   document.getElementById('modele-type').value,
+    annee:  parseInt(document.getElementById('modele-annee').value, 10) || null,
+  };
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/services/modeles/${id}` : '/api/services/modeles';
+  const res    = method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body);
+
+  if (!res.success) return alert(res.error || 'Erreur.');
+  closeModal('modal-modele');
+  await loadModeles(_selectedMarque);
+  await loadMarques(); // refresh nb_modeles
+}
+
+async function deleteModele(id) {
+  const mo = _modelesFull.find(x => x.id === id);
+  if (!confirm(`Désactiver le modèle "${mo?.nom}" ?`)) return;
+  await apiDelete(`/api/services/modeles/${id}`);
+  await loadModeles(_selectedMarque);
+  await loadMarques();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIAISON SERVICE ↔ MODÈLE
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _allServices = [];
+
+async function openModalLiaison(modeleId, modeleName) {
+  document.getElementById('modal-liaison-title').textContent = `Services — ${modeleName}`;
+  document.getElementById('liaison-modele-id').value = modeleId;
+  document.getElementById('liaison-prix-specifique').value = '';
+
+  // Charger tous les services pour le select
+  if (!_allServices.length) {
+    const res = await apiGet('/api/services?limit=200');
+    _allServices = res.data || [];
+  }
+  const sel = document.getElementById('liaison-service-select');
+  sel.innerHTML = `<option value="">— Sélectionner un service —</option>` +
+    _allServices.map(s => `<option value="${s.id}">${escHtml(s.nom)} (${s.categorie_nom || 'Sans catégorie'})</option>`).join('');
+
+  await refreshLiaisonList(modeleId);
+  document.getElementById('modal-liaison').classList.add('open');
+}
+
+async function refreshLiaisonList(modeleId) {
+  const res  = await apiGet(`/api/services/modeles/${modeleId}/services`);
+  const svcs = res.data?.services || [];
+
+  const el = document.getElementById('liaison-services-list');
+  if (!svcs.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:16px;"><div class="es-icon">🔗</div><div class="es-title">Aucun service lié</div></div>`;
+    return;
+  }
+  el.innerHTML = svcs.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+      <div>
+        <span style="font-weight:600;font-size:13px;">${escHtml(s.nom)}</span>
+        <span style="color:#6366f1;margin-left:8px;font-size:13px;">${s.prix_ttc_effectif?.toFixed(2)} € TTC</span>
+        ${s.prix_ht_specifique != null ? `<span style="font-size:11px;color:#f59e0b;margin-left:6px;">prix spécifique</span>` : ''}
+        <div style="font-size:11px;color:#94a3b8;">${escHtml(s.categorie_nom || '')}</div>
+      </div>
+      <button class="btn btn-danger" style="font-size:12px;padding:3px 8px;"
+        onclick="removeLiaison(${s.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+async function addLiaison() {
+  const modeleId  = parseInt(document.getElementById('liaison-modele-id').value, 10);
+  const serviceId = parseInt(document.getElementById('liaison-service-select').value, 10);
+  const prix      = parseFloat(document.getElementById('liaison-prix-specifique').value) || null;
+
+  if (!serviceId) return alert('Sélectionner un service.');
+
+  const res = await apiPost(`/api/services/modeles/${modeleId}/services`, {
+    service_id:          serviceId,
+    prix_ht_specifique:  prix,
+  });
+  if (!res.success) return alert(res.error || 'Erreur.');
+  document.getElementById('liaison-service-select').value = '';
+  document.getElementById('liaison-prix-specifique').value = '';
+  await refreshLiaisonList(modeleId);
+}
+
+async function removeLiaison(serviceId) {
+  const modeleId = parseInt(document.getElementById('liaison-modele-id').value, 10);
+  await apiDelete(`/api/services/modeles/${modeleId}/services/${serviceId}`);
+  await refreshLiaisonList(modeleId);
+}
+
+window.switchTab         = switchTab;
+window.openModalMarque   = openModalMarque;
+window.saveMarque        = saveMarque;
+window.deleteMarque      = deleteMarque;
+window.selectMarque      = selectMarque;
+window.openModalModele   = openModalModele;
+window.saveModele        = saveModele;
+window.deleteModele      = deleteModele;
+window.filterModeles     = filterModeles;
+window.openModalLiaison  = openModalLiaison;
+window.addLiaison        = addLiaison;
+window.removeLiaison     = removeLiaison;

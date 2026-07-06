@@ -8,22 +8,36 @@
  *   Toute validation d'entrée est déléguée à `validators.ts`.
  *
  * Sprint 2.4 — MOD-04 Catalogue Services
+ * Sprint 2.38 — MOD-15 : Référentiel marques/modèles + liaison services suggérés
  *
  * Structure hiérarchique gérée :
  *   Catégorie parente → Sous-catégories → Services (prestations)
  *   Soft delete cascade : supprimer une catégorie désactive ses services.
  *
  * Endpoints :
- *   GET    /api/services/catalogue        → Arbre complet (catégories + services imbriqués)
- *   GET    /api/services/categories       → Liste plate des catégories actives
- *   POST   /api/services/categories       → Créer une catégorie (admin/manager)
- *   PUT    /api/services/categories/:id   → Modifier une catégorie (admin/manager)
- *   DELETE /api/services/categories/:id   → Désactiver une catégorie + ses services (admin/manager)
- *   GET    /api/services                  → Liste services paginée avec filtres
- *   GET    /api/services/:id              → Détail d'un service
- *   POST   /api/services                  → Créer un service (admin/manager)
- *   PUT    /api/services/:id              → Modifier un service (admin/manager)
- *   DELETE /api/services/:id              → Désactiver un service (admin/manager, soft delete)
+ *   GET    /api/services/catalogue              → Arbre complet (catégories + services imbriqués)
+ *   GET    /api/services/categories             → Liste plate des catégories actives
+ *   POST   /api/services/categories             → Créer une catégorie (admin/manager)
+ *   PUT    /api/services/categories/:id         → Modifier une catégorie (admin/manager)
+ *   DELETE /api/services/categories/:id         → Désactiver une catégorie + ses services (admin/manager)
+ *   GET    /api/services                        → Liste services paginée avec filtres
+ *   GET    /api/services/:id                    → Détail d'un service
+ *   POST   /api/services                        → Créer un service (admin/manager)
+ *   PUT    /api/services/:id                    → Modifier un service (admin/manager)
+ *   DELETE /api/services/:id                    → Désactiver un service (admin/manager, soft delete)
+ *
+ *   Sprint 2.38 — Marques / Modèles / Liaisons
+ *   GET    /api/services/marques                → Liste marques actives (avec nb_modeles)
+ *   POST   /api/services/marques                → Créer une marque (admin/manager)
+ *   PUT    /api/services/marques/:id            → Modifier une marque (admin/manager)
+ *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin/manager)
+ *   GET    /api/services/modeles                → Liste modèles (filtre: marque_id, search, type)
+ *   POST   /api/services/modeles                → Créer un modèle (admin/manager)
+ *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin/manager)
+ *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin/manager)
+ *   GET    /api/services/modeles/:id/services   → Services suggérés pour un modèle
+ *   POST   /api/services/modeles/:id/services   → Lier un service à un modèle (admin/manager)
+ *   DELETE /api/services/modeles/:id/services/:sid → Délier un service d'un modèle (admin/manager)
  *
  * Sécurité :
  *   Toutes les routes requièrent `authMiddleware` (appliqué globalement).
@@ -39,6 +53,9 @@ import {
   listCategories, createCategorie, updateCategorie, deleteCategorie,
   listServices, getService, createService, updateService, deleteService,
   getCatalogueArbre,
+  listMarques, createMarque, updateMarque, deleteMarque,
+  listModeles, createModele, updateModele, deleteModele,
+  getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices,
 } from '../services/servicesService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
@@ -308,6 +325,162 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
 
   await deleteService(c.env.DB, id, user.sub)
   return c.json({ success: true, message: 'Service désactivé.' })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MARQUES D'APPAREILS (Sprint 2.38)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** GET /api/services/marques — Liste des marques actives avec nb_modeles */
+services.get('/services/marques', async (c) => {
+  const user       = c.get('user')
+  const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await listMarques(c.env.DB, boutiqueId)
+  return c.json({ success: true, data })
+})
+
+/** POST /api/services/marques — Créer une marque */
+services.post('/services/marques', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json()
+
+  if (!body.nom?.trim()) return c.json({ success: false, error: 'Le nom de la marque est requis.' }, 400)
+
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  try {
+    const id = await createMarque(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+    return c.json({ success: true, id, message: 'Marque créée.' }, 201)
+  } catch (e: any) {
+    if (e?.message?.includes('UNIQUE')) return c.json({ success: false, error: 'Cette marque existe déjà.' }, 409)
+    throw e
+  }
+})
+
+/** PUT /api/services/marques/:id — Modifier une marque */
+services.put('/services/marques/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  const body = await c.req.json()
+
+  await updateMarque(c.env.DB, id, body, user.sub)
+  return c.json({ success: true, message: 'Marque mise à jour.' })
+})
+
+/** DELETE /api/services/marques/:id — Désactiver une marque (+ ses modèles en cascade) */
+services.delete('/services/marques/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  await deleteMarque(c.env.DB, id, user.sub)
+  return c.json({ success: true, message: 'Marque désactivée (et ses modèles).' })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODÈLES D'APPAREILS (Sprint 2.38)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** GET /api/services/modeles — Liste des modèles (filtrables par marque_id, search, type) */
+services.get('/services/modeles', async (c) => {
+  const user       = c.get('user')
+  const query      = c.req.query()
+  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await listModeles(c.env.DB, boutiqueId, {
+    marque_id: query.marque_id ? parseInt(query.marque_id, 10) : undefined,
+    search:    query.search,
+    type:      query.type,
+  })
+  return c.json({ success: true, data })
+})
+
+/** POST /api/services/modeles — Créer un modèle */
+services.post('/services/modeles', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json()
+
+  if (!body.nom?.trim())   return c.json({ success: false, error: 'Le nom du modèle est requis.' }, 400)
+  if (!body.marque_id)     return c.json({ success: false, error: 'marque_id est requis.' }, 400)
+
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  try {
+    const id = await createModele(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+    return c.json({ success: true, id, message: 'Modèle créé.' }, 201)
+  } catch (e: any) {
+    if (e?.message?.includes('UNIQUE')) return c.json({ success: false, error: 'Ce modèle existe déjà pour cette marque.' }, 409)
+    throw e
+  }
+})
+
+/** PUT /api/services/modeles/:id — Modifier un modèle */
+services.put('/services/modeles/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  const body = await c.req.json()
+
+  await updateModele(c.env.DB, id, body, user.sub)
+  return c.json({ success: true, message: 'Modèle mis à jour.' })
+})
+
+/** DELETE /api/services/modeles/:id — Désactiver un modèle */
+services.delete('/services/modeles/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  await deleteModele(c.env.DB, id, user.sub)
+  return c.json({ success: true, message: 'Modèle désactivé.' })
+})
+
+// ── Liaisons service ↔ modèle ─────────────────────────────────────────────────
+
+/**
+ * GET /api/services/modeles/:id/services
+ * Services suggérés pour un modèle + détail du modèle.
+ */
+services.get('/services/modeles/:id/services', async (c) => {
+  const id   = parseInt(c.req.param('id'), 10)
+  const data = await getModeleWithServices(c.env.DB, id)
+  if (!data.modele) return c.json({ success: false, error: 'Modèle introuvable.' }, 404)
+  return c.json({ success: true, data })
+})
+
+/**
+ * POST /api/services/modeles/:id/services
+ * Lie un service à un modèle (avec prix override optionnel).
+ * Body : `{ service_id: number, prix_ht_specifique?: number }`
+ */
+services.post('/services/modeles/:id/services', requireRole('admin', 'manager'), async (c) => {
+  const user      = c.get('user')
+  const modeleId  = parseInt(c.req.param('id'), 10)
+  const body      = await c.req.json()
+
+  if (!body.service_id) return c.json({ success: false, error: 'service_id est requis.' }, 400)
+
+  await linkServiceModele(c.env.DB, {
+    service_id:          parseInt(body.service_id, 10),
+    modele_id:           modeleId,
+    prix_ht_specifique:  body.prix_ht_specifique ?? null,
+  }, user.sub)
+  return c.json({ success: true, message: 'Service lié au modèle.' })
+})
+
+/**
+ * DELETE /api/services/modeles/:id/services/:sid
+ * Dissocie un service d'un modèle (soft delete liaison).
+ */
+services.delete('/services/modeles/:id/services/:sid', requireRole('admin', 'manager'), async (c) => {
+  const user      = c.get('user')
+  const modeleId  = parseInt(c.req.param('id'), 10)
+  const serviceId = parseInt(c.req.param('sid'), 10)
+
+  await unlinkServiceModele(c.env.DB, { service_id: serviceId, modele_id: modeleId }, user.sub)
+  return c.json({ success: true, message: 'Service dissocié du modèle.' })
 })
 
 export default services

@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
 > Mis à jour : Sprint 2.36 clôturé — 6 juillet 2026  
-> Version production : **v2.37.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Version production : **v2.38.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
 > Build : 72 modules / 273.30 kB  
-> Git : branche `main`, tag `v2.37.0`
+> Git : branche `main`, tag `v2.38.0`
 
 ---
 
@@ -369,6 +369,58 @@ npm run build && gsk hosted deploy
 
 ---
 
+### Sprint 2.38 ✅ — MOD-15 : Référentiel marques/modèles + liaison catalogue services
+**Module CDC : MOD-15 (HAUTE) — Catalogue services complet** — *6 juillet 2026*
+
+- [x] Migration `0030_marques_modeles_appareils.sql` : `marques_appareils`, `modeles_appareils`, `service_modeles` (pivot M2M avec prix override)
+- [x] `servicesService.ts` : `listMarques()`, `createMarque()`, `updateMarque()`, `deleteMarque()` (cascade modèles)
+- [x] `servicesService.ts` : `listModeles()` (filtres marque_id/search/type), `createModele()`, `updateModele()`, `deleteModele()`
+- [x] `servicesService.ts` : `getServicesByModele()` (prix COALESCE override), `linkServiceModele()` (ON CONFLICT idempotent), `unlinkServiceModele()`, `getModeleWithServices()`
+- [x] `routes/services.ts` : CRUD marques (`GET/POST/PUT/DELETE /api/services/marques/*`)
+- [x] `routes/services.ts` : CRUD modèles (`GET/POST/PUT/DELETE /api/services/modeles/*`)
+- [x] `routes/services.ts` : liaison (`GET/POST /api/services/modeles/:id/services`, `DELETE /api/services/modeles/:id/services/:sid`)
+- [x] `services.html` : onglet "📱 Marques & Modèles" — liste marques + grille modèles + modal liaison services
+- [x] `tickets.html` : autocomplete champ Modèle avec suggestions services pré-configurés (debounce 300ms)
+- [x] `tests/servicesService.test.ts` : **26 tests** — listMarques, createMarque, updateMarque, deleteMarque, listModeles (3 variantes), createModele, updateModele, deleteModele, getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices (3 variantes)
+- [x] **633/633 tests** ✅ (16 suites)
+- [x] Version bump v2.38.0
+
+---
+
+## RGPD — Conformité phase 2 (post-MVP, à planifier)
+
+> Couverture actuelle : droits **sur demande** couverts (Art. 15 export ✅, Art. 17 purge ✅).
+> Point de non-conformité principal : **limitation automatique de conservation** (Art. 5.1.e) non implémentée.
+
+### Durées légales applicables
+
+| Catégorie | Durée base active | Base légale | Durée archivage intermédiaire | Fondement |
+|---|---|---|---|---|
+| Clients (nom, email, tél) | 3 ans après dernier contact | Art. 6.1.b RGPD (contrat) | 5 ans | Prescription civile art. 2224 C.civ. |
+| Tickets / réparations | 3 ans après clôture | Art. 6.1.b RGPD | 10 ans | Garantie légale + prescription commerciale |
+| Factures | 10 ans | Art. 6.1.c (obligation légale) | Indéfini | Art. L123-22 Code de commerce |
+| Devis | 3 ans | Art. 6.1.b RGPD | 5 ans | Prescription civile |
+| RDV | 1 an | Art. 6.1.b RGPD | 3 ans | Prescription civile |
+| IMEI / numéro de série | Durée ticket associé | Art. 6.1.b RGPD | 5 ans | Art. 321-7 C.pén. (anti-recel) |
+| Logs / audit trail | 1 an | Art. 6.1.c (obligation légale) | 1 an | LCEN art. 6-II |
+
+### Fonctionnalités manquantes
+
+- [ ] `checkAndPurgeExpiredClients()` — batch auto-anonymisation clients inactifs > 3 ans (Art. 5.1.e)
+- [ ] `checkAndPurgeExpiredTickets()` — batch suppression tickets anonymisés > 10 ans
+- [ ] 3 états distincts : **base active** → **archive légale** (accès restreint) → **destruction** (actuellement : 1 seul état actif/inactif)
+- [ ] Mention légale dans l'export RGPD : durées de conservation applicables par catégorie
+- [ ] Registre des traitements Art. 30 (document externe à tenir manuellement)
+- [ ] Tableau de bord admin : suivi des expirations et volumes à purger
+
+### Risque IMEI / anti-recel
+
+L'art. 321-7 C.pén. impose un registre des appareils reçus avec IMEI pendant **5 ans minimum**.
+La purge RGPD met l'IMEI à `NULL` → tension légale si contrôle DGCCRF.
+Solution : tenir un registre réglementaire séparé (hors CRM) avant d'implémenter la purge automatique IMEI.
+
+---
+
 ## Fonctionnalités hors périmètre MVP (post-v3)
 
 | Fonctionnalité | Priorité | Raison |
@@ -403,7 +455,7 @@ npm run build && gsk hosted deploy
 | MOD-12 Notifications email | HAUTE | ~75% | ✅ Triggers termine + livre, relances actives |
 | MOD-13 Caisse POS NF525 | MOYENNE | ~85% | ✅ Complet |
 | MOD-14 Vitrine publique | MOYENNE | ~75% | ✅ Tracking + RDV en ligne public |
-| MOD-15 Catalogue services | HAUTE | ~80% | ✅ Complet (manque liaison modèle appareil) |
+| MOD-15 Catalogue services | HAUTE | ~95% | ✅ Complet + référentiel marques/modèles + liaison services suggérés |
 | MOD-17 Rapports/Exports | HAUTE | ~90% | ✅ Exports CSV tickets/CA/techniciens + rapport comptable |
 | MOD-18 Auth avancée | MOYENNE | ~90% | ✅ Reset password + OAuth Google One Tap |
 
@@ -428,4 +480,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.37 clôturé (v2.37.0) — RGPD + Archivage tickets*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.38 clôturé (v2.38.0) — MOD-15 Référentiel marques/modèles + liaison catalogue services*

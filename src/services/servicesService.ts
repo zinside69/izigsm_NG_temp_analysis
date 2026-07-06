@@ -1,6 +1,7 @@
 /**
  * @module servicesService
- * @description Model P1 : Catalogue de prestations hiérarchique (catégories + services).
+ * @description Model P1 : Catalogue de prestations hiérarchique (catégories + services)
+ *              + Référentiel marques/modèles d'appareils avec liaison services suggérés.
  *
  * Rôle architectural (P1 MVC) : Model exclusif — tout le SQL ici.
  * Les routes `src/routes/services.ts` délèguent sans aucun `.prepare()`.
@@ -398,4 +399,285 @@ export async function getCatalogueArbre(
   }))
 
   return racines
+}
+
+// ─── Marques d'appareils ──────────────────────────────────────────────────────
+
+export interface MarqueAppareil {
+  id:          number
+  boutique_id: number
+  nom:         string
+  logo_url:    string | null
+  ordre:       number
+  actif:       number
+  nb_modeles?: number
+}
+
+export interface ModeleAppareil {
+  id:          number
+  boutique_id: number
+  marque_id:   number
+  marque_nom?: string
+  nom:         string
+  type:        string
+  annee:       number | null
+  actif:       number
+}
+
+/**
+ * Liste toutes les marques actives d'une boutique, triées par `ordre` puis `nom`.
+ * Inclut le compte de modèles actifs associés (`nb_modeles`).
+ */
+export async function listMarques(
+  db: D1Database, boutiqueId: number
+): Promise<MarqueAppareil[]> {
+  const rows = await db.prepare(`
+    SELECT m.*,
+           COUNT(mo.id) AS nb_modeles
+    FROM   marques_appareils m
+    LEFT JOIN modeles_appareils mo ON mo.marque_id = m.id AND mo.actif = 1
+    WHERE  m.boutique_id = ? AND m.actif = 1
+    GROUP  BY m.id
+    ORDER  BY m.ordre ASC, m.nom ASC
+  `).bind(boutiqueId).all()
+  return rows.results as MarqueAppareil[]
+}
+
+/**
+ * Crée une marque d'appareil.
+ * Contrainte UNIQUE (boutique_id, nom) — lève une erreur si doublon.
+ */
+export async function createMarque(
+  db: D1Database,
+  data: { boutique_id: number; nom: string; logo_url?: string; ordre?: number },
+  userId: number
+): Promise<number> {
+  const result = await db.prepare(`
+    INSERT INTO marques_appareils (boutique_id, nom, logo_url, ordre)
+    VALUES (?, ?, ?, ?)
+    RETURNING id
+  `).bind(
+    data.boutique_id,
+    data.nom.trim(),
+    data.logo_url ?? null,
+    data.ordre    ?? 0
+  ).first<{ id: number }>()
+
+  await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_MARQUE', entite_type: 'marque_appareil', entite_id: result?.id })
+  return result?.id ?? 0
+}
+
+/**
+ * Met à jour une marque (PATCH partiel via COALESCE).
+ */
+export async function updateMarque(
+  db: D1Database,
+  id: number,
+  data: { nom?: string; logo_url?: string | null; ordre?: number },
+  userId: number
+): Promise<void> {
+  await db.prepare(`
+    UPDATE marques_appareils
+    SET nom        = COALESCE(?, nom),
+        logo_url   = COALESCE(?, logo_url),
+        ordre      = COALESCE(?, ordre),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(data.nom?.trim() ?? null, data.logo_url ?? null, data.ordre ?? null, id).run()
+  await auditLog(db, { user_id: userId, action: 'UPDATE_MARQUE', entite_type: 'marque_appareil', entite_id: id })
+}
+
+/**
+ * Désactive une marque et tous ses modèles (soft delete cascade).
+ */
+export async function deleteMarque(
+  db: D1Database, id: number, userId: number
+): Promise<void> {
+  await db.prepare(`UPDATE modeles_appareils SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE marque_id = ?`).bind(id).run()
+  await db.prepare(`UPDATE marques_appareils SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run()
+  await auditLog(db, { user_id: userId, action: 'DELETE_MARQUE', entite_type: 'marque_appareil', entite_id: id })
+}
+
+// ─── Modèles d'appareils ──────────────────────────────────────────────────────
+
+/**
+ * Liste les modèles actifs d'une boutique.
+ * Filtrage optionnel par `marque_id` ou `search` (nom).
+ * Retourne `marque_nom` en jointure.
+ */
+export async function listModeles(
+  db: D1Database,
+  boutiqueId: number,
+  query: { marque_id?: number; search?: string; type?: string } = {}
+): Promise<ModeleAppareil[]> {
+  const conditions = ['mo.boutique_id = ?', 'mo.actif = 1']
+  const bindings: any[] = [boutiqueId]
+
+  if (query.marque_id) {
+    conditions.push('mo.marque_id = ?')
+    bindings.push(query.marque_id)
+  }
+  if (query.type) {
+    conditions.push('mo.type = ?')
+    bindings.push(query.type)
+  }
+  if (query.search) {
+    conditions.push('(mo.nom LIKE ? OR ma.nom LIKE ?)')
+    const s = `%${query.search}%`
+    bindings.push(s, s)
+  }
+
+  const rows = await db.prepare(`
+    SELECT mo.*,
+           ma.nom AS marque_nom
+    FROM   modeles_appareils mo
+    JOIN   marques_appareils ma ON ma.id = mo.marque_id
+    WHERE  ${conditions.join(' AND ')}
+    ORDER  BY ma.nom ASC, mo.nom ASC
+  `).bind(...bindings).all()
+
+  return rows.results as ModeleAppareil[]
+}
+
+/**
+ * Crée un modèle rattaché à une marque.
+ * Contrainte UNIQUE (boutique_id, marque_id, nom).
+ */
+export async function createModele(
+  db: D1Database,
+  data: { boutique_id: number; marque_id: number; nom: string; type?: string; annee?: number },
+  userId: number
+): Promise<number> {
+  const result = await db.prepare(`
+    INSERT INTO modeles_appareils (boutique_id, marque_id, nom, type, annee)
+    VALUES (?, ?, ?, ?, ?)
+    RETURNING id
+  `).bind(
+    data.boutique_id,
+    data.marque_id,
+    data.nom.trim(),
+    data.type  ?? 'smartphone',
+    data.annee ?? null
+  ).first<{ id: number }>()
+
+  await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_MODELE', entite_type: 'modele_appareil', entite_id: result?.id })
+  return result?.id ?? 0
+}
+
+/**
+ * Met à jour un modèle (PATCH partiel).
+ */
+export async function updateModele(
+  db: D1Database,
+  id: number,
+  data: { nom?: string; type?: string; annee?: number | null },
+  userId: number
+): Promise<void> {
+  await db.prepare(`
+    UPDATE modeles_appareils
+    SET nom        = COALESCE(?, nom),
+        type       = COALESCE(?, type),
+        annee      = COALESCE(?, annee),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(data.nom?.trim() ?? null, data.type ?? null, data.annee ?? null, id).run()
+  await auditLog(db, { user_id: userId, action: 'UPDATE_MODELE', entite_type: 'modele_appareil', entite_id: id })
+}
+
+/**
+ * Désactive un modèle (soft delete).
+ * Les liaisons service_modeles sont désactivées en cascade via la FK ON DELETE CASCADE.
+ */
+export async function deleteModele(
+  db: D1Database, id: number, userId: number
+): Promise<void> {
+  await db.prepare(`UPDATE modeles_appareils SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run()
+  await auditLog(db, { user_id: userId, action: 'DELETE_MODELE', entite_type: 'modele_appareil', entite_id: id })
+}
+
+// ─── Liaison service ↔ modèle ─────────────────────────────────────────────────
+
+/**
+ * Retourne les services suggérés pour un modèle d'appareil donné.
+ * Utilisé lors de la création d'un ticket pour pré-remplir les prestations.
+ * `prix_ht_effectif` = prix override si défini, sinon prix catalogue.
+ */
+export async function getServicesByModele(
+  db: D1Database, modeleId: number
+): Promise<object[]> {
+  const rows = await db.prepare(`
+    SELECT s.id,
+           s.nom,
+           s.description,
+           s.reference,
+           s.tva_taux,
+           s.garantie_jours,
+           s.duree_minutes,
+           COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif,
+           ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif,
+           sm.prix_ht_specifique,
+           c.nom    AS categorie_nom,
+           c.couleur AS categorie_couleur
+    FROM   service_modeles sm
+    JOIN   services s  ON s.id = sm.service_id AND s.actif = 1
+    LEFT JOIN categories_services c ON c.id = s.categorie_id
+    WHERE  sm.modele_id = ? AND sm.actif = 1
+    ORDER  BY c.nom ASC, s.nom ASC
+  `).bind(modeleId).all()
+  return rows.results
+}
+
+/**
+ * Associe un service à un modèle (avec prix override optionnel).
+ * Idempotent : si la liaison existe déjà (même inactif), la réactive et met à jour le prix.
+ */
+export async function linkServiceModele(
+  db: D1Database,
+  data: { service_id: number; modele_id: number; prix_ht_specifique?: number | null },
+  userId: number
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO service_modeles (service_id, modele_id, prix_ht_specifique, actif)
+    VALUES (?, ?, ?, 1)
+    ON CONFLICT(service_id, modele_id) DO UPDATE SET
+      prix_ht_specifique = excluded.prix_ht_specifique,
+      actif              = 1,
+      created_at         = created_at
+  `).bind(data.service_id, data.modele_id, data.prix_ht_specifique ?? null).run()
+  await auditLog(db, { user_id: userId, action: 'LINK_SERVICE_MODELE', entite_type: 'service_modele', entite_id: data.modele_id, meta: { service_id: data.service_id } })
+}
+
+/**
+ * Dissocie un service d'un modèle (soft delete via actif = 0).
+ */
+export async function unlinkServiceModele(
+  db: D1Database,
+  data: { service_id: number; modele_id: number },
+  userId: number
+): Promise<void> {
+  await db.prepare(`
+    UPDATE service_modeles SET actif = 0
+    WHERE service_id = ? AND modele_id = ?
+  `).bind(data.service_id, data.modele_id).run()
+  await auditLog(db, { user_id: userId, action: 'UNLINK_SERVICE_MODELE', entite_type: 'service_modele', entite_id: data.modele_id, meta: { service_id: data.service_id } })
+}
+
+/**
+ * Retourne toutes les liaisons service_modeles d'un modèle
+ * sous forme plate (service_id + nom + prix_ht_specifique + actif).
+ * Utile pour afficher la liste des services configurés dans l'UI.
+ */
+export async function getModeleWithServices(
+  db: D1Database, modeleId: number
+): Promise<{ modele: ModeleAppareil | null; services: object[] }> {
+  const [modeleRow, services] = await Promise.all([
+    db.prepare(`
+      SELECT mo.*, ma.nom AS marque_nom
+      FROM   modeles_appareils mo
+      JOIN   marques_appareils ma ON ma.id = mo.marque_id
+      WHERE  mo.id = ? AND mo.actif = 1
+    `).bind(modeleId).first(),
+    getServicesByModele(db, modeleId)
+  ])
+  return { modele: modeleRow as ModeleAppareil ?? null, services }
 }

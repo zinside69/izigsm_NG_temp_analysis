@@ -199,7 +199,17 @@
             </div>
             <div class="form-field">
               <label>Modèle</label>
-              <input type="text" id="t-device-model" placeholder="Ex : iPhone 14 Pro">
+              <div style="position:relative;">
+                <input type="text" id="t-device-model" placeholder="Ex : iPhone 14 Pro"
+                  autocomplete="off" oninput="onModeleInput(this.value)" onfocus="onModeleInput(this.value)">
+                <input type="hidden" id="t-device-model-id">
+                <div id="modele-suggestions" style="display:none;position:absolute;z-index:999;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:200px;overflow-y:auto;"></div>
+              </div>
+              <!-- Suggestion services selon modèle -->
+              <div id="services-suggestion-box" style="display:none;margin-top:6px;padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;">
+                <div style="font-weight:600;color:#1d4ed8;margin-bottom:4px;">💡 Services suggérés pour ce modèle</div>
+                <div id="services-suggestion-list"></div>
+              </div>
             </div>
             <div class="form-field">
               <label>IMEI / N° de série</label>

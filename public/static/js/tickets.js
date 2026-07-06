@@ -1040,6 +1040,109 @@ function closeLightbox() {
 // Fermer sur Escape
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTOCOMPLETE MODÈLE APPAREIL + SUGGESTION SERVICES (Sprint 2.38)
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _modelesCache   = null;
+let _modeleTimer    = null;
+
+/** Déclenché à chaque frappe dans le champ Modèle */
+async function onModeleInput(val) {
+  clearTimeout(_modeleTimer);
+  const box = document.getElementById('modele-suggestions');
+  const hidId = document.getElementById('t-device-model-id');
+
+  // Si valeur effacée → reset
+  if (!val || val.length < 2) {
+    box.style.display = 'none';
+    hidId.value = '';
+    hideSuggestions();
+    return;
+  }
+
+  // Debounce 300ms
+  _modeleTimer = setTimeout(async () => {
+    if (!_modelesCache) {
+      const res = await apiGet('/api/services/modeles?limit=500');
+      _modelesCache = res.data || [];
+    }
+    const lv = val.toLowerCase();
+    const matches = _modelesCache.filter(m =>
+      m.nom.toLowerCase().includes(lv) || (m.marque_nom || '').toLowerCase().includes(lv)
+    ).slice(0, 10);
+
+    if (!matches.length) { box.style.display = 'none'; return; }
+
+    box.innerHTML = matches.map(m => `
+      <div onclick="selectModeleFromSuggestion(${m.id}, '${m.nom.replace(/'/g,"\\'")} — ${m.marque_nom || ''}')"
+           style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;"
+           onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+        <span style="font-weight:600;">${escapeHtml(m.nom)}</span>
+        <span style="color:#94a3b8;"> — ${escapeHtml(m.marque_nom || '')}</span>
+        ${m.type ? `<span style="font-size:11px;color:#6366f1;margin-left:6px;">${m.type}</span>` : ''}
+      </div>
+    `).join('');
+    box.style.display = 'block';
+  }, 300);
+}
+
+async function selectModeleFromSuggestion(modeleId, nom) {
+  document.getElementById('t-device-model').value   = nom;
+  document.getElementById('t-device-model-id').value = modeleId;
+  document.getElementById('modele-suggestions').style.display = 'none';
+
+  // Charger les services suggérés
+  await loadServicesSuggestionsForModele(modeleId);
+}
+
+async function loadServicesSuggestionsForModele(modeleId) {
+  const box  = document.getElementById('services-suggestion-box');
+  const list = document.getElementById('services-suggestion-list');
+
+  if (!modeleId) { box.style.display = 'none'; return; }
+
+  const res  = await apiGet(`/api/services/modeles/${modeleId}/services`);
+  const svcs = res.data?.services || [];
+
+  if (!svcs.length) { box.style.display = 'none'; return; }
+
+  list.innerHTML = svcs.map(s => `
+    <label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;">
+      <input type="checkbox" value="${s.id}" data-prix="${s.prix_ttc_effectif || 0}" data-nom="${s.nom.replace(/"/g,'&quot;')}"
+        style="accent-color:#6366f1;">
+      <span>${escapeHtml(s.nom)}</span>
+      <span style="color:#6366f1;font-weight:600;">${(s.prix_ttc_effectif || 0).toFixed(2)} €</span>
+      ${s.prix_ht_specifique != null ? `<span style="font-size:10px;color:#f59e0b;">prix spé.</span>` : ''}
+    </label>
+  `).join('');
+
+  box.style.display = 'block';
+}
+
+function hideSuggestions() {
+  const box = document.getElementById('services-suggestion-box');
+  if (box) box.style.display = 'none';
+}
+
+/** Fermer les suggestions si clic ailleurs */
+document.addEventListener('click', e => {
+  const box = document.getElementById('modele-suggestions');
+  const inp = document.getElementById('t-device-model');
+  if (box && inp && !inp.contains(e.target) && !box.contains(e.target)) {
+    box.style.display = 'none';
+  }
+});
+
+/** Petite fonction escapeHtml locale (évite conflit si app.js définit escHtml) */
+function escapeHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+window.onModeleInput                  = onModeleInput;
+window.selectModeleFromSuggestion     = selectModeleFromSuggestion;
+window.loadServicesSuggestionsForModele = loadServicesSuggestionsForModele;
+
 // ── Helper : showToast (si pas défini globalement dans app.js) ─────────────────
 function showToast(msg, type = 'info') {
   // Réutilise la fonction globale de app.js si disponible
