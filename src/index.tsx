@@ -25,7 +25,7 @@ import { createD1KV, d1KvCleanup } from './lib/d1kv'
 
 /**
  * @module index
- * @version 2.35.0
+ * @version 2.36.0
  * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1).
  *
  * Sprint 2.27 — Audit global frontend : 0 axios/ApiService, stats.html, fix tickets.js, DEPLOIEMENT.md.
@@ -56,6 +56,7 @@ import { createD1KV, d1KvCleanup } from './lib/d1kv'
 type Bindings = {
   DB:         D1Database
   JWT_SECRET: string
+  PHOTOS?:    R2Bucket   // Sprint 2.36 — MOD-01 photos tickets (optionnel : absent en dev sans R2)
   // KV supprimé — remplacé par D1AsKV (createD1KV) pour compatibilité gsk-hosted-deploy
 }
 
@@ -87,8 +88,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.35.0',
-    sprint:    '2.35 — MOD-18 Reset password + OAuth Google One Tap',
+    version:   '2.36.0',
+    sprint:    '2.36 — MOD-01 Photos tickets R2 (avant/après)',
     timestamp: new Date().toISOString(),
   })
 })

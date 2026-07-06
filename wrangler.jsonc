@@ -21,6 +21,18 @@
   // Remplacé par D1AsKV : table kv_store dans D1 + wrapper createD1KV().
   // Voir src/lib/d1kv.ts et migrations/0024_kv_store.sql
 
+  // ── R2 Storage (photos tickets) ──────────────────────────────────────────
+  // Sprint 2.36 — MOD-01 : stockage binaire photos avant/après réparation.
+  // Auto-provisionné par gsk-hosted-deploy sous le nom "izigsm-photos".
+  // En dev local : --r2=PHOTOS dans l'arg wrangler pages dev (sandbox R2 simulé).
+  ,
+  "r2_buckets": [
+    {
+      "binding":     "PHOTOS",
+      "bucket_name": "izigsm-photos"
+    }
+  ]
+
   // ── Secrets (ne jamais mettre en clair ici) ──────────────────────────────
   // Configurer via : gsk hosted secret_put --name JWT_SECRET --value "$JWT_SECRET"
 }

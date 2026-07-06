@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.33 clôturé — 6 juillet 2026  
-> Version production : **v2.33.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Mis à jour : Sprint 2.36 clôturé — 6 juillet 2026  
+> Version production : **v2.36.0** — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
 > Tests : **607/607** (15 suites Vitest)  
-> Build : 71 modules / 248.08 kB  
-> Git : branche `main`, tag `v2.33.0`, déploiement ✅
+> Build : 72 modules / 273.30 kB  
+> Git : branche `main`, tag `v2.36.0`
 
 ---
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | **Backend Hono** | ✅ Complet | 18 fichiers routes, ~230 endpoints, 0 SQL dans les controllers |
 | **Services Model** | ✅ Complet | 17 services, P1 MVC strict respecté partout |
-| **Migrations D1** | ✅ 27 migrations | 0027_users_google_id.sql = dernière |
+| **Migrations D1** | ✅ 28 migrations | 0028_ticket_photos.sql = dernière |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
 | **Tests Vitest** | ✅ 607/607 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, **clientService 38, personnelService 36, reconditionnementService 50, publicService 20** |
@@ -331,16 +331,25 @@
 
 ---
 
-### Sprint 2.36 🔜 — Photos tickets R2 + upload AJAX
-**Module CDC : MOD-01 (CRITIQUE) — Upload photos avant/après**
+### Sprint 2.36 ✅ — Photos tickets R2 + upload AJAX
+**Module CDC : MOD-01 (CRITIQUE) — Upload photos avant/après** — v2.36.0 — *6 juillet 2026*
 
-- [ ] Activer R2 dans `wrangler.jsonc` : `r2_buckets` binding `R2`
-- [ ] `gsk hosted` : créer bucket R2 (nécessite approbation utilisateur)
-- [ ] `src/services/photosService.ts` : `uploadPhoto(r2, ticketId, buffer, mime)` → clé `tickets/:id/photos/:uuid`, `listPhotos(db, ticketId)`, `deletePhoto(r2, db, photoId)`
-- [ ] Migration 0026 : table `ticket_photos (id, ticket_id, r2_key, url, type [avant/apres], created_at)`
-- [ ] `src/routes/tickets.ts` : `POST /api/tickets/:id/photos`, `GET /api/tickets/:id/photos`, `DELETE /api/tickets/:id/photos/:photoId`
-- [ ] `public/tickets.html` : zone drag & drop upload (JPEG/PNG ≤5MB), galerie avant/après
-- [ ] `public/static/js/tickets.js` : `uploadPhoto()`, `loadPhotos()`, compression canvas avant upload
+- [x] Migration `0028_ticket_photos.sql` : table `ticket_photos (id, ticket_id, r2_key, nom_fichier, type_photo [avant/apres/autre], mime_type, taille, created_at, created_by)` + 2 index
+- [x] `src/services/photosService.ts` : `uploadPhoto()` (R2 put + D1 insert + audit), `listPhotos()` (ORDER BY type puis date), `getPhotoById()`, `deletePhoto()` (R2 delete + D1 delete), `getTicketForPhoto()`, types `TypePhoto` + constantes `MIME_AUTORISES` / `TAILLE_MAX`
+- [x] `wrangler.jsonc` : binding `PHOTOS: R2Bucket` → bucket `izigsm-photos` (optionnel en dev local → 503 gracieux)
+- [x] `src/routes/tickets.ts` : `GET /api/tickets/:id/photos`, `POST /api/tickets/:id/photos` (multipart + body brut), `GET /api/tickets/:id/photos/:photoId/view` (proxy R2), `DELETE /api/tickets/:id/photos/:photoId` (admin/manager/technicien)
+- [x] `src/index.tsx` : `PHOTOS?: R2Bucket` dans Bindings, version 2.36.0
+- [x] `public/tickets.html` : onglet Photos dans modal détail (drag & drop, select avant/apres/autre, galerie 3 sections, progress bar, lightbox, avertissement R2 absent)
+- [x] `public/static/js/tickets.js` : `switchDetailTab()`, `loadPhotos()`, `renderGallery()`, `buildPhotoThumb()`, `processPhotoFile()`, `compressImage()` (canvas max 1400px q:0.82), `uploadPhoto()` (FormData JWT), `deletePhotoConfirm()`, `openLightbox()`/`closeLightbox()`, `showToast()`
+- [x] 607/607 tests — zéro régression
+
+**Notes déploiement production :**
+```bash
+# Créer le bucket R2 avant le déploiement
+gsk hosted r2_create izigsm-photos   # ou via dashboard CF
+# Puis déployer normalement
+npm run build && gsk hosted deploy
+```
 
 ---
 
@@ -415,4 +424,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.35 clôturé (v2.35.0), fix placeholder commit e1e21c7 — Sprint 2.36 à démarrer*
+*Dernière mise à jour : 6 juillet 2026 — Sprint 2.36 clôturé (v2.36.0) — Sprint 2.37 à démarrer*

@@ -9,6 +9,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prises en charge — iziGSM</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    /* ── Galerie photos ───────────────────────────────────────────────── */
+    .photo-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .photo-thumb {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #f3f4f6;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color .15s, transform .15s;
+    }
+    .photo-thumb:hover { border-color: #6366f1; transform: scale(1.03); }
+    .photo-thumb img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .photo-thumb-del {
+      position: absolute;
+      top: 4px; right: 4px;
+      background: rgba(0,0,0,.55);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 22px; height: 22px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+    .photo-thumb:hover .photo-thumb-del { opacity: 1; }
+    .photo-thumb-label {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,.45);
+      color: #fff;
+      font-size: 0.65rem;
+      padding: 2px 5px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* dropzone drag-over highlight */
+    .dropzone.drag-over {
+      border-color: #6366f1;
+      background: #eef2ff;
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -214,18 +270,110 @@
 
   <!-- Modal détail ticket -->
   <div class="modal-overlay" id="modal-ticket-detail">
-    <div class="modal" style="max-width:640px;">
+    <div class="modal" style="max-width:700px;">
       <div class="modal-header">
         <h2 id="detail-title">Prise en charge #001</h2>
         <button class="modal-close" onclick="closeModal('modal-ticket-detail')">✕</button>
       </div>
-      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-body">
+        <!-- Onglets détail -->
+        <div class="tabs" style="margin-bottom:16px;">
+          <button class="tab-btn active" onclick="switchDetailTab('detail-info')">Informations</button>
+          <button class="tab-btn" onclick="switchDetailTab('detail-photos')">📷 Photos</button>
+        </div>
+
+        <!-- Onglet informations (contenu existant) -->
+        <div id="detail-info" class="tab-content active">
+          <div id="detail-body"></div>
+        </div>
+
+        <!-- Onglet photos -->
+        <div id="detail-photos" class="tab-content">
+
+          <!-- Upload drag & drop -->
+          <div style="margin-bottom:20px;">
+            <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+              <span style="font-weight:600;font-size:0.9rem;">Ajouter une photo</span>
+              <select id="photo-type-select" style="border:1px solid #e5e7eb;border-radius:8px;padding:4px 10px;font:inherit;font-size:0.85rem;">
+                <option value="avant">📸 Avant réparation</option>
+                <option value="apres">✅ Après réparation</option>
+                <option value="autre">📎 Autre</option>
+              </select>
+            </div>
+            <div class="dropzone" id="photo-dropzone"
+                 onclick="document.getElementById('photo-file-input').click()"
+                 ondragover="photoDragOver(event)"
+                 ondragleave="photoDragLeave(event)"
+                 ondrop="photoDrop(event)"
+                 style="cursor:pointer;">
+              <div class="dropzone-icon" id="photo-dz-icon">📷</div>
+              <p><span class="dz-action">Cliquez pour choisir</span> ou glissez une photo ici</p>
+              <p style="font-size:0.78rem;color:#9ca3af;margin-top:4px;">JPEG · PNG · WebP — Max 5 Mo — Compressé automatiquement</p>
+              <div id="photo-upload-progress" style="display:none;margin-top:10px;">
+                <div style="height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden;">
+                  <div id="photo-progress-bar" style="height:100%;width:0%;background:#6366f1;transition:width 0.3s;"></div>
+                </div>
+                <p id="photo-upload-status" style="font-size:0.78rem;color:#6366f1;margin-top:4px;text-align:center;">Upload en cours...</p>
+              </div>
+            </div>
+            <input type="file" id="photo-file-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handlePhotoFile(event)">
+          </div>
+
+          <!-- Galerie avant/après -->
+          <div id="photos-gallery">
+            <!-- Section Avant -->
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#374151;">📸 Avant réparation</span>
+                <span id="count-avant" style="font-size:0.75rem;color:#9ca3af;"></span>
+              </div>
+              <div id="gallery-avant" class="photo-gallery-grid"></div>
+              <p id="empty-avant" style="color:#9ca3af;font-size:0.85rem;font-style:italic;">Aucune photo avant réparation</p>
+            </div>
+            <!-- Section Après -->
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#374151;">✅ Après réparation</span>
+                <span id="count-apres" style="font-size:0.75rem;color:#9ca3af;"></span>
+              </div>
+              <div id="gallery-apres" class="photo-gallery-grid"></div>
+              <p id="empty-apres" style="color:#9ca3af;font-size:0.85rem;font-style:italic;">Aucune photo après réparation</p>
+            </div>
+            <!-- Section Autre -->
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#374151;">📎 Autres</span>
+                <span id="count-autre" style="font-size:0.75rem;color:#9ca3af;"></span>
+              </div>
+              <div id="gallery-autre" class="photo-gallery-grid"></div>
+              <p id="empty-autre" style="color:#9ca3af;font-size:0.85rem;font-style:italic;display:none;">Aucune photo</p>
+            </div>
+          </div>
+
+          <!-- Loading state -->
+          <div id="photos-loading" style="display:none;text-align:center;padding:24px;color:#9ca3af;">
+            <div style="font-size:1.5rem;margin-bottom:8px;">⏳</div>
+            <p>Chargement des photos...</p>
+          </div>
+
+          <!-- Erreur R2 non configuré -->
+          <div id="photos-r2-warning" style="display:none;padding:12px 16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:0.85rem;color:#92400e;">
+            ⚠️ Le stockage photos (R2) n'est pas configuré sur ce déploiement. Les photos ne sont pas disponibles en développement local.
+          </div>
+        </div>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-ticket-detail')">Fermer</button>
         <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
         <button class="btn btn-accent" id="btn-create-devis" onclick="createDevisFromTicket()">Créer un devis →</button>
       </div>
     </div>
+  </div>
+
+  <!-- Lightbox photo -->
+  <div id="photo-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;" onclick="closeLightbox()">
+    <button style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:1.8rem;cursor:pointer;" onclick="closeLightbox()">✕</button>
+    <img id="lightbox-img" src="" alt="" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.5);">
   </div>
 
   <script src="/static/js/app.js"></script>

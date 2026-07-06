@@ -221,6 +221,9 @@ function viewTicket(id) {
     </div>
   `;
   window._currentTicketId = id;
+  _currentPhotoTicketId   = id;  // Sprint 2.36 — photos
+  // Réinitialiser l'onglet sur "Informations" à chaque ouverture
+  switchDetailTab('detail-info');
   openModal('modal-ticket-detail');
 }
 
@@ -700,3 +703,299 @@ async function populateClients() {
 }
 
 function esc(s) { return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ======================== PHOTOS TICKETS (Sprint 2.36) ========================
+
+let _currentPhotoTicketId = null;
+
+/**
+ * switchDetailTab — gère les onglets du modal détail ticket
+ */
+function switchDetailTab(tabId) {
+  document.querySelectorAll('#modal-ticket-detail .tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#modal-ticket-detail .tab-btn').forEach(btn => btn.classList.remove('active'));
+  const tab = document.getElementById(tabId);
+  if (tab) tab.classList.add('active');
+  // Activer le bon bouton (par ordre d'index)
+  const tabs = ['detail-info', 'detail-photos'];
+  const idx  = tabs.indexOf(tabId);
+  const btns = document.querySelectorAll('#modal-ticket-detail .tab-btn');
+  if (btns[idx]) btns[idx].classList.add('active');
+
+  // Charger les photos à la première activation
+  if (tabId === 'detail-photos' && _currentPhotoTicketId) {
+    loadPhotos(_currentPhotoTicketId);
+  }
+}
+
+/**
+ * loadPhotos — charge et affiche la galerie d'un ticket
+ */
+async function loadPhotos(ticketId) {
+  _currentPhotoTicketId = ticketId;
+
+  const loading = document.getElementById('photos-loading');
+  const warning = document.getElementById('photos-r2-warning');
+  const gallery = document.getElementById('photos-gallery');
+
+  if (!gallery) return;
+
+  if (loading) loading.style.display = 'block';
+  gallery.style.display = 'none';
+  if (warning) warning.style.display = 'none';
+
+  try {
+    const r = await apiGet(`/api/tickets/${ticketId}/photos`);
+
+    if (!r.ok && r.status === 503) {
+      if (loading) loading.style.display = 'none';
+      if (warning) warning.style.display = 'block';
+      gallery.style.display = 'none';
+      return;
+    }
+
+    const photos = r.data?.data || [];
+    renderGallery(ticketId, photos);
+  } catch (err) {
+    console.warn('[Photos] Erreur chargement:', err.message);
+    if (warning) warning.style.display = 'block';
+  } finally {
+    if (loading) loading.style.display = 'none';
+    gallery.style.display = 'block';
+  }
+}
+
+/**
+ * renderGallery — construit la grille avant/après/autre
+ */
+function renderGallery(ticketId, photos) {
+  const types = ['avant', 'apres', 'autre'];
+  types.forEach(t => {
+    const grid    = document.getElementById(`gallery-${t}`);
+    const empty   = document.getElementById(`empty-${t}`);
+    const counter = document.getElementById(`count-${t}`);
+    if (!grid) return;
+
+    const subset = photos.filter(p => p.type_photo === t);
+    grid.innerHTML = '';
+
+    if (subset.length === 0) {
+      if (empty) empty.style.display = 'block';
+      if (counter) counter.textContent = '';
+    } else {
+      if (empty) empty.style.display = 'none';
+      if (counter) counter.textContent = `(${subset.length})`;
+      subset.forEach(photo => {
+        const thumb = buildPhotoThumb(ticketId, photo);
+        grid.appendChild(thumb);
+      });
+    }
+  });
+}
+
+/**
+ * buildPhotoThumb — crée la vignette d'une photo
+ */
+function buildPhotoThumb(ticketId, photo) {
+  const div = document.createElement('div');
+  div.className = 'photo-thumb';
+  div.dataset.photoId = photo.id;
+
+  const imgUrl = `/api/tickets/${ticketId}/photos/${photo.id}/view`;
+
+  div.innerHTML = `
+    <img src="${imgUrl}" alt="${esc(photo.nom_fichier)}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23f3f4f6%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>📷</text></svg>'">
+    <button class="photo-thumb-del" onclick="deletePhotoConfirm(event, ${ticketId}, ${photo.id})" title="Supprimer">✕</button>
+    <div class="photo-thumb-label">${esc(photo.nom_fichier)}</div>
+  `;
+  div.querySelector('img').addEventListener('click', () => openLightbox(imgUrl));
+  return div;
+}
+
+// ── Drag & drop dropzone photos ───────────────────────────────────────────────
+
+function photoDragOver(e) {
+  e.preventDefault();
+  document.getElementById('photo-dropzone')?.classList.add('drag-over');
+}
+function photoDragLeave(e) {
+  document.getElementById('photo-dropzone')?.classList.remove('drag-over');
+}
+function photoDrop(e) {
+  e.preventDefault();
+  document.getElementById('photo-dropzone')?.classList.remove('drag-over');
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) processPhotoFile(files[0]);
+}
+function handlePhotoFile(e) {
+  const files = e.target.files;
+  if (files && files.length > 0) processPhotoFile(files[0]);
+  e.target.value = ''; // reset pour re-sélection du même fichier
+}
+
+/**
+ * processPhotoFile — compresse via canvas puis upload
+ */
+async function processPhotoFile(file) {
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    showToast('Format non supporté. Utilisez JPEG, PNG ou WebP.', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Fichier trop lourd (max 5 Mo).', 'error');
+    return;
+  }
+  if (!_currentPhotoTicketId) {
+    showToast('Aucun ticket sélectionné.', 'error');
+    return;
+  }
+
+  const type = document.getElementById('photo-type-select')?.value || 'autre';
+
+  // Compression via canvas (cible max 1400px, qualité 0.82)
+  let blob;
+  try {
+    blob = await compressImage(file, 1400, 0.82);
+  } catch {
+    blob = file; // fallback sans compression
+  }
+
+  await uploadPhoto(_currentPhotoTicketId, blob, file.name, type);
+}
+
+/**
+ * compressImage — redimensionne et compresse une image via canvas
+ * @param {File} file
+ * @param {number} maxDim — dimension max en px
+ * @param {number} quality — 0..1 pour JPEG
+ * @returns {Promise<Blob>}
+ */
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else                { width  = Math.round(width  * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width  = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const outMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), outMime, quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
+
+/**
+ * uploadPhoto — POST multipart vers /api/tickets/:id/photos
+ */
+async function uploadPhoto(ticketId, blob, nom, type) {
+  const progress   = document.getElementById('photo-upload-progress');
+  const progressBar = document.getElementById('photo-progress-bar');
+  const statusTxt  = document.getElementById('photo-upload-status');
+
+  if (progress) progress.style.display = 'block';
+  if (progressBar) progressBar.style.width = '30%';
+  if (statusTxt) statusTxt.textContent = 'Compression et envoi...';
+
+  try {
+    const formData = new FormData();
+    formData.append('photo', blob, nom);
+    formData.append('type', type);
+
+    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
+    const token   = session.accessToken || session.access_token || '';
+
+    if (progressBar) progressBar.style.width = '60%';
+
+    const res = await fetch(`/api/tickets/${ticketId}/photos`, {
+      method: 'POST',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (progressBar) progressBar.style.width = '90%';
+
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'Erreur upload');
+
+    if (progressBar) progressBar.style.width = '100%';
+    if (statusTxt) statusTxt.textContent = '✅ Photo ajoutée !';
+
+    setTimeout(() => {
+      if (progress) progress.style.display = 'none';
+      if (progressBar) progressBar.style.width = '0%';
+    }, 1200);
+
+    // Recharger la galerie
+    await loadPhotos(ticketId);
+    showToast('Photo ajoutée avec succès.', 'success');
+  } catch (err) {
+    if (progress) progress.style.display = 'none';
+    if (progressBar) progressBar.style.width = '0%';
+    showToast(err.message || 'Erreur lors de l\'upload.', 'error');
+  }
+}
+
+/**
+ * deletePhotoConfirm — confirmation + suppression d'une photo
+ */
+async function deletePhotoConfirm(e, ticketId, photoId) {
+  e.stopPropagation();
+  if (!confirm('Supprimer cette photo ? Cette action est irréversible.')) return;
+
+  try {
+    const r = await apiDelete(`/api/tickets/${ticketId}/photos/${photoId}`);
+    if (!r.ok) throw new Error(r.error || 'Erreur suppression');
+    // Retirer la vignette du DOM directement (UX instantanée)
+    const thumb = document.querySelector(`.photo-thumb[data-photo-id="${photoId}"]`);
+    if (thumb) thumb.remove();
+    showToast('Photo supprimée.', 'success');
+    // Recharger pour mise à jour compteurs
+    await loadPhotos(ticketId);
+  } catch (err) {
+    showToast(err.message || 'Erreur lors de la suppression.', 'error');
+  }
+}
+
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
+function openLightbox(imgUrl) {
+  const lb  = document.getElementById('photo-lightbox');
+  const img = document.getElementById('lightbox-img');
+  if (!lb || !img) return;
+  img.src = imgUrl;
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  const lb = document.getElementById('photo-lightbox');
+  if (lb) lb.style.display = 'none';
+  document.body.style.overflow = '';
+}
+// Fermer sur Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+// ── Helper : showToast (si pas défini globalement dans app.js) ─────────────────
+function showToast(msg, type = 'info') {
+  // Réutilise la fonction globale de app.js si disponible
+  if (typeof window.showNotification === 'function') {
+    window.showNotification(msg, type);
+    return;
+  }
+  // Fallback minimal
+  const toast = document.createElement('div');
+  toast.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:99999;padding:12px 18px;border-radius:10px;font-size:0.88rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.15);color:#fff;background:${type==='error'?'#ef4444':type==='success'?'#22c55e':'#6366f1'};transition:opacity .3s;`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 350); }, 3000);
+}

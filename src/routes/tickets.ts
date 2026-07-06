@@ -29,8 +29,18 @@ import {
 import { getClientEmailPrenom } from '../services/clientService'
 import { createGarantieFromTicket } from '../services/garantiesService'
 import { sendTicketCree, sendTicketTermine, sendTicketLivre } from '../services/emailService'
+import {
+  uploadPhoto,
+  listPhotos,
+  getPhotoById,
+  deletePhoto,
+  getTicketForPhoto,
+  type TypePhoto,
+  MIME_AUTORISES,
+  TAILLE_MAX,
+} from '../services/photosService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; PHOTOS?: R2Bucket }
 type Variables = { user: any }
 
 const tickets = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -251,6 +261,159 @@ tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
 
   await deleteTicket(db, id, user.sub)
   return c.json({ success: true, message: 'Ticket supprimé.' })
+})
+
+// ─── Photos (Sprint 2.36 — MOD-01) ───────────────────────────────────────────
+
+// ── GET /api/tickets/:id/photos ───────────────────────────────────────────────
+/**
+ * Liste toutes les photos d'un ticket.
+ * @param id — ID du ticket
+ * @returns { success, data: PhotoRow[] }
+ */
+tickets.get('/:id/photos', async (c) => {
+  const { user, db } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+
+  try {
+    const ticket = await getTicketForPhoto(db, ticketId)
+    if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+
+    const boutiqueId = getBoutiqueId(c)
+    if (boutiqueId && ticket.boutique_id !== Number(boutiqueId)) {
+      return c.json({ success: false, error: 'Accès refusé.' }, 403)
+    }
+
+    const photos = await listPhotos(db, ticketId)
+    return c.json({ success: true, data: photos })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500)
+  }
+})
+
+// ── POST /api/tickets/:id/photos ──────────────────────────────────────────────
+/**
+ * Upload une photo (multipart/form-data ou body binaire).
+ * Accepte multipart avec champ `photo` (File) + champ `type` (avant|apres|autre).
+ * Fallback : body binaire brut avec header X-Photo-Type et X-Photo-Name.
+ *
+ * @param id — ID du ticket
+ * @body multipart: photo (File), type? (avant|apres|autre)
+ * @returns { success, data: PhotoRow }
+ */
+tickets.post('/:id/photos', async (c) => {
+  const { user, db } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+
+  const r2 = c.env.PHOTOS
+  if (!r2) {
+    return c.json({ success: false, error: 'Stockage R2 non configuré sur ce déploiement.' }, 503)
+  }
+
+  try {
+    const ticket = await getTicketForPhoto(db, ticketId)
+    if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+
+    const boutiqueId = getBoutiqueId(c)
+    if (boutiqueId && ticket.boutique_id !== Number(boutiqueId)) {
+      return c.json({ success: false, error: 'Accès refusé.' }, 403)
+    }
+
+    let buffer: ArrayBuffer
+    let mime:   string
+    let nom:    string
+    let type:   TypePhoto = 'autre'
+
+    const contentType = c.req.header('content-type') ?? ''
+
+    if (contentType.includes('multipart/form-data')) {
+      // ── Multipart (cas standard frontend) ────────────────────────────────
+      const formData = await c.req.formData()
+      const file = formData.get('photo') as File | null
+      if (!file) return c.json({ success: false, error: 'Champ "photo" manquant dans le formulaire.' }, 422)
+
+      buffer = await file.arrayBuffer()
+      mime   = file.type || 'image/jpeg'
+      nom    = file.name || 'photo.jpg'
+      const typeParam = (formData.get('type') ?? 'autre') as string
+      type   = (['avant', 'apres', 'autre'].includes(typeParam) ? typeParam : 'autre') as TypePhoto
+    } else {
+      // ── Body binaire brut (fallback curl / tests) ─────────────────────────
+      buffer = await c.req.arrayBuffer()
+      mime   = contentType.split(';')[0].trim() || 'image/jpeg'
+      nom    = c.req.header('x-photo-name') ?? 'photo.jpg'
+      const typeHeader = c.req.header('x-photo-type') ?? 'autre'
+      type   = (['avant', 'apres', 'autre'].includes(typeHeader) ? typeHeader : 'autre') as TypePhoto
+    }
+
+    const photo = await uploadPhoto(r2, db, ticketId, user.sub, buffer, mime, nom, type)
+    return c.json({ success: true, data: photo }, 201)
+  } catch (err: any) {
+    const status = err.message.includes('non autorisé') || err.message.includes('trop volumineux') ? 422 : 500
+    return c.json({ success: false, error: err.message }, status)
+  }
+})
+
+// ── GET /api/tickets/:id/photos/:photoId/view ─────────────────────────────────
+/**
+ * Proxy R2 → client : retourne le binaire de la photo.
+ * Utilisé par les balises <img src="..."> du frontend.
+ * @param id      — ID du ticket
+ * @param photoId — ID de la photo
+ * @returns Binaire de l'image avec Content-Type correct
+ */
+tickets.get('/:id/photos/:photoId/view', async (c) => {
+  const { db } = ctx(c)
+  const photoId = parseInt(c.req.param('photoId'), 10)
+
+  const r2 = c.env.PHOTOS
+  if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
+
+  try {
+    const meta = await getPhotoById(db, photoId)
+    if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
+
+    const obj = await r2.get(meta.r2_key)
+    if (!obj) return c.json({ success: false, error: 'Fichier introuvable dans le stockage.' }, 404)
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type':  meta.mime_type,
+        'Cache-Control': 'private, max-age=86400',
+        'Content-Disposition': `inline; filename="${meta.nom_fichier}"`,
+      },
+    })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500)
+  }
+})
+
+// ── DELETE /api/tickets/:id/photos/:photoId ───────────────────────────────────
+/**
+ * Supprime une photo (R2 + D1). Réservé admin/manager/technicien.
+ * @param id      — ID du ticket
+ * @param photoId — ID de la photo à supprimer
+ * @returns { success, message }
+ */
+tickets.delete('/:id/photos/:photoId', requireRole('admin', 'manager', 'technicien'), async (c) => {
+  const { user, db } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+  const photoId  = parseInt(c.req.param('photoId'), 10)
+
+  const r2 = c.env.PHOTOS
+  if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
+
+  try {
+    const meta = await getPhotoById(db, photoId)
+    if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
+    if (meta.ticket_id !== ticketId) return c.json({ success: false, error: 'Photo non liée à ce ticket.' }, 403)
+
+    await deletePhoto(r2, db, photoId, user.sub)
+    return c.json({ success: true, message: 'Photo supprimée.' })
+  } catch (err: any) {
+    const status = err.message.includes('introuvable') ? 404 : 500
+    return c.json({ success: false, error: err.message }, status)
+  }
 })
 
 export default tickets
