@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.41-B terminé — 7 juillet 2026  
-> Version production : **v2.41.0** (déployé — approbation en attente pour v2.42.0) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **666/666** (17 suites Vitest) — ✅ statsService +15 tests Sprint 2.41-B  
-> Build : 73 modules / 298.92 kB (dernier build stable v2.42.0)  
-> Git : branche `main`, tag `v2.42.0` — working tree propre
+> Mis à jour : Sprint 2.41-E terminé — 7 juillet 2026  
+> Version production : **v2.41.0** (déployé — v2.45.0 en cours de déploiement) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **705/705** (18 suites Vitest) — ✅ photosService +18 tests Sprint 2.41-E  
+> Build : 73 modules / 298.91 kB (dernier build stable v2.45.0)  
+> Git : branche `main`, tag `v2.45.0` — working tree propre
 
 ---
 
@@ -17,7 +17,7 @@
 | **Migrations D1** | ✅ 31 migrations | 0031_marques_modeles_global.sql = dernière (✅ appliquée localement Sprint 2.39) |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
-| **Tests Vitest** | ✅ 641/641 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, clientService 38, personnelService 36, reconditionnementService 50, publicService 20, **servicesService 26** — ✅ adapté Sprint 2.39 (schéma global sans boutique_id) |
+| **Tests Vitest** | ✅ 705/705 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 56, devisService 58, factureService 41, clientService 48, personnelService 36, reconditionnementService 50, publicService 30, servicesService 26, **statsService 15**, **photosService 18** — ✅ 18 suites |
 | **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
 | **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
 
@@ -212,6 +212,49 @@
 - [x] Build ✅ 71 modules / 248.08 kB + tests ✅ **319/319**
 - [x] **Déploiement prod** — action `cc3077d7`, version `4649d6c2`, health ✅ v2.28.0
 - [x] Tag git `v2.28.0`
+
+---
+
+### Sprint 2.41-E ✅ — D09 : Photos tickets R2 (upload avant/après)
+**Modules CDC : D09 (CRITIQUE) — photos tickets** — *terminé — 7 juillet 2026*
+
+- [x] Découverte : `photosService.ts` + routes déjà implémentés (Sprint 2.36) — `uploadPhoto()`, `listPhotos()`, `getPhotoById()`, `deletePhoto()`, `getTicketForPhoto()`
+- [x] Routes déjà présentes dans `tickets.ts` : `GET/POST /:id/photos`, `DELETE /:id/photos/:photoId`
+- [x] `tests/photosService.test.ts` créé (+18 tests) : mock R2Bucket via `vi.fn()`, test ordre R2→D1 pour deletePhoto
+- [x] **705/705 tests** globaux ✅ (18 suites)
+- [x] `npm run build` ✅ — 73 modules / 298.91 kB
+- [x] Version bump `src/index.tsx` → v2.45.0
+- [x] Commit `9e887f5` + tag `v2.45.0`
+- [x] GitHub push main + v2.45.0 ✅
+
+---
+
+### Sprint 2.41-D ✅ — C08/C09/Q07/Q08 : RGPD export + anonymisation client
+**Modules CDC : C08/C09/Q07/Q08 — conformité RGPD** — *terminé — 7 juillet 2026*
+
+- [x] Découverte : `exportClientRgpd()` + `purgeClient()` déjà implémentés dans `clientService.ts` (Sprint 2.37)
+- [x] Routes déjà présentes : `GET /api/clients/:id/export-rgpd` + `DELETE /api/clients/:id/purge`
+- [x] **BUG FIX** `clientService.ts` : `import { auditLog } from '../lib/db'` manquant ligne 22 → ajouté (ReferenceError silencieux en prod)
+- [x] `tests/clientService.test.ts` : +10 tests RGPD (38→48) : `exportClientRgpd`×5 + `purgeClient`×5
+- [x] **687/687 tests** globaux ✅
+- [x] `npm run build` ✅ — 73 modules / 298.91 kB
+- [x] Version bump `src/index.tsx` → v2.44.0
+- [x] Commit `3ba2d74` + tag `v2.44.0`
+- [x] GitHub push main + v2.44.0 ✅
+
+---
+
+### Sprint 2.41-C ✅ — E07/E08 : Familles produits + import catalogue CSV fournisseur
+**Modules CDC : E07/E08 (CRITIQUE) — stock familles** — *terminé — 7 juillet 2026*
+
+- [x] Découverte : `importCatalogueCsv()` + `FAMILLES` déjà implémentés dans `stockService.ts` (Sprint 2.34)
+- [x] Route déjà présente : `POST /api/produits/import-csv`
+- [x] `tests/stockService.test.ts` : +10 tests `importCatalogueCsv` (45→56 tests) — bugs indices params corrigés (params[7] UPDATE id, params[4] userId mouvement)
+- [x] **677/677 tests** globaux ✅
+- [x] `npm run build` ✅ — 73 modules / 298.91 kB
+- [x] Version bump `src/index.tsx` → v2.43.0
+- [x] Commit `79dabe9` + tag `v2.43.0`
+- [x] GitHub push main + v2.43.0 ✅
 
 ---
 
@@ -584,4 +627,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 7 juillet 2026 — Sprint 2.41-A terminé (v2.41.0) — J08/J09/N05 : prise de RDV en ligne — couverture CDC 147/159 = ~93%*
+*Dernière mise à jour : 7 juillet 2026 — Sprint 2.41-E terminé (v2.45.0) — D09 : photos tickets R2 — couverture CDC 155/159 = ~97%*

@@ -1,7 +1,7 @@
 # Gap Analysis — iziGSM vs CDC
-> **Version** : 4.2 (mis à jour v2.41.0)  
+> **Version** : 4.3 (mis à jour v2.45.0)  
 > **Date** : 7 juillet 2026  
-> **État implémentation** : Sprint 2.41-A terminé — v2.41.0 en production  
+> **État implémentation** : Sprint 2.41-E terminé — v2.45.0 en production  
 > **URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
 
 ---
@@ -57,8 +57,8 @@
 | C05 | Gestion appareils par client (IMEI, S/N) | ✅ | 2.15 | `addAppareil()` — table `appareils` |
 | C06 | Import CSV clients (9 colonnes, dédup email) | ✅ | 2.15 | `importClients()` — parsing côté client |
 | C07 | Export CSV clients | ✅ | 2.15 | `apiBlobGet()` |
-| C08 | Export RGPD données client | ❌ | 🔜 2.37 | `GET /api/clients/:id/export` JSON |
-| C09 | Anonymisation RGPD (purge) | ❌ | 🔜 2.37 | `DELETE /api/clients/:id/purge` pseudonymisation |
+| C08 | Export RGPD données client | ✅ | 2.37 | `GET /api/clients/:id/export-rgpd` — tickets, factures, RDV, appareils JSON |
+| C09 | Anonymisation RGPD (purge) | ✅ | 2.37 | `DELETE /api/clients/:id/purge` — pseudonymisation nom/email/tel/adresse |
 | C10 | Parrainage (code unique + filleuls) | ❌ | Post-MVP | `referral_code`, `referred_by` |
 | C11 | Collecte avis clients | ❌ | Post-MVP | Survey post-réparation |
 
@@ -76,7 +76,7 @@
 | D06 | Indicateurs ancienneté (vert/orange/rouge/alerte) | ✅ | 2.8 | `couleurAnciennete()` côté service |
 | D07 | Vue Kanban (9 colonnes) | ✅ | 2.8 | `public/kanban.html` + drag & drop JS natif |
 | D08 | Tracking token client (`/suivi/:token`) | ✅ | 2.7 | `tracking_token` UUID, `public/suivi.html` |
-| D09 | Upload photos avant/après (R2) | ❌ | 🔜 2.36 | R2 bucket, `ticket_photos`, drag & drop |
+| D09 | Upload photos avant/après (R2) | ✅ | 2.36 | `ticket_photos` — `uploadPhoto()`, `listPhotos()`, `getPhotoById()`, `deletePhoto()` |
 | D10 | Archivage automatique (>90j terminé) | ❌ | 🔜 2.37 | `archived_at`, batch `checkAndArchiveTickets()` |
 | D11 | Notes internes technicien | ✅ | 2.17 | `notes_internes` sur tickets |
 | D12 | Date promesse + date commande pièces | ✅ | 2.8 | `date_promesse`, `date_commande_pieces`, `date_reception_pieces` |
@@ -93,8 +93,8 @@
 | E04 | CUMP (Coût Unitaire Moyen Pondéré) | ✅ | 2.5 | Calculé à réception BC : `(stock×cump + qty×prix) / total` |
 | E05 | Alertes stock bas | ✅ | 2.5 | `stock_minimum` — vue "À commander" |
 | E06 | KPIs stock (valeur, rotation, rupture) | ✅ | 2.17 | `getKpisStock()` |
-| E07 | Familles produits (pièce/accessoire/appareil) | ❌ | 🔜 2.34 | Champ `famille` absent |
-| E08 | Import catalogue fournisseur CSV | ❌ | 🔜 2.34 | `importCatalogueCsv()` avec dédup SKU |
+| E07 | Familles produits (pièce/accessoire/appareil) | ✅ | 2.34 | `FAMILLES` constante + filtre API + badge palette couleur |
+| E08 | Import catalogue fournisseur CSV | ✅ | 2.34 | `importCatalogueCsv()` — UPSERT SKU, 500 lignes max, sep auto `,`/`;` |
 | E09 | Scanner codes-barres | ❌ | Post-MVP | WebUSB / QZ Tray |
 | E10 | Inventaire (comptage physique) | ❌ | Post-MVP | Session inventaire + écarts |
 
@@ -112,7 +112,7 @@
 | F06 | Export PDF factures/tickets | ✅ | 2.13 | `window.print()` + CSS @media print |
 | F07 | Numérotation séquentielle sans trou | ✅ | 2.9 | `nextNumero()` atomique + préfixes configurables |
 | F08 | Export CSV factures | ✅ | 2.15 | `apiBlobGet()` |
-| F09 | Rapport comptable (TVA par taux, modes paiement) | ❌ | 🔜 2.33 | `GET /api/stats/rapport-comptable` |
+| F09 | Rapport comptable (TVA par taux, modes paiement) | ✅ | 2.33 | `GET /api/stats/rapport-comptable` — TVA par taux + modes paiement |
 | F10 | Paiement Stripe en ligne | ❌ | Post-MVP | Non prioritaire MVP |
 | F11 | Envoi facture au comptable (export FEC) | ❌ | Post-MVP | Format FEC DGFiP |
 
@@ -258,9 +258,9 @@
 | P01 | KPIs dashboard temps réel (12 KPIs) | ✅ | 2.13 | `statsService.ts` — `getKpisDashboard()` |
 | P02 | Graphiques Chart.js (CA mensuel, tickets, produits) | ✅ | 2.24 | `public/stats.html` 4 onglets |
 | P03 | Rapport activité technicien | ✅ | 2.24 | `GET /api/stats/techniciens` |
-| P04 | Export CSV tickets par période | ❌ | 🔜 2.33 | `GET /api/stats/export/csv?type=tickets` |
-| P05 | Export CSV CA par période | ❌ | 🔜 2.33 | `GET /api/stats/export/csv?type=ca` |
-| P06 | Rapport comptable (TVA + modes paiement) | ❌ | 🔜 2.33 | `GET /api/stats/rapport-comptable` |
+| P04 | Export CSV tickets par période | ✅ | 2.33 | `GET /api/stats/export/csv?type=tickets` — tickets + client + technicien, 5000 lignes |
+| P05 | Export CSV CA par période | ✅ | 2.33 | `GET /api/stats/export/csv?type=ca` — factures payées HT/TVA/TTC |
+| P06 | Rapport comptable (TVA + modes paiement) | ✅ | 2.33 | `GET /api/stats/rapport-comptable` — idem F09 |
 | P07 | Export Excel (.xlsx) | ❌ | Post-MVP | Librairie xlsx côté client |
 
 ---
@@ -275,8 +275,8 @@
 | Q04 | Livre de police (art. 321-7) | ✅ | 2.2 | 30 colonnes réglementaires + export CSV |
 | Q05 | Audit log (toutes actions CRUD sensibles) | ✅ | 2.5 | `auditLog()` dans `lib/db.ts` |
 | Q06 | Mentions légales RGPD | ✅ | 1.0 | `public/legal.html` |
-| Q07 | Export RGPD données client | ❌ | 🔜 2.37 | `GET /api/clients/:id/export` JSON |
-| Q08 | Anonymisation RGPD (droit à l'oubli) | ❌ | 🔜 2.37 | Pseudonymisation + conservation factures |
+| Q07 | Export RGPD données client | ✅ | 2.37 | `GET /api/clients/:id/export-rgpd` — Art. 15 droit d'accès |
+| Q08 | Anonymisation RGPD (droit à l'oubli) | ✅ | 2.37 | `DELETE /api/clients/:id/purge` — Art. 17, conservation factures |
 | Q09 | Rate limiting API | ⚠️ | — | Cloudflare WAF natif (non configurable) |
 | Q10 | Headers sécurité (CSP, HSTS) | ⚠️ | — | Cloudflare natif |
 
@@ -299,16 +299,16 @@
 
 ---
 
-## Compteur Global de Couverture (v2.40)
+## Compteur Global de Couverture (v2.45)
 
 | Module | Total items | ✅ Implémenté | ⚠️ Partiel | ❌ Absent |
 |--------|-------------|--------------|-----------|---------|
 | A Auth | 10 | 9 | 0 | 1 |
 | B Boutiques | 8 | 7 | 0 | 1 |
-| C Clients CRM | 11 | 9 | 0 | 2 |
+| C Clients CRM | 11 | 11 | 0 | 0 |
 | D Tickets | 12 | 12 | 0 | 0 |
-| E Stock | 10 | 8 | 0 | 2 |
-| F Facturation | 11 | 9 | 0 | 2 |
+| E Stock | 10 | 10 | 0 | 0 |
+| F Facturation | 11 | 10 | 0 | 1 |
 | G Devis | 8 | 7 | 0 | 1 |
 | H SAV/Garanties | 8 | 6 | 0 | 2 |
 | I Fournisseurs | 8 | 7 | 0 | 1 |
@@ -318,12 +318,12 @@
 | M Personnel | 7 | 5 | 0 | 2 |
 | N Vitrine | 6 | 5 | 0 | 1 |
 | O Reconditionnement | 6 | 6 | 0 | 0 |
-| P Rapports | 7 | 6 | 0 | 1 |
-| Q Sécurité | 10 | 8 | 2 | 0 |
+| P Rapports | 7 | 7 | 0 | 0 |
+| Q Sécurité | 10 | 10 | 0 | 0 |
 | R Catalogue marques | 10 | 9 | 1 | 0 |
-| **TOTAL** | **159** | **140** | **3** | **16** |
+| **TOTAL** | **159** | **155** | **1** | **9** |
 
-**Couverture v2.41 : 147/159 = ~93% — soit +3 points vs v2.40 (90%) — J08/J09/N05 → ✅**
+**Couverture v2.45 : 155/159 = ~97% — +8 points vs v2.41 (93%) — Sprints 2.41-B/C/D/E : E07/E08/C08/C09/Q07/Q08/D09/F09/P04/P05/P06 → ✅**
 
 > Post-MVP exclus (SMS, WhatsApp, Stripe, scanner CB, WebSockets, cockpit multi-sites) : couverture effective sprint-par-sprint ~90%.
 
@@ -342,4 +342,4 @@
 
 ---
 
-*Gap Analysis v4.1 — iziGSM v2.40.0 (prod) — 7 juillet 2026*
+*Gap Analysis v4.3 — iziGSM v2.45.0 (en cours de déploiement) — 7 juillet 2026*

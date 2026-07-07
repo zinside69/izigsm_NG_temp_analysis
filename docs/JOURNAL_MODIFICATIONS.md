@@ -6,6 +6,81 @@
 
 ---
 
+## Sprint 2.41-E — D09 : Photos tickets R2 (upload avant/après)
+
+**Commit** : `feat(D09): photos tickets R2 — Sprint 2.41-E v2.45.0`  
+**Date** : 7 juillet 2026  
+**Version** : 2.45.0
+
+### Contexte
+
+Sprint D09 : photos avant/après sur tickets. Découverte que `photosService.ts` et toutes les routes étaient déjà implémentés (Sprint 2.36). Seuls les tests manquaient. Bug documenté (non corrigé) : `auditLog` appelé en positionnelle dans `photosService.ts` au lieu d'un objet → audit silencieusement ignoré.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `tests/photosService.test.ts` | ➕ créé | +18 tests : getTicketForPhoto×3, uploadPhoto×5, listPhotos×3, getPhotoById×3, deletePhoto×4 — mock R2Bucket `vi.fn()` |
+| `src/index.tsx` | ✏️ modifié | Version bump 2.44.0 → 2.45.0, sprint label mis à jour |
+
+### Résultats
+
+- **Tests** : 705/705 ✅ (18 suites — +18 tests photosService)
+- **Build** : 73 modules / 298.91 kB ✅
+- **Services couverts** : uploadPhoto, listPhotos, getPhotoById, deletePhoto, getTicketForPhoto
+
+---
+
+## Sprint 2.41-D — C08/C09/Q07/Q08 : RGPD export + anonymisation client
+
+**Commit** : `feat(C08/C09/Q07/Q08): RGPD export + anonymisation client — Sprint 2.41-D v2.44.0`  
+**Date** : 7 juillet 2026  
+**Version** : 2.44.0
+
+### Contexte
+
+Sprint RGPD : découverte que `exportClientRgpd()` et `purgeClient()` étaient déjà implémentés dans `clientService.ts` (Sprint 2.37). Bug critique corrigé : `auditLog` appelé dans `purgeClient()` sans import → `ReferenceError` silencieux masqué par le `.catch()` de la route.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/clientService.ts` | 🐛 bug fix | Import `auditLog` manquant (ligne 22) — `purgeClient()` levait `ReferenceError` silencieux en prod |
+| `tests/clientService.test.ts` | ✏️ modifié | +10 tests RGPD (38→48) : `exportClientRgpd`×5 + `purgeClient`×5 |
+| `src/index.tsx` | ✏️ modifié | Version bump 2.43.0 → 2.44.0, sprint label mis à jour |
+
+### Résultats
+
+- **Tests** : 687/687 ✅ (18 suites — +10 tests clientService)
+- **Build** : 73 modules / 298.91 kB ✅
+- **Bug fix** : `purgeClient()` fonctionnel en production (import `auditLog` ajouté)
+
+---
+
+## Sprint 2.41-C — E07/E08 : Familles produits + import catalogue CSV fournisseur
+
+**Commit** : `feat(E07/E08): familles produits + import catalogue CSV — Sprint 2.41-C v2.43.0`  
+**Date** : 7 juillet 2026  
+**Version** : 2.43.0
+
+### Contexte
+
+Sprint stock : découverte que `importCatalogueCsv()` et la constante `FAMILLES` étaient déjà implémentés (Sprint 2.34). Deux bugs d'indices de params corrigés lors de l'écriture des tests : `params[8]` → `params[7]` pour l'id UPDATE, `params[5]` → `params[4]` pour userId mouvement entrée.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `tests/stockService.test.ts` | ✏️ modifié | +10 tests `importCatalogueCsv` (45→56) — bugs indices params corrigés |
+| `src/index.tsx` | ✏️ modifié | Version bump 2.42.0 → 2.43.0, sprint label mis à jour |
+
+### Résultats
+
+- **Tests** : 677/677 ✅ (18 suites — +10 tests stockService)
+- **Build** : 73 modules / 298.91 kB ✅
+
+---
+
 ## Sprint 2.41-A — J08/J09/N05 : Prise de RDV en ligne (vitrine publique)
 
 **Commit** : `feat(J08/J09/N05): prise de RDV en ligne — vitrine publique Sprint 2.41`  
