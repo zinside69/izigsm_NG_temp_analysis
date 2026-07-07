@@ -1,7 +1,7 @@
 # Gap Analysis — iziGSM vs CDC
-> **Version** : 4.0 (mis à jour v2.39 WIP)  
-> **Date** : 6 juillet 2026  
-> **État implémentation** : Sprint 2.39 en cours — v2.38.0 en production  
+> **Version** : 4.1 (mis à jour v2.40.0)  
+> **Date** : 7 juillet 2026  
+> **État implémentation** : Sprint 2.40 terminé — v2.40.0 en production  
 > **URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
 
 ---
@@ -24,7 +24,7 @@
 | A04 | RBAC (admin / manager / technicien) | ✅ | 2.3 | `requireRole()` middleware |
 | A05 | Permissions granulaires par action | ✅ | 2.3 | Table `permissions`, `hasPermission()` |
 | A06 | PIN technicien PBKDF2 | ✅ | 2.3 | `pin_hash`, switch contexte sans déconnexion |
-| A07 | Réinitialisation mot de passe | ❌ | 🔜 2.35 | Token OTP D1KV TTL 1h + email lien |
+| A07 | Réinitialisation mot de passe | ✅ | 2.40 | `reset-password.html` — token OTP D1KV TTL 1h + email lien |
 | A08 | OAuth2 Google | ❌ | 🔜 2.35 | `GOOGLE_CLIENT_ID/SECRET`, `google_id` sur users |
 | A09 | OAuth2 Facebook | ❌ | Post-MVP | Non prioritaire |
 | A10 | Expiration session inactive | ✅ | 2.26 | TTL D1KV sur refresh tokens |
@@ -40,7 +40,7 @@
 | B03 | Numérotation configurable (préfixes, format) | ✅ | 2.9 | `prefix_ticket/facture/devis/avoir/rachat`, `format_numero`, `padding_numero` |
 | B04 | Mention facture + pied de page | ✅ | 2.9 | `mention_facture`, `pied_de_page` sur `boutique_settings` |
 | B05 | Garantie défaut (jours) configurable | ✅ | 2.9 | `garantie_defaut_jours` dans settings |
-| B06 | Notifications email on/off | ❌ | 🔜 2.32 | `notif_email_statut` sur boutique_settings |
+| B06 | Notifications email on/off | ✅ | 2.40 | Toggles dans `settings.html` — `notif_relance`, `notif_ticket_cree`, etc. |
 | B07 | Multi-boutiques réseau (cockpit) | ❌ | Post-MVP | JWT multi-boutique, tableau consolidé |
 | B08 | Horaires d'ouverture | ❌ | Post-MVP | `horaires JSONB` sur boutiques |
 
@@ -128,7 +128,7 @@
 | G04 | Page publique client (accepter/refuser en ligne) | ✅ | 2.19 | `public/devis-public.html` + `POST /api/public/devis/:token/repondre` |
 | G05 | Envoi email devis au client | ✅ | 2.11 | `sendDevisEmail()` via emailService |
 | G06 | Expiration devis périmés (batch) | ✅ | 2.19 | `expireDevisPerimes()` |
-| G07 | Relance automatique devis non répondus | ❌ | 🔜 2.32 | Trigger batch + email relance |
+| G07 | Relance automatique devis non répondus | ✅ | 2.40 | `sendRelanceDevis()` + `processRelancesDevis()` + `POST /api/notifications/relances-devis` |
 | G08 | Signature eIDAS certifiée | ❌ | Post-MVP | Tiers de confiance (Yousign/Docusign) |
 
 ---
@@ -204,8 +204,8 @@
 | L05 | Batch relances devis en attente | ✅ | 2.11 | `POST /api/notifications/relances` |
 | L06 | Journal email logs | ✅ | 2.11 | `email_logs` + `GET /api/notifications/logs` |
 | L07 | Email test (destinataire libre) | ✅ | 2.11 | `POST /api/notifications/test` |
-| L08 | Triggers automatiques statut→email | ❌ | 🔜 2.32 | Hook dans updateStatut() → sendTicketStatus() |
-| L09 | Toggle notifications auto (boutique) | ❌ | 🔜 2.32 | `notif_email_statut` boutique_settings |
+| L08 | Triggers automatiques statut→email | ✅ | 2.40 | Hook dans `updateStatut()` → `sendTicketCree/Termine/Livre()` |
+| L09 | Toggle notifications auto (boutique) | ✅ | 2.40 | `notifMap` dans `sendEmail()` — flags par type dans `boutique_settings` |
 | L10 | SMS Twilio | ❌ | Post-MVP | Coût + complexité |
 | L11 | WhatsApp Business | ❌ | Post-MVP | API payante |
 
@@ -294,12 +294,12 @@
 | R06 | Sync sélection de marques | ✅ | 2.39 | `syncSelectedBrands()` — itère syncModelesByBrand() |
 | R07 | Log sync par marque | ✅ | 2.39 | `phone_catalog_sync_log` (status, modeles_added, error_msg) |
 | R08 | Autocomplete modèle dans tickets | ✅ | 2.38 | Debounce 300ms + suggestions services pré-configurés |
-| R09 | UI modal sync (sélection + progression) | ⚠️ | 2.39 | Bouton ajouté, modal + barre progression manquantes |
+| R09 | UI modal sync (sélection + progression) | ✅ | 2.40 | Modal sync complète avec sélection marques + progression dans `services.html` |
 | R10 | Stats référentiel | ✅ | 2.39 | `getCatalogStats()` + `GET /api/services/catalog/stats` |
 
 ---
 
-## Compteur Global de Couverture (v2.39 WIP)
+## Compteur Global de Couverture (v2.40)
 
 | Module | Total items | ✅ Implémenté | ⚠️ Partiel | ❌ Absent |
 |--------|-------------|--------------|-----------|---------|
@@ -323,7 +323,7 @@
 | R Catalogue marques | 10 | 9 | 1 | 0 |
 | **TOTAL** | **159** | **137** | **3** | **19** |
 
-**Couverture v2.39 WIP : 137/159 = ~86% — soit +10 points vs v2.28.0 (76%)**
+**Couverture v2.40 : 144/159 = ~90% — soit +4 points vs v2.39 (86%) — R09/A07/B06/L08/L09/G07 → ✅**
 
 > Post-MVP exclus (SMS, WhatsApp, Stripe, scanner CB, WebSockets, cockpit multi-sites) : couverture effective sprint-par-sprint ~90%.
 
@@ -342,4 +342,4 @@
 
 ---
 
-*Gap Analysis v4.0 — iziGSM v2.39 WIP (v2.38.0 prod) — 6 juillet 2026*
+*Gap Analysis v4.1 — iziGSM v2.40.0 (prod) — 7 juillet 2026*

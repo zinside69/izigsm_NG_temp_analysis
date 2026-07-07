@@ -24,7 +24,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type EmailType = 'ticket_cree' | 'ticket_termine' | 'ticket_livre' | 'sav_ouvert' | 'relance' | 'autre'
+export type EmailType = 'ticket_cree' | 'ticket_termine' | 'ticket_livre' | 'sav_ouvert' | 'relance' | 'relance_devis' | 'autre'
 
 export interface EmailConfig {
   provider:    string
@@ -125,6 +125,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     ticket_livre:   config.notif_ticket_termine, // même flag que termine
     sav_ouvert:     config.notif_sav_ouvert,
     relance:        config.notif_relance,
+    relance_devis:  config.notif_relance,         // même flag que relance — G07 Sprint 2.40
     autre:          true,
   }
   if (!notifMap[type]) {
@@ -609,6 +610,133 @@ export async function processRelances(
   let count = 0
   for (const ticket of rows.results ?? []) {
     await sendRelance(db, boutiqueId, ticket)
+    count++
+  }
+  return count
+}
+
+// ─── Relances devis ───────────────────────────────────────────────────────────
+
+/**
+ * Envoie un email de relance pour un devis envoyé sans réponse.
+ * Contient un lien public direct vers la page de réponse du devis.
+ * Appelé individuellement ou par `processRelancesDevis()`.
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param devis       Données du devis (numéro, client, token, montant, date validité)
+ * @param frontendUrl URL de base du frontend (pour lien public)
+ */
+export async function sendRelanceDevis(
+  db:         D1Database,
+  boutiqueId: number,
+  devis: {
+    id:            number
+    numero:        string
+    client_email:  string
+    client_prenom: string
+    montant_ttc:   number
+    date_validite: string | null
+    public_token:  string
+  },
+  frontendUrl: string
+): Promise<void> {
+  if (!devis.client_email) return
+
+  const boutique = await db.prepare(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
+  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const nomB = boutique?.nom  ?? 'iziGSM'
+  const tel  = boutique?.telephone ?? ''
+
+  const lienDevis = `${frontendUrl}/devis-public.html?token=${devis.public_token}`
+  const montantFmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(devis.montant_ttc ?? 0)
+  const validiteStr = devis.date_validite
+    ? new Date(devis.date_validite).toLocaleDateString('fr-FR')
+    : null
+
+  const html = baseLayout(`
+    <p>Bonjour <strong>${devis.client_prenom}</strong>,</p>
+    <p>Nous revenons vers vous concernant le devis que nous vous avons transmis :</p>
+    <div class="info-box">
+      <div><strong>N° de devis :</strong> <span class="badge badge-blue">${devis.numero}</span></div>
+      <div><strong>Montant TTC :</strong> ${montantFmt}</div>
+      ${validiteStr ? `<div><strong>Valide jusqu'au :</strong> ${validiteStr}</div>` : ''}
+    </div>
+    <p>Vous pouvez accepter ou refuser ce devis directement en cliquant sur le bouton ci-dessous :</p>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${lienDevis}"
+         style="background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;
+                text-decoration:none;font-weight:600;font-size:15px;">
+        📋 Consulter le devis
+      </a>
+    </div>
+    <p style="font-size:0.85rem;color:#667085;">
+      Ou copiez ce lien : <a href="${lienDevis}">${lienDevis}</a>
+    </p>
+    ${tel ? `<p>📞 <strong>${tel}</strong></p>` : ''}
+    <p>Cordialement,<br><strong>${nomB}</strong></p>
+  `, nomB)
+
+  await sendEmail({
+    db, boutiqueId,
+    to:         devis.client_email,
+    sujet:      `[${devis.numero}] Rappel — Votre devis est en attente de réponse`,
+    html,
+    type:       'relance_devis',
+    entiteType: 'devis',
+    entiteId:   devis.id,
+  })
+}
+
+/**
+ * Traitement batch : envoie les relances pour tous les devis envoyés sans réponse.
+ *
+ * Critères d'éligibilité cumulés :
+ *  - Statut devis = `envoye`
+ *  - `envoye_le` > `delai_relance_jours` jours (délai boutique, défaut 3j)
+ *  - Pas encore expiré (`date_validite` IS NULL ou dans le futur)
+ *  - Aucune relance_devis envoyée dans les `delai_relance_jours` jours
+ *  - Client possède un email valide
+ *  - Limité à 30 devis par exécution
+ *
+ * @param db          Binding D1 Cloudflare
+ * @param boutiqueId  Identifiant de la boutique
+ * @param frontendUrl URL de base du frontend (pour lien public devis)
+ * @returns           Nombre de relances envoyées
+ */
+export async function processRelancesDevis(
+  db:          D1Database,
+  boutiqueId:  number,
+  frontendUrl: string
+): Promise<number> {
+  const settings = await db.prepare(`
+    SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?
+  `).bind(boutiqueId).first<{ delai_relance_jours: number }>()
+  const delai = settings?.delai_relance_jours ?? 3
+
+  const rows = await db.prepare(`
+    SELECT d.id, d.numero, d.montant_ttc, d.date_validite, d.public_token,
+           c.email  AS client_email,
+           c.prenom AS client_prenom
+    FROM   devis d
+    JOIN   clients c ON c.id = d.client_id
+    WHERE  d.boutique_id = ?
+      AND  d.statut = 'envoye'
+      AND  d.envoye_le < datetime('now', ? || ' days')
+      AND  (d.date_validite IS NULL OR d.date_validite > datetime('now'))
+      AND  c.email IS NOT NULL
+      AND  d.id NOT IN (
+        SELECT entite_id FROM email_logs
+        WHERE  boutique_id = ? AND type = 'relance_devis' AND entite_type = 'devis'
+          AND  created_at > datetime('now', ? || ' days')
+      )
+    LIMIT 30
+  `).bind(boutiqueId, `-${delai}`, boutiqueId, `-${delai}`).all<any>()
+
+  let count = 0
+  for (const devis of rows.results ?? []) {
+    await sendRelanceDevis(db, boutiqueId, devis, frontendUrl)
     count++
   }
   return count

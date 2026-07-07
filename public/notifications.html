@@ -157,10 +157,14 @@
               </label>
             </div>
           </div>
-          <div class="mt-4 pt-4 border-t border-gray-100">
+          <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
             <button onclick="lancerRelances()"
               class="w-full text-sm border border-indigo-200 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg transition-colors">
-              <i class="fas fa-sync mr-1"></i>Lancer relances manuellement
+              <i class="fas fa-sync mr-1"></i>Relances tickets
+            </button>
+            <button onclick="lancerRelancesDevis()"
+              class="w-full text-sm border border-violet-200 text-violet-600 hover:bg-violet-50 py-2 rounded-lg transition-colors">
+              <i class="fas fa-file-alt mr-1"></i>Relances devis
             </button>
           </div>
         </div>
@@ -383,11 +387,26 @@
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
       const data = await apiPost(`/api/notifications/relances${params}`, {})
       if (data.success) {
-        showToast(`${data.data?.relances_envoyees ?? 0} relance(s) envoyée(s)`, 'green')
+        showToast(`${data.data?.relances_envoyees ?? 0} relance(s) tickets envoyée(s)`, 'green')
         loadStats()
         loadLogs()
       } else {
         showToast(data.error || 'Erreur relances', 'red')
+      }
+    } catch (e) { showToast('Erreur réseau', 'red') }
+  }
+
+  async function lancerRelancesDevis() {
+    if (!_boutiqueId) return
+    try {
+      const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
+      const data = await apiPost(`/api/notifications/relances-devis${params}`, {})
+      if (data.success) {
+        showToast(`${data.data?.relances_envoyees ?? 0} relance(s) devis envoyée(s)`, 'green')
+        loadStats()
+        loadLogs()
+      } else {
+        showToast(data.error || 'Erreur relances devis', 'red')
       }
     } catch (e) { showToast('Erreur réseau', 'red') }
   }

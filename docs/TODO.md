@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.39 en cours — 6 juillet 2026  
-> Version production : **v2.38.0** (v2.39.0 en cours) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **633/633** (16 suites Vitest) — ⚠️ servicesService.test.ts à mettre à jour pour Sprint 2.39  
+> Mis à jour : Sprint 2.40 terminé — 7 juillet 2026  
+> Version production : **v2.40.0** (déployé) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **641/641** (16 suites Vitest) — ⚠️ servicesService.test.ts à mettre à jour pour Sprint 2.39  
 > Build : 72 modules / 287.42 kB (dernier build stable v2.38.0)  
-> Git : branche `main`, tag `v2.38.0`, working tree dirty (Sprint 2.39 non commité)
+> Git : branche `main`, tag `v2.40.0` — working tree propre
 
 ---
 

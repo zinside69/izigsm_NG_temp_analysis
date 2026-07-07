@@ -3,10 +3,12 @@
  * @description Tests unitaires — src/services/emailService.ts
  *
  * Couverture :
- *   - getEmailConfig()  — lecture boutique_settings, valeurs par défaut
- *   - sendEmail()       — mode simulé (clé absente), notif désactivée, déduplication
- *   - getEmailStats()   — agrégat KPIs depuis email_logs
- *   - listEmailLogs()   — pagination + filtres type/statut
+ *   - getEmailConfig()         — lecture boutique_settings, valeurs par défaut
+ *   - sendEmail()              — mode simulé (clé absente), notif désactivée, déduplication
+ *   - getEmailStats()          — agrégat KPIs depuis email_logs
+ *   - listEmailLogs()          — pagination + filtres type/statut
+ *   - sendRelanceDevis()       — email relance devis avec lien public (Sprint 2.40 G07)
+ *   - processRelancesDevis()   — batch relances devis non répondus (Sprint 2.40 G07)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -16,6 +18,8 @@ import {
   sendEmail,
   getEmailStats,
   listEmailLogs,
+  sendRelanceDevis,
+  processRelancesDevis,
   type EmailConfig,
 } from '../src/services/emailService'
 
@@ -327,5 +331,148 @@ describe('listEmailLogs()', () => {
     const res = await listEmailLogs(db, 1, { limit: 20, offset: 0 })
     expect(res.rows).toEqual([])
     expect(res.total).toBe(0)
+  })
+})
+
+// ─── sendRelanceDevis ─────────────────────────────────────────────────────────
+
+describe('sendRelanceDevis()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  const DEVIS_RELANCE = {
+    id:            42,
+    numero:        'DEV-2026-00042',
+    client_email:  'client@example.com',
+    client_prenom: 'Pierre',
+    montant_ttc:   350.00,
+    date_validite: '2026-08-01',
+    public_token:  'abc123token',
+  }
+
+  const SQL_BOUTIQUE  = `SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1`
+  const SQL_DEDUP_DEV = `SELECT id FROM email_logs WHERE boutique_id = ? AND entite_type = ? AND entite_id = ? AND type = ? AND statut IN ('envoye','simule') AND created_at > datetime('now', '-5 minutes') LIMIT 1`
+
+  beforeEach(() => { db = createMockD1() })
+
+  it('envoie un email de relance devis en mode simulé (pas de clé API)', async () => {
+    // config sans clé API
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    db.__setResponse(SQL_BOUTIQUE, { nom: 'iziGSM Paris', telephone: '01 23 45 67 89' })
+    db.__setResponse(SQL_DEDUP_DEV, null)       // pas de doublon
+    db.__setResponse(SQL_LOG_INSERT, { meta: { last_row_id: 99 } })
+
+    await sendRelanceDevis(db, 1, DEVIS_RELANCE, 'http://localhost:3000')
+
+    const calls = db.__getCalls()
+    // Doit insérer dans email_logs avec type='relance_devis'
+    const insertCall = calls.find(c => c.sql === SQL_LOG_INSERT)
+    expect(insertCall).toBeDefined()
+    expect(insertCall?.params).toContain('relance_devis')
+    expect(insertCall?.params).toContain('devis')
+    expect(insertCall?.params).toContain(42)
+    expect(insertCall?.params).toContain('simule')
+  })
+
+  it('n\'envoie pas si client_email vide', async () => {
+    const devisSansEmail = { ...DEVIS_RELANCE, client_email: '' }
+    await sendRelanceDevis(db, 1, devisSansEmail, 'http://localhost:3000')
+    expect(db.__getCalls()).toHaveLength(0)
+  })
+
+  it('inclut le lien public devis dans le log', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    db.__setResponse(SQL_BOUTIQUE, { nom: 'iziGSM', telephone: null })
+    db.__setResponse(SQL_DEDUP_DEV, null)
+    db.__setResponse(SQL_LOG_INSERT, { meta: { last_row_id: 100 } })
+
+    await sendRelanceDevis(db, 1, DEVIS_RELANCE, 'https://app.izigsm.fr')
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_LOG_INSERT)
+    // Le sujet doit contenir le numéro du devis
+    expect(insertCall?.params).toContain('client@example.com')
+    const sujet = insertCall?.params.find((b: any) => typeof b === 'string' && b.includes('DEV-2026-00042'))
+    expect(sujet).toBeDefined()
+  })
+
+  it('ne renvoie pas si déduplication active (même devis dans les 5 min)', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)
+    db.__setResponse(SQL_BOUTIQUE, { nom: 'iziGSM', telephone: null })
+    db.__setResponse(SQL_DEDUP_DEV, { id: 77 })   // doublon trouvé → skip
+
+    await sendRelanceDevis(db, 1, DEVIS_RELANCE, 'http://localhost:3000')
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_LOG_INSERT)
+    expect(insertCall).toBeUndefined()   // pas d'INSERT → déduplication OK
+  })
+})
+
+// ─── processRelancesDevis ─────────────────────────────────────────────────────
+
+describe('processRelancesDevis()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  const SQL_SETTINGS_RELANCE = `SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?`
+  // SQL normalisé (espaces collapsés) — doit matcher normalizeSQL() du mockD1
+  const SQL_DEVIS_ELIGIBLES  = `SELECT d.id, d.numero, d.montant_ttc, d.date_validite, d.public_token, c.email AS client_email, c.prenom AS client_prenom FROM devis d JOIN clients c ON c.id = d.client_id WHERE d.boutique_id = ? AND d.statut = 'envoye' AND d.envoye_le < datetime('now', ? || ' days') AND (d.date_validite IS NULL OR d.date_validite > datetime('now')) AND c.email IS NOT NULL AND d.id NOT IN ( SELECT entite_id FROM email_logs WHERE boutique_id = ? AND type = 'relance_devis' AND entite_type = 'devis' AND created_at > datetime('now', ? || ' days') ) LIMIT 30`
+  // Note: __getCalls() enregistre le SQL normalisé — on inspecte via includes sur bindings
+
+  const DEVIS_ROW = {
+    id: 5, numero: 'DEV-2026-00005',
+    montant_ttc: 250.00, date_validite: '2026-09-01',
+    public_token: 'tok555',
+    client_email: 'client@example.com', client_prenom: 'Marie',
+  }
+
+  beforeEach(() => { db = createMockD1() })
+
+  it('retourne 0 si aucun devis éligible', async () => {
+    db.__setResponse(SQL_SETTINGS_RELANCE, { delai_relance_jours: 3 })
+    db.__setListResponse(SQL_DEVIS_ELIGIBLES, [])
+
+    const count = await processRelancesDevis(db, 1, 'http://localhost:3000')
+    expect(count).toBe(0)
+  })
+
+  it('utilise delai_relance_jours=3 par défaut si settings absent', async () => {
+    db.__setResponse(SQL_SETTINGS_RELANCE, null)
+    db.__setListResponse(SQL_DEVIS_ELIGIBLES, [])
+
+    const count = await processRelancesDevis(db, 1, 'http://localhost:3000')
+    expect(count).toBe(0)
+
+    const calls = db.__getCalls()
+    // Le deuxième appel est le SELECT devis éligibles avec le délai en binding
+    const eligibleCall = calls.find(c => c.sql.includes('envoye_le') && c.sql.includes('LIMIT 30'))
+    expect(eligibleCall).toBeDefined()
+    expect(eligibleCall?.params).toContain('-3')
+  })
+
+  it('envoie une relance par devis éligible et retourne le count', async () => {
+    db.__setResponse(SQL_SETTINGS_RELANCE, { delai_relance_jours: 5 })
+    db.__setListResponse(SQL_DEVIS_ELIGIBLES, [DEVIS_ROW, { ...DEVIS_ROW, id: 6, numero: 'DEV-2026-00006' }])
+
+    // Pour chaque devis : boutique + dedup + insert
+    const SQL_BOUTIQUE = `SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1`
+    db.__setResponse(SQL_BOUTIQUE, { nom: 'iziGSM', telephone: null })
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    db.__setResponse(SQL_DEDUP, null)
+    db.__setResponse(SQL_LOG_INSERT, { meta: { last_row_id: 1 } })
+
+    const count = await processRelancesDevis(db, 1, 'http://localhost:3000')
+    expect(count).toBe(2)
+  })
+
+  it('utilise le délai configuré en boutique (7j)', async () => {
+    db.__setResponse(SQL_SETTINGS_RELANCE, { delai_relance_jours: 7 })
+    db.__setListResponse(SQL_DEVIS_ELIGIBLES, [])
+
+    await processRelancesDevis(db, 1, 'http://localhost:3000')
+
+    const calls = db.__getCalls()
+    const eligibleCall = calls.find(c => c.sql.includes('envoye_le') && c.sql.includes('LIMIT 30'))
+    expect(eligibleCall).toBeDefined()
+    expect(eligibleCall?.params).toContain('-7')
   })
 })

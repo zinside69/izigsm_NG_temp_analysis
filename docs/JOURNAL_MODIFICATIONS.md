@@ -1378,3 +1378,32 @@ Audit de documentation : 6 services, 4 fichiers `src/lib/`, 5 routes controllers
 | `npm run build` | ✅ 67 modules, 244.26 kB, 0 erreur TypeScript |
 | Git status post-commit | ✅ 16 fichiers modifiés, +2114/-264 lignes |
 
+
+---
+
+## Sprint 2.40 — G07 : Relances automatiques devis non répondus
+
+**Commit** : feat(G07): relances automatiques devis non répondus — Sprint 2.40  
+**Date** : 7 juillet 2026  
+**Version** : 2.40.0
+
+### Contexte
+R09/A07/B06/L08/L09 découverts déjà implémentés dans commits précédents.
+G07 : nouvelle fonctionnalité de relance email pour devis envoyés sans réponse.
+Correction bug : `notifMap` dans `sendEmail()` manquait l'entrée `relance_devis` → INSERT email_logs skippé.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/emailService.ts` | ✏️ modifié | `EmailType` +`relance_devis` ; `notifMap` +`relance_devis: config.notif_relance` (bug fix) ; `sendRelanceDevis()` + `processRelancesDevis()` ajoutées |
+| `src/routes/notifications.ts` | ✏️ modifié | Import `processRelancesDevis` + route `POST /api/notifications/relances-devis` |
+| `public/notifications.html` | ✏️ modifié | Bouton "Relances devis" (violet) + `lancerRelancesDevis()` |
+| `tests/emailService.test.ts` | ✏️ modifié | +8 tests : `sendRelanceDevis()` (4) + `processRelancesDevis()` (4) → 641/641 ✅ |
+| `src/index.tsx` | ✏️ modifié | Version 2.39.0 → **2.40.0** ; sprint label mis à jour |
+| `docs/GAP_ANALYSIS_ENRICHI.md` | ✏️ modifié | v4.1 — R09/A07/B06/L08/L09/G07 → ✅ ; couverture 86% → 90% |
+| `docs/TODO.md` | ✏️ modifié | Header Sprint 2.40 terminé ; tests 633 → 641 |
+| `docs/JOURNAL_MODIFICATIONS.md` | ✏️ modifié | Ce sprint ajouté |
+
+### Bug corrigé
+`notifMap: Record<EmailType, boolean>` dans `sendEmail()` ne contenait pas `relance_devis` → `undefined` → falsy → return prématuré sans INSERT dans `email_logs`. Corrigé : `relance_devis: config.notif_relance`.

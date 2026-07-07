@@ -1,14 +1,17 @@
 /**
- * routes/notifications.ts — Controller notifications email (Sprint 2.11)
+ * routes/notifications.ts — Controller notifications email (Sprint 2.11 → 2.40)
  *
  * Endpoints :
- *   GET  /api/notifications/stats          → stats emails du mois
- *   GET  /api/notifications/logs           → journal des emails (paginé)
- *   POST /api/notifications/test           → email de test (destinataire libre)
- *   POST /api/notifications/relances       → lancer batch relances manuellement
+ *   GET  /api/notifications/stats             → stats emails du mois
+ *   GET  /api/notifications/logs              → journal des emails (paginé)
+ *   POST /api/notifications/test              → email de test (destinataire libre)
+ *   POST /api/notifications/relances          → batch relances tickets en attente
+ *   POST /api/notifications/relances-devis    → batch relances devis sans réponse (G07)
  *   PUT  /api/boutiques/:id/settings (déjà géré dans boutiques.ts) → config email
  *
  * Architecture : 0 SQL ici — tout passe par emailService.ts
+ *
+ * Sprint 2.40 — G07 : relances automatiques devis non répondus
  */
 
 import { Hono }              from 'hono'
@@ -20,6 +23,7 @@ import {
   listEmailLogs,
   getBoutiqueNomById,
   processRelances,
+  processRelancesDevis,
   getEmailConfig,
 } from '../services/emailService'
 
@@ -169,6 +173,32 @@ notifications.post('/notifications/relances', requireRole('admin', 'manager'), a
       success: true,
       data:    { relances_envoyees: count },
       message: `${count} relance(s) envoyée(s).`,
+    })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
+// ─── Batch relances devis ────────────────────────────────────────────────────
+
+/**
+ * POST /api/notifications/relances-devis
+ * Lance manuellement le batch de relances pour les devis envoyés sans réponse.
+ * Critères : statut=envoye, envoye_le > delai_relance_jours, non expiré, pas de relance récente.
+ * En production, à appeler via Cron Trigger Cloudflare (même pattern que /relances).
+ */
+notifications.post('/notifications/relances-devis', requireRole('admin', 'manager'), async (c) => {
+  try {
+    const { boutiqueId } = ctx(c)
+    if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
+
+    const frontendUrl = c.env.FRONTEND_URL ?? 'http://localhost:3000'
+    const count       = await processRelancesDevis(c.env.DB, boutiqueId, frontendUrl)
+
+    return c.json({
+      success: true,
+      data:    { relances_envoyees: count },
+      message: `${count} relance(s) devis envoyée(s).`,
     })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
