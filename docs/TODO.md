@@ -2,7 +2,7 @@
 
 > Mis à jour : Sprint 2.40 terminé — 7 juillet 2026  
 > Version production : **v2.40.0** (déployé) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **641/641** (16 suites Vitest) — ⚠️ servicesService.test.ts à mettre à jour pour Sprint 2.39  
+> Tests : **641/641** (16 suites Vitest) — ✅ emailService +8 tests Sprint 2.40  
 > Build : 72 modules / 287.42 kB (dernier build stable v2.38.0)  
 > Git : branche `main`, tag `v2.40.0` — working tree propre
 
@@ -17,7 +17,7 @@
 | **Migrations D1** | ✅ 31 migrations | 0031_marques_modeles_global.sql = dernière (✅ appliquée localement Sprint 2.39) |
 | **Auth JWT + D1KV** | ✅ Prod | PBKDF2, sessions D1 (remplacement KV), refresh tokens |
 | **NF525 conformité** | ✅ Prod | SHA-256 chaîné factures + avoirs + caisse |
-| **Tests Vitest** | ✅ 633/633 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, clientService 38, personnelService 36, reconditionnementService 50, publicService 20, **servicesService 26** — ✅ adapté Sprint 2.39 (schéma global sans boutique_id) |
+| **Tests Vitest** | ✅ 641/641 | authService 23, boutiqueService 24, caisseService 14, ticketService 37, emailService 16, garantiesService 65, agendaService 75, fournisseursService 65, stockService 45, devisService 58, factureService 41, clientService 38, personnelService 36, reconditionnementService 50, publicService 20, **servicesService 26** — ✅ adapté Sprint 2.39 (schéma global sans boutique_id) |
 | **PWA** | ✅ Prod | manifest.json, sw.js, install prompt |
 | **Déploiement** | ✅ Prod | gsk hosted deploy, Cloudflare Workers for Platform |
 
@@ -215,8 +215,27 @@
 
 ---
 
-### Sprint 2.39 🔜 — MOD-15 Phase 2 : Synchronisation référentiel global phone-specs-api
-**Module CDC : MOD-15 (HAUTE) — Catalogue services complet** — *en cours — 6 juillet 2026*
+### Sprint 2.40 ✅ — G07 : Relances automatiques devis non répondus
+**Module CDC : G07 (HAUTE) — Relances devis** — *terminé — 7 juillet 2026*
+
+- [x] `EmailType` étendu : ajout `'relance_devis'`
+- [x] `notifMap` dans `sendEmail()` : entrée `relance_devis: config.notif_relance` ajoutée
+- [x] `sendRelanceDevis()` : email relance avec lien public `/devis-public.html?token=...`
+- [x] `processRelancesDevis()` : batch SELECT devis éligibles (statut=envoye, délai dépassé, non expiré, pas de relance récente), LIMIT 30
+- [x] `POST /api/notifications/relances-devis` : route déclenchement manuel (admin)
+- [x] UI `notifications.html` : bouton "Relances devis" violet + `lancerRelancesDevis()`
+- [x] R09 (modal sync services.html), A07 (reset-password.html), B06/L08/L09 (toggles notifs) : **découverts déjà implémentés** — validés Sprint 2.40
+- [x] **8 tests** `emailService.test.ts` : `sendRelanceDevis` (4) + `processRelancesDevis` (4) — 24/24 ✅
+- [x] **641/641 tests** globaux ✅
+- [x] `npm run build` ✅ — 73 modules / 296.37 kB
+- [x] Version bump `src/index.tsx` → v2.40.0
+- [x] Commit + tag v2.40.0
+- [x] GAP_ANALYSIS v4.1 : R09/A07/B06/L08/L09/G07 → ✅ — couverture 144/159 = ~90%
+
+---
+
+### Sprint 2.39 ✅ — MOD-15 Phase 2 : Synchronisation référentiel global phone-specs-api
+**Module CDC : MOD-15 (HAUTE) — Catalogue services complet** — *terminé — 6 juillet 2026*
 
 #### Contexte et décision d'architecture
 L'API gratuite `phone-specs-api.vercel.app` (source GSMArena) expose 126 marques et leurs modèles paginés. Décision : **référentiel global** (sans `boutique_id`) — les marques/modèles sont partagés entre toutes les boutiques.
@@ -535,4 +554,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 6 juillet 2026 — Sprint 2.39 en cours (v2.38.0 stable, v2.39.0 WIP) — MOD-15 Phase 2 : synchronisation référentiel global phone-specs-api*
+*Dernière mise à jour : 7 juillet 2026 — Sprint 2.40 terminé (v2.40.0 en prod) — G07 : relances automatiques devis non répondus — couverture CDC 144/159 = ~90%*

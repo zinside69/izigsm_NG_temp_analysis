@@ -6,11 +6,44 @@
 
 ---
 
+## Sprint 2.40 — G07 : Relances automatiques devis non répondus
+
+**Commit** : `feat(G07): relances automatiques devis non répondus — Sprint 2.40`  
+**Date** : 7 juillet 2026  
+**Version** : 2.40.0
+
+### Contexte
+
+Sprint focalisé sur G07 : relances email pour les devis envoyés sans réponse. Découverte que R09/A07/B06/L08/L09 étaient déjà implémentés dans des commits précédents — validés et documentés ce sprint.
+
+Bug corrigé : `notifMap` dans `sendEmail()` ne contenait pas l'entrée `relance_devis` → l'INSERT dans `email_logs` était sauté silencieusement pour ce type. Corrigé en ajoutant `relance_devis: config.notif_relance`.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/services/emailService.ts` | ✏️ modifié | `EmailType` +`relance_devis`, `notifMap` +`relance_devis: config.notif_relance`, `sendRelanceDevis()`, `processRelancesDevis()` |
+| `src/routes/notifications.ts` | ✏️ modifié | Import `processRelancesDevis` + route `POST /api/notifications/relances-devis` |
+| `public/notifications.html` | ✏️ modifié | Bouton "Relances devis" + `lancerRelancesDevis()` |
+| `tests/emailService.test.ts` | ✏️ modifié | +8 tests : `sendRelanceDevis` (4) + `processRelancesDevis` (4) |
+| `src/index.tsx` | ✏️ modifié | Version bump 2.39.0 → 2.40.0, sprint label mis à jour |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.40 ajouté, compteurs mis à jour |
+| `docs/GAP_ANALYSIS_ENRICHI.md` | ✏️ modifié | v4.1 — R09/A07/B06/L08/L09/G07 → ✅, couverture 144/159 = ~90% |
+| `docs/JOURNAL_MODIFICATIONS.md` | ✏️ modifié | Sprint 2.40 ajouté |
+
+### Résultats
+
+- **Tests** : 641/641 ✅ (16 suites — +8 tests emailService)
+- **Build** : 73 modules / 296.37 kB ✅
+- **Fix critique** : `notifMap['relance_devis']` manquant → `undefined` → return prématuré sans log INSERT
+
+---
+
 ## Sprint 2.39 — MOD-15 Phase 2 : Sync référentiel global phone-specs-api
 
-**Commit** : ⚠️ NON COMMITÉ — Sprint en cours  
+**Commit** : `feat(MOD-15): sync phone-specs-api référentiel global — Sprint 2.39`  
 **Date** : 6 juillet 2026  
-**Version** : 2.39.0 (WIP — v2.38.0 en production)
+**Version** : 2.39.0
 
 ### Contexte
 
