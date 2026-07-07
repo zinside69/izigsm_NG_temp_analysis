@@ -1,7 +1,8 @@
 /**
  * @file tests/stockService.test.ts
  * @description Tests unitaires — src/services/stockService.ts
- * Sprint 2.29
+ * Sprint 2.29 — couverture initiale
+ * Sprint 2.41-C — +10 tests importCatalogueCsv (E07/E08)
  *
  * Couverture :
  *   - listProduits()          — pagination, filtres categorie_id/stock_bas/search, alerte_stock
@@ -15,6 +16,11 @@
  *   - listCategories()        — résultats avec nb_produits, ORDER racines first
  *   - createCategorie()       — id retourné, parent_id null par défaut
  *   - getKpisStock()          — 5 champs, fallback 0 si null
+ *   - importCatalogueCsv()    — CSV vide, col nom absente, INSERT nouveau SKU,
+ *                               UPDATE SKU existant, famille invalide → 'piece',
+ *                               skip ligne sans nom, séparateur point-virgule,
+ *                               mouvement entree si stock > 0, dédup SKU inconnu,
+ *                               résultat { imported, updated, skipped, errors }
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -29,6 +35,7 @@ import {
   listCategories,
   createCategorie,
   getKpisStock,
+  importCatalogueCsv,
   type ProduitRow,
   type KpisStock,
 } from '../src/services/stockService'
@@ -209,6 +216,49 @@ const SQL_AUDIT = n(`
   INSERT INTO audit_logs (boutique_id, user_id, action, entite_type, entite_id, donnees_avant, donnees_apres, ip_address)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `)
+
+// ─── SQL importCatalogueCsv ───────────────────────────────────────────────────
+
+const SQL_IMPORT_SELECT_SKU = n(
+  `SELECT id, stock_actuel FROM produits WHERE boutique_id = ? AND sku = ? AND actif = 1 LIMIT 1`
+)
+
+const SQL_IMPORT_UPDATE_PRODUIT = n(`
+  UPDATE produits SET
+    nom           = ?,
+    famille       = ?,
+    prix_achat_ht = ?,
+    prix_vente_ht = ?,
+    tva_taux      = ?,
+    marque        = COALESCE(?, marque),
+    fournisseur   = COALESCE(?, fournisseur),
+    updated_at    = CURRENT_TIMESTAMP
+  WHERE id = ?
+`)
+
+const SQL_IMPORT_INSERT_PRODUIT = n(`
+  INSERT INTO produits
+    (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
+     tva_taux, stock_actuel, stock_minimum, fournisseur)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 5, ?)
+  RETURNING id
+`)
+
+const SQL_IMPORT_MOUVEMENT_ENTREE = n(`
+  INSERT INTO mouvements_stock
+    (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
+  VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
+`)
+
+const SQL_IMPORT_MOUVEMENT_INVENTAIRE = n(`
+  INSERT INTO mouvements_stock
+    (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
+  VALUES (?, ?, 'inventaire', ?, ?, ?, ?, 'Import catalogue CSV')
+`)
+
+const SQL_IMPORT_UPDATE_STOCK = n(
+  `UPDATE produits SET stock_actuel = ? WHERE id = ?`
+)
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -834,6 +884,174 @@ describe('stockService', () => {
       const kpisCall = calls.find(c => c.sql === SQL_KPIS_STOCK)
       expect(kpisCall).toBeDefined()
       expect(kpisCall!.params).toContain(3)
+    })
+  })
+
+  // ─── importCatalogueCsv() ───────────────────────────────────────────────────
+
+  describe('importCatalogueCsv()', () => {
+    let db: ReturnType<typeof createMockD1>
+
+    beforeEach(() => { db = createMockD1() })
+
+    const CSV_VALIDE = [
+      'sku,nom,prix_achat_ht,prix_vente_ht,stock_actuel,famille,tva_taux,marque,fournisseur',
+      'ECR-IP14,Écran iPhone 14,50,90,5,piece,20,Apple,Apple Dist',
+    ].join('\n')
+
+    const CSV_SEMICOLON = [
+      'sku;nom;prix_achat_ht;prix_vente_ht;stock_actuel;famille;tva_taux',
+      'ECR-IP15;Écran iPhone 15;55;95;3;piece;20',
+    ].join('\n')
+
+    it('lève une erreur si le CSV est vide ou sans données', async () => {
+      await expect(
+        importCatalogueCsv(db as any, 1, 1, 'sku,nom')
+      ).rejects.toThrow('vide')
+    })
+
+    it('lève une erreur si la colonne nom est absente', async () => {
+      const csv = 'sku,prix_achat_ht\nECR-001,50'
+      await expect(
+        importCatalogueCsv(db as any, 1, 1, csv)
+      ).rejects.toThrow('nom')
+    })
+
+    it('insère un nouveau produit si le SKU est inconnu', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)          // SKU absent
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 10 })
+
+      const result = await importCatalogueCsv(db as any, 1, 1, CSV_VALIDE)
+
+      expect(result.imported).toBe(1)
+      expect(result.updated).toBe(0)
+      expect(result.skipped).toBe(0)
+      const calls = db.__getCalls()
+      const insertCall = calls.find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)
+      expect(insertCall).toBeDefined()
+      // params[2] = nom
+      expect(insertCall!.params[2]).toBe('Écran iPhone 14')
+    })
+
+    it('met à jour un produit existant si le SKU est connu', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, { id: 5, stock_actuel: 5 }) // même stock → pas de mouvement
+      // run() répond par défaut success
+
+      const result = await importCatalogueCsv(db as any, 1, 1, CSV_VALIDE)
+
+      expect(result.updated).toBe(1)
+      expect(result.imported).toBe(0)
+      const calls = db.__getCalls()
+      const updateCall = calls.find(c => c.sql === SQL_IMPORT_UPDATE_PRODUIT)
+      expect(updateCall).toBeDefined()
+      // params : [nom, famille, paHt, pvHt, tva, marque, fourn, id]
+      expect(updateCall!.params[0]).toBe('Écran iPhone 14')
+      expect(updateCall!.params[7]).toBe(5)
+    })
+
+    it('crée un mouvement inventaire si le stock CSV diffère du stock existant', async () => {
+      // stock_actuel existant = 2, CSV stock = 5 → delta = 3 → mouvement inventaire
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, { id: 5, stock_actuel: 2 })
+
+      const result = await importCatalogueCsv(db as any, 1, 1, CSV_VALIDE)
+
+      expect(result.updated).toBe(1)
+      const calls = db.__getCalls()
+      const mouvCall = calls.find(c => c.sql === SQL_IMPORT_MOUVEMENT_INVENTAIRE)
+      expect(mouvCall).toBeDefined()
+      // params : [produit_id=5, boutique_id=1, quantite=3, stock_avant=2, stock_apres=5, user_id=1]
+      expect(mouvCall!.params[0]).toBe(5)
+      expect(mouvCall!.params[2]).toBe(3)   // delta
+      expect(mouvCall!.params[3]).toBe(2)   // stock_avant
+      expect(mouvCall!.params[4]).toBe(5)   // stock_apres
+    })
+
+    it('normalise famille invalide en "piece"', async () => {
+      const csvFamilleInvalide = [
+        'sku,nom,famille',
+        'SKU-001,Produit test,gadget',    // "gadget" n'est pas dans FAMILLES
+      ].join('\n')
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 20 })
+
+      await importCatalogueCsv(db as any, 1, 1, csvFamilleInvalide)
+
+      const calls = db.__getCalls()
+      const insertCall = calls.find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)
+      expect(insertCall).toBeDefined()
+      // params[4] = famille
+      expect(insertCall!.params[4]).toBe('piece')
+    })
+
+    it('ignore une ligne sans nom et l\'ajoute aux erreurs', async () => {
+      const csvSansNom = [
+        'sku,nom,prix_achat_ht',
+        'SKU-001,,50',
+      ].join('\n')
+
+      const result = await importCatalogueCsv(db as any, 1, 1, csvSansNom)
+
+      expect(result.skipped).toBe(1)
+      expect(result.imported).toBe(0)
+      expect(result.errors.length).toBeGreaterThan(0)
+      expect(result.errors[0]).toContain('nom manquant')
+    })
+
+    it('accepte le séparateur point-virgule', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 15 })
+
+      const result = await importCatalogueCsv(db as any, 1, 1, CSV_SEMICOLON)
+
+      expect(result.imported).toBe(1)
+      const calls = db.__getCalls()
+      const insertCall = calls.find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)
+      expect(insertCall!.params[2]).toBe('Écran iPhone 15')
+    })
+
+    it('crée un mouvement entrée si le produit est nouveau et stock > 0', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 10 })
+
+      await importCatalogueCsv(db as any, 1, 99, CSV_VALIDE)
+
+      const calls = db.__getCalls()
+      const mouvCall = calls.find(c => c.sql === SQL_IMPORT_MOUVEMENT_ENTREE)
+      expect(mouvCall).toBeDefined()
+      // params : [produit_id=10, boutique_id=1, quantite=5, stock_apres=5, user_id=99]
+      // SQL: VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
+      // bind: (res.id, boutiqueId, stock, stock, userId) → indices [0..4]
+      expect(mouvCall!.params[0]).toBe(10)
+      expect(mouvCall!.params[2]).toBe(5)
+      expect(mouvCall!.params[4]).toBe(99)  // userId
+    })
+
+    it('ne crée pas de mouvement entrée si le nouveau produit a stock = 0', async () => {
+      const csvStock0 = [
+        'sku,nom,stock_actuel',
+        'SKU-ZERO,Produit zéro stock,0',
+      ].join('\n')
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 30 })
+
+      await importCatalogueCsv(db as any, 1, 1, csvStock0)
+
+      const calls = db.__getCalls()
+      const mouvCall = calls.find(c => c.sql === SQL_IMPORT_MOUVEMENT_ENTREE)
+      expect(mouvCall).toBeUndefined()
+    })
+
+    it('retourne la structure { imported, updated, skipped, errors }', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 50 })
+
+      const result = await importCatalogueCsv(db as any, 1, 1, CSV_VALIDE)
+
+      expect(result).toHaveProperty('imported')
+      expect(result).toHaveProperty('updated')
+      expect(result).toHaveProperty('skipped')
+      expect(result).toHaveProperty('errors')
+      expect(Array.isArray(result.errors)).toBe(true)
     })
   })
 })
