@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.40 terminé — 7 juillet 2026  
-> Version production : **v2.40.0** (déployé) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **641/641** (16 suites Vitest) — ✅ emailService +8 tests Sprint 2.40  
-> Build : 72 modules / 287.42 kB (dernier build stable v2.38.0)  
-> Git : branche `main`, tag `v2.40.0` — working tree propre
+> Mis à jour : Sprint 2.41-A terminé — 7 juillet 2026  
+> Version production : **v2.41.0** (en cours de déploiement) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **651/651** (16 suites Vitest) — ✅ publicService +10 tests Sprint 2.41-A  
+> Build : 73 modules / 298.92 kB (dernier build stable v2.41.0)  
+> Git : branche `main`, tag `v2.41.0` — working tree propre
 
 ---
 
@@ -212,6 +212,22 @@
 - [x] Build ✅ 71 modules / 248.08 kB + tests ✅ **319/319**
 - [x] **Déploiement prod** — action `cc3077d7`, version `4649d6c2`, health ✅ v2.28.0
 - [x] Tag git `v2.28.0`
+
+---
+
+### Sprint 2.41-A ✅ — J08/J09/N05 : Prise de RDV en ligne (vitrine publique)
+**Modules CDC : J08 (HAUTE) + J09 (HAUTE) + N05 (HAUTE) — RDV public** — *terminé — 7 juillet 2026*
+
+- [x] Découverte : `getDisponibilites()` + `createRdvPublic()` déjà implémentées dans `publicService.ts` (lignes 286/388)
+- [x] Correction import manquant dans `src/routes/public.ts` : +`getDisponibilites`, +`createRdvPublic`
+- [x] Routes déjà présentes : `GET /api/public/boutique/:slug/disponibilites` + `POST /api/public/rdv`
+- [x] `public/rdv-public.html` créé : formulaire 3 étapes (service → créneau calendrier → coordonnées)
+- [x] **+10 tests** `publicService.test.ts` : `getDisponibilites` (5) + `createRdvPublic` (5) — 20→30 tests
+- [x] **651/651 tests** globaux ✅
+- [x] `npm run build` ✅ — 73 modules / 298.92 kB
+- [x] Version bump `src/index.tsx` → v2.41.0
+- [x] Commit `40a2ce4` + tag `v2.41.0`
+- [x] GAP_ANALYSIS v4.2 : J08/J09/N05 → ✅ — couverture 147/159 = ~93%
 
 ---
 
@@ -554,4 +570,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 
 ---
 
-*Dernière mise à jour : 7 juillet 2026 — Sprint 2.40 terminé (v2.40.0 en prod) — G07 : relances automatiques devis non répondus — couverture CDC 144/159 = ~90%*
+*Dernière mise à jour : 7 juillet 2026 — Sprint 2.41-A terminé (v2.41.0) — J08/J09/N05 : prise de RDV en ligne — couverture CDC 147/159 = ~93%*

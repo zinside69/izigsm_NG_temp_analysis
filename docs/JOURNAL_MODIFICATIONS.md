@@ -6,6 +6,36 @@
 
 ---
 
+## Sprint 2.41-A — J08/J09/N05 : Prise de RDV en ligne (vitrine publique)
+
+**Commit** : `feat(J08/J09/N05): prise de RDV en ligne — vitrine publique Sprint 2.41`  
+**Date** : 7 juillet 2026  
+**Version** : 2.41.0
+
+### Contexte
+
+Sprint focalisé sur J08/J09/N05 : permettre aux clients de prendre rendez-vous en ligne depuis la vitrine publique, sans authentification. Découverte que `getDisponibilites()` et `createRdvPublic()` étaient déjà implémentées dans `publicService.ts` (lignes 286 et 388) et que les routes étaient déjà présentes dans `public.ts` — seul l'import manquait.
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `src/routes/public.ts` | ✏️ modifié | Import +`getDisponibilites`, +`createRdvPublic` depuis publicService |
+| `tests/publicService.test.ts` | ✏️ modifié | +10 tests : `getDisponibilites` (5) + `createRdvPublic` (5) — 20→30 tests |
+| `public/rdv-public.html` | ➕ créé | Formulaire RDV public 3 étapes : service → créneau calendrier → coordonnées |
+| `src/index.tsx` | ✏️ modifié | Version bump 2.40.0 → 2.41.0, sprint label mis à jour |
+| `docs/TODO.md` | ✏️ modifié | Sprint 2.41-A ✅ ajouté, compteurs mis à jour |
+| `docs/GAP_ANALYSIS_ENRICHI.md` | ✏️ modifié | v4.2 — J08/J09/N05 → ✅, couverture 147/159 = ~93% |
+| `docs/JOURNAL_MODIFICATIONS.md` | ✏️ modifié | Sprint 2.41-A ajouté |
+
+### Résultats
+
+- **Tests** : 651/651 ✅ (16 suites — +10 tests publicService)
+- **Build** : 73 modules / 298.92 kB ✅
+- **Nouvelles routes publiques** : `GET /api/public/boutique/:slug/disponibilites?date=` + `POST /api/public/rdv`
+
+---
+
 ## Sprint 2.40 — G07 : Relances automatiques devis non répondus
 
 **Commit** : `feat(G07): relances automatiques devis non répondus — Sprint 2.40`  

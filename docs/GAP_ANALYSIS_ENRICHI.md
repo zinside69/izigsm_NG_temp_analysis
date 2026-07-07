@@ -1,7 +1,7 @@
 # Gap Analysis — iziGSM vs CDC
-> **Version** : 4.1 (mis à jour v2.40.0)  
+> **Version** : 4.2 (mis à jour v2.41.0)  
 > **Date** : 7 juillet 2026  
-> **État implémentation** : Sprint 2.40 terminé — v2.40.0 en production  
+> **État implémentation** : Sprint 2.41-A terminé — v2.41.0 en production  
 > **URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
 
 ---
@@ -174,8 +174,8 @@
 | J05 | KPIs agenda (taux honoré) | ✅ | 2.6 | `getKpisAgenda()` — 5 requêtes |
 | J06 | Export iCal RFC 5545 (webcal) | ✅ | 2.6 | `generateIcal()` CRLF, UID stable, DTSTART UTC |
 | J07 | Token iCal stable par boutique | ✅ | 2.6 | `boutique_ical_tokens` |
-| J08 | Prise de RDV en ligne (sans auth) | ❌ | 🔜 2.31 | `POST /api/public/rdv` + `rdv-public.html` |
-| J09 | Créneaux disponibles par date | ❌ | 🔜 2.31 | `GET /api/public/boutique/:slug/disponibilites` |
+| J08 | Prise de RDV en ligne (sans auth) | ✅ | 2.41 | `POST /api/public/rdv` + `rdv-public.html` — formulaire 3 étapes |
+| J09 | Créneaux disponibles par date | ✅ | 2.41 | `GET /api/public/boutique/:slug/disponibilites?date=` |
 | J10 | Conversion RDV → Ticket | ✅ | 2.6 | Statut CONVERTED + `ticket_id` sur RDV |
 
 ---
@@ -233,7 +233,7 @@
 | N02 | Page boutique (`/pro/:slug`) | ✅ | 2.7 | `GET /api/public/boutique/:slug` |
 | N03 | Catalogue services public | ✅ | 2.7 | `GET /api/public/catalogue/:slug` |
 | N04 | Stats boutique publiques (note, nb réparations) | ✅ | 2.25 | `getStatsBoutiquePublic()` |
-| N05 | Prise de RDV en ligne | ❌ | 🔜 2.31 | Formulaire 3 étapes public |
+| N05 | Prise de RDV en ligne | ✅ | 2.41 | `rdv-public.html` — stepper service → créneau → coordonnées |
 | N06 | Dépôt à distance (demande devis avec photos) | ❌ | Post-MVP | Formulaire + upload R2 |
 
 ---
@@ -321,9 +321,9 @@
 | P Rapports | 7 | 6 | 0 | 1 |
 | Q Sécurité | 10 | 8 | 2 | 0 |
 | R Catalogue marques | 10 | 9 | 1 | 0 |
-| **TOTAL** | **159** | **137** | **3** | **19** |
+| **TOTAL** | **159** | **140** | **3** | **16** |
 
-**Couverture v2.40 : 144/159 = ~90% — soit +4 points vs v2.39 (86%) — R09/A07/B06/L08/L09/G07 → ✅**
+**Couverture v2.41 : 147/159 = ~93% — soit +3 points vs v2.40 (90%) — J08/J09/N05 → ✅**
 
 > Post-MVP exclus (SMS, WhatsApp, Stripe, scanner CB, WebSockets, cockpit multi-sites) : couverture effective sprint-par-sprint ~90%.
 
