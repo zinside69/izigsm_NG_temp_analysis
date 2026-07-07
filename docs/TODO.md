@@ -1,10 +1,10 @@
 # iziGSM — TODO & Suivi des Sprints
 
-> Mis à jour : Sprint 2.41-A terminé — 7 juillet 2026  
-> Version production : **v2.41.0** (en cours de déploiement) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
-> Tests : **651/651** (16 suites Vitest) — ✅ publicService +10 tests Sprint 2.41-A  
-> Build : 73 modules / 298.92 kB (dernier build stable v2.41.0)  
-> Git : branche `main`, tag `v2.41.0` — working tree propre
+> Mis à jour : Sprint 2.41-B terminé — 7 juillet 2026  
+> Version production : **v2.41.0** (déployé — approbation en attente pour v2.42.0) — `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`  
+> Tests : **666/666** (17 suites Vitest) — ✅ statsService +15 tests Sprint 2.41-B  
+> Build : 73 modules / 298.92 kB (dernier build stable v2.42.0)  
+> Git : branche `main`, tag `v2.42.0` — working tree propre
 
 ---
 
@@ -212,6 +212,20 @@
 - [x] Build ✅ 71 modules / 248.08 kB + tests ✅ **319/319**
 - [x] **Déploiement prod** — action `cc3077d7`, version `4649d6c2`, health ✅ v2.28.0
 - [x] Tag git `v2.28.0`
+
+---
+
+### Sprint 2.41-B ✅ — F09/P04/P05/P06 : Exports CSV + Rapport comptable
+**Modules CDC : F09/P04/P05/P06 — exports & rapport** — *terminé — 7 juillet 2026*
+
+- [x] Découverte : `exportCsvTickets()`, `exportCsvCa()`, `exportCsvTechniciens()`, `getRapportComptable()` déjà implémentées dans `statsService.ts`
+- [x] Routes `GET /api/stats/export/csv?type=tickets|ca|techniciens` + `GET /api/stats/rapport-comptable` déjà présentes dans `routes/stats.ts`
+- [x] `tests/statsService.test.ts` créé (+15 tests) : `exportCsvTickets`×5 + `exportCsvCa`×5 + `getRapportComptable`×5
+- [x] **666/666 tests** globaux ✅
+- [x] `npm run build` ✅ — 73 modules / 298.92 kB
+- [x] Version bump `src/index.tsx` → v2.42.0
+- [x] Commit `83b223d` + tag `v2.42.0`
+- [x] GitHub push main + v2.42.0 ✅
 
 ---
 
