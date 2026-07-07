@@ -25,7 +25,7 @@ import { createD1KV, d1KvCleanup } from './lib/d1kv'
 
 /**
  * @module index
- * @version 2.44.0
+ * @version 2.45.0
  * @description iziGSM — API Backend Cloudflare Pages Functions (Hono + D1).
  *
  * Sprint 2.27 — Audit global frontend : 0 axios/ApiService, stats.html, fix tickets.js, DEPLOIEMENT.md.
@@ -88,8 +88,8 @@ app.get('/api/health', (c) => {
   return c.json({
     status:    'ok',
     app:       'iziGSM',
-    version:   '2.44.0',
-    sprint:    '2.44 — C08/C09/Q07/Q08 : RGPD export + anonymisation client',
+    version:   '2.45.0',
+    sprint:    '2.45 — D09 : photos tickets R2 (upload avant/après)',
     timestamp: new Date().toISOString(),
   })
 })
