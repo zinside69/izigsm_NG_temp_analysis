@@ -1,6 +1,7 @@
 /**
  * tests/publicService.test.ts
  * Sprint 2.30 — Couverture publicService.ts
+ * Sprint 2.41 — +10 tests : getDisponibilites / createRdvPublic (J08/J09/N05)
  *
  * Fonctions testées :
  *   getTicketPublicByToken   (4 tests)
@@ -9,8 +10,10 @@
  *   getBoutiqueIdBySlug      (3 tests)
  *   getCategoriesPubliques   (3 tests)
  *   getServicesPublics       (4 tests)
+ *   getDisponibilites        (5 tests)
+ *   createRdvPublic          (5 tests)
  *
- * Total : 20 tests
+ * Total : 30 tests
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -22,6 +25,8 @@ import {
   getBoutiqueIdBySlug,
   getCategoriesPubliques,
   getServicesPublics,
+  getDisponibilites,
+  createRdvPublic,
   type TicketPublic,
   type BoutiquePublic,
 } from '../src/services/publicService'
@@ -323,5 +328,161 @@ describe('getServicesPublics', () => {
     expect(result[0]).toHaveProperty('prix_ht')
     expect(result[0]).toHaveProperty('tva_taux')
     expect(result[0]).toHaveProperty('categorie_id')
+  })
+})
+
+// ─── getDisponibilites ────────────────────────────────────────────────────────
+
+describe('getDisponibilites()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  // SQL normalisés — espaces collapsés pour correspondre au mockD1.normalizeSQL()
+  const SQL_CRENEAUX = `SELECT heure_debut, heure_fin, duree_slot FROM boutique_creneaux WHERE boutique_id = ? AND jour_semaine = ? AND actif = 1 ORDER BY heure_debut ASC`
+  const SQL_RDV_DATE = `SELECT debut, fin FROM rendez_vous WHERE boutique_id = ? AND actif = 1 AND DATE(debut) = ? AND statut NOT IN ('CANCELLED') ORDER BY debut ASC`
+
+  beforeEach(() => {
+    db = createMockD1()
+  })
+
+  it('retourne tableau vide si aucune plage horaire configurée', async () => {
+    db.__setListResponse(SQL_CRENEAUX, [])
+
+    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+
+    expect(result).toHaveLength(0)
+    // Pas de 2ème requête si aucune plage
+    const calls = db.__getCalls()
+    expect(calls.find(c => c.sql.includes('rendez_vous'))).toBeUndefined()
+  })
+
+  it('génère les créneaux à partir des plages et filtre les occupés', async () => {
+    // Plage 09:00–10:00 de 30min → 2 slots : 09:00 et 09:30
+    db.__setListResponse(SQL_CRENEAUX, [
+      { heure_debut: '09:00', heure_fin: '10:00', duree_slot: 30 },
+    ])
+    // RDV existant qui occupe 09:00–09:30
+    db.__setListResponse(SQL_RDV_DATE, [
+      { debut: '2099-12-15 09:00', fin: '2099-12-15 09:30' },
+    ])
+
+    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+
+    // Le slot 09:00 est occupé, seul 09:30 reste
+    expect(result).toHaveLength(1)
+    expect(result[0].debut).toContain('09:30')
+    expect(result[0].duree_minutes).toBe(30)
+  })
+
+  it('retourne tous les slots si aucun RDV existant', async () => {
+    // Plage 14:00–15:30 de 30min → 3 slots
+    db.__setListResponse(SQL_CRENEAUX, [
+      { heure_debut: '14:00', heure_fin: '15:30', duree_slot: 30 },
+    ])
+    db.__setListResponse(SQL_RDV_DATE, [])
+
+    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+
+    expect(result).toHaveLength(3)
+    expect(result[0].debut).toContain('14:00')
+    expect(result[1].debut).toContain('14:30')
+    expect(result[2].debut).toContain('15:00')
+  })
+
+  it('transmet boutiqueId et dayOfWeek comme bindings à SQL_CRENEAUX', async () => {
+    db.__setListResponse(SQL_CRENEAUX, [])
+
+    // 2099-12-15 = mardi → dayOfWeek = 2
+    await getDisponibilites(db as any, 42, '2099-12-15')
+
+    const calls = db.__getCalls()
+    const creneauxCall = calls.find(c => c.sql.includes('boutique_creneaux'))
+    expect(creneauxCall!.params[0]).toBe(42)    // boutiqueId
+    expect(creneauxCall!.params[1]).toBe(2)     // mardi = 2
+  })
+
+  it('chaque créneau a debut, fin et duree_minutes', async () => {
+    db.__setListResponse(SQL_CRENEAUX, [
+      { heure_debut: '10:00', heure_fin: '11:00', duree_slot: 60 },
+    ])
+    db.__setListResponse(SQL_RDV_DATE, [])
+
+    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toHaveProperty('debut')
+    expect(result[0]).toHaveProperty('fin')
+    expect(result[0]).toHaveProperty('duree_minutes')
+    expect(result[0].duree_minutes).toBe(60)
+  })
+})
+
+// ─── createRdvPublic ──────────────────────────────────────────────────────────
+
+describe('createRdvPublic()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  const SQL_INSERT_RDV = `INSERT INTO rendez_vous (boutique_id, client_id, ticket_id, user_id, titre, description, debut, fin, duree_minutes, statut, type_rdv, nom_client, telephone_client, rappel_minutes, ical_token, couleur, notes) VALUES (?,NULL,NULL,NULL,?,?,?,?,?,'PENDING',?,?,?,60,?,'#F59E0B',?) RETURNING id, ical_token, debut, fin, titre`
+
+  // debut bien dans le futur
+  const DEBUT_FUTUR = '2099-12-15 10:00'
+
+  beforeEach(() => {
+    db = createMockD1()
+  })
+
+  it('crée un RDV public et retourne id + titre', async () => {
+    db.__setResponse(SQL_INSERT_RDV, {
+      id: 55, ical_token: 'tok123', debut: DEBUT_FUTUR,
+      fin: '2099-12-15 10:30', titre: 'RDV en ligne',
+    })
+
+    const result = await createRdvPublic(db as any, 1, {
+      debut:            DEBUT_FUTUR,
+      nom_client:       'Jean Dupont',
+      telephone_client: '0601020304',
+    })
+
+    expect(result.id).toBe(55)
+    expect(result.titre).toBe('RDV en ligne')
+  })
+
+  it('utilise service_nom comme titre si fourni', async () => {
+    db.__setResponse(SQL_INSERT_RDV, {
+      id: 56, ical_token: 'tok456', debut: DEBUT_FUTUR,
+      fin: '2099-12-15 10:30', titre: 'Remplacement écran',
+    })
+
+    const result = await createRdvPublic(db as any, 1, {
+      debut:      DEBUT_FUTUR,
+      nom_client: 'Marie Martin',
+      service_nom: 'Remplacement écran',
+    })
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql.includes('INSERT INTO rendez_vous'))
+    // params[1] = titre
+    expect(insertCall!.params[1]).toBe('Remplacement écran')
+    expect(result.id).toBe(56)
+  })
+
+  it('lève une erreur si debut absent', async () => {
+    await expect(
+      createRdvPublic(db as any, 1, { nom_client: 'Test' })
+    ).rejects.toThrow('requise')
+  })
+
+  it('lève une erreur si nom_client et telephone_client absents', async () => {
+    await expect(
+      createRdvPublic(db as any, 1, { debut: DEBUT_FUTUR })
+    ).rejects.toThrow('requis')
+  })
+
+  it('lève une erreur si debut dans le passé', async () => {
+    await expect(
+      createRdvPublic(db as any, 1, {
+        debut:      '2020-01-01 10:00',
+        nom_client: 'Test',
+      })
+    ).rejects.toThrow('futur')
   })
 })

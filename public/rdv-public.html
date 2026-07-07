@@ -2,628 +2,603 @@
 <html lang="fr">
 <head>
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#f59e0b">
+  <meta name="theme-color" content="#6366f1">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prendre rendez-vous — iziGSM</title>
+  <title>Prendre un rendez-vous — iziGSM</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <style>
-    body { background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%); min-height: 100vh; }
-    .card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+    body { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); min-height: 100vh; }
+    .card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
+    @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+    .spin { animation: spin 1s linear infinite; }
 
     /* Stepper */
-    .step-item { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; }
-    .step-item:not(:last-child)::after {
-      content: ''; position: absolute; top: 20px; left: calc(50% + 20px);
-      width: calc(100% - 40px); height: 2px; background: #e5e7eb;
-    }
-    .step-item.done::after, .step-item.active::after { background: #f59e0b; }
-    .step-circle {
-      width: 40px; height: 40px; border-radius: 50%;
+    .step-dot {
+      width: 32px; height: 32px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px; border: 2px solid #e5e7eb;
-      background: white; color: #9ca3af; z-index: 1;
-      transition: all .3s;
+      font-weight: 700; font-size: 13px; transition: all .3s;
     }
-    .step-item.done .step-circle  { background: #22c55e; border-color: #22c55e; color: white; }
-    .step-item.active .step-circle { background: #f59e0b; border-color: #f59e0b; color: white; box-shadow: 0 0 0 4px rgba(245,158,11,.25); }
-    .step-label { font-size: 11px; margin-top: 6px; color: #9ca3af; font-weight: 500; text-align: center; }
-    .step-item.active .step-label, .step-item.done .step-label { color: #374151; }
+    .step-dot.active   { background: #6366f1; color: white; }
+    .step-dot.done     { background: #22c55e; color: white; }
+    .step-dot.inactive { background: #e5e7eb; color: #9ca3af; }
+    .step-line { flex: 1; height: 2px; background: #e5e7eb; transition: background .3s; }
+    .step-line.done { background: #22c55e; }
 
-    /* Créneaux horaires */
+    /* Créneaux */
     .creneau-btn {
       border: 2px solid #e5e7eb; border-radius: 10px; padding: 10px 14px;
-      font-size: 14px; font-weight: 600; color: #374151;
-      cursor: pointer; transition: all .2s; text-align: center; background: white;
+      cursor: pointer; transition: all .15s; font-weight: 600; font-size: 14px;
+      color: #374151; background: white;
     }
-    .creneau-btn:hover  { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
-    .creneau-btn.selected { border-color: #f59e0b; background: #f59e0b; color: white; }
-    .creneau-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-    /* Calendrier navigation */
-    .nav-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .nav-btn:hover { background: #f3f4f6; }
-    .nav-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-    /* Jour calendrier */
-    .day-btn {
-      width: 40px; height: 40px; border-radius: 10px; border: 1px solid transparent;
-      font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .day-btn:hover:not(:disabled)  { background: #fffbeb; border-color: #f59e0b; }
-    .day-btn.selected  { background: #f59e0b; color: white; border-color: #f59e0b; font-weight: 700; }
-    .day-btn.today     { border-color: #f59e0b; color: #92400e; }
-    .day-btn:disabled  { opacity: .35; cursor: not-allowed; }
-    .day-btn.other-month { opacity: .3; }
-
-    /* Spinner */
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #e5e7eb; border-top-color: #f59e0b; border-radius: 50%; animation: spin .7s linear infinite; }
+    .creneau-btn:hover    { border-color: #6366f1; color: #6366f1; background: #eef2ff; }
+    .creneau-btn.selected { border-color: #6366f1; color: #6366f1; background: #eef2ff; }
 
     /* Services */
-    .service-card {
+    .service-btn {
       border: 2px solid #e5e7eb; border-radius: 12px; padding: 14px 16px;
-      cursor: pointer; transition: all .2s; background: white;
+      cursor: pointer; transition: all .15s; text-align: left; width: 100%;
+      background: white;
     }
-    .service-card:hover   { border-color: #f59e0b; background: #fffbeb; }
-    .service-card.selected { border-color: #f59e0b; background: #fffbeb; }
+    .service-btn:hover    { border-color: #6366f1; background: #eef2ff; }
+    .service-btn.selected { border-color: #6366f1; background: #eef2ff; }
 
-    input:focus, select:focus, textarea:focus {
-      outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,.25); border-color: #f59e0b;
+    /* Boutons */
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white; font-weight: 700; padding: 14px 28px;
+      border-radius: 12px; border: none; cursor: pointer; font-size: 1rem;
+      transition: opacity .2s, transform .1s; width: 100%;
     }
-    input, select, textarea { transition: border-color .2s, box-shadow .2s; }
+    .btn-primary:hover  { opacity: .92; transform: translateY(-1px); }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      background: #f3f4f6; color: #374151; font-weight: 600; padding: 14px 28px;
+      border-radius: 12px; border: none; cursor: pointer; font-size: 1rem; width: 100%;
+    }
+    .btn-secondary:hover { background: #e5e7eb; }
+
+    /* Input */
+    .inp {
+      width: 100%; padding: 11px 14px; border: 2px solid #e5e7eb;
+      border-radius: 10px; font-size: 15px; transition: border-color .15s; outline: none;
+      box-sizing: border-box;
+    }
+    .inp:focus { border-color: #6366f1; }
+    label { font-size: 14px; font-weight: 600; color: #374151; display: block; margin-bottom: 5px; }
+
+    /* Calendrier mini */
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-day-head { text-align: center; font-size: 11px; font-weight: 700; color: #9ca3af; padding: 4px 0; }
+    .cal-day {
+      text-align: center; font-size: 13px; padding: 6px 0;
+      border-radius: 8px; cursor: pointer; transition: all .15s;
+    }
+    .cal-day.today     { font-weight: 700; color: #6366f1; }
+    .cal-day.selected  { background: #6366f1; color: white; font-weight: 700; }
+    .cal-day.available { color: #374151; }
+    .cal-day.available:hover { background: #eef2ff; color: #6366f1; }
+    .cal-day.disabled  { color: #d1d5db; cursor: default; }
+    .cal-day.other     { color: #d1d5db; cursor: default; }
   </style>
 </head>
-<body class="flex flex-col items-center justify-start py-10 px-4 pb-20">
+<body class="flex flex-col items-center justify-start py-10 px-4">
 
-  <!-- Header -->
+  <!-- Header boutique -->
   <div class="text-center mb-8">
-    <a href="/" class="inline-block">
-      <div class="text-4xl font-black text-white mb-1">iziGSM</div>
-    </a>
-    <div class="text-white/80 text-sm font-medium">Prise de rendez-vous en ligne</div>
+    <div id="boutique-name" class="text-2xl font-black text-white mb-1">iziGSM</div>
+    <div class="text-white/70 text-sm">Prise de rendez-vous en ligne</div>
   </div>
 
-  <!-- Carte principale -->
-  <div class="card w-full max-w-lg p-8">
+  <!-- Chargement initial -->
+  <div id="loading-section" class="card w-full max-w-lg p-10 text-center">
+    <i class="fas fa-circle-notch spin text-4xl text-indigo-400 mb-4"></i>
+    <p class="text-gray-500 text-sm">Chargement…</p>
+  </div>
+
+  <!-- Erreur -->
+  <div id="error-section" class="hidden card w-full max-w-lg p-10 text-center">
+    <div class="text-5xl mb-4">😕</div>
+    <h2 id="error-title" class="text-xl font-bold text-gray-800 mb-2">Boutique introuvable</h2>
+    <p id="error-msg" class="text-gray-500 text-sm">Vérifiez le lien ou contactez la boutique.</p>
+  </div>
+
+  <!-- Formulaire principal -->
+  <div id="main-section" class="hidden card w-full max-w-lg overflow-hidden">
 
     <!-- Stepper -->
-    <div class="flex mb-8" id="stepper">
-      <div class="step-item active" id="step-ind-1">
-        <div class="step-circle">1</div>
-        <span class="step-label">Service</span>
+    <div class="px-8 pt-7 pb-5">
+      <div class="flex items-center gap-1">
+        <div id="dot1" class="step-dot active">1</div>
+        <div id="line12" class="step-line"></div>
+        <div id="dot2" class="step-dot inactive">2</div>
+        <div id="line23" class="step-line"></div>
+        <div id="dot3" class="step-dot inactive">3</div>
       </div>
-      <div class="step-item" id="step-ind-2">
-        <div class="step-circle">2</div>
-        <span class="step-label">Date &amp; heure</span>
-      </div>
-      <div class="step-item" id="step-ind-3">
-        <div class="step-circle">3</div>
-        <span class="step-label">Vos infos</span>
-      </div>
-    </div>
-
-    <!-- ─── ÉTAPE 1 : Choix du service ─────────────────────────────── -->
-    <div id="etape-1">
-      <h2 class="text-xl font-bold text-gray-800 mb-1">
-        <i class="fas fa-tools text-amber-500 mr-2"></i>Quel service souhaitez-vous ?
-      </h2>
-      <p class="text-sm text-gray-500 mb-5">Sélectionnez le type de prestation souhaitée.</p>
-
-      <div id="catalogue-loading" class="text-center py-6">
-        <div class="spinner mx-auto mb-2"></div>
-        <p class="text-sm text-gray-400">Chargement des services…</p>
-      </div>
-
-      <div id="catalogue-error" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600 mb-4"></div>
-
-      <div id="catalogue-list" class="hidden space-y-3"></div>
-
-      <!-- Option "Autre / Conseil" -->
-      <div id="service-autre" class="hidden service-card mt-3" onclick="selectService(null, 'Autre / Conseil général', 30)">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-semibold text-gray-800">
-              <i class="fas fa-comment-dots text-amber-400 mr-2"></i>Autre / Conseil général
-            </div>
-            <div class="text-xs text-gray-400 mt-1">Diagnostic, question, renseignement…</div>
-          </div>
-          <div class="text-sm text-gray-400">30 min</div>
-        </div>
-      </div>
-
-      <div class="mt-6 text-right">
-        <button id="btn-step1-next" onclick="goStep(2)"
-          class="hidden bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
-          Suivant <i class="fas fa-arrow-right ml-2"></i>
-        </button>
+      <div class="flex justify-between mt-1" style="font-size:11px; color:#9ca3af; font-weight:600;">
+        <span>Service</span>
+        <span>Créneau</span>
+        <span>Coordonnées</span>
       </div>
     </div>
 
-    <!-- ─── ÉTAPE 2 : Date + Heure ──────────────────────────────────── -->
-    <div id="etape-2" class="hidden">
-      <h2 class="text-xl font-bold text-gray-800 mb-1">
-        <i class="fas fa-calendar-alt text-amber-500 mr-2"></i>Choisissez une date
-      </h2>
-      <p id="step2-service-recap" class="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-5"></p>
+    <!-- ─── Étape 1 : Choix du service ──────────────────────────────────── -->
+    <div id="step1" class="px-8 pb-8">
+      <h2 class="text-lg font-bold text-gray-800 mb-1">Quel service souhaitez-vous ?</h2>
+      <p class="text-gray-400 text-sm mb-5">Sélectionnez le type de prestation.</p>
+      <div id="services-list" class="flex flex-col gap-3 mb-6">
+        <!-- services injectés dynamiquement -->
+      </div>
+      <!-- Service libre si catalogue vide -->
+      <div id="service-libre" class="hidden mb-6">
+        <label for="service-nom-input">Décrivez votre demande <span class="text-red-400">*</span></label>
+        <input id="service-nom-input" type="text" class="inp" placeholder="Ex : Remplacement écran, diagnostic…" maxlength="120">
+      </div>
+      <button id="btn-next1" class="btn-primary" onclick="goStep2()" disabled>
+        Choisir un créneau <i class="fas fa-arrow-right ml-2"></i>
+      </button>
+    </div>
 
-      <!-- Mini-calendrier -->
-      <div class="mb-5">
-        <div class="flex items-center justify-between mb-3">
-          <button class="nav-btn" id="cal-prev" onclick="changeMonth(-1)"><i class="fas fa-chevron-left text-xs"></i></button>
-          <span id="cal-month-label" class="font-semibold text-gray-800 text-sm"></span>
-          <button class="nav-btn" id="cal-next" onclick="changeMonth(1)"><i class="fas fa-chevron-right text-xs"></i></button>
+    <!-- ─── Étape 2 : Choix du créneau ──────────────────────────────────── -->
+    <div id="step2" class="hidden px-8 pb-8">
+      <h2 class="text-lg font-bold text-gray-800 mb-1">Choisissez un créneau</h2>
+      <p class="text-gray-400 text-sm mb-5">Sélectionnez une date puis un horaire disponible.</p>
+
+      <!-- Mini calendrier -->
+      <div class="border border-gray-100 rounded-xl p-4 mb-5">
+        <div class="cal-nav">
+          <button onclick="prevMonth()" class="text-gray-400 hover:text-indigo-500 transition p-1">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span id="cal-month-label" class="font-bold text-gray-700 text-sm"></span>
+          <button onclick="nextMonth()" class="text-gray-400 hover:text-indigo-500 transition p-1">
+            <i class="fas fa-chevron-right"></i>
+          </button>
         </div>
-        <div class="grid grid-cols-7 gap-1 text-center mb-2">
-          <div class="text-xs font-semibold text-gray-400">Lun</div>
-          <div class="text-xs font-semibold text-gray-400">Mar</div>
-          <div class="text-xs font-semibold text-gray-400">Mer</div>
-          <div class="text-xs font-semibold text-gray-400">Jeu</div>
-          <div class="text-xs font-semibold text-gray-400">Ven</div>
-          <div class="text-xs font-semibold text-gray-400">Sam</div>
-          <div class="text-xs font-semibold text-gray-400">Dim</div>
+        <div class="cal-grid" id="cal-grid">
+          <!-- Jours injectés dynamiquement -->
         </div>
-        <div id="cal-grid" class="grid grid-cols-7 gap-1 justify-items-center"></div>
       </div>
 
       <!-- Créneaux horaires -->
-      <div id="creneaux-section" class="hidden">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">
-          <i class="fas fa-clock text-amber-400 mr-1"></i>
-          Créneaux disponibles — <span id="creneaux-date-label"></span>
-        </h3>
-        <div id="creneaux-loading" class="text-center py-4 hidden">
-          <div class="spinner mx-auto"></div>
+      <div id="creneaux-section" class="hidden mb-6">
+        <p id="creneaux-date-label" class="text-sm font-semibold text-gray-600 mb-3"></p>
+        <div id="creneaux-loading" class="hidden text-center py-4">
+          <i class="fas fa-circle-notch spin text-indigo-400"></i>
         </div>
-        <div id="creneaux-empty" class="hidden text-center py-4 text-sm text-gray-400">
-          <i class="fas fa-calendar-times text-2xl mb-2 block text-gray-300"></i>
-          Aucun créneau disponible ce jour.
+        <div id="creneaux-vide" class="hidden text-center py-4 text-gray-400 text-sm">
+          Aucun créneau disponible ce jour. Essayez une autre date.
         </div>
-        <div id="creneaux-grid" class="grid grid-cols-3 gap-2"></div>
+        <div id="creneaux-grid" class="grid grid-cols-3 gap-2">
+          <!-- créneaux injectés dynamiquement -->
+        </div>
       </div>
 
-      <div class="flex justify-between mt-6">
-        <button onclick="goStep(1)"
-          class="text-gray-500 hover:text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors">
-          <i class="fas fa-arrow-left mr-1"></i> Retour
+      <div class="flex gap-3">
+        <button class="btn-secondary" onclick="goStep1()">
+          <i class="fas fa-arrow-left mr-2"></i> Retour
         </button>
-        <button id="btn-step2-next" onclick="goStep(3)"
-          class="hidden bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
-          Suivant <i class="fas fa-arrow-right ml-2"></i>
+        <button id="btn-next2" class="btn-primary" onclick="goStep3()" disabled>
+          Mes coordonnées <i class="fas fa-arrow-right ml-2"></i>
         </button>
       </div>
     </div>
 
-    <!-- ─── ÉTAPE 3 : Coordonnées ───────────────────────────────────── -->
-    <div id="etape-3" class="hidden">
-      <h2 class="text-xl font-bold text-gray-800 mb-1">
-        <i class="fas fa-user text-amber-500 mr-2"></i>Vos coordonnées
-      </h2>
-      <div id="step3-recap" class="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-5 space-y-0.5"></div>
+    <!-- ─── Étape 3 : Coordonnées ────────────────────────────────────────── -->
+    <div id="step3" class="hidden px-8 pb-8">
+      <h2 class="text-lg font-bold text-gray-800 mb-1">Vos coordonnées</h2>
+      <p class="text-gray-400 text-sm mb-5">Pour que la boutique puisse vous confirmer le rendez-vous.</p>
 
-      <div class="space-y-4">
+      <!-- Récap sélection -->
+      <div id="recap-selection" class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-5 text-sm text-indigo-800 flex flex-col gap-1">
+        <div><i class="fas fa-wrench mr-2 text-indigo-400"></i><span id="recap-service" class="font-semibold"></span></div>
+        <div><i class="fas fa-calendar mr-2 text-indigo-400"></i><span id="recap-creneau" class="font-semibold"></span></div>
+      </div>
+
+      <div class="flex flex-col gap-4 mb-6">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Votre nom <span class="text-red-500">*</span>
-          </label>
-          <input id="f-nom" type="text" placeholder="Jean Dupont"
-            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm">
+          <label for="nom-input">Votre nom complet <span class="text-red-400">*</span></label>
+          <input id="nom-input" type="text" class="inp" placeholder="Jean Dupont" maxlength="100" oninput="checkStep3()">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-          <input id="f-tel" type="tel" placeholder="06 12 34 56 78"
-            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm">
+          <label for="tel-input">Téléphone <span class="text-red-400">*</span></label>
+          <input id="tel-input" type="tel" class="inp" placeholder="06 01 02 03 04" maxlength="30" oninput="checkStep3()">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input id="f-email" type="email" placeholder="jean@exemple.fr"
-            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm">
+          <label for="email-input">Email <span class="text-gray-400 font-normal">(optionnel)</span></label>
+          <input id="email-input" type="email" class="inp" placeholder="jean@exemple.fr" maxlength="200">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Appareil &amp; panne (optionnel)</label>
-          <textarea id="f-notes" rows="3" placeholder="Ex : iPhone 14 — écran cassé, batterie…"
-            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none"></textarea>
+          <label for="notes-input">Précisions <span class="text-gray-400 font-normal">(optionnel)</span></label>
+          <textarea id="notes-input" class="inp" rows="3" placeholder="Décrivez brièvement la panne ou votre demande…" maxlength="500" style="resize:vertical;"></textarea>
         </div>
       </div>
 
-      <div id="form-error" class="hidden mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600"></div>
-
-      <div class="flex justify-between mt-6">
-        <button onclick="goStep(2)"
-          class="text-gray-500 hover:text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors">
-          <i class="fas fa-arrow-left mr-1"></i> Retour
+      <div class="flex gap-3">
+        <button class="btn-secondary" onclick="goStep2()">
+          <i class="fas fa-arrow-left mr-2"></i> Retour
         </button>
-        <button id="btn-submit" onclick="soumettre()"
-          class="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
-          <i class="fas fa-check mr-2"></i>Confirmer le RDV
+        <button id="btn-submit" class="btn-primary" onclick="submitRdv()" disabled>
+          <span id="btn-submit-label"><i class="fas fa-check mr-2"></i>Confirmer le rendez-vous</span>
+          <span id="btn-submit-loading" class="hidden"><i class="fas fa-circle-notch spin mr-2"></i>Envoi…</span>
         </button>
       </div>
     </div>
+  </div>
 
-    <!-- ─── CONFIRMATION ────────────────────────────────────────────── -->
-    <div id="etape-confirm" class="hidden text-center py-4">
-      <div class="text-5xl mb-4">🎉</div>
-      <h2 class="text-2xl font-black text-gray-800 mb-2">Demande envoyée !</h2>
-      <p class="text-gray-500 text-sm mb-6">
-        Votre demande de rendez-vous a bien été reçue.<br>
-        L'équipe vous confirmera rapidement par téléphone ou email.
-      </p>
-      <div id="confirm-details" class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-left mb-6 space-y-1"></div>
-      <div class="space-y-3">
-        <a href="/suivi.html"
-          class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm">
-          <i class="fas fa-search mr-2"></i>Suivre ma réparation
-        </a>
-        <button onclick="location.reload()"
-          class="block w-full border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium py-3 rounded-xl transition-colors text-sm">
-          <i class="fas fa-plus mr-2"></i>Nouveau rendez-vous
-        </button>
-      </div>
+  <!-- ─── Confirmation finale ──────────────────────────────────────────────── -->
+  <div id="confirm-section" class="hidden card w-full max-w-lg p-10 text-center">
+    <div class="text-6xl mb-5">🎉</div>
+    <h2 class="text-2xl font-black text-gray-800 mb-3">Demande envoyée !</h2>
+    <p class="text-gray-500 mb-6">
+      Votre demande de rendez-vous a bien été enregistrée.<br>
+      L'équipe vous contactera rapidement pour confirmer.
+    </p>
+    <div id="confirm-details" class="bg-gray-50 rounded-xl p-5 text-left text-sm text-gray-700 mb-6 space-y-2">
+      <!-- injecté dynamiquement -->
     </div>
-
-  </div><!-- /.card -->
-
-  <!-- Pied de page -->
-  <p class="text-white/50 text-xs mt-8 text-center">
-    Powered by <strong>iziGSM</strong> — Gestion de boutiques de réparation
-  </p>
+    <div id="boutique-contact" class="text-gray-400 text-sm"></div>
+  </div>
 
 <script>
-// ─── État global ──────────────────────────────────────────────────────────────
+// ─── État global ───────────────────────────────────────────────────────────────
 const state = {
-  slug:          '',      // slug boutique (lu depuis URL)
-  serviceId:     null,    // id service sélectionné (null = autre)
-  serviceNom:    '',      // nom affiché
-  serviceDuree:  30,      // durée en minutes
-  selectedDate:  '',      // "YYYY-MM-DD"
-  selectedCreneau: null,  // { debut, fin, duree_minutes }
-  calYear:       0,
-  calMonth:      0,       // 0-indexed
+  slug:         null,
+  boutique:     null,
+  catalogue:    [],
+  serviceNom:   null,
+  selectedDate: null,
+  selectedCreneau: null,   // { debut, fin, duree_minutes }
+  currentMonth: new Date(),
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  // Lire slug depuis ?slug=xxx ou /rdv-public.html?slug=xxx
-  const qs   = new URLSearchParams(window.location.search)
-  state.slug = qs.get('slug') || ''
+// ─── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(location.search)
+  state.slug = params.get('slug') || ''
 
-  if (!state.slug) {
-    showCatalogueError('Paramètre "slug" manquant dans l\'URL. Exemple : /rdv-public.html?slug=ma-boutique')
-    return
+  if (!state.slug) return showError('Paramètre slug manquant.', 'Lien invalide')
+
+  try {
+    // Charger boutique + catalogue en parallèle
+    const [boutRes, catRes] = await Promise.all([
+      fetch(`/api/public/boutique/${encodeURIComponent(state.slug)}`),
+      fetch(`/api/public/catalogue/${encodeURIComponent(state.slug)}`),
+    ])
+
+    if (!boutRes.ok) return showError('Boutique introuvable.', 'Boutique inconnue')
+
+    const boutData = await boutRes.json()
+    state.boutique = boutData.data
+    document.getElementById('boutique-name').textContent = state.boutique.nom
+    document.title = `RDV — ${state.boutique.nom}`
+
+    if (catRes.ok) {
+      const catData = await catRes.json()
+      // Aplatir tous les services des catégories
+      for (const cat of catData.catalogue ?? []) {
+        for (const svc of cat.services ?? []) {
+          state.catalogue.push({ ...svc, categorie: cat.nom })
+        }
+      }
+    }
+
+    renderStep1()
+    show('main-section')
+    hide('loading-section')
+
+  } catch (e) {
+    showError('Erreur de connexion.', 'Erreur réseau')
   }
-
-  const now = new Date()
-  state.calYear  = now.getFullYear()
-  state.calMonth = now.getMonth()
-
-  chargerCatalogue()
-  renderCalendar()
 })
 
-// ─── ÉTAPE 1 : Catalogue ──────────────────────────────────────────────────────
-async function chargerCatalogue() {
-  try {
-    const r    = await fetch(`/api/public/catalogue/${state.slug}`)
-    const data = await r.json()
-    if (!data.success) { showCatalogueError(data.error || 'Boutique introuvable.'); return }
-
-    renderCatalogue(data.catalogue)
-  } catch (e) {
-    showCatalogueError('Erreur de connexion. Réessayez.')
-  }
-}
-
-function renderCatalogue(catalogue) {
-  document.getElementById('catalogue-loading').classList.add('hidden')
-  const list = document.getElementById('catalogue-list')
-
-  if (!catalogue || catalogue.length === 0) {
-    document.getElementById('service-autre').classList.remove('hidden')
-    list.classList.remove('hidden')
+// ─── Étape 1 : Service ────────────────────────────────────────────────────────
+function renderStep1() {
+  const list = document.getElementById('services-list')
+  if (state.catalogue.length === 0) {
+    // Pas de catalogue : afficher champ libre
+    show('service-libre')
+    document.getElementById('service-nom-input').addEventListener('input', () => {
+      const val = document.getElementById('service-nom-input').value.trim()
+      state.serviceNom = val || null
+      document.getElementById('btn-next1').disabled = !val
+    })
     return
   }
 
   list.innerHTML = ''
-  for (const cat of catalogue) {
-    if (!cat.services || cat.services.length === 0) continue
-
-    // Titre catégorie
-    const catTitle = document.createElement('p')
-    catTitle.className = 'text-xs font-semibold text-gray-400 uppercase tracking-wide mt-2 mb-1'
-    catTitle.textContent = cat.nom
-    list.appendChild(catTitle)
-
-    for (const svc of cat.services) {
-      const card = document.createElement('div')
-      card.className = 'service-card'
-      card.dataset.id    = svc.id
-      card.dataset.nom   = svc.nom
-      card.dataset.duree = svc.duree_minutes || 30
-      card.innerHTML = `
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-semibold text-gray-800 text-sm">${escHtml(svc.nom)}</div>
-            ${svc.description ? `<div class="text-xs text-gray-400 mt-0.5">${escHtml(svc.description)}</div>` : ''}
-          </div>
-          <div class="text-right ml-3 shrink-0">
-            <div class="font-bold text-amber-600 text-sm">${Number(svc.prix_ttc).toFixed(2)} €</div>
-            ${svc.duree_minutes ? `<div class="text-xs text-gray-400">${svc.duree_minutes} min</div>` : ''}
-          </div>
-        </div>`
-      card.onclick = () => selectService(svc.id, svc.nom, svc.duree_minutes || 30)
-      list.appendChild(card)
+  state.catalogue.forEach(svc => {
+    const prix = svc.prix_ttc ? ` — ${Number(svc.prix_ttc).toFixed(2)} €` : ''
+    const duree = svc.duree_minutes ? ` · ${svc.duree_minutes} min` : ''
+    const btn = document.createElement('button')
+    btn.className = 'service-btn'
+    btn.innerHTML = `
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-bold text-gray-800 text-sm">${escHtml(svc.nom)}</div>
+          ${svc.description ? `<div class="text-gray-400 text-xs mt-0.5">${escHtml(svc.description)}</div>` : ''}
+          <div class="text-xs text-indigo-400 mt-1">${escHtml(svc.categorie)}${duree}</div>
+        </div>
+        ${prix ? `<span class="text-sm font-bold text-indigo-600 ml-4 whitespace-nowrap">${prix}</span>` : ''}
+      </div>
+    `
+    btn.onclick = () => {
+      document.querySelectorAll('.service-btn').forEach(b => b.classList.remove('selected'))
+      btn.classList.add('selected')
+      state.serviceNom = svc.nom
+      document.getElementById('btn-next1').disabled = false
     }
-  }
-
-  document.getElementById('service-autre').classList.remove('hidden')
-  list.classList.remove('hidden')
+    list.appendChild(btn)
+  })
 }
 
-function selectService(id, nom, duree) {
-  state.serviceId    = id
-  state.serviceNom   = nom
-  state.serviceDuree = duree
-
-  // Visuellement sélectionner
-  document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'))
-  const target = id
-    ? document.querySelector(`.service-card[data-id="${id}"]`)
-    : document.getElementById('service-autre')
-  if (target) target.classList.add('selected')
-
-  document.getElementById('btn-step1-next').classList.remove('hidden')
+function goStep2() {
+  if (!state.serviceNom) return
+  setStep(2)
+  // Init calendrier sur mois courant
+  state.currentMonth = new Date()
+  state.currentMonth.setDate(1)
+  renderCalendar()
 }
 
-function showCatalogueError(msg) {
-  document.getElementById('catalogue-loading').classList.add('hidden')
-  const el = document.getElementById('catalogue-error')
-  el.textContent = msg
-  el.classList.remove('hidden')
-  document.getElementById('service-autre').classList.remove('hidden')
-  document.getElementById('catalogue-list').classList.remove('hidden')
-}
-
-// ─── ÉTAPE 2 : Calendrier ─────────────────────────────────────────────────────
-const MOIS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
-                 'Juillet','Août','Septembre','Octobre','Novembre','Décembre']
-
+// ─── Étape 2 : Calendrier + Créneaux ──────────────────────────────────────────
 function renderCalendar() {
-  const y = state.calYear, m = state.calMonth
-  document.getElementById('cal-month-label').textContent = `${MOIS_FR[m]} ${y}`
+  const { currentMonth } = state
+  const year  = currentMonth.getFullYear()
+  const month = currentMonth.getMonth()
 
-  const firstDay = new Date(y, m, 1).getDay() || 7  // 1=Lun
-  const daysInMonth = new Date(y, m + 1, 0).getDate()
-  const today = new Date(); today.setHours(0,0,0,0)
+  const label = new Date(year, month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+  document.getElementById('cal-month-label').textContent =
+    label.charAt(0).toUpperCase() + label.slice(1)
 
   const grid = document.getElementById('cal-grid')
   grid.innerHTML = ''
 
-  // Jours vides avant le 1er
-  for (let i = 1; i < firstDay; i++) {
-    grid.appendChild(Object.assign(document.createElement('div'), { className: 'w-10 h-10' }))
+  // En-têtes jours
+  const jours = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di']
+  jours.forEach(j => {
+    const h = document.createElement('div')
+    h.className = 'cal-day-head'
+    h.textContent = j
+    grid.appendChild(h)
+  })
+
+  const firstDay = new Date(year, month, 1)
+  const lastDay  = new Date(year, month + 1, 0)
+  const today    = new Date()
+  today.setHours(0,0,0,0)
+
+  // Décalage (lundi = 0)
+  let startDow = firstDay.getDay() - 1
+  if (startDow < 0) startDow = 6
+
+  // Cases vides avant le 1er
+  for (let i = 0; i < startDow; i++) {
+    const empty = document.createElement('div')
+    empty.className = 'cal-day other'
+    grid.appendChild(empty)
   }
 
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(y, m, d)
-    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+  // Jours du mois
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const date = new Date(year, month, d)
+    const dateStr = toDateStr(date)
     const isPast  = date < today
-    const isToday = date.getTime() === today.getTime()
-    const isSel   = dateStr === state.selectedDate
+    const isSelected = dateStr === state.selectedDate
 
-    const btn = document.createElement('button')
-    btn.className = `day-btn${isToday ? ' today' : ''}${isSel ? ' selected' : ''}`
-    btn.textContent = d
-    btn.disabled = isPast
-    if (!isPast) btn.onclick = () => selectDate(dateStr)
-    grid.appendChild(btn)
+    const el = document.createElement('div')
+    el.textContent = d
+
+    if (isPast) {
+      el.className = 'cal-day disabled'
+    } else {
+      el.className = `cal-day available${isSelected ? ' selected' : ''}${
+        toDateStr(today) === dateStr ? ' today' : ''
+      }`
+      el.onclick = () => selectDate(dateStr)
+    }
+    grid.appendChild(el)
   }
-
-  // Bouton prev désactivé si on est au mois courant
-  const nowDate = new Date()
-  document.getElementById('cal-prev').disabled =
-    (y === nowDate.getFullYear() && m === nowDate.getMonth())
 }
 
-function changeMonth(delta) {
-  state.calMonth += delta
-  if (state.calMonth < 0)  { state.calMonth = 11; state.calYear-- }
-  if (state.calMonth > 11) { state.calMonth = 0;  state.calYear++ }
+function prevMonth() {
+  state.currentMonth.setMonth(state.currentMonth.getMonth() - 1)
+  renderCalendar()
+}
+function nextMonth() {
+  state.currentMonth.setMonth(state.currentMonth.getMonth() + 1)
   renderCalendar()
 }
 
 async function selectDate(dateStr) {
-  state.selectedDate   = dateStr
+  state.selectedDate = dateStr
   state.selectedCreneau = null
-  document.getElementById('btn-step2-next').classList.add('hidden')
-
-  // Mettre à jour le calendrier visuellement
+  document.getElementById('btn-next2').disabled = true
   renderCalendar()
 
   // Afficher section créneaux
-  const section = document.getElementById('creneaux-section')
-  section.classList.remove('hidden')
-  document.getElementById('creneaux-date-label').textContent = formatDateFr(dateStr)
-  document.getElementById('creneaux-loading').classList.remove('hidden')
-  document.getElementById('creneaux-empty').classList.add('hidden')
-  document.getElementById('creneaux-grid').innerHTML = ''
+  show('creneaux-section')
+  hide('creneaux-vide')
+  hide('creneaux-grid')
+  show('creneaux-loading')
+
+  const d = new Date(dateStr + 'T12:00:00Z')
+  const label = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' })
+  document.getElementById('creneaux-date-label').textContent =
+    `Créneaux disponibles le ${label.charAt(0).toUpperCase() + label.slice(1)} :`
 
   try {
-    const r    = await fetch(`/api/public/boutique/${state.slug}/disponibilites?date=${dateStr}`)
-    const data = await r.json()
-    document.getElementById('creneaux-loading').classList.add('hidden')
-
-    if (!data.success || !data.creneaux?.length) {
-      document.getElementById('creneaux-empty').classList.remove('hidden')
-      return
-    }
-    renderCreneaux(data.creneaux)
-  } catch {
-    document.getElementById('creneaux-loading').classList.add('hidden')
-    document.getElementById('creneaux-empty').classList.remove('hidden')
+    const res = await fetch(`/api/public/boutique/${encodeURIComponent(state.slug)}/disponibilites?date=${dateStr}`)
+    const data = await res.json()
+    hide('creneaux-loading')
+    renderCreneaux(data.creneaux ?? [])
+  } catch(e) {
+    hide('creneaux-loading')
+    show('creneaux-vide')
   }
 }
 
 function renderCreneaux(creneaux) {
+  if (creneaux.length === 0) { show('creneaux-vide'); return }
+
   const grid = document.getElementById('creneaux-grid')
   grid.innerHTML = ''
-  for (const c of creneaux) {
-    const heure = c.debut.slice(11, 16)  // "HH:MM"
+  show('creneaux-grid')
+
+  creneaux.forEach(c => {
+    const heure = c.debut.slice(11, 16)   // "HH:MM"
     const btn = document.createElement('button')
     btn.className = 'creneau-btn'
     btn.textContent = heure
-    btn.onclick = () => selectCreneau(c, btn)
+    btn.onclick = () => {
+      document.querySelectorAll('.creneau-btn').forEach(b => b.classList.remove('selected'))
+      btn.classList.add('selected')
+      state.selectedCreneau = c
+      document.getElementById('btn-next2').disabled = false
+    }
     grid.appendChild(btn)
-  }
-}
-
-function selectCreneau(creneau, btn) {
-  state.selectedCreneau = creneau
-  document.querySelectorAll('.creneau-btn').forEach(b => b.classList.remove('selected'))
-  btn.classList.add('selected')
-  document.getElementById('btn-step2-next').classList.remove('hidden')
-}
-
-// ─── Navigation étapes ────────────────────────────────────────────────────────
-function goStep(n) {
-  // Validation
-  if (n === 2 && !state.serviceNom) { alert('Veuillez sélectionner un service.'); return }
-  if (n === 3) {
-    if (!state.selectedDate)    { alert('Veuillez choisir une date.'); return }
-    if (!state.selectedCreneau) { alert('Veuillez choisir un créneau horaire.'); return }
-  }
-
-  // Cacher toutes les étapes
-  ;[1,2,3].forEach(i => {
-    document.getElementById(`etape-${i}`).classList.add('hidden')
-    const ind = document.getElementById(`step-ind-${i}`)
-    ind.classList.remove('active','done')
-    if (i < n) ind.classList.add('done')
-    else if (i === n) ind.classList.add('active')
   })
-  document.getElementById(`etape-${n}`).classList.remove('hidden')
-
-  // Récap étape 2
-  if (n === 2) {
-    document.getElementById('step2-service-recap').innerHTML =
-      `<i class="fas fa-tools mr-1 text-amber-500"></i>Service sélectionné : <strong>${escHtml(state.serviceNom)}</strong> (${state.serviceDuree} min)`
-  }
-
-  // Récap étape 3
-  if (n === 3) {
-    const c   = state.selectedCreneau
-    const hd  = c.debut.slice(11,16)
-    const hf  = c.fin.slice(11,16)
-    document.getElementById('step3-recap').innerHTML = `
-      <div><i class="fas fa-tools text-amber-500 mr-2"></i><strong>${escHtml(state.serviceNom)}</strong></div>
-      <div><i class="fas fa-calendar text-amber-500 mr-2"></i>${formatDateFr(state.selectedDate)}</div>
-      <div><i class="fas fa-clock text-amber-500 mr-2"></i>${hd} – ${hf}</div>`
-  }
 }
 
-// ─── Soumission ───────────────────────────────────────────────────────────────
-async function soumettre() {
-  const nom   = document.getElementById('f-nom').value.trim()
-  const tel   = document.getElementById('f-tel').value.trim()
-  const email = document.getElementById('f-email').value.trim()
-  const notes = document.getElementById('f-notes').value.trim()
+function goStep3() {
+  if (!state.selectedCreneau) return
+  // Remplir récap
+  document.getElementById('recap-service').textContent = state.serviceNom ?? '—'
+  const d     = new Date(state.selectedDate + 'T12:00:00Z')
+  const label = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' })
+  const heure = state.selectedCreneau.debut.slice(11, 16)
+  document.getElementById('recap-creneau').textContent =
+    `${label.charAt(0).toUpperCase() + label.slice(1)} à ${heure}`
+  setStep(3)
+  checkStep3()
+}
 
-  if (!nom) { showFormError('Votre nom est requis.'); return }
-  if (!tel && !email) { showFormError('Téléphone ou email requis pour vous contacter.'); return }
+function goStep1() { setStep(1) }
+function goStep2() { setStep(2); renderCalendar() }
 
-  const btn = document.getElementById('btn-submit')
-  btn.disabled = true
-  btn.innerHTML = '<span class="spinner"></span> Envoi…'
-  hideFormError()
+// ─── Étape 3 : Validation formulaire ─────────────────────────────────────────
+function checkStep3() {
+  const nom = document.getElementById('nom-input').value.trim()
+  const tel = document.getElementById('tel-input').value.trim()
+  document.getElementById('btn-submit').disabled = !(nom && tel)
+}
 
+async function submitRdv() {
+  const nom   = document.getElementById('nom-input').value.trim()
+  const tel   = document.getElementById('tel-input').value.trim()
+  const email = document.getElementById('email-input').value.trim()
+  const notes = document.getElementById('notes-input').value.trim()
+
+  if (!nom || !tel) return
+
+  setLoading(true)
   try {
-    const body = {
-      slug:             state.slug,
-      debut:            state.selectedCreneau.debut,
-      duree_minutes:    state.selectedCreneau.duree_minutes,
-      service_nom:      state.serviceNom,
-      nom_client:       nom,
-      telephone_client: tel || null,
-      email_client:     email || null,
-      notes:            notes || null,
-      type_rdv:         'reparation',
-    }
-
-    const r    = await fetch('/api/public/rdv', {
-      method:  'POST',
+    const res = await fetch('/api/public/rdv', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+      body: JSON.stringify({
+        slug:             state.slug,
+        debut:            state.selectedCreneau.debut,
+        duree_minutes:    state.selectedCreneau.duree_minutes,
+        service_nom:      state.serviceNom,
+        nom_client:       nom,
+        telephone_client: tel,
+        email_client:     email || undefined,
+        notes:            notes || undefined,
+        type_rdv:         'reparation',
+      }),
     })
-    const data = await r.json()
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error ?? 'Erreur serveur.')
 
-    if (!data.success) {
-      showFormError(data.error || 'Erreur lors de l\'envoi.')
-      btn.disabled = false
-      btn.innerHTML = '<i class="fas fa-check mr-2"></i>Confirmer le RDV'
-      return
-    }
-
-    // Succès → confirmation
-    afficherConfirmation(data.data)
+    // Afficher confirmation
+    showConfirmation(data.data, nom, tel, email)
 
   } catch (e) {
-    showFormError('Erreur de connexion. Réessayez.')
-    btn.disabled = false
-    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Confirmer le RDV'
+    setLoading(false)
+    alert(`Erreur : ${e.message}`)
   }
 }
 
-function afficherConfirmation(rdv) {
-  ;[1,2,3].forEach(i => document.getElementById(`etape-${i}`).classList.add('hidden'))
-  ;[1,2,3].forEach(i => {
-    const ind = document.getElementById(`step-ind-${i}`)
-    ind.classList.remove('active')
-    ind.classList.add('done')
-  })
-
-  const c  = state.selectedCreneau
-  const hd = c.debut.slice(11,16)
-  const hf = c.fin.slice(11,16)
+function showConfirmation(rdv, nom, tel, email) {
+  hide('main-section')
+  const d = new Date(state.selectedDate + 'T12:00:00Z')
+  const label = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+  const heure = state.selectedCreneau.debut.slice(11, 16)
 
   document.getElementById('confirm-details').innerHTML = `
-    <div class="flex items-center gap-2 mb-2">
-      <i class="fas fa-tools text-amber-500"></i>
-      <span><strong>${escHtml(state.serviceNom)}</strong></span>
+    <div class="flex items-center gap-2">
+      <i class="fas fa-wrench text-indigo-400"></i>
+      <span>${escHtml(state.serviceNom ?? '—')}</span>
     </div>
-    <div class="flex items-center gap-2 mb-2">
-      <i class="fas fa-calendar text-amber-500"></i>
-      <span>${formatDateFr(state.selectedDate)} de ${hd} à ${hf}</span>
+    <div class="flex items-center gap-2">
+      <i class="fas fa-calendar-check text-indigo-400"></i>
+      <span>${label.charAt(0).toUpperCase() + label.slice(1)} à <strong>${heure}</strong></span>
     </div>
-    <div class="flex items-center gap-2 text-gray-500 text-xs mt-2">
-      <i class="fas fa-info-circle"></i>
-      <span>Référence RDV n° ${rdv.id}</span>
-    </div>`
+    <div class="flex items-center gap-2">
+      <i class="fas fa-user text-indigo-400"></i>
+      <span>${escHtml(nom)}${tel ? ' · ' + escHtml(tel) : ''}</span>
+    </div>
+    ${email ? `<div class="flex items-center gap-2"><i class="fas fa-envelope text-indigo-400"></i><span>${escHtml(email)}</span></div>` : ''}
+  `
+  const b = state.boutique
+  const contact = [b?.telephone, b?.email].filter(Boolean).join(' · ')
+  document.getElementById('boutique-contact').innerHTML = contact
+    ? `<i class="fas fa-store mr-2"></i>${escHtml(b.nom)} — ${escHtml(contact)}`
+    : ''
 
-  document.getElementById('etape-confirm').classList.remove('hidden')
+  show('confirm-section')
 }
 
-// ─── Utilitaires ──────────────────────────────────────────────────────────────
-function showFormError(msg) {
-  const el = document.getElementById('form-error')
-  el.textContent = msg
-  el.classList.remove('hidden')
-}
-function hideFormError() {
-  document.getElementById('form-error').classList.add('hidden')
+// ─── Stepper ──────────────────────────────────────────────────────────────────
+function setStep(n) {
+  hide('step1'); hide('step2'); hide('step3')
+  show(`step${n}`)
+
+  // dots
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById(`dot${i}`)
+    dot.className = 'step-dot ' + (i < n ? 'done' : i === n ? 'active' : 'inactive')
+  }
+  // lines
+  if (document.getElementById('line12'))
+    document.getElementById('line12').className = 'step-line' + (n > 1 ? ' done' : '')
+  if (document.getElementById('line23'))
+    document.getElementById('line23').className = 'step-line' + (n > 2 ? ' done' : '')
 }
 
-function formatDateFr(str) {
-  // "YYYY-MM-DD" → "Lundi 7 juillet 2026"
-  const d = new Date(str + 'T12:00:00Z')
-  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function show(id) { document.getElementById(id)?.classList.remove('hidden') }
+function hide(id) { document.getElementById(id)?.classList.add('hidden') }
+
+function showError(msg, title = 'Erreur') {
+  hide('loading-section'); hide('main-section')
+  document.getElementById('error-title').textContent = title
+  document.getElementById('error-msg').textContent   = msg
+  show('error-section')
 }
 
-function escHtml(str) {
-  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+function setLoading(on) {
+  document.getElementById('btn-submit-label').classList.toggle('hidden', on)
+  document.getElementById('btn-submit-loading').classList.toggle('hidden', !on)
+  document.getElementById('btn-submit').disabled = on
+}
+
+function toDateStr(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0')
+}
+
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 </script>
-<script src="/static/js/pwa.js"></script>
 </body>
 </html>

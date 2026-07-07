@@ -22,6 +22,8 @@ import {
   getBoutiqueIdBySlug,
   getCategoriesPubliques,
   getServicesPublics,
+  getDisponibilites,
+  createRdvPublic,
 } from '../services/publicService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
