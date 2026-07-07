@@ -1,6 +1,7 @@
 /**
  * tests/clientService.test.ts
  * Sprint 2.30 — Couverture clientService.ts
+ * Sprint 2.41-D — +10 tests RGPD exportClientRgpd / purgeClient (C08/C09/Q07/Q08)
  *
  * Fonctions testées :
  *   listClients           (7 tests)
@@ -13,8 +14,10 @@
  *   importClients         (6 tests)
  *   getClientEmailPrenom  (3 tests)
  *   countTicketsByClient  (2 tests)
+ *   exportClientRgpd      (5 tests)
+ *   purgeClient           (5 tests)
  *
- * Total : 38 tests
+ * Total : 48 tests
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -30,6 +33,8 @@ import {
   importClients,
   getClientEmailPrenom,
   countTicketsByClient,
+  exportClientRgpd,
+  purgeClient,
 } from '../src/services/clientService'
 
 // ─── SQL normalisés ───────────────────────────────────────────────────────────
@@ -67,6 +72,24 @@ const SQL_GET_EMAIL_PRENOM = `SELECT email, prenom FROM clients WHERE id = ? LIM
 
 // countTicketsByClient
 const SQL_COUNT_TICKETS = `SELECT COUNT(*) as cnt FROM tickets WHERE client_id = ? AND actif = 1`
+
+// ─── SQL RGPD ─────────────────────────────────────────────────────────────────
+
+const SQL_RGPD_TICKETS = `SELECT id, numero, statut, description_panne, diagnostic, appareil_marque, appareil_modele, imei, prix_estime, prix_final, date_reception, date_promesse, created_at, updated_at, archived_at FROM tickets WHERE client_id = ? AND actif = 1 ORDER BY created_at DESC`
+
+const SQL_RGPD_FACTURES = `SELECT f.id, f.numero, f.statut, f.total_ht, f.total_tva, f.total_ttc, f.issued_at, f.created_at FROM factures f WHERE f.client_id = ? ORDER BY f.created_at DESC`
+
+const SQL_RGPD_RDV = `SELECT id, type_rdv AS type, statut, debut, fin, description, created_at FROM rendez_vous WHERE client_id = ? AND actif = 1 ORDER BY debut DESC`
+
+const SQL_RGPD_APPAREILS = `SELECT id, marque, modele, imei, numero_serie, couleur, notes, created_at FROM appareils_client WHERE client_id = ? ORDER BY created_at DESC`
+
+const SQL_PURGE_CHECK = `SELECT id, prenom, nom, email, actif FROM clients WHERE id = ?`
+
+const SQL_PURGE_UPDATE = `UPDATE clients SET prenom = 'Anonymisé', nom = ?, email = NULL, telephone = NULL, adresse = NULL, code_postal = NULL, ville = NULL, notes = NULL, actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+
+const SQL_PURGE_APPAREILS = `UPDATE appareils_client SET imei = NULL, numero_serie = NULL, notes = NULL WHERE client_id = ?`
+
+const SQL_AUDIT = `INSERT INTO audit_logs (boutique_id, user_id, action, entite_type, entite_id, donnees_avant, donnees_apres, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -593,5 +616,139 @@ describe('countTicketsByClient', () => {
     const result = await countTicketsByClient(db as any, 10)
 
     expect(result).toBe(0)
+  })
+})
+
+// ─── exportClientRgpd ────────────────────────────────────────────────────────
+
+describe('exportClientRgpd', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => { db = createMockD1() })
+
+  it('retourne null si le client est introuvable', async () => {
+    db.__setResponse(SQL_GET_CLIENT, null)
+
+    const result = await exportClientRgpd(db as any, 999)
+
+    expect(result).toBeNull()
+  })
+
+  it('retourne la structure complète avec export_date et rgpd_base', async () => {
+    db.__setResponse(SQL_GET_CLIENT, CLIENT_ROW)
+    db.__setListResponse(SQL_RGPD_TICKETS, [])
+    db.__setListResponse(SQL_RGPD_FACTURES, [])
+    db.__setListResponse(SQL_RGPD_RDV, [])
+    db.__setListResponse(SQL_RGPD_APPAREILS, [])
+
+    const result = await exportClientRgpd(db as any, 10) as any
+
+    expect(result).not.toBeNull()
+    expect(result).toHaveProperty('export_date')
+    expect(result).toHaveProperty('rgpd_base')
+    expect(result.rgpd_base).toContain('Art. 15')
+  })
+
+  it('inclut les données personnelles du client (sans password_hash)', async () => {
+    db.__setResponse(SQL_GET_CLIENT, CLIENT_ROW)
+    db.__setListResponse(SQL_RGPD_TICKETS, [])
+    db.__setListResponse(SQL_RGPD_FACTURES, [])
+    db.__setListResponse(SQL_RGPD_RDV, [])
+    db.__setListResponse(SQL_RGPD_APPAREILS, [])
+
+    const result = await exportClientRgpd(db as any, 10) as any
+
+    expect(result.client.prenom).toBe('Alice')
+    expect(result.client.email).toBe('alice@example.com')
+    expect(result.client).not.toHaveProperty('password_hash')
+    expect(result.client).not.toHaveProperty('boutique_nom')
+  })
+
+  it('inclut les tableaux tickets, factures, rendez_vous, appareils', async () => {
+    const TICKET = { id: 1, numero: 'TKT-001', statut: 'livre' }
+    db.__setResponse(SQL_GET_CLIENT, CLIENT_ROW)
+    db.__setListResponse(SQL_RGPD_TICKETS, [TICKET])
+    db.__setListResponse(SQL_RGPD_FACTURES, [])
+    db.__setListResponse(SQL_RGPD_RDV, [])
+    db.__setListResponse(SQL_RGPD_APPAREILS, [])
+
+    const result = await exportClientRgpd(db as any, 10) as any
+
+    expect(Array.isArray(result.tickets)).toBe(true)
+    expect(result.tickets).toHaveLength(1)
+    expect(result.tickets[0].numero).toBe('TKT-001')
+    expect(Array.isArray(result.factures)).toBe(true)
+    expect(Array.isArray(result.rendez_vous)).toBe(true)
+    expect(Array.isArray(result.appareils)).toBe(true)
+  })
+
+  it('transmet clientId aux 4 requêtes SQL (Promise.all)', async () => {
+    db.__setResponse(SQL_GET_CLIENT, CLIENT_ROW)
+    db.__setListResponse(SQL_RGPD_TICKETS, [])
+    db.__setListResponse(SQL_RGPD_FACTURES, [])
+    db.__setListResponse(SQL_RGPD_RDV, [])
+    db.__setListResponse(SQL_RGPD_APPAREILS, [])
+
+    await exportClientRgpd(db as any, 42)
+
+    const calls = db.__getCalls()
+    const sqls  = [SQL_RGPD_TICKETS, SQL_RGPD_FACTURES, SQL_RGPD_RDV, SQL_RGPD_APPAREILS]
+    for (const sql of sqls) {
+      const call = calls.find(c => c.sql === sql)
+      expect(call).toBeDefined()
+      expect(call!.params[0]).toBe(42)
+    }
+  })
+})
+
+// ─── purgeClient ─────────────────────────────────────────────────────────────
+
+describe('purgeClient', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => { db = createMockD1() })
+
+  const CLIENT_ACTIF = { id: 10, prenom: 'Alice', nom: 'Dupont', email: 'alice@test.fr', actif: 1 }
+
+  it('lève une erreur si le client est introuvable', async () => {
+    db.__setResponse(SQL_PURGE_CHECK, null)
+
+    await expect(purgeClient(db as any, 999, 1)).rejects.toThrow('introuvable')
+  })
+
+  it('lève une erreur si le client est déjà supprimé (actif=0)', async () => {
+    db.__setResponse(SQL_PURGE_CHECK, { ...CLIENT_ACTIF, actif: 0 })
+
+    await expect(purgeClient(db as any, 10, 1)).rejects.toThrow('supprimé')
+  })
+
+  it('lève une erreur si le client est déjà anonymisé', async () => {
+    db.__setResponse(SQL_PURGE_CHECK, { ...CLIENT_ACTIF, prenom: 'Anonymisé' })
+
+    await expect(purgeClient(db as any, 10, 1)).rejects.toThrow('anonymisé')
+  })
+
+  it('exécute UPDATE clients avec prenom=Anonymisé et email=NULL', async () => {
+    db.__setResponse(SQL_PURGE_CHECK, CLIENT_ACTIF)
+
+    await purgeClient(db as any, 10, 1)
+
+    const calls = db.__getCalls()
+    const updateCall = calls.find(c => c.sql === SQL_PURGE_UPDATE)
+    expect(updateCall).toBeDefined()
+    // params : [anon='RGPD-10', clientId=10]
+    expect(updateCall!.params[0]).toBe('RGPD-10')
+    expect(updateCall!.params[1]).toBe(10)
+  })
+
+  it('anonymise aussi les appareils liés (IMEI = données personnelles)', async () => {
+    db.__setResponse(SQL_PURGE_CHECK, CLIENT_ACTIF)
+
+    await purgeClient(db as any, 10, 1)
+
+    const calls = db.__getCalls()
+    const appCall = calls.find(c => c.sql === SQL_PURGE_APPAREILS)
+    expect(appCall).toBeDefined()
+    expect(appCall!.params[0]).toBe(10)
   })
 })

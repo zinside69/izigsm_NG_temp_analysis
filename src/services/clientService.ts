@@ -19,6 +19,8 @@
  *   getClientEmailPrenom(db, clientId)           — Email + prénom pour hooks email (léger)
  */
 
+import { auditLog } from '../lib/db'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ClientRow {
