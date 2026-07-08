@@ -1,0 +1,55 @@
+# iziGSM — robots.txt
+# Environnement de pré-production — NE PAS INDEXER
+
+User-agent: *
+Disallow: /
+
+# Blocage explicite des crawlers majeurs
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+# Blocage des crawlers LLM (OpenAI, Anthropic, Meta, Apple, etc.)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /

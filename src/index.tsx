@@ -146,6 +146,66 @@ app.route('/api/boutiques',  boutiquesRoutes)
 app.route('/api/reconditionnement', reconditionnementRoutes)  // ordres de reconditionnement
 app.route('/api/bons-achat',        bonsAchatRoutes)          // bons d'achat geste commercial
 
+// ─── Fichiers statiques racine (servis avant le fallback HTML) ────────────────
+const ROBOTS_TXT = `# iziGSM — robots.txt
+# Environnement de pré-production — NE PAS INDEXER
+
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: BaiduspIder
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+`
+
+app.get('/robots.txt', (c) =>
+  c.text(ROBOTS_TXT, 200, { 'Content-Type': 'text/plain; charset=utf-8' })
+)
+
 // ─── 404 fallback API ─────────────────────────────────────────────────────────
 app.notFound((c) => {
   if (c.req.path.startsWith('/api/')) {
