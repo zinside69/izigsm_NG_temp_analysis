@@ -2,7 +2,7 @@
   "name": "iziGSM — Gestion atelier réparation",
   "short_name": "iziGSM",
   "description": "Logiciel de gestion pour ateliers de réparation smartphone & informatique. Tickets, facturation NF525, caisse POS, stock, SAV.",
-  "start_url": "/dashboard.html",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
@@ -83,21 +83,21 @@
       "name": "Nouveau ticket",
       "short_name": "Ticket",
       "description": "Créer une nouvelle prise en charge",
-      "url": "/tickets.html",
+      "url": "/tickets",
       "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
     },
     {
       "name": "Caisse POS",
       "short_name": "Caisse",
       "description": "Ouvrir la caisse",
-      "url": "/caisse.html",
+      "url": "/caisse",
       "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
     },
     {
       "name": "Agenda",
       "short_name": "Agenda",
       "description": "Voir les rendez-vous",
-      "url": "/agenda.html",
+      "url": "/agenda",
       "icons": [{ "src": "/static/img/icon-96.svg", "sizes": "96x96" }]
     }
   ],

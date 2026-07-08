@@ -200,7 +200,7 @@ function verifyOtp() {
     ].map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('');
   }
   const verifyBtn = document.getElementById('btn-go-verify');
-  if (verifyBtn) verifyBtn.href = '/verify-email.html?email=' + encodeURIComponent(user.email);
+  if (verifyBtn) verifyBtn.href = '/verify-email?email=' + encodeURIComponent(user.email);
 }
 
 // ======================== SAISIE MANUELLE ========================

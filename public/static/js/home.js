@@ -216,7 +216,7 @@ function hideBanner(banner) {
  */
 function goToRegister(source) {
   const src = source || 'homepage';
-  window.location.href = '/register.html?utm_source=' + src;
+  window.location.href = '/register?utm_source=' + src;
 }
 
 /**

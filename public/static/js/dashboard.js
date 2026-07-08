@@ -171,15 +171,15 @@ window.DashApp = (() => {
     const chips = []
 
     if (d.stock_bas > 0)
-      chips.push({ cls:'error', icon:'📦', text:`${d.stock_bas} produit${d.stock_bas>1?'s':''} en rupture`, href:'stock.html' })
+      chips.push({ cls:'error', icon:'📦', text:`${d.stock_bas} produit${d.stock_bas>1?'s':''} en rupture`, href:'stock' })
     if (d.factures_en_retard > 0)
-      chips.push({ cls:'error', icon:'💶', text:`${d.factures_en_retard} facture${d.factures_en_retard>1?'s':''} en retard`, href:'factures.html' })
+      chips.push({ cls:'error', icon:'💶', text:`${d.factures_en_retard} facture${d.factures_en_retard>1?'s':''} en retard`, href:'factures' })
     if (d.garanties_expirent > 0)
-      chips.push({ cls:'warn', icon:'🛡', text:`${d.garanties_expirent} garantie${d.garanties_expirent>1?'s':''} expirent bientôt`, href:'sav.html' })
+      chips.push({ cls:'warn', icon:'🛡', text:`${d.garanties_expirent} garantie${d.garanties_expirent>1?'s':''} expirent bientôt`, href:'sav' })
     if (d.devis_en_attente > 0)
-      chips.push({ cls:'info', icon:'📋', text:`${d.devis_en_attente} devis en attente`, href:'factures.html' })
+      chips.push({ cls:'info', icon:'📋', text:`${d.devis_en_attente} devis en attente`, href:'factures' })
     if (d.rdv_today > 0)
-      chips.push({ cls:'info', icon:'📅', text:`${d.rdv_today} RDV aujourd'hui`, href:'agenda.html' })
+      chips.push({ cls:'info', icon:'📅', text:`${d.rdv_today} RDV aujourd'hui`, href:'agenda' })
 
     if (!chips.length) {
       strip.innerHTML = '<div class="alert-chip none">✅ Tout est en ordre</div>'
@@ -394,10 +394,10 @@ window.DashApp = (() => {
         return
       }
       const typeMap = {
-        ticket:  { icon:'🔧', bg:'#ede9ff', href:'tickets.html'  },
-        facture: { icon:'💶', bg:'#e0f2fe', href:'factures.html' },
-        rachat:  { icon:'♻️', bg:'#ecfdf3', href:'rachats.html'  },
-        rdv:     { icon:'📅', bg:'#fef9c3', href:'agenda.html'   },
+        ticket:  { icon:'🔧', bg:'#ede9ff', href:'tickets'  },
+        facture: { icon:'💶', bg:'#e0f2fe', href:'factures' },
+        rachat:  { icon:'♻️', bg:'#ecfdf3', href:'rachats'  },
+        rdv:     { icon:'📅', bg:'#fef9c3', href:'agenda'   },
       }
       el.innerHTML = r.data.data.map(item => {
         const t = typeMap[item.type] || { icon:'📌', bg:'#f3f4f6', href:'#' }

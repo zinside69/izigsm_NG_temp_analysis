@@ -17,16 +17,16 @@ const CACHE_API      = `${CACHE_VERSION}-api`
 
 // ─── App Shell : fichiers mis en cache à l'installation ──────────────────────
 const APP_SHELL = [
-  '/dashboard.html',
-  '/tickets.html',
-  '/clients.html',
-  '/factures.html',
-  '/caisse.html',
-  '/agenda.html',
-  '/stock.html',
-  '/sav.html',
-  '/settings.html',
-  '/login.html',
+  '/dashboard',
+  '/tickets',
+  '/clients',
+  '/factures',
+  '/caisse',
+  '/agenda',
+  '/stock',
+  '/sav',
+  '/settings',
+  '/login',
   '/static/css/main.css',
   '/static/css/print.css',
   '/static/js/app.js',
@@ -154,7 +154,7 @@ async function cacheFirst(request) {
     return response
   } catch {
     // Offline et pas en cache → retourner la page login comme fallback
-    const fallback = await caches.match('/login.html')
+    const fallback = await caches.match('/login')
     return fallback || new Response('Hors ligne', { status: 503 })
   }
 }

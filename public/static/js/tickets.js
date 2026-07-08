@@ -482,7 +482,7 @@ async function deleteTicket(id) {
 function createDevisFromTicket() {
   if (currentTicketId) {
     localStorage.setItem('izigsm_new_devis_from_ticket', String(currentTicketId));
-    window.location.href = 'devis.html';
+    window.location.href = 'devis';
   }
 }
 

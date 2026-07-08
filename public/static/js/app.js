@@ -27,26 +27,26 @@ function buildSidebar(activePage) {
   const company = session.company || 'Mon Atelier';
 
   const pages = [
-    { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard.html', section:'principal', badge: null },
-    { id:'tickets', icon:'🔧', label:'Prises en charge', href:'tickets.html', section:'principal', badge: getTicketBadge() },
-    { id:'kanban', icon:'📊', label:'Kanban', href:'kanban.html', section:'principal', badge: null },
-    { id:'stats', icon:'📈', label:'Statistiques', href:'stats.html', section:'principal', badge: null },
-    { id:'sav', icon:'🛡️', label:'SAV & Garanties', href:'sav.html', section:'principal', badge: null },
-    { id:'devis', icon:'📋', label:'Devis', href:'devis.html', section:'principal', badge: null },
-    { id:'factures', icon:'💶', label:'Factures', href:'factures.html', section:'principal', badge: null },
-    { id:'caisse', icon:'🏧', label:'Caisse POS', href:'caisse.html', section:'principal', badge: null },
-    { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar.html', section:'subvention', badge: getQRBadge() },
-    { id:'stock', icon:'📦', label:'Stock', href:'stock.html', section:'gestion', badge: getStockAlert() },
-    { id:'services', icon:'🛠', label:'Catalogue services', href:'services.html', section:'gestion', badge: null },
-    { id:'fournisseurs', icon:'🚚', label:'Fournisseurs', href:'fournisseurs.html', section:'gestion', badge: null },
-    { id:'agenda', icon:'📅', label:'Agenda', href:'agenda.html', section:'gestion', badge: null },
-    { id:'rachats',            icon:'📒', label:'Livre de police',      href:'rachats.html',            section:'gestion', badge: null },
-    { id:'reconditionnement',  icon:'🔄', label:'Reconditionnement',    href:'reconditionnement.html',  section:'gestion', badge: null },
-    { id:'clients',            icon:'👥', label:'Clients',              href:'clients.html',            section:'gestion', badge: null },
-    { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel.html', section:'gestion', badge: null },
-    { id:'notifications', icon:'✉️', label:'Notifications Email', href:'notifications.html', section:'gestion', badge: null },
-    { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings.html', section:'config', badge: null },
-    { id:'modules', icon:'🧩', label:'Modules', href:'modules.html', section:'config', badge: null },
+    { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard', section:'principal', badge: null },
+    { id:'tickets', icon:'🔧', label:'Prises en charge', href:'tickets', section:'principal', badge: getTicketBadge() },
+    { id:'kanban', icon:'📊', label:'Kanban', href:'kanban', section:'principal', badge: null },
+    { id:'stats', icon:'📈', label:'Statistiques', href:'stats', section:'principal', badge: null },
+    { id:'sav', icon:'🛡️', label:'SAV & Garanties', href:'sav', section:'principal', badge: null },
+    { id:'devis', icon:'📋', label:'Devis', href:'devis', section:'principal', badge: null },
+    { id:'factures', icon:'💶', label:'Factures', href:'factures', section:'principal', badge: null },
+    { id:'caisse', icon:'🏧', label:'Caisse POS', href:'caisse', section:'principal', badge: null },
+    { id:'qualirepar', icon:'🌿', label:'QualiRépar', href:'qualirepar', section:'subvention', badge: getQRBadge() },
+    { id:'stock', icon:'📦', label:'Stock', href:'stock', section:'gestion', badge: getStockAlert() },
+    { id:'services', icon:'🛠', label:'Catalogue services', href:'services', section:'gestion', badge: null },
+    { id:'fournisseurs', icon:'🚚', label:'Fournisseurs', href:'fournisseurs', section:'gestion', badge: null },
+    { id:'agenda', icon:'📅', label:'Agenda', href:'agenda', section:'gestion', badge: null },
+    { id:'rachats',            icon:'📒', label:'Livre de police',      href:'rachats',            section:'gestion', badge: null },
+    { id:'reconditionnement',  icon:'🔄', label:'Reconditionnement',    href:'reconditionnement',  section:'gestion', badge: null },
+    { id:'clients',            icon:'👥', label:'Clients',              href:'clients',            section:'gestion', badge: null },
+    { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel', section:'gestion', badge: null },
+    { id:'notifications', icon:'✉️', label:'Notifications Email', href:'notifications', section:'gestion', badge: null },
+    { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings', section:'config', badge: null },
+    { id:'modules', icon:'🧩', label:'Modules', href:'modules', section:'config', badge: null },
   ];
 
   const sections = {
@@ -79,7 +79,7 @@ function buildSidebar(activePage) {
       </div>
       <div class="sidebar-nav">${navHtml}</div>
       <div class="sidebar-footer">
-        <div class="sidebar-user" onclick="window.location.href='settings.html'">
+        <div class="sidebar-user" onclick="window.location.href='/settings'">
           <div class="user-avatar">${initials}</div>
           <div class="user-info">
             <div class="u-name">${session.name || 'Utilisateur'}</div>

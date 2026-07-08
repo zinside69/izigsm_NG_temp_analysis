@@ -30,7 +30,7 @@ const KanbanApp = (() => {
   async function init() {
     const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null');
     if (!user) { setTimeout(init, 100); return; }
-    if (!user) { window.location.href = '/index.html'; return; }
+    if (!user) { window.location.href = '/index'; return; }
     _boutiqueId = user.boutique_id;
     await refresh();
   }
@@ -322,7 +322,7 @@ const KanbanApp = (() => {
 
           <!-- Actions -->
           <div class="flex gap-3 pt-2 border-t">
-            <a href="/tickets.html?id=${t.id}" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+            <a href="/tickets?id=${t.id}" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors">
               <i class="fas fa-edit mr-1"></i>Éditer
             </a>
             <button onclick="KanbanApp.closeModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium transition-colors">
