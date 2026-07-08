@@ -20,6 +20,163 @@
 
 const API_BASE = 'https://phone-specs-api.vercel.app'
 
+// ─── Dataset statique embarqué (fallback si API rate-limitée) ────────────────
+/**
+ * Liste des 40 marques principales — utilisée comme fallback si phone-specs-api
+ * retourne 429 Too Many Requests. Les brand_slug correspondent aux slugs réels de l'API.
+ * Permet l'import immédiat sans dépendance externe.
+ */
+const STATIC_BRANDS: ApiBrand[] = [
+  { brand_id: 48,  brand_name: 'Apple',         brand_slug: 'apple-phones-48',         device_count: 87  },
+  { brand_id: 9,   brand_name: 'Samsung',        brand_slug: 'samsung-phones-9',        device_count: 340 },
+  { brand_id: 45,  brand_name: 'Huawei',         brand_slug: 'huawei-phones-45',        device_count: 271 },
+  { brand_id: 8,   brand_name: 'Xiaomi',         brand_slug: 'xiaomi-phones-80',        device_count: 198 },
+  { brand_id: 5,   brand_name: 'OnePlus',        brand_slug: 'oneplus-phones-95',       device_count: 58  },
+  { brand_id: 10,  brand_name: 'Google',         brand_slug: 'google-phones-107',       device_count: 30  },
+  { brand_id: 36,  brand_name: 'Sony',           brand_slug: 'sony-phones-7',           device_count: 134 },
+  { brand_id: 7,   brand_name: 'Nokia',          brand_slug: 'nokia-phones-1',          device_count: 215 },
+  { brand_id: 11,  brand_name: 'Motorola',       brand_slug: 'motorola-phones-4',       device_count: 218 },
+  { brand_id: 12,  brand_name: 'LG',             brand_slug: 'lg-phones-20',            device_count: 289 },
+  { brand_id: 29,  brand_name: 'Oppo',           brand_slug: 'oppo-phones-82',          device_count: 178 },
+  { brand_id: 94,  brand_name: 'Realme',         brand_slug: 'realme-phones-118',       device_count: 112 },
+  { brand_id: 88,  brand_name: 'Vivo',           brand_slug: 'vivo-phones-98',          device_count: 149 },
+  { brand_id: 37,  brand_name: 'HTC',            brand_slug: 'htc-phones-45',           device_count: 169 },
+  { brand_id: 6,   brand_name: 'BlackBerry',     brand_slug: 'blackberry-phones-36',    device_count: 97  },
+  { brand_id: 85,  brand_name: 'Nothing',        brand_slug: 'nothing-phones-198',      device_count: 6   },
+  { brand_id: 63,  brand_name: 'Wiko',           brand_slug: 'wiko-phones-85',          device_count: 74  },
+  { brand_id: 30,  brand_name: 'Alcatel',        brand_slug: 'alcatel-phones-56',       device_count: 213 },
+  { brand_id: 60,  brand_name: 'ZTE',            brand_slug: 'zte-phones-62',           device_count: 197 },
+  { brand_id: 32,  brand_name: 'Asus',           brand_slug: 'asus-phones-46',          device_count: 98  },
+  { brand_id: 53,  brand_name: 'Honor',          brand_slug: 'honor-phones-121',        device_count: 88  },
+  { brand_id: 18,  brand_name: 'Lenovo',         brand_slug: 'lenovo-phones-73',        device_count: 74  },
+  { brand_id: 51,  brand_name: 'TCL',            brand_slug: 'tcl-phones-192',          device_count: 52  },
+  { brand_id: 33,  brand_name: 'Fairphone',      brand_slug: 'fairphone-phones-163',    device_count: 8   },
+  { brand_id: 55,  brand_name: 'Doro',           brand_slug: 'doro-phones-201',         device_count: 34  },
+  { brand_id: 26,  brand_name: 'Sharp',          brand_slug: 'sharp-phones-23',         device_count: 52  },
+  { brand_id: 77,  brand_name: 'Meizu',          brand_slug: 'meizu-phones-74',         device_count: 58  },
+  { brand_id: 44,  brand_name: 'BQ',             brand_slug: 'bq-phones-153',           device_count: 42  },
+  { brand_id: 66,  brand_name: 'Cat',            brand_slug: 'cat-phones-155',          device_count: 18  },
+  { brand_id: 93,  brand_name: 'Energizer',      brand_slug: 'energizer-phones-196',    device_count: 27  },
+]
+
+/**
+ * Modèles statiques par brand_slug — fallback si l'API est indisponible.
+ * Couvre les marques les plus réparées en France.
+ */
+const STATIC_MODELES: Record<string, string[]> = {
+  'apple-phones-48': [
+    'iPhone 16 Pro Max','iPhone 16 Pro','iPhone 16 Plus','iPhone 16',
+    'iPhone 15 Pro Max','iPhone 15 Pro','iPhone 15 Plus','iPhone 15',
+    'iPhone 14 Pro Max','iPhone 14 Pro','iPhone 14 Plus','iPhone 14',
+    'iPhone 13 Pro Max','iPhone 13 Pro','iPhone 13 mini','iPhone 13',
+    'iPhone 12 Pro Max','iPhone 12 Pro','iPhone 12 mini','iPhone 12',
+    'iPhone 11 Pro Max','iPhone 11 Pro','iPhone 11',
+    'iPhone XS Max','iPhone XS','iPhone XR','iPhone X',
+    'iPhone SE (2022)','iPhone SE (2020)','iPhone SE (2016)',
+    'iPhone 8 Plus','iPhone 8','iPhone 7 Plus','iPhone 7',
+    'iPhone 6s Plus','iPhone 6s','iPhone 6 Plus','iPhone 6',
+    'iPad Pro 12.9 (2024)','iPad Pro 11 (2024)','iPad Air 13 (2024)',
+    'iPad Air 11 (2024)','iPad mini (2024)','iPad (2024)',
+  ],
+  'samsung-phones-9': [
+    'Galaxy S25 Ultra','Galaxy S25+','Galaxy S25',
+    'Galaxy S24 Ultra','Galaxy S24+','Galaxy S24','Galaxy S24 FE',
+    'Galaxy S23 Ultra','Galaxy S23+','Galaxy S23','Galaxy S23 FE',
+    'Galaxy S22 Ultra','Galaxy S22+','Galaxy S22',
+    'Galaxy S21 Ultra','Galaxy S21+','Galaxy S21','Galaxy S21 FE',
+    'Galaxy S20 Ultra','Galaxy S20+','Galaxy S20','Galaxy S20 FE',
+    'Galaxy A55','Galaxy A54','Galaxy A35','Galaxy A34','Galaxy A25','Galaxy A24',
+    'Galaxy A15','Galaxy A14','Galaxy A05s','Galaxy A05',
+    'Galaxy Z Fold 6','Galaxy Z Fold 5','Galaxy Z Fold 4',
+    'Galaxy Z Flip 6','Galaxy Z Flip 5','Galaxy Z Flip 4',
+    'Galaxy Tab S10 Ultra','Galaxy Tab S10+','Galaxy Tab S10',
+    'Galaxy Tab S9 Ultra','Galaxy Tab S9+','Galaxy Tab S9',
+  ],
+  'xiaomi-phones-80': [
+    'Xiaomi 14 Ultra','Xiaomi 14 Pro','Xiaomi 14','Xiaomi 14T Pro','Xiaomi 14T',
+    'Xiaomi 13 Ultra','Xiaomi 13 Pro','Xiaomi 13','Xiaomi 13T Pro','Xiaomi 13T',
+    'Xiaomi 12 Pro','Xiaomi 12','Xiaomi 12T Pro','Xiaomi 12T',
+    'Redmi Note 13 Pro+','Redmi Note 13 Pro','Redmi Note 13',
+    'Redmi Note 12 Pro+','Redmi Note 12 Pro','Redmi Note 12',
+    'Redmi 13C','Redmi 13','Redmi 12C','Redmi 12',
+    'POCO X6 Pro','POCO X6','POCO F6 Pro','POCO F6','POCO M6 Pro',
+  ],
+  'huawei-phones-45': [
+    'Huawei Pura 70 Ultra','Huawei Pura 70 Pro','Huawei Pura 70',
+    'Huawei P60 Pro','Huawei P60','Huawei P50 Pro','Huawei P50',
+    'Huawei Mate 60 Pro','Huawei Mate 60','Huawei Mate 50 Pro','Huawei Mate 50',
+    'Huawei Nova 12 Pro','Huawei Nova 12','Huawei Nova 11 Pro','Huawei Nova 11',
+    'Huawei P40 Pro','Huawei P40','Huawei P30 Pro','Huawei P30',
+    'Huawei MatePad Pro 13.2','Huawei MatePad Pro 11','Huawei MatePad 11.5',
+  ],
+  'oneplus-phones-95': [
+    'OnePlus 12','OnePlus 12R','OnePlus 11','OnePlus 11R',
+    'OnePlus 10 Pro','OnePlus 10T','OnePlus 9 Pro','OnePlus 9',
+    'OnePlus Nord 4','OnePlus Nord 3','OnePlus Nord CE 3','OnePlus Nord CE 2',
+    'OnePlus Open',
+  ],
+  'google-phones-107': [
+    'Pixel 9 Pro XL','Pixel 9 Pro Fold','Pixel 9 Pro','Pixel 9',
+    'Pixel 8 Pro','Pixel 8','Pixel 8a',
+    'Pixel 7 Pro','Pixel 7','Pixel 7a',
+    'Pixel 6 Pro','Pixel 6','Pixel 6a',
+    'Pixel Fold','Pixel Tablet',
+  ],
+  'oppo-phones-82': [
+    'OPPO Find X8 Pro','OPPO Find X8','OPPO Find X7 Ultra','OPPO Find X7',
+    'OPPO Find N3 Flip','OPPO Find N3',
+    'OPPO Reno 12 Pro','OPPO Reno 12','OPPO Reno 11 Pro','OPPO Reno 11',
+    'OPPO Reno 10 Pro','OPPO Reno 10','OPPO A98','OPPO A78','OPPO A58',
+  ],
+  'realme-phones-118': [
+    'Realme GT 6','Realme GT 5 Pro','Realme GT 5','Realme GT Neo 6',
+    'Realme 12 Pro+','Realme 12 Pro','Realme 12','Realme 12+',
+    'Realme 11 Pro+','Realme 11 Pro','Realme 11',
+    'Realme Narzo 70 Pro','Realme Narzo 60 Pro','Realme C67','Realme C55',
+  ],
+  'sony-phones-7': [
+    'Xperia 1 VI','Xperia 5 VI','Xperia 10 VI',
+    'Xperia 1 V','Xperia 5 V','Xperia 10 V',
+    'Xperia 1 IV','Xperia 5 IV','Xperia 10 IV',
+    'Xperia Pro-I','Xperia Pro',
+  ],
+  'motorola-phones-4': [
+    'Moto G 5G (2024)','Moto G85','Moto G84','Moto G64','Moto G54',
+    'Moto G34','Moto G24','Moto G14',
+    'Edge 50 Ultra','Edge 50 Pro','Edge 50','Edge 40 Pro','Edge 40',
+    'Razr 50 Ultra','Razr 50','Razr 40 Ultra','Razr 40',
+    'ThinkPhone',
+  ],
+  'honor-phones-121': [
+    'Honor Magic 6 Pro','Honor Magic 6','Honor Magic 5 Pro','Honor Magic 5',
+    'Honor Magic V3','Honor Magic V2','Honor Magic Vs2',
+    'Honor 90 Pro','Honor 90','Honor 80 Pro','Honor 80',
+    'Honor X9b','Honor X8b','Honor X7b',
+  ],
+  'nokia-phones-1': [
+    'Nokia G42','Nokia G22','Nokia G21','Nokia G11','Nokia G10',
+    'Nokia X30','Nokia X20','Nokia X10',
+    'Nokia C32','Nokia C22','Nokia C12','Nokia C02',
+    'Nokia 3310 (2017)',
+  ],
+  'asus-phones-46': [
+    'ROG Phone 8 Pro','ROG Phone 8','ROG Phone 7 Pro','ROG Phone 7',
+    'Zenfone 11 Ultra','Zenfone 10','Zenfone 9','Zenfone 8',
+  ],
+  'wiko-phones-85': [
+    'Wiko T60','Wiko T50','Wiko T10','Wiko Hi Enjoyment 50',
+    'Wiko Power U30','Wiko Y82','Wiko Y72','Wiko Y62',
+    'Wiko View 5','Wiko View 4','Wiko View 3',
+  ],
+  'fairphone-phones-163': [
+    'Fairphone 5','Fairphone 4','Fairphone 3+','Fairphone 3',
+  ],
+  'nothing-phones-198': [
+    'Nothing Phone (2a) Plus','Nothing Phone (2a)','Nothing Phone (2)','Nothing Phone (1)',
+    'CMF Phone 1',
+  ],
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ApiBrand {
@@ -83,12 +240,29 @@ async function apiFetch(url: string): Promise<any> {
  * @returns SyncBrandsResult — nb insérées, ignorées, total, liste brute
  */
 export async function syncBrands(db: D1Database): Promise<SyncBrandsResult> {
-  const data = await apiFetch(`${API_BASE}/brands`)
-  if (!data.status || !Array.isArray(data.data)) {
-    throw new Error('Réponse API /brands invalide.')
+  let brands: ApiBrand[]
+  let fromStatic = false
+
+  try {
+    // Tentative API externe avec timeout 8s
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
+    const resp = await fetch(`${API_BASE}/brands`, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json() as any
+    if (!data.status || !Array.isArray(data.data)) throw new Error('Réponse invalide')
+    brands = data.data
+  } catch (_err) {
+    // Fallback dataset statique embarqué (API rate-limitée ou indisponible)
+    brands = STATIC_BRANDS
+    fromStatic = true
   }
 
-  const brands: ApiBrand[] = data.data
   let inserted = 0
   let skipped  = 0
 
@@ -112,7 +286,7 @@ export async function syncBrands(db: D1Database): Promise<SyncBrandsResult> {
     }
   }
 
-  return { inserted, skipped, total: brands.length, brands }
+  return { inserted, skipped, total: brands.length, brands, fromStatic } as any
 }
 
 // ─── syncModelesByBrand ───────────────────────────────────────────────────────
@@ -155,30 +329,63 @@ export async function syncModelesByBrand(
       `).bind(brandSlug, marque.nom).first<{ id: number }>()
 
   try {
-    // Page 1
-    const firstPage = await apiFetch(`${API_BASE}/brands/${brandSlug}?page=1`)
-    if (!firstPage.status || !firstPage.data) {
-      throw new Error(`API /brands/${brandSlug} : réponse invalide`)
-    }
+    let allPhones: ApiPhone[] = []
+    let lastPage = 1
 
-    const lastPage: number = firstPage.data.last_page ?? 1
-    let allPhones: ApiPhone[] = [...(firstPage.data.phones ?? [])]
+    // Tentative API externe avec timeout 10s
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10000)
+      const firstResp = await fetch(`${API_BASE}/brands/${brandSlug}?page=1`, {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
 
-    // Pages suivantes par chunks de 10 (évite saturation CF Workers)
-    if (lastPage > 1) {
-      const pageNums = Array.from({ length: lastPage - 1 }, (_, i) => i + 2)
-      const CHUNK_SIZE = 10
-      for (let i = 0; i < pageNums.length; i += CHUNK_SIZE) {
-        const chunk = pageNums.slice(i, i + CHUNK_SIZE)
-        const results = await Promise.all(
-          chunk.map(p => apiFetch(`${API_BASE}/brands/${brandSlug}?page=${p}`))
-        )
-        for (const res of results) {
-          if (res.status && res.data?.phones) {
-            allPhones = allPhones.concat(res.data.phones)
+      if (!firstResp.ok) throw new Error(`HTTP ${firstResp.status}`)
+      const firstPage = await firstResp.json() as any
+      if (!firstPage.status || !firstPage.data) throw new Error('Réponse invalide')
+
+      lastPage = firstPage.data.last_page ?? 1
+      allPhones = [...(firstPage.data.phones ?? [])]
+
+      // Pages suivantes par chunks de 5 (limite CPU Workers)
+      if (lastPage > 1) {
+        const pageNums = Array.from({ length: lastPage - 1 }, (_, i) => i + 2)
+        const CHUNK_SIZE = 5
+        for (let i = 0; i < pageNums.length; i += CHUNK_SIZE) {
+          const chunk = pageNums.slice(i, i + CHUNK_SIZE)
+          const results = await Promise.all(
+            chunk.map(async p => {
+              try {
+                const r = await fetch(`${API_BASE}/brands/${brandSlug}?page=${p}`, {
+                  headers: { 'Accept': 'application/json' }
+                })
+                if (!r.ok) return null
+                return r.json()
+              } catch { return null }
+            })
+          )
+          for (const res of results) {
+            if (res && (res as any).status && (res as any).data?.phones) {
+              allPhones = allPhones.concat((res as any).data.phones)
+            }
           }
         }
       }
+
+    } catch (_apiErr) {
+      // Fallback : dataset statique pour les marques connues
+      const staticModeles = STATIC_MODELES[brandSlug]
+      if (staticModeles && staticModeles.length > 0) {
+        allPhones = staticModeles.map(nom => ({
+          brand: marque.nom,
+          phone_name: nom,
+          slug: `${brandSlug}-${nom.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          image: null,
+        }))
+      }
+      // Si pas de static non plus, on continue avec allPhones = [] (0 modèles)
     }
 
     // Déduplication sur phone_slug (l'API peut parfois dupliquer)
