@@ -1,0 +1,32 @@
+# iziGSM — Cloudflare Pages _redirects
+# Filet de sécurité : redirige les URLs .html vers leurs équivalents sans extension
+# CF Pages fait déjà un 308 automatique, mais ce fichier force un 301 propre
+
+/login.html           /login           301
+/register.html        /register        301
+/reset-password.html  /reset-password  301
+/verify-email.html    /verify-email    301
+/dashboard.html       /dashboard       301
+/tickets.html         /tickets         301
+/clients.html         /clients         301
+/stock.html           /stock           301
+/devis.html           /devis           301
+/factures.html        /factures        301
+/settings.html        /settings        301
+/stats.html           /stats           301
+/agenda.html          /agenda          301
+/caisse.html          /caisse          301
+/kanban.html          /kanban          301
+/modules.html         /modules         301
+/personnel.html       /personnel       301
+/qualirepar.html      /qualirepar      301
+/rachats.html         /rachats         301
+/reconditionnement.html /reconditionnement 301
+/sav.html             /sav             301
+/services.html        /services        301
+/fournisseurs.html    /fournisseurs    301
+/notifications.html   /notifications   301
+/legal.html           /legal           301
+/devis-public.html    /devis-public    301
+/rdv-public.html      /rdv-public      301
+/suivi.html           /suivi           301

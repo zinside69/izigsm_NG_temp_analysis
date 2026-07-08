@@ -1,38 +1,34 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "webapp",
+  "name": "izigsm",
   "compatibility_date": "2026-04-13",
   "pages_build_output_dir": "./dist",
   "compatibility_flags": ["nodejs_compat"],
 
   // ── Cloudflare D1 (SQLite edge) ──────────────────────────────────────────
-  // Auto-provisionné par gsk-hosted-deploy sous le nom "<worker>-db"
-  // L'id est réécrit côté serveur — ne pas modifier manuellement
+  // Base créée le 2026-07-08 sur Contact@soteli.fr's Account
   "d1_databases": [
     {
       "binding":       "DB",
       "database_name": "izigsm-production",
-      "database_id":   "00000000-0000-0000-0000-000000000000"
+      "database_id":   "1e5c6e26-6b55-4b00-bf83-72ba26b6b112"
     }
-  ]
-
-  // ── KV supprimé ──────────────────────────────────────────────────────────
-  // KVNamespace non supporté par gsk-hosted-deploy (cap 1000/account partagé).
-  // Remplacé par D1AsKV : table kv_store dans D1 + wrapper createD1KV().
-  // Voir src/lib/d1kv.ts et migrations/0024_kv_store.sql
+  ],
 
   // ── R2 Storage (photos tickets) ──────────────────────────────────────────
   // Sprint 2.36 — MOD-01 : stockage binaire photos avant/après réparation.
-  // Auto-provisionné par gsk-hosted-deploy sous le nom "izigsm-photos".
-  // En dev local : --r2=PHOTOS dans l'arg wrangler pages dev (sandbox R2 simulé).
-  ,
-  "r2_buckets": [
-    {
-      "binding":     "PHOTOS",
-      "bucket_name": "izigsm-photos"
-    }
-  ]
+  // ⚠️ R2 désactivé temporairement — activer R2 dans le dashboard CF puis :
+  //    npx wrangler r2 bucket create izigsm-photos
+  //    Décommenter le bloc ci-dessous et redéployer.
+  //
+  // "r2_buckets": [
+  //   {
+  //     "binding":     "PHOTOS",
+  //     "bucket_name": "izigsm-photos"
+  //   }
+  // ]
 
-  // ── Secrets (ne jamais mettre en clair ici) ──────────────────────────────
-  // Configurer via : gsk hosted secret_put --name JWT_SECRET --value "$JWT_SECRET"
+  // ── Secrets ──────────────────────────────────────────────────────────────
+  // Configurer via : npx wrangler pages secret put JWT_SECRET --project-name izigsm
+  //                  npx wrangler pages secret put RESEND_API_KEY --project-name izigsm
 }
