@@ -6,6 +6,38 @@
 
 ---
 
+## Sprint (non numéroté) — Nav URLs propres + Catalogue fallback statique + SEO noindex
+
+**Commits** : `5fd3ddf`, `3856e4f`, `5dec0de`, `eddd3af`, `f578781`
+**Date** : 8 juillet 2026 — documenté rétroactivement
+**Version** : 2.45.0 (inchangée — pas de bump)
+
+### Contexte
+
+Batch de 5 commits postérieurs au Sprint 2.41-E, non documentés à l'origine dans TODO.md/JOURNAL. Trois axes indépendants : navigation (URLs propres), résilience du catalogue téléphones (fallback statique), SEO (désindexation).
+
+### Fichiers modifiés
+
+| Fichier | Action | Description |
+|---|---|---|
+| `public/_redirects` | ➕ créé | Redirections Cloudflare Pages — URLs sans `.html` |
+| `wrangler.jsonc` | ✏️ modifié | Config alignée sur redirections propres |
+| `public/index.html`, `kanban.html`, `legal.html`, `login.html`, `personnel.html`, `register.html`, `reset-password.html`, `verify-email.html`, `dashboard.html` | ✏️ modifié | href internes → URLs propres (sans `.html`) |
+| `public/static/js/app.js`, `dashboard.js`, `home.js`, `kanban.js`, `register.js`, `tickets.js` | ✏️ modifié | Suppression `.html` dans routes JS |
+| `public/sw.js`, `public/manifest.json` | ✏️ modifié | Cache/manifest alignés sur URLs propres |
+| `public/dashboard.html` | ✏️ modifié | Fix sidebar absente |
+| `src/services/phoneCatalogService.ts` | ✏️ modifié (+1468 lignes cumulées sur 2 commits) | `STATIC_BRANDS`/`STATIC_MODELES` — fallback dataset statique (24 marques / 6 866 modèles) si `phone-specs-api` renvoie 429 |
+| `public/*.html` (29 pages) | ✏️ modifié | `<meta name="robots" content="noindex">` |
+| `public/robots.txt` | ✏️ modifié | Disallow complet — app privée non indexable |
+
+### Résultats
+
+- Build/tests : **non revérifiés dans ce batch** — aucun commit `docs(...)` de clôture ni version bump associé
+- **Dette identifiée** : `src/services/phoneCatalogService.ts` passé à 1710 lignes, **0 test** (`tests/phoneCatalogService.test.ts` absent) — fallback statique et logique 429 non couverts par Vitest
+- Version production inchangée : 2.45.0
+
+---
+
 ## Sprint 2.41-E — D09 : Photos tickets R2 (upload avant/après)
 
 **Commit** : `feat(D09): photos tickets R2 — Sprint 2.41-E v2.45.0`  

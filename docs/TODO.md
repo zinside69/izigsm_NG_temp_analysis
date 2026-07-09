@@ -215,6 +215,19 @@
 
 ---
 
+### Sprint 2.46 (non numéroté à l'origine) ✅ — Nav URLs propres + Catalogue fallback statique + SEO noindex
+**Commits `5fd3ddf` → `f578781`** — *8 juillet 2026 — documenté rétroactivement*
+
+- [x] `public/_redirects` + `wrangler.jsonc` : URLs propres sans `.html`, redirections Cloudflare Pages
+- [x] Fix sidebar absente sur `dashboard.html`
+- [x] `phoneCatalogService.ts` : fallback dataset statique (`STATIC_BRANDS`/`STATIC_MODELES` — 24 marques / 6 866 modèles) si `phone-specs-api` répond 429
+- [x] SEO : `noindex` sur 29 pages HTML + `robots.txt` durci (app privée)
+- [ ] **Dette à traiter** : `tests/phoneCatalogService.test.ts` manquant — 0 test sur ~1500 lignes ajoutées au fallback catalogue
+- [ ] Version bump `src/index.tsx` (reste 2.45.0)
+- [ ] Entrée `docs/GAP_ANALYSIS_ENRICHI.md` si le fallback catalogue doit être tracé comme évolution MOD-15
+
+---
+
 ### Sprint 2.41-E ✅ — D09 : Photos tickets R2 (upload avant/après)
 **Modules CDC : D09 (CRITIQUE) — photos tickets** — *terminé — 7 juillet 2026*
 
@@ -628,3 +641,4 @@ gsk hosted secret_put TWILIO_AUTH_TOKEN      # Post-MVP SMS
 ---
 
 *Dernière mise à jour : 7 juillet 2026 — Sprint 2.41-E terminé (v2.45.0) — D09 : photos tickets R2 — couverture CDC 155/159 = ~97%*
+*Dernière mise à jour : 8 juillet 2026 — Sprint non-numéroté documenté rétroactivement (commits 5fd3ddf→f578781) — nav URLs propres, catalogue fallback statique, SEO noindex — dette : phoneCatalogService.ts non testé*
