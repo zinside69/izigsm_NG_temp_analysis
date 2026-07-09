@@ -1,48 +1,60 @@
-# Recovery Prompt — iziGSM — 2026-07-09
+# Recovery Prompt — iziGSM — 2026-07-09 (checkpoint pause)
 
 ## Vue d'ensemble
-SaaS Hono/TypeScript + Cloudflare (Workers/Pages + D1 + R2) de gestion boutique réparation GSM. Repo réel : `izigsm/webapp/` (remote GitHub `zinside69/izigsm_NG_temp_analysis`).
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) de gestion boutique réparation GSM. Repo : `izigsm/webapp/` (remote GitHub `zinside69/izigsm_NG_temp_analysis`).
 
-## Architecture actuelle
-Voir `architecture.md` — MVC strict (P1→P4), 18 routes/18 services/~240 endpoints, 31 migrations D1, conformité NF525 + RGPD partielle.
+## Ce qu'on fait
+Migration de l'hébergement Genspark (dev/staging, `gsk hosted deploy`) vers Cloudflare direct (compte `Contact@soteli.fr`), domaine cible `repairdesk.fr`. Design et plan approuvés, exécution en mode subagent-driven hybride (voir `decisions.md` pour le détail complet du cadrage).
+
+- Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`
+- Plan (9 tâches) : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md`
+- Suivi tâche par tâche : `todo.md`
+
+## Où on s'est arrêté — TASK 7, EN COURS
+
+Tasks 1 à 6 sont terminées et vérifiées (D1 migrée, R2 actif avec bucket `izigsm-photos`, secrets `JWT_SECRET`+`RESEND_API_KEY` posés, code HEAD déployé sur `izigsm.pages.dev` — déploiement `885cc1e3`, commit `6f26a51`).
+
+**Task 7 (validation fonctionnelle) est à moitié faite** :
+- ✅ `/api/health` répond v2.45.0
+- ✅ `/register` et `/login` s'affichent correctement
+- ❌ Bug découvert : `/register` ne peut pas créer de compte (mauvais chemin API — voir `bugs.md` § "/register cassé"). Contournement : se connecter avec le compte seedé `admin@izigsm.fr` / `Admin@2026!`.
+- ⏳ **Reste à faire pour clore Task 7** : se connecter avec le compte seedé, vérifier le dashboard, créer un client + ticket, uploader une photo sur le ticket (valide le binding R2), en surveillant les logs d'erreur (`npx wrangler pages deployment tail 885cc1e3-a173-4578-b4a1-bda708436e62 --project-name izigsm --format json --status error`)
+
+**Ensuite** : Task 8 (attacher `repairdesk.fr` — nécessite une confirmation explicite de l'utilisateur juste avant, c'est une action DNS de production) puis Task 9 (vérifier MX/SPF/webmail intacts, clôturer les docs).
+
+## Décisions de cadrage (résumé — détail complet dans `decisions.md`)
+1. Pas de migration de données — D1 neuve (schéma seul)
+2. Pages maintenant, Workers plus tard (chantier séparé futur)
+3. Même compte Cloudflare pour DNS `repairdesk.fr` et D1/Pages
+4. R2 activé dans le cadre de cette migration
+5. Secrets régénérés à neuf
+6. Bascule DNS en 2 temps : validation `*.pages.dev` d'abord, `repairdesk.fr` ensuite
+
+## Décisions prises pendant l'exécution (à ajouter à decisions.md si pas déjà fait)
+- R2 : bucket nommé `izigsm-photos` (pas de nom générique type "medias"/"backups" — un seul usage aujourd'hui, photos tickets)
+- Resend : domaine d'envoi configuré sur le **sous-domaine** `mail.repairdesk.fr` (pas la racine `repairdesk.fr`) pour ne jamais toucher aux MX/SPF/webmail Gandi existants. DNS (MX + TXT SPF + TXT DKIM) déjà présents dans la zone au moment de la vérification — probablement posés lors du travail du 08/07.
+- Mode d'exécution : hybride — infra pilotée directement par l'agent en session (pas de worktree, pas de subagent pour les opérations Cloudflare/DNS/secrets qui touchent le compte de prod réel), subagent-driven uniquement pour Task 4 (le seul vrai diff de code, review Approved après un cycle de fix mineur)
 
 ## Fichiers importants
-- `docs/ARCHITECTURE_MODULES.md` → architecture + endpoints (source de vérité, mis à jour à chaque sprint produit)
-- `docs/TODO.md` → suivi sprints produit
-- `wrangler.jsonc` → config déploiement (Pages, D1 `1e5c6e26-...`, R2 commenté)
-- `project-docs/decisions.md` → décisions de la migration Cloudflare en cours
+- `wrangler.jsonc` → config Pages, D1 `izigsm-production` (uuid `1e5c6e26-6b55-4b00-bf83-72ba26b6b112`), R2 `izigsm-photos` actif
+- `docs/ARCHITECTURE_MODULES.md` → architecture (⚠️ §2 tableau migrations obsolète, voir bugs.md)
+- `seed.sql` → compte de test `admin@izigsm.fr` / `Admin@2026!`
 
-## Décisions prises (session 2026-07-09, migration Cloudflare)
-1. Pas de migration de données — nouvelle D1 vide
-2. Pages maintenant, Workers plus tard
-3. Même compte Cloudflare (`Contact@soteli.fr`) pour DNS `repairdesk.fr` et D1
-4. R2 activé maintenant (bucket `izigsm-photos`)
-5. Secrets régénérés à neuf (`JWT_SECRET` généré par l'outillage, `RESEND_API_KEY` à récupérer par l'utilisateur)
-6. Bascule DNS en 2 temps : `*.pages.dev` d'abord, `repairdesk.fr` custom domain ensuite (ne jamais toucher MX/SPF/webmail Gandi)
-
-Détail complet : `decisions.md`.
-
-## État courant
-**Brainstorming en cours, design pas encore présenté.** Cloudflare MCP authentifié avec succès (2026-07-09). Dossier repo renommé `izigsm_backup_2026-07-08.tar/webapp/` → `izigsm/webapp/`. Prochaine étape : inspecter l'état réel côté Cloudflare (projet Pages `izigsm` existe-t-il déjà, migrations D1 appliquées, secrets déjà présents) avant de présenter le design final.
-
-## Tâches en attente
-- [x] Compléter l'auth Cloudflare
-- [ ] Inspecter état Cloudflare réel (Pages/D1/R2/secrets)
-- [ ] Présenter le design de migration (sections : architecture cible, étapes, rollback)
-- [ ] Rédiger la spec, la committer, la faire approuver
-- [ ] `writing-plans` → plan d'implémentation détaillé
-- [ ] Exécution (npm install, R2, secrets, migrations D1, déploiement pages.dev, tests, attachement custom domain)
-
-## Bugs connus
-Voir `bugs.md` — prod Genspark en retard de version (sans objet après migration), `/robots.txt` 500, `phoneCatalogService.ts` non testé, RGPD Art.5.1.e non implémenté.
+## Bugs connus (détail complet dans `bugs.md`)
+- **`/register` cassé** (bloquant, découvert pendant Task 7, hors scope migration mais à traiter vite pour un vrai lancement)
+- Prod Genspark en retard de version (sans objet une fois la migration terminée)
+- `/robots.txt` 500 sur Genspark
+- `phoneCatalogService.ts` non testé
+- RGPD Art.5.1.e non implémenté
+- `docs/ARCHITECTURE_MODULES.md` §2 obsolète
+- 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
 
 ## Contraintes
-- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr` lors de l'attachement du custom domain
-- `RESEND_API_KEY` doit être récupérée par l'utilisateur (compte Resend externe)
+- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr`
+- Ne jamais faire transiter de secret en clair dans la conversation
+- Confirmation explicite de l'utilisateur requise avant Task 8 (bascule DNS de production)
 - Toujours proposer avant modification/suppression de fichier existant (règle globale)
 - Historiques de version : toujours ajouter en dessous, jamais écraser (règle globale)
 
-## Prochaines étapes recommandées
-1. Attendre/relancer la complétion OAuth Cloudflare
-2. Appeler les tools Cloudflare pour lister projets Pages / D1 / R2 existants sur le compte
-3. Reprendre le brainstorming : proposer 2-3 approches pour l'ordre d'exécution technique, présenter le design, écrire la spec
+## Prochaine étape immédiate à la reprise
+Reprendre Task 7 : demander à l'utilisateur de se connecter avec `admin@izigsm.fr` / `Admin@2026!` sur `https://izigsm.pages.dev/login`, puis créer client + ticket + upload photo, avec l'écoute de logs d'erreur active en parallèle.

@@ -26,5 +26,13 @@
 
 **Aucun de ces records ne doit être modifié** lors de l'attachement du custom domain Cloudflare Pages — seul le record A racine (`repairdesk.fr` → actuellement `217.70.184.38`, IP Gandi) sera remplacé.
 
+### Décisions prises pendant l'exécution (plan `docs/superpowers/plans/2026-07-09-migration-cloudflare.md`)
+
+| Sujet | Décision | Justification |
+|---|---|---|
+| Nom du bucket R2 | `izigsm-photos` (pas de nom générique type "medias"/"backups") | L'utilisateur a proposé un nom générique — refusé : le code (`photosService.ts`, binding `PHOTOS`) et la doc (`TODO.md` Sprint 2.36) référencent déjà `izigsm-photos`, et mélanger photos/backups dans un seul bucket mélangerait des besoins de rétention différents. |
+| Domaine d'envoi Resend | Sous-domaine **`mail.repairdesk.fr`** (pas la racine `repairdesk.fr`) | Évite tout conflit avec les enregistrements MX/SPF/webmail Gandi déjà actifs sur la racine — cohérent avec la contrainte DNS ci-dessus. Vérifié après coup : les 3 enregistrements DNS requis (MX, TXT SPF, TXT DKIM) existaient déjà dans la zone au moment de la config Resend — posés lors du travail du 08/07, réutilisés tels quels. |
+| Mode d'exécution du plan | **Hybride** : agent pilote directement les tâches d'infra en session (D1, déploiement, secrets, DNS) — pas de worktree, pas de subagent-driven pour ces étapes. Seule Task 4 (édition `wrangler.jsonc`, seul vrai diff de code) est passée par le cycle subagent-driven (implémenteur + reviewer). | Le skill `subagent-driven-development` suppose des tâches de code isolables dans un worktree ; ici la majorité des tâches touchent le même compte Cloudflare de production qu'on soit dans un worktree ou non (aucune protection apportée), et plusieurs étapes nécessitent une action humaine directe (R2 dashboard, clé Resend, confirmation DNS) — incompatible avec le mode "exécution continue sans interruption" du skill. Décision proposée par l'agent, validée par l'utilisateur. |
+
 ## État de la décision
-Brainstorming en cours (skill `superpowers:brainstorming`) — design pas encore formellement rédigé/approuvé au moment de la création de ce fichier. Voir `recovery-prompt.md` pour reprendre.
+Design approuvé, spec écrite et commitée, plan d'implémentation écrit et commité. Exécution en cours (mode hybride ci-dessus) — Tasks 1-6 terminées, Task 7 en pause (voir `recovery-prompt.md` pour le point de reprise exact).

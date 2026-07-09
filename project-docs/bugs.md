@@ -15,3 +15,18 @@ Connu et documenté dans `docs/TODO.md` : `checkAndPurgeExpiredClients()` / `che
 
 ## Tension IMEI purge RGPD / registre anti-recel (art. 321-7)
 La purge RGPD met l'IMEI à `NULL`, mais l'art. 321-7 C.pén. impose un registre IMEI 5 ans minimum. Solution documentée mais non implémentée : registre réglementaire séparé hors CRM avant d'activer la purge auto IMEI.
+
+## `docs/ARCHITECTURE_MODULES.md` §2 (tableau migrations) obsolète
+Constaté le 2026-07-09 (Task 3 migration Cloudflare) : le tableau des tables par migration dans `ARCHITECTURE_MODULES.md` ne reflète plus les noms réels (`statuts_historique`→`tickets_statuts_historique`, `otp_codes`→`otp_tokens`, `tickets_sav`→`sav_dossiers`, `lignes_facture`→`lignes_document`, tables `commissions`/`clotures_journalieres`/`sequences` absentes du tableau). Vérifié : le code (`src/services/*.ts`) et `migrations/*.sql` sont cohérents entre eux — seule la doc a pris du retard, pas de risque fonctionnel. À corriger dans une session dédiée doc, sans lien avec la migration Cloudflare.
+
+## `/register` cassé — mauvais chemin API (BLOQUANT pour l'onboarding réel)
+Constaté le 2026-07-09 (Task 7 validation migration Cloudflare) sur `izigsm.pages.dev`. `public/static/js/register.js:185` appelle `apiPostPublic('/api/register', ...)`. Le backend n'expose que `/api/auth/register` (`src/routes/auth.ts:116`, monté sous `/api/auth` dans `src/index.tsx:128`) — il n'existe **aucune route `/api/register`**. Résultat : la soumission finale du formulaire d'inscription (après l'étape "OTP") échoue en 404 silencieux, aucun compte n'est réellement créé.
+
+Point additionnel : l'étape "OTP par SMS" du wizard (`registerState.otp`, `public/static/js/register.js:119-140`) est une simulation 100% frontend — code à 6 chiffres généré par `Math.random()` côté navigateur, affiché uniquement dans la console DevTools (`console.log('[iziGSM démo] Code OTP :', otp)`), jamais de SMS ni d'email réellement envoyé à cette étape. Le vrai flow email-OTP documenté (`POST /api/auth/register` + `POST /api/auth/verify-otp`) n'est jamais atteint par ce wizard.
+
+**Impact** : aucune nouvelle boutique ne peut s'inscrire sur l'app actuellement, sur aucun environnement (bug de code, pas lié à l'hébergement). Contournement temporaire utilisé pour valider la migration : connexion directe avec le compte seedé `admin@izigsm.fr` (`seed.sql`, credentials publiques du repo).
+
+**Fix probable** (non appliqué — hors scope de la migration, à valider avec l'utilisateur) : soit corriger `register.js:185` pour appeler `/api/auth/register`, soit refaire tout le wizard pour utiliser le vrai flow email-OTP (`verify-otp`) au lieu du mock SMS — la deuxième option est plus lourde mais évite de faire croire à un SMS qui n'existera jamais sans Twilio (post-MVP, cf. TODO.md).
+
+## Tests sensibles au fuseau horaire local (3 tests, non-bloquant)
+Constaté le 2026-07-09 lors de la migration Cloudflare (Task 1 du plan, `npm test` sur HEAD `5106d93`) : 3 tests échouent sur une machine en UTC+2 (`agendaService.test.ts` "fin auto-calculée", `statsService.test.ts` "1er du mois courant" ×2) — écart de 2h exact, cohérent avec `new Date().getTimezoneOffset() === -120` sur cette machine. Les services testés (`agendaService.ts`, `statsService.ts`) utilisent probablement `new Date()` en heure locale au lieu de forcer UTC. 702/705 tests passent. Sans lien avec la migration d'hébergement — dette pré-existante, non corrigée (hors scope).

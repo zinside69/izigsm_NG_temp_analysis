@@ -1,21 +1,32 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## En cours — Migration Cloudflare (2026-07-09)
-- [x] Brainstorming : 6 décisions validées (voir decisions.md)
-- [x] Authentification Cloudflare MCP (OAuth)
-- [x] Vérifier état réel côté Cloudflare — **setup déjà partiellement fait le 08/07** : projet Pages `izigsm` existe, D1 liée, `JWT_SECRET` présent, mais D1 vide (0 tables), `RESEND_API_KEY` absent, R2 désactivé compte, dernier déploiement au commit `eddd3af` (pas `f578781`), pas de custom domain — détail `current-state.md`
-- [ ] Présenter le design complet (brainstorming) avec l'état réel connu
-- [ ] Rédiger et faire approuver la spec (`docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`)
-- [ ] Passer à `writing-plans` pour le plan d'implémentation détaillé
-- [ ] `npm install` (node_modules absent localement)
-- [ ] **Action utilisateur** : activer R2 dans le dashboard Cloudflare (impossible via API — erreur 10042)
-- [ ] Créer bucket R2 `izigsm-photos`, décommenter binding dans `wrangler.jsonc`
-- [ ] **Action utilisateur** : récupérer `RESEND_API_KEY` (dashboard Resend)
-- [ ] Appliquer les 31 migrations sur D1 `1e5c6e26-...` (0 tables actuellement — bloquant, l'app plante sans ça)
-- [ ] Redéployer le code à jour (`wrangler pages deploy`) — dernier déploiement date du commit `eddd3af`, pas du HEAD actuel
-- [ ] Valider intégralement sur `izigsm.pages.dev`
-- [ ] Attacher `repairdesk.fr` en custom domain (uniquement record A/CNAME racine — ne pas toucher MX/SPF/webmail)
+## Migration Cloudflare — PAUSE au 2026-07-09, reprendre à Task 7
 
-## Dette technique héritée (voir bugs.md)
+Plan complet : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md` (9 tâches).
+Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
+
+- [x] Task 1 : npm install + vérif tooling
+- [x] Task 2 : R2 activé sur le compte Cloudflare
+- [x] Task 3 : migrations D1 (déjà appliquées avant cette session — vérifié 48 tables réelles)
+- [x] Task 4 : bucket R2 `izigsm-photos` + binding `PHOTOS` (commits `e1b1c58`, `6f26a51`)
+- [x] Task 5 : secret `RESEND_API_KEY` posé (sous-domaine `mail.repairdesk.fr` déjà vérifié Resend)
+- [x] Task 6 : build + déploiement HEAD (`885cc1e3`, commit `6f26a51`)
+- [ ] **Task 7 — EN COURS, reprendre ici** : validation fonctionnelle sur `izigsm.pages.dev`
+  - [x] `/api/health` → v2.45.0 ✓
+  - [x] `/register`, `/login` se chargent ✓
+  - [ ] Connexion avec `admin@izigsm.fr` / `Admin@2026!` (contournement — voir bugs.md, `/register` cassé)
+  - [ ] Vérifier arrivée sur `/dashboard`
+  - [ ] Créer un client + un ticket
+  - [ ] Uploader une photo sur le ticket (valide R2)
+  - [ ] Relancer l'écoute logs pendant le test (`wrangler pages deployment tail 885cc1e3-... --project-name izigsm --format json --status error`)
+- [ ] Task 8 : attacher `repairdesk.fr` en custom domain — **confirmation explicite utilisateur requise avant d'exécuter**
+- [ ] Task 9 : vérifier MX/SPF/webmail intacts + clôturer les docs
+
+## Dette technique découverte pendant la migration (voir bugs.md pour le détail)
+- [ ] `/register` cassé — mauvais chemin API, bloque tout onboarding réel (BLOQUANT, hors scope migration)
+- [ ] `docs/ARCHITECTURE_MODULES.md` §2 obsolète (noms de tables)
+- [ ] 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
+
+## Dette technique héritée (préexistante, voir bugs.md)
 - [ ] `tests/phoneCatalogService.test.ts` à créer
-- [ ] Investiguer `/robots.txt` 500 (peut se résoudre de lui-même après migration)
+- [ ] Investiguer `/robots.txt` 500 sur Genspark (sans objet une fois Genspark abandonné)
