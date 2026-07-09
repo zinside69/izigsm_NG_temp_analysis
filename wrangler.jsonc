@@ -17,10 +17,7 @@
 
   // ── R2 Storage (photos tickets) ──────────────────────────────────────────
   // Sprint 2.36 — MOD-01 : stockage binaire photos avant/après réparation.
-  // ⚠️ R2 désactivé temporairement — activer R2 dans le dashboard CF puis :
-  //    npx wrangler r2 bucket create izigsm-photos
-  //    Décommenter le bloc ci-dessous et redéployer.
-  //
+  // R2 activé le 2026-07-09 — migration Cloudflare (izigsm-photos)
   "r2_buckets": [
     {
       "binding":     "PHOTOS",
