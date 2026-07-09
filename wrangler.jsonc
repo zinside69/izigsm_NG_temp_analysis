@@ -21,12 +21,12 @@
   //    npx wrangler r2 bucket create izigsm-photos
   //    Décommenter le bloc ci-dessous et redéployer.
   //
-  // "r2_buckets": [
-  //   {
-  //     "binding":     "PHOTOS",
-  //     "bucket_name": "izigsm-photos"
-  //   }
-  // ]
+  "r2_buckets": [
+    {
+      "binding":     "PHOTOS",
+      "bucket_name": "izigsm-photos"
+    }
+  ]
 
   // ── Secrets ──────────────────────────────────────────────────────────────
   // Configurer via : npx wrangler pages secret put JWT_SECRET --project-name izigsm
