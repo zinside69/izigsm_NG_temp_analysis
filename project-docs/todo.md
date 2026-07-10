@@ -1,6 +1,6 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## Migration Cloudflare — PAUSE au 2026-07-09, reprendre à Task 7
+## Migration Cloudflare — TERMINÉE le 2026-07-10
 
 Plan complet : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md` (9 tâches).
 Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
@@ -11,16 +11,17 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 - [x] Task 4 : bucket R2 `izigsm-photos` + binding `PHOTOS` (commits `e1b1c58`, `6f26a51`)
 - [x] Task 5 : secret `RESEND_API_KEY` posé (sous-domaine `mail.repairdesk.fr` déjà vérifié Resend)
 - [x] Task 6 : build + déploiement HEAD (`885cc1e3`, commit `6f26a51`)
-- [ ] **Task 7 — EN COURS, reprendre ici** : validation fonctionnelle sur `izigsm.pages.dev`
+- [x] **Task 7 — TERMINÉE (2026-07-10)** : validation fonctionnelle sur `izigsm.pages.dev` (via API, navigateur indisponible)
   - [x] `/api/health` → v2.45.0 ✓
   - [x] `/register`, `/login` se chargent ✓
-  - [ ] Connexion avec `admin@izigsm.fr` / `Admin@2026!` (contournement — voir bugs.md, `/register` cassé)
-  - [ ] Vérifier arrivée sur `/dashboard`
-  - [ ] Créer un client + un ticket
-  - [ ] Uploader une photo sur le ticket (valide R2)
-  - [ ] Relancer l'écoute logs pendant le test (`wrangler pages deployment tail 885cc1e3-... --project-name izigsm --format json --status error`)
-- [ ] Task 8 : attacher `repairdesk.fr` en custom domain — **confirmation explicite utilisateur requise avant d'exécuter**
-- [ ] Task 9 : vérifier MX/SPF/webmail intacts + clôturer les docs
+  - [x] Connexion avec `admin@izigsm.fr` / `Admin@2026!` (contournement — voir bugs.md, `/register` cassé) — `/api/auth/login` 200, JWT émis, `/api/auth/me` confirme role admin
+  - [x] Créer un client + un ticket — client id `6`, ticket `TKT-2026-00006` (boutique `iziGSM Paris 11`, id 1)
+  - [x] Uploader une photo sur le ticket (valide R2) — 201, `r2_key: tickets/6/photos/a04dbb1e-....jpg`, relue via `/photos/:id/view` (200, contenu identique)
+  - [x] Écoute logs pendant le test (`wrangler pages deployment tail 885cc1e3-... --project-name izigsm --format json --status error`) — aucune erreur sur les 6 appels
+- [x] **Task 8 — TERMINÉE (2026-07-10)** : `repairdesk.fr` attaché au projet Pages `izigsm`, ancien A record Gandi supprimé (confirmation explicite obtenue), CNAME créé manuellement (`repairdesk.fr → izigsm.pages.dev`, auto-provisioning Cloudflare bloqué), statut `active`, `/api/health` répond en prod
+- [x] **Task 9 — TERMINÉE (2026-07-10)** : MX/SPF/DKIM/webmail/www re-vérifiés intacts, docs `current-state.md` + `decisions.md` clôturés
+
+**Migration Cloudflare complète.** `repairdesk.fr` sert l'app en production, plus de dépendance Genspark.
 
 ## Dette technique découverte pendant la migration (voir bugs.md pour le détail)
 - [ ] `/register` cassé — mauvais chemin API, bloque tout onboarding réel (BLOQUANT, hors scope migration)

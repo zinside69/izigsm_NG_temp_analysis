@@ -1,4 +1,4 @@
-# Recovery Prompt — iziGSM — 2026-07-09 (checkpoint pause)
+# Recovery Prompt — iziGSM — 2026-07-10 (Migration Cloudflare TERMINÉE)
 
 ## Vue d'ensemble
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) de gestion boutique réparation GSM. Repo : `izigsm/webapp/` (remote GitHub `zinside69/izigsm_NG_temp_analysis`).
@@ -10,17 +10,17 @@ Migration de l'hébergement Genspark (dev/staging, `gsk hosted deploy`) vers Clo
 - Plan (9 tâches) : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md`
 - Suivi tâche par tâche : `todo.md`
 
-## Où on s'est arrêté — TASK 7, EN COURS
+## Migration terminée — les 9 tâches sont closes (2026-07-10)
 
-Tasks 1 à 6 sont terminées et vérifiées (D1 migrée, R2 actif avec bucket `izigsm-photos`, secrets `JWT_SECRET`+`RESEND_API_KEY` posés, code HEAD déployé sur `izigsm.pages.dev` — déploiement `885cc1e3`, commit `6f26a51`).
+Tasks 1 à 9 terminées et vérifiées (D1 migrée, R2 actif avec bucket `izigsm-photos`, secrets `JWT_SECRET`+`RESEND_API_KEY` posés, code HEAD déployé — déploiement `885cc1e3`, commit `6f26a51` — Task 7 validée via API, `repairdesk.fr` attaché et actif, DNS mail re-vérifié intact).
 
-**Task 7 (validation fonctionnelle) est à moitié faite** :
-- ✅ `/api/health` répond v2.45.0
-- ✅ `/register` et `/login` s'affichent correctement
-- ❌ Bug découvert : `/register` ne peut pas créer de compte (mauvais chemin API — voir `bugs.md` § "/register cassé"). Contournement : se connecter avec le compte seedé `admin@izigsm.fr` / `Admin@2026!`.
-- ⏳ **Reste à faire pour clore Task 7** : se connecter avec le compte seedé, vérifier le dashboard, créer un client + ticket, uploader une photo sur le ticket (valide le binding R2), en surveillant les logs d'erreur (`npx wrangler pages deployment tail 885cc1e3-a173-4578-b4a1-bda708436e62 --project-name izigsm --format json --status error`)
+**Task 7 (validation fonctionnelle)** — faite via API (navigateur Chrome indisponible, extension non connectée) : login seedé `admin@izigsm.fr`/`Admin@2026!` → JWT valide, client + ticket créés, photo uploadée+relue sur R2, 0 erreur en logs.
 
-**Ensuite** : Task 8 (attacher `repairdesk.fr` — nécessite une confirmation explicite de l'utilisateur juste avant, c'est une action DNS de production) puis Task 9 (vérifier MX/SPF/webmail intacts, clôturer les docs).
+**Task 8 (attacher `repairdesk.fr`)** — écart au plan : l'A record préexistant (Gandi, `217.70.184.38`) a empêché l'auto-provisioning Cloudflare du CNAME (`"CNAME record not set"`). Confirmation explicite obtenue avant chaque mutation DNS : suppression de l'A record, puis création manuelle du CNAME (`repairdesk.fr → izigsm.pages.dev`, proxied). Domaine `active` ~2 min après, certificat SSL Google CA provisionné. `https://repairdesk.fr/api/health` répond 200 en prod.
+
+**Task 9 (vérification DNS mail)** — MX, SPF, DKIM (`gm1`/`gm2`/`resend`), `webmail.repairdesk.fr`, `www.repairdesk.fr` tous confirmés inchangés. Seul le record racine a changé (A → CNAME), comme prévu.
+
+**Migration Cloudflare terminée.** `repairdesk.fr` sert l'app iziGSM en production. Plus rien en attente sur ce chantier — la reprise concerne maintenant la dette technique (voir Bugs connus) ou de nouvelles demandes.
 
 ## Décisions de cadrage (résumé — détail complet dans `decisions.md`)
 1. Pas de migration de données — D1 neuve (schéma seul)
@@ -50,11 +50,10 @@ Tasks 1 à 6 sont terminées et vérifiées (D1 migrée, R2 actif avec bucket `i
 - 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
 
 ## Contraintes
-- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr`
+- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr` (validé intacts au 2026-07-10)
 - Ne jamais faire transiter de secret en clair dans la conversation
-- Confirmation explicite de l'utilisateur requise avant Task 8 (bascule DNS de production)
 - Toujours proposer avant modification/suppression de fichier existant (règle globale)
 - Historiques de version : toujours ajouter en dessous, jamais écraser (règle globale)
 
 ## Prochaine étape immédiate à la reprise
-Reprendre Task 7 : demander à l'utilisateur de se connecter avec `admin@izigsm.fr` / `Admin@2026!` sur `https://izigsm.pages.dev/login`, puis créer client + ticket + upload photo, avec l'écoute de logs d'erreur active en parallèle.
+Aucune action en attente sur la migration — chantier clos. Points ouverts pour une future session : fixer le bug `/register` (bloquant onboarding réel, voir `bugs.md`), ou traiter la dette technique listée ci-dessus.

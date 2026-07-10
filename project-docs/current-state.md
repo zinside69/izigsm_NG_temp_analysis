@@ -1,9 +1,11 @@
-# iziGSM — État courant (MàJ : 2026-07-09, checkpoint pause)
+# iziGSM — État courant (MàJ : 2026-07-10, migration Cloudflare TERMINÉE)
 
 ## Ce qui fonctionne
-- App déployée et fonctionnelle sur Cloudflare Pages direct (`izigsm.pages.dev`), plus dépendante de Genspark pour ce déploiement
+- **`https://repairdesk.fr` sert l'app iziGSM en production sur Cloudflare Pages** (`/api/health` → 200, v2.45.0), plus aucune dépendance à Genspark
+- `izigsm.pages.dev` reste actif (sous-domaine par défaut du projet Pages)
 - Repo git propre côté code, HEAD `6f26a51`
 - D1 `izigsm-production` peuplée (48 tables réelles, cohérentes avec le code), R2 actif avec bucket `izigsm-photos`, secrets `JWT_SECRET` + `RESEND_API_KEY` configurés
+- DNS mail Gandi (MX, SPF, DKIM, webmail, www) intacts — vérifiés après bascule du domaine
 
 ## Migration Cloudflare — état des 9 tâches du plan (`docs/superpowers/plans/2026-07-09-migration-cloudflare.md`)
 
@@ -15,25 +17,46 @@
 | 4 | Bucket R2 + binding `PHOTOS` | ✅ (commits `e1b1c58` + fix `6f26a51`, review subagent Approved) |
 | 5 | Secret `RESEND_API_KEY` | ✅ (sous-domaine `mail.repairdesk.fr` déjà vérifié dans Resend, DNS déjà en place) |
 | 6 | Build + déploiement HEAD | ✅ (déploiement `885cc1e3`, commit `6f26a51`, succès confirmé API) |
-| 7 | **Validation fonctionnelle** | 🔶 **EN COURS — PAUSE ICI** (voir détail ci-dessous) |
-| 8 | Attacher `repairdesk.fr` (confirmation explicite requise) | ⏸ pas commencé |
-| 9 | Vérifier DNS mail intact + clôture docs | ⏸ pas commencé |
+| 7 | **Validation fonctionnelle** | ✅ **TERMINÉE (2026-07-10)** — via API, navigateur Chrome indisponible (voir détail ci-dessous) |
+| 8 | Attacher `repairdesk.fr` (confirmation explicite requise) | ✅ **TERMINÉE (2026-07-10)** — voir détail ci-dessous |
+| 9 | Vérifier DNS mail intact + clôture docs | ✅ **TERMINÉE (2026-07-10)** |
 
-## Task 7 — détail précis de la reprise
+## Task 8 — attachement du domaine (2026-07-10)
 
-Validé jusqu'ici :
+- Confirmation explicite utilisateur obtenue avant exécution
+- `POST /accounts/{id}/pages/projects/izigsm/domains` → domaine `repairdesk.fr` attaché (`domain_id: 83642e8d-ca8c-42b6-ba33-f3880d5d1cfe`)
+- Blocage rencontré : l'ancien A record racine (`repairdesk.fr → 217.70.184.38`, IP Gandi) empêchait le provisionnement auto du CNAME Cloudflare (`verification_data.error_message: "CNAME record not set"`)
+- Confirmation explicite utilisateur obtenue avant suppression de cet A record (id `b950995fa59517f1faffb7ca5339714a`)
+- L'auto-provisioning Cloudflare n'a pas créé le CNAME de remplacement après suppression → créé manuellement : `CNAME repairdesk.fr → izigsm.pages.dev` (proxied, id `42b8c4081fad3d760a2f5e721c7b0e6f`)
+- Statut domaine passé à `active` (~2 min après création du CNAME) : `verification_data.status: active`, `validation_data.status: active` (certificat SSL Google CA)
+- Vérifié : `https://repairdesk.fr/api/health` → 200, `v2.45.0` en production
+
+## Task 9 — vérification DNS mail (2026-07-10)
+
+Relecture complète de la zone `repairdesk.fr` après bascule — tous les enregistrements mail confirmés inchangés :
+- MX → `spool.mail.gandi.net`, `fb.mail.gandi.net` ✅ (+ `send.mail.repairdesk.fr` → Amazon SES, préexistant)
+- TXT SPF → `v=spf1 include:_mailcust.gandi.net ?all` ✅
+- DKIM → `gm1._domainkey`, `gm2._domainkey` → `gandimail.net` ✅, `resend._domainkey.mail.repairdesk.fr` ✅
+- CNAME `webmail.repairdesk.fr` → `webmail.gandi.net` ✅
+- CNAME `www.repairdesk.fr` → `webredir.vip.gandi.net` ✅
+- Seul changement : record racine `repairdesk.fr`, A → CNAME (`izigsm.pages.dev`), comme prévu
+
+**Migration Cloudflare terminée.** Déploiement final : commit `6f26a51`, déploiement Pages `885cc1e3`, domaine `repairdesk.fr` actif.
+
+## Task 7 — résultat de la validation (2026-07-10)
+
+Faute de navigateur Chrome connecté (extension non détectée), validation faite en pilotant directement l'API REST (mêmes endpoints que le frontend) :
 - ✅ `https://izigsm.pages.dev/api/health` → `{"status":"ok","version":"2.45.0","sprint":"2.45 — D09..."}`
 - ✅ `/register` et `/login` se chargent (pas de sidebar cassée)
-- ❌ **Bug découvert, non lié à la migration** : le formulaire `/register` ne peut pas créer de compte (mauvais chemin API `/api/register` au lieu de `/api/auth/register`, voir `bugs.md` § "/register cassé"). L'étape "OTP SMS" du wizard est un mock frontend, pas un vrai envoi.
-- **Contournement en place** : connexion avec le compte seedé `admin@izigsm.fr` / `Admin@2026!` (credentials publiques de `seed.sql`, pas un secret)
+- ❌ **Bug confirmé, non lié à la migration** : `/register` ne peut pas créer de compte (mauvais chemin API, voir `bugs.md` § "/register cassé")
+- ✅ `POST /api/auth/login` avec `admin@izigsm.fr` / `Admin@2026!` → 200, JWT valide, `GET /api/auth/me` confirme la session (role admin)
+- ✅ `POST /api/clients` → client `id: 6` créé (boutique `iziGSM Paris 11`, `id: 1`, seed data)
+- ✅ `POST /api/tickets` → ticket `TKT-2026-00006` créé
+- ✅ `POST /api/tickets/6/photos` → 201, upload R2 réussi (`r2_key: tickets/6/photos/a04dbb1e-....jpg`)
+- ✅ `GET /api/tickets/6/photos/1/view` → 200, contenu relu identique à l'upload — **binding R2 `PHOTOS` validé bout-en-bout**
+- ✅ `wrangler pages deployment tail 885cc1e3-... --status error` actif pendant les 6 appels → aucune erreur
 
-**Reste à faire pour clore Task 7** (reprendre ici) :
-1. Se connecter avec `admin@izigsm.fr` / `Admin@2026!` sur `https://izigsm.pages.dev/login`
-2. Vérifier l'arrivée sur `/dashboard`
-3. Créer un client + un ticket
-4. Uploader une photo sur ce ticket (valide le binding R2 `PHOTOS`)
-5. Relancer l'écoute des logs d'erreur pendant ce test : `npx wrangler pages deployment tail 885cc1e3-a173-4578-b4a1-bda708436e62 --project-name izigsm --format json --status error` (le monitor précédent a été arrêté à la pause — le déploiement `885cc1e3` reste valide tant que Task 6 n'est pas re-exécutée)
-6. Si tout passe → Task 8 (confirmation explicite utilisateur requise avant d'attacher `repairdesk.fr`)
+**Task 7 close.** Prochaine étape : Task 8 — attacher `repairdesk.fr` en custom domain (confirmation explicite utilisateur requise avant exécution, action DNS de prod).
 
 ## Bugs découverts pendant l'exécution (voir `bugs.md` pour le détail complet)
 - `/register` cassé (bloquant onboarding réel, hors scope migration)
