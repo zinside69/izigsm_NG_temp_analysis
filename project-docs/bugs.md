@@ -1,5 +1,12 @@
 # iziGSM — Bugs connus
 
+## Service Worker `sw.js` — CACHE_VERSION jamais bumpée depuis Sprint 2.14/2.17 — CORRIGÉ le 2026-07-10
+Constaté le 2026-07-10 en testant l'onboarding Google : `/login` (et le reste de l'`APP_SHELL` : `/dashboard`, `/tickets`, etc.) est précaché en stratégie "Cache First" par `sw.js`. `CACHE_VERSION` était resté à `'izigsm-v2.17'` alors que l'app est en v2.45.0 — **tout déploiement depuis le Sprint 2.17 n'a jamais invalidé le cache des pages App Shell** pour les navigateurs ayant déjà installé le service worker. Symptôme concret : un utilisateur avec le SW déjà installé continuait de voir l'ancienne version de `/login` (sans le fix onboarding Google de cette session) malgré un déploiement réussi — `handleGoogleCredential` exécutait l'ancien code, aucune erreur visible, juste un comportement silencieusement obsolète.
+
+**Fix appliqué** : `CACHE_VERSION` bumpée à `'izigsm-v2.46'` (commit à venir). Le mécanisme d'invalidation existant (`activate` → `caches.delete()` des anciennes versions, `skipWaiting()`) fonctionne correctement — il suffisait de déclencher le bump.
+
+**Dette restante** : rien n'automatise ce bump à chaque déploiement — à faire manuellement (ou scripter dans le process de build) pour éviter que ça se reproduise sur plusieurs sprints. Impact potentiel rétroactif : des utilisateurs ont pu voir des versions obsolètes de l'App Shell entre Sprint 2.17 et ce fix sans s'en rendre compte.
+
 ## `www.repairdesk.fr` → Error 521 (Web server down)
 Constaté le 2026-07-10 par l'utilisateur juste après l'attachement de `repairdesk.fr` à Cloudflare Pages. `www.repairdesk.fr` (CNAME → `webredir.vip.gandi.net`, proxied, non modifié par la migration) renvoie 521 de façon reproductible (Cloudflare ne joint pas le service de redirection Gandi). **L'apex `repairdesk.fr` fonctionne normalement (200)** — vérifié à plusieurs reprises, aucun lien avec la migration Cloudflare. Cause probable : panne ou changement côté service de redirection Gandi, indépendant de nos actions. Non-bloquant (le lien canonique de l'app est l'apex), mais à corriger si des liens/favoris externes pointent vers `www.`.
 
