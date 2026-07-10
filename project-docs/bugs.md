@@ -1,5 +1,18 @@
 # iziGSM — Bugs connus
 
+## Backup D1 automatique — OPÉRATIONNEL depuis le 2026-07-10
+Mis en place suite à une question de l'utilisateur sur la durabilité des données D1 (isolation multi-tenant vérifiée + fiabilité Cloudflare). En plus des garanties natives D1 (Time Travel, export à la demande — vérifiées via l'API Cloudflare), un backup SQL complet est maintenant exporté chaque nuit à 02h00 UTC via `.github/workflows/d1-backup.yml` et commité dans `backups/d1/` (hébergeur différent de Cloudflare — vraie redondance).
+
+**Mise en place mouvementée** (token Cloudflare édité plusieurs fois) :
+- Erreur 1 : token scopé "D1 Write" seul → wrangler échoue sur l'appel `/memberships` (auto-détection du compte). Fix tenté : `CLOUDFLARE_ACCOUNT_ID` explicite dans le workflow — insuffisant seul.
+- Erreur 2 : toujours `/memberships`, message explicite de wrangler → il manquait les permissions **User → User Details → Read** et **User → Memberships → Read** (catégorie différente de la permission D1, qui est catégorie Account — piège UI, deux menus déroulants séparés).
+- Erreur 3 : `git push` rejeté (non-fast-forward) — plusieurs runs déclenchés manuellement pendant le débogage se sont chevauchés. Fix : `git pull --rebase origin main` avant `git push` dans le workflow.
+- Erreur 4 (transitoire) : après ajout de la permission User Details Read, l'export D1 a échoué une fois en `Authentication error [code: 10000]` malgré des permissions token vérifiées correctes — résolu en relançant après ~2 min (probable délai de propagation Cloudflare suite aux éditions successives du token).
+
+Premier backup réussi : `backups/d1/backup-2026-07-10.sql` (13669 lignes), commit `b27848f`. Rotation automatique sur les 14 derniers jours.
+
+**Setup requis pour toute recréation du token** : permissions **Account → D1 → Write** + **User → User Details → Read** + **User → Memberships → Read**, "Account Resources" = Contact@soteli.fr's Account. Secret GitHub `CLOUDFLARE_API_TOKEN` à mettre à jour si le token est régénéré (pas juste édité).
+
 ## Service Worker `sw.js` — CACHE_VERSION jamais bumpée depuis Sprint 2.14/2.17 — CORRIGÉ le 2026-07-10
 Constaté le 2026-07-10 en testant l'onboarding Google : `/login` (et le reste de l'`APP_SHELL` : `/dashboard`, `/tickets`, etc.) est précaché en stratégie "Cache First" par `sw.js`. `CACHE_VERSION` était resté à `'izigsm-v2.17'` alors que l'app est en v2.45.0 — **tout déploiement depuis le Sprint 2.17 n'a jamais invalidé le cache des pages App Shell** pour les navigateurs ayant déjà installé le service worker. Symptôme concret : un utilisateur avec le SW déjà installé continuait de voir l'ancienne version de `/login` (sans le fix onboarding Google de cette session) malgré un déploiement réussi — `handleGoogleCredential` exécutait l'ancien code, aucune erreur visible, juste un comportement silencieusement obsolète.
 
