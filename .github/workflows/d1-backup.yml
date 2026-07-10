@@ -13,10 +13,16 @@
 # ateliers). À surveiller si la base grossit significativement.
 #
 # Setup requis (une fois) :
-#   1. Créer un token API Cloudflare avec permission D1 Edit sur le compte
-#      Contact@soteli.fr (dash.cloudflare.com → My Profile → API Tokens)
+#   1. Créer un token API Cloudflare avec permission D1 Write sur le compte
+#      Contact@soteli.fr (dash.cloudflare.com → My Profile → API Tokens →
+#      Create Custom Token → Account / D1 / Write)
 #   2. L'ajouter comme secret GitHub : Settings → Secrets and variables →
 #      Actions → New repository secret → nom CLOUDFLARE_API_TOKEN
+#
+# Note : CLOUDFLARE_ACCOUNT_ID est fourni explicitement ci-dessous (pas un
+# secret, juste un identifiant) car un token scopé (D1 Write uniquement,
+# sans accès /memberships) ne peut pas laisser wrangler deviner le compte
+# automatiquement — sinon erreur "Authentication error [code: 10000]".
 
 name: Backup D1 (izigsm-production)
 
@@ -36,7 +42,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Installer les dépendances (wrangler)
         run: npm ci
@@ -44,6 +50,7 @@ jobs:
       - name: Exporter la base D1 en SQL
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 88cfb31e7023ac0740536222bda8a8ae
         run: |
           mkdir -p backups/d1
           npx wrangler d1 export izigsm-production --remote \
