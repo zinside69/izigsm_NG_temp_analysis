@@ -243,6 +243,13 @@ function baseLayout(content: string, boutiqueName: string): string {
 </body></html>`
 }
 
+/**
+ * Échappe les caractères HTML spéciaux avant interpolation dans un template email.
+ * Utilisé pour toute donnée saisie librement par l'utilisateur (prénom, etc.)
+ * afin d'éviter l'injection HTML dans le contenu envoyé par Resend.
+ * @param str  Chaîne brute (potentiellement non fiable)
+ * @returns    Chaîne sûre à interpoler dans du HTML
+ */
 function escapeHtml(str: string): string {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

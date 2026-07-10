@@ -117,6 +117,14 @@ function buildRecap() {
 }
 
 // ======================== API HELPER (page register — app.js non chargé ici) ========================
+
+/**
+ * POST JSON minimal, sans gestion JWT (endpoints publics /api/auth/*).
+ * app.js (qui expose apiPostPublic) n'est pas chargé sur cette page — voir register.html.
+ * @param {string} url  Chemin de l'endpoint (ex: '/api/auth/register')
+ * @param {object} body Corps JSON de la requête
+ * @returns {Promise<{ok: boolean, status: number, data: object|null}>}
+ */
 async function apiPost(url, body) {
   try {
     const res = await fetch(url, {
@@ -133,6 +141,13 @@ async function apiPost(url, body) {
 }
 
 // ======================== OTP ========================
+
+/**
+ * Crée le compte (POST /api/auth/register) et déclenche l'envoi du code OTP par email.
+ * Le compte est créé inactif côté backend — verifyOtp() l'active après saisie du code.
+ * `otpDemo` n'est renvoyé par le backend que si RESEND_API_KEY n'est pas configurée
+ * (dev local) — jamais en prod, voir auth.ts.
+ */
 async function sendOtp() {
   const accepted = document.getElementById('accepted_terms')?.checked;
   if (!accepted) {
@@ -175,6 +190,10 @@ async function sendOtp() {
   if (btn) { btn.textContent = '✓ Code envoyé'; }
 }
 
+/**
+ * Régénère et renvoie l'OTP (POST /api/auth/resend-otp) pour le compte en cours d'inscription.
+ * Réponse backend volontairement générique (anti-énumération de comptes) — voir auth.ts.
+ */
 async function resendOtp() {
   const btn = document.querySelector('#otp-box .btn-ghost');
   if (btn) { btn.disabled = true; }
@@ -197,6 +216,12 @@ async function resendOtp() {
   if (btn) { btn.disabled = false; }
 }
 
+/**
+ * Valide le code saisi (POST /api/auth/verify-otp) : active le compte, récupère les
+ * vrais tokens JWT et affiche l'étape de succès. `registerState.account.boutique_id`
+ * n'est jamais renseigné ici (le wizard ne crée pas de boutique via ce champ) —
+ * conservé pour cohérence avec la forme de session utilisée par app.js/login.html.
+ */
 async function verifyOtp() {
   const code = document.getElementById('otp-input')?.value?.trim();
   if (!code) {

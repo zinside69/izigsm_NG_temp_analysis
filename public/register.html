@@ -371,6 +371,13 @@
       } catch (_) { /* non bloquant */ }
     }
 
+    /**
+     * Callback Google Identity Services — reçoit le credential JWT signé par Google
+     * et le fait vérifier côté backend (POST /api/auth/google). Contrairement au
+     * flow OTP manuel, un compte créé via Google est déjà actif et vérifié
+     * (createGoogleUser côté backend) : connexion directe, pas d'étape de code.
+     * @param {{credential: string}} response  Réponse Google One Tap
+     */
     async function handleGoogleCredential(response) {
       const res  = await apiPost('/api/auth/google', { credential: response.credential });
 
