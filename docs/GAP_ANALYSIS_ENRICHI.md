@@ -2,7 +2,7 @@
 > **Version** : 4.3 (mis à jour v2.45.0)  
 > **Date** : 7 juillet 2026  
 > **État implémentation** : Sprint 2.41-E terminé — v2.45.0 en production  
-> **URL production** : `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com`
+> **URL production** : `https://repairdesk.fr` (migration Cloudflare Pages directe terminée le 2026-07-10, ex-Genspark)
 
 ---
 
@@ -25,7 +25,7 @@
 | A05 | Permissions granulaires par action | ✅ | 2.3 | Table `permissions`, `hasPermission()` |
 | A06 | PIN technicien PBKDF2 | ✅ | 2.3 | `pin_hash`, switch contexte sans déconnexion |
 | A07 | Réinitialisation mot de passe | ✅ | 2.40 | `reset-password.html` — token OTP D1KV TTL 1h + email lien |
-| A08 | OAuth2 Google | ❌ | 🔜 2.35 | `GOOGLE_CLIENT_ID/SECRET`, `google_id` sur users |
+| A08 | OAuth2 Google | ✅ | 2026-07-10 | `POST /api/auth/google` (login+register), `google_id` sur users, bouton One Tap sur `/login` et `/register`, `GOOGLE_CLIENT_ID` configuré sur Cloudflare Pages — testé en prod (nouveau compte + liaison compte existant) |
 | A09 | OAuth2 Facebook | ❌ | Post-MVP | Non prioritaire |
 | A10 | Expiration session inactive | ✅ | 2.26 | TTL D1KV sur refresh tokens |
 
@@ -303,7 +303,7 @@
 
 | Module | Total items | ✅ Implémenté | ⚠️ Partiel | ❌ Absent |
 |--------|-------------|--------------|-----------|---------|
-| A Auth | 10 | 9 | 0 | 1 |
+| A Auth | 10 | 10 | 0 | 0 |
 | B Boutiques | 8 | 7 | 0 | 1 |
 | C Clients CRM | 11 | 11 | 0 | 0 |
 | D Tickets | 12 | 12 | 0 | 0 |
@@ -321,9 +321,9 @@
 | P Rapports | 7 | 7 | 0 | 0 |
 | Q Sécurité | 10 | 10 | 0 | 0 |
 | R Catalogue marques | 10 | 9 | 1 | 0 |
-| **TOTAL** | **159** | **155** | **1** | **9** |
+| **TOTAL** | **159** | **156** | **1** | **8** |
 
-**Couverture v2.45 : 155/159 = ~97% — +8 points vs v2.41 (93%) — Sprints 2.41-B/C/D/E : E07/E08/C08/C09/Q07/Q08/D09/F09/P04/P05/P06 → ✅**
+**Couverture v2.45 : 156/159 = ~98% — Sprints 2.41-B/C/D/E : E07/E08/C08/C09/Q07/Q08/D09/F09/P04/P05/P06 → ✅ ; A08 OAuth Google finalisé le 2026-07-10 (frontend + secret Cloudflare)**
 
 > Post-MVP exclus (SMS, WhatsApp, Stripe, scanner CB, WebSockets, cockpit multi-sites) : couverture effective sprint-par-sprint ~90%.
 
@@ -335,7 +335,7 @@
 |---|---|---|
 | `JWT_SECRET` | ✅ Configuré | Auth JWT |
 | `RESEND_API_KEY` | ✅ Configuré | Emails Resend |
-| `GOOGLE_CLIENT_ID` | ⚠️ À confirmer | Sprint 2.35 OAuth (configurer via `gsk hosted secret_put`) |
+| `GOOGLE_CLIENT_ID` | ✅ Configuré | OAuth Google (2026-07-10, `wrangler pages secret put`) |
 | `GOOGLE_CLIENT_SECRET` | ❌ Non utilisé | Tokeninfo ne nécessite pas le secret |
 | `TWILIO_*` | ❌ Post-MVP | SMS |
 | `STRIPE_*` | ❌ Post-MVP | Paiement en ligne |
