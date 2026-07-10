@@ -243,6 +243,12 @@ function baseLayout(content: string, boutiqueName: string): string {
 </body></html>`
 }
 
+function escapeHtml(str: string): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
 // ─── Email système (hors contexte boutique) ────────────────────────────────────
 
 /**
@@ -265,10 +271,10 @@ export async function sendOtpInscription(
   otp:    string
 ): Promise<{ success: boolean }> {
   const html = baseLayout(`
-    <p>Bonjour <strong>${prenom}</strong>,</p>
+    <p>Bonjour <strong>${escapeHtml(prenom)}</strong>,</p>
     <p>Merci de votre inscription sur iziGSM. Voici votre code de vérification :</p>
     <div class="info-box" style="text-align:center; font-size:28px; font-weight:700; letter-spacing:6px; color:#4f46e5;">
-      ${otp}
+      ${escapeHtml(otp)}
     </div>
     <p>Ce code est valable 10 minutes. Saisissez-le sur la page d'inscription pour activer votre compte.</p>
     <p>Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.</p>

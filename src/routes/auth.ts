@@ -150,9 +150,9 @@ auth.post('/register', async (c) => {
     const otp = generateOtp()
     await storeOtp(c.env.KV, email, otp)
 
-    // Envoyer l'OTP par email (Resend) — fallback en clair si pas de clé ou échec d'envoi
+    // Envoyer l'OTP par email (Resend)
     const apiKey = c.env.RESEND_API_KEY
-    const emailResult = apiKey ? await sendOtpInscription(apiKey, email, prenom, otp) : { success: false }
+    if (apiKey) await sendOtpInscription(apiKey, email, prenom, otp)
 
     // Traçabilité
     await auditLog(c.env.DB, { user_id: userId, action: 'REGISTER', entite_type: 'user', entite_id: userId })
@@ -160,7 +160,9 @@ auth.post('/register', async (c) => {
     return c.json({
       success: true,
       message: 'Compte créé. Vérifiez votre boîte email pour le code de vérification.',
-      ...(emailResult.success ? {} : { otpDemo: otp }),
+      // otpDemo uniquement en dev local sans clé Resend configurée — jamais si une clé existe,
+      // même en cas d'échec d'envoi (sinon l'OTP redevient récupérable sans accès à l'email).
+      ...(apiKey ? {} : { otpDemo: otp }),
     }, 201)
   } catch (e: any) {
     console.error('[register]', e)
@@ -228,15 +230,16 @@ auth.post('/verify-otp', async (c) => {
  * Régénère et renvoie l'OTP par email pour un compte déjà créé mais pas encore vérifié.
  * Utilisé par le bouton "Renvoyer le code" du wizard d'inscription.
  *
+ * Anti-énumération (même principe que POST /login) : réponse 200 identique que le compte
+ * existe ou non, ou qu'il soit déjà vérifié ou non — évite de révéler si un email est inscrit.
+ *
  * Body JSON :
  * ```json
  * { "email": "user@example.com" }
  * ```
  *
- * @returns 200 `{ success: true, message, otpDemo? }` — otpDemo seulement si l'envoi email échoue
+ * @returns 200 `{ success: true, message, otpDemo? }` — toujours 200, otpDemo seulement en dev sans clé Resend
  * @returns 400 si email manquant
- * @returns 404 si aucun compte pour cet email
- * @returns 409 si le compte est déjà vérifié
  * @returns 500 en cas d'erreur serveur
  */
 auth.post('/resend-otp', async (c) => {
@@ -244,20 +247,21 @@ auth.post('/resend-otp', async (c) => {
     const { email } = await c.req.json()
     if (!email) return c.json({ success: false, error: 'Email requis.' }, 400)
 
+    const genericResponse = { success: true, message: 'Si un compte existe pour cet email et n\'est pas encore vérifié, un nouveau code vient d\'être envoyé.' }
+
     const user = await findUserByEmailFull(c.env.DB, email)
-    if (!user) return c.json({ success: false, error: 'Aucun compte associé à cet email.' }, 404)
-    if (user.email_verifie) return c.json({ success: false, error: 'Ce compte est déjà vérifié.' }, 409)
+    if (!user || user.email_verifie) return c.json(genericResponse)
 
     const otp = generateOtp()
     await storeOtp(c.env.KV, email, otp)
 
     const apiKey = c.env.RESEND_API_KEY
-    const emailResult = apiKey ? await sendOtpInscription(apiKey, email, user.prenom, otp) : { success: false }
+    if (apiKey) await sendOtpInscription(apiKey, email, user.prenom, otp)
 
     return c.json({
-      success: true,
-      message: 'Code renvoyé.',
-      ...(emailResult.success ? {} : { otpDemo: otp }),
+      ...genericResponse,
+      // otpDemo uniquement en dev local sans clé Resend configurée (voir /register)
+      ...(apiKey ? {} : { otpDemo: otp }),
     })
   } catch (e) {
     console.error('[resend-otp]', e)
