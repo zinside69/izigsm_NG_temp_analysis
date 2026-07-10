@@ -67,4 +67,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add backups/d1/
           git diff --staged --quiet || git commit -m "chore: backup D1 automatique $(date -u +%Y-%m-%d)"
+          # main a pu avancer entre le checkout et ce push (autres commits pendant le job) —
+          # rebase avant de pousser plutôt qu'un simple push qui échouerait en non-fast-forward.
+          git pull --rebase origin main
           git push
