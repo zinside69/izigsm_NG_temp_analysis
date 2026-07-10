@@ -197,14 +197,14 @@
 
 | Réf | Fonctionnalité | Statut | Sprint | Détail |
 |-----|----------------|--------|--------|--------|
-| L01 | Email transactionnel (Resend API) | ✅ | 2.11 | `emailService.ts` + `RESEND_API_KEY` en prod |
-| L02 | Envoi email statut ticket (manuel) | ✅ | 2.11 | `sendTicketStatus()` — fire & forget |
-| L03 | Envoi email devis au client | ✅ | 2.11 | `sendDevisEmail()` |
-| L04 | Envoi email facture au client | ✅ | 2.11 | `sendFactureEmail()` |
-| L05 | Batch relances devis en attente | ✅ | 2.11 | `POST /api/notifications/relances` |
-| L06 | Journal email logs | ✅ | 2.11 | `email_logs` + `GET /api/notifications/logs` |
-| L07 | Email test (destinataire libre) | ✅ | 2.11 | `POST /api/notifications/test` |
-| L08 | Triggers automatiques statut→email | ✅ | 2.40 | Hook dans `updateStatut()` → `sendTicketCree/Termine/Livre()` |
+| L01 | Email transactionnel (Resend API) | ✅ | 2.11, **corrigé 2026-07-10** | `emailService.ts` — voir bugs.md : `waitUntil()` manquant + pas de clé Resend par boutique + `FRONTEND_URL` absente rendaient TOUS les emails non-fonctionnels depuis toujours (`email_logs` vide) malgré ce tableau. Corrigé et validé bout-en-bout le 2026-07-10. |
+| L02 | Envoi email statut ticket (auto, ticket créé/terminé/livré) | ✅ | 2.11, **corrigé 2026-07-10** | `sendTicketCree/Termine/Livre()` (`tickets.ts`) — même correctif que L01 |
+| L03 | Envoi email devis au client | ✅ | 2.11, **corrigé 2026-07-10** | `POST /devis/:id/envoyer` (`facturation.ts`) — même correctif que L01 |
+| L04 | Envoi email facture au client | ❌ | Jamais implémenté | `POST /factures/:id/emettre` n'envoie aucun email — contrairement à ce que ce tableau affirmait. Le client télécharge/imprime la facture (PDF), pas d'email automatique. |
+| L05 | Batch relances devis en attente | ✅ | 2.11, **corrigé 2026-07-10** | `POST /api/notifications/relances-devis` — même correctif que L01 |
+| L06 | Journal email logs | ✅ | 2.11 | `email_logs` + `GET /api/notifications/logs` — vide depuis toujours jusqu'au fix du 2026-07-10, contient maintenant de vrais envois |
+| L07 | Email test (destinataire libre) | ✅ | 2.11 | `POST /api/notifications/test` — le seul endpoint email qui fonctionnait déjà correctement (proprement `await`é, pas de fire-and-forget) |
+| L08 | Triggers automatiques statut→email | ✅ | 2.40, **corrigé 2026-07-10** | Hook dans `updateStatutTicket()` → `sendTicketTermine/Livre()` — même correctif que L01 |
 | L09 | Toggle notifications auto (boutique) | ✅ | 2.40 | `notifMap` dans `sendEmail()` — flags par type dans `boutique_settings` |
 | L10 | SMS Twilio | ❌ | Post-MVP | Coût + complexité |
 | L11 | WhatsApp Business | ❌ | Post-MVP | API payante |

@@ -1,5 +1,22 @@
 # iziGSM — Bugs connus
 
+## Emails transactionnels jamais envoyés depuis la création de la base — CORRIGÉ le 2026-07-10
+Découvert en testant les emails automatiques à la demande de l'utilisateur. `email_logs` était **totalement vide depuis toujours** — aucun email transactionnel (ticket créé/terminé/livré, SAV ouvert, devis, relances) n'était jamais réellement parti, malgré le code semblant fonctionnel et documenté comme "✅ Fait" dans `GAP_ANALYSIS_ENRICHI.md`. Trois bugs cumulés, chacun masquant le suivant :
+
+1. **`waitUntil()` manquant** — tous les triggers email (`sendTicketCree` et 4 autres) étaient appelés en fire-and-forget (`.catch(() => {})`) sans être enregistrés auprès du runtime Cloudflare Workers. Résultat : Workers tue l'exécution dès la réponse HTTP envoyée, avant que la promesse n'ait le temps d'aboutir — silencieux, aucune erreur visible côté utilisateur.
+2. **`email_api_key` jamais configurée par boutique** — même le `waitUntil()` corrigé, `sendEmail()` serait tombé en mode "simulé" (log sans envoi réel) faute de clé Resend propre à chaque boutique. Aucune boutique n'a jamais configuré ça (pas même un flow d'onboarding pour le faire).
+3. **`FRONTEND_URL` jamais configurée en production** — une fois les deux bugs précédents corrigés, l'email partait réellement mais le lien "Suivre ma réparation" pointait vers `http://localhost:3000` (fallback de dev), cassé pour tout client réel.
+
+**Fix appliqué** :
+- `waitUntil()` ajouté sur les 5 triggers fire-and-forget (`tickets.ts` ×4, `sav.ts`, `facturation.ts`)
+- Fallback plateforme sur `RESEND_API_KEY` globale (même mécanisme que l'email OTP) quand `email_api_key` boutique est vide — expéditeur forcé sur `mail.repairdesk.fr` (domaine vérifié) dans ce cas ; `POST /api/notifications/test` volontairement exclu du fallback (doit tester la vraie config boutique)
+- `FRONTEND_URL=https://repairdesk.fr` ajoutée dans `wrangler.jsonc` (var non-secrète)
+- Bonus : règle de réécriture `_redirects` pour `/suivi/:token` (format path, inutilisé par les liens réels qui sont en `?token=`, mais laissé cassé aurait été trompeur)
+
+**Validé bout-en-bout en production** (commit `2968bfa`) : ticket `TKT-2026-00009` → email réellement reçu par `telnet@bbox.fr` → lien de suivi correct vers `repairdesk.fr`. Premier enregistrement jamais créé dans `email_logs` (`statut: envoye`, `provider_id` Resend réel).
+
+**Dette restante** : `/factures/:id/emettre` n'envoie pas d'email du tout (jamais implémenté, contrairement à ce que suggérait la doc CDC "MOD-12 envoi email facture ✅") — non corrigé, hors scope de cette session.
+
 ## Backup D1 automatique — OPÉRATIONNEL depuis le 2026-07-10
 Mis en place suite à une question de l'utilisateur sur la durabilité des données D1 (isolation multi-tenant vérifiée + fiabilité Cloudflare). En plus des garanties natives D1 (Time Travel, export à la demande — vérifiées via l'API Cloudflare), un backup SQL complet est maintenant exporté chaque nuit à 02h00 UTC via `.github/workflows/d1-backup.yml` et commité dans `backups/d1/` (hébergeur différent de Cloudflare — vraie redondance).
 

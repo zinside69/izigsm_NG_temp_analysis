@@ -45,3 +45,29 @@ Seul vrai gap de conformité restant identifié dans le CDC. `checkAndPurgeExpir
 Confirmé le 2026-07-10 : ce n'est PAS hors périmètre produit. Un client possédant plusieurs boutiques doit pouvoir avoir un dashboard consolidé (vue toutes boutiques), naviguer vers chaque site, et transférer stock/personnel entre boutiques de son groupe. Cohabite avec le modèle actuel (boutiques indépendantes par défaut, façon RepairDesk/MonAtelier) — un client peut simplement posséder plusieurs boutiques indépendantes reliées à son compte.
 Chantier d'architecture, pas un ajout incrémental — le modèle actuel est strictement 1 user = 1 boutique_id (JWT). Nécessite : notion de groupe propriétaire, utilisateur multi-boutiques, mécanismes de transfert stock/personnel tracés. **À scoper en session dédiée** (conception avant code).
 - [ ] Session de conception : modèle de données groupe/multi-accès, impact sur l'isolation multi-tenant actuelle (vérifiée étanche le 2026-07-10), UI dashboard consolidé
+
+## Outils marketing pour les boutiques (2026-07-10, à revisiter)
+Déjà en place : vitrine publique, catalogue services public, prise de RDV en ligne, page de suivi réparation client, emails automatiques (statut/facture/devis), relances devis. Manquant, identifié en croisant `CDC_Manus.md` §5.7/5.12/5.14 avec le code réel :
+- [ ] **Programme de parrainage** — `referral_code`/`referred_by` prévus dans le modèle CRM (CDC §5.7), jamais implémentés (= item C10 gap analysis, Post-MVP)
+- [ ] **Collecte d'avis clients** — sondage post-réparation automatique, jamais construit (= item C11 gap analysis, Post-MVP)
+- [ ] **Email anniversaire client** — trigger prévu dans l'"Automation Engine" du CDC (§5.12), aucune trace dans le code, jamais planifié en sprint
+- [ ] **Dépôt à distance / devis avec photos** — formulaire public de capture de lead sans déplacement (CDC §5.14 `/pro/:slug/depot` + `/devis`) — item N06 gap analysis, Post-MVP
+
+Impact business (avis de l'agent, à discuter) : dépôt à distance = acquisition, parrainage + avis clients = rétention/confiance — probablement les plus proches de "killer features" chez la concurrence (RepairDesk/MonAtelier).
+
+## Bug — boutiques créées en libre-service sans slug (vitrine/RDV inaccessibles)
+Constaté le 2026-07-10 en testant les liens vitrine/RDV. `createBoutiqueWithSettings()` (`authService.ts`, utilisée par `/register` et `/complete-onboarding`) ne génère jamais de `slug`, contrairement à la route admin `POST /api/boutiques` (`boutiques.ts:137`) qui a déjà la logique d'auto-génération. Résultat : toute boutique créée via inscription libre-service (ex. SOTELI, Desk1 créées aujourd'hui) a `slug: NULL` en base → sa page vitrine/RDV publique (`rdv-public.html?slug=...`) est injoignable, aucun client ne peut réserver.
+- [ ] Réutiliser la logique de génération de slug de `boutiques.ts:137` dans `createBoutiqueWithSettings()` (authService.ts) — fix ciblé, pas de nouvelle table/migration nécessaire
+- [ ] Vérifier s'il faut aussi backfiller le slug des boutiques déjà créées sans (SOTELI id 2, Desk1 id 3)
+
+## Bug — prise de RDV en ligne : aucun créneau disponible (table boutique_creneaux vide)
+Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`publicService.ts:286`) lit la table `boutique_creneaux` (horaires bookables hebdomadaires par boutique) pour générer les créneaux — **cette table est vide pour toutes les boutiques, sans exception**, et **aucune UI ni route API n'existe pour la configurer** (recherché dans tout `src/` et `public/` — seule la migration `0025_rdv_public.sql` la crée). Le moteur lui-même est correct : il croise déjà les créneaux template avec les vrais RDV existants (table `rendez_vous`, celle de l'agenda interne) pour exclure les créneaux occupés — donc booking public et agenda interne sont déjà connectés au niveau données.
+- [ ] Construire l'écran de configuration des horaires bookables (settings.html ou nouvel onglet) + route CRUD `boutique_creneaux`
+- [ ] Vérifier besoin exprimé par l'utilisateur : affichage agenda (RDV en cours + disponibilités) directement sur le dashboard technicien (au-delà de la page `/agenda` dédiée déjà existante) — à clarifier en session dédiée
+
+## Bug majeur — emails transactionnels jamais envoyés — CORRIGÉ et VALIDÉ le 2026-07-10
+- [x] `waitUntil()` ajouté sur les 5 triggers fire-and-forget (tickets créé/terminé/livré/archivage auto, SAV ouvert, devis envoyé)
+- [x] Fallback `RESEND_API_KEY` globale quand la boutique n'a pas sa propre clé (expéditeur forcé `mail.repairdesk.fr`)
+- [x] `FRONTEND_URL=https://repairdesk.fr` ajoutée (`wrangler.jsonc`) — les liens emails pointaient vers `localhost:3000` en prod
+- [x] Validé bout-en-bout : ticket `TKT-2026-00009`, email reçu par `telnet@bbox.fr`, lien de suivi correct — commit `2968bfa`
+- Détail complet dans `bugs.md`. Dette restante notée là-bas : `/factures/:id/emettre` n'envoie toujours aucun email (jamais implémenté, GAP_ANALYSIS_ENRICHI.md corrigé en conséquence).
