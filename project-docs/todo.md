@@ -71,3 +71,21 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 - [x] `FRONTEND_URL=https://repairdesk.fr` ajoutée (`wrangler.jsonc`) — les liens emails pointaient vers `localhost:3000` en prod
 - [x] Validé bout-en-bout : ticket `TKT-2026-00009`, email reçu par `telnet@bbox.fr`, lien de suivi correct — commit `2968bfa`
 - Détail complet dans `bugs.md`. Dette restante notée là-bas : `/factures/:id/emettre` n'envoie toujours aucun email (jamais implémenté, GAP_ANALYSIS_ENRICHI.md corrigé en conséquence).
+
+## Analyse comparative — monatelier.net vs repairdesk.fr (demandé 2026-07-10)
+- [ ] Faire une analyse comparative des fonctionnalités entre `https://monatelier.net/aide/` (centre d'aide du concurrent — bonne source pour lister leurs features réelles) et l'état actuel d'iziGSM/repairdesk.fr. Objectif : repérer les écarts fonctionnels non déjà couverts par `GAP_ANALYSIS_ENRICHI.md` (qui compare au CDC, pas à la concurrence directement).
+
+## Rebranding — retirer "Mon Atelier" / "monatelier", remplacer par "MyDesk" (demandé 2026-07-10)
+"Mon Atelier" est utilisé comme nom de boutique par défaut/placeholder à plusieurs endroits du code — à remplacer par "MyDesk" pour ne pas rappeler la marque du concurrent monatelier.net. Occurrences trouvées (recherche `mon atelier|monatelier`, insensible à la casse) :
+- [ ] `public/static/js/app.js:27,385,386` — fallback `session.company`/`user.boutique_name` dans le wrapper ApiService partagé (impacte tout le dashboard)
+- [ ] `public/static/js/register.js:230,231` — fallback session après inscription email/OTP
+- [ ] `public/login.html:81,156,157,267,268` — placeholder input onboarding Google + fallback session (×2 occurrences : handleGoogleCredential et submitOnboarding)
+- [ ] `public/register.html:158,201,326,447,448` — placeholder `company_name`, lien "🇧🇪 Mon atelier est en Belgique" (formulation générique, à reformuler aussi), placeholder onboarding Google, fallback session
+- [ ] `src/routes/auth.ts:659` — exemple dans un commentaire JSDoc (`workshopName: "Mon Atelier"`) — cosmétique, à corriger pour cohérence
+- Vérifier aussi les autres pages internes (`dashboard.html`, `settings.html`, etc.) non auditées ici — recherche limitée à `src/` et `public/` en surface
+
+## Page de suivi ticket — feature "Progression" (demandé 2026-07-10)
+Constat : la section "Progression" (`suivi.html:93-94`, timeline visuelle avec icônes/étapes done-active-pending) **existe déjà et semble fonctionnelle** (`renderTimeline()`, `suivi.html:276-303`) — jamais vue en render propre par l'utilisateur à cause du bug email (jamais reçu avant aujourd'hui) et de l'extension navigateur qui a faussé mon test plus tôt. À clarifier avec l'utilisateur : vérifier le rendu réel une fois un lien d'email propre cliqué, et préciser si "ajouter cette feature" signifie un ajout par-dessus l'existant (ex. horodatage par étape, description détaillée) ou si la timeline actuelle ne s'affichait pas correctement pour une autre raison.
+
+## Message utilisateur "Diagnostic" (2026-07-10, sans contexte)
+Reçu seul, sans précision — à clarifier à la reprise de session : diagnostic de quoi précisément ?
