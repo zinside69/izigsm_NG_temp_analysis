@@ -18,12 +18,15 @@
  *   1. POST /refresh   → valide refresh en KV, révoque l'ancien, génère une nouvelle paire
  *
  * Endpoints :
- *   POST   /api/auth/register    → Inscription (crée boutique optionnelle + OTP)
- *   POST   /api/auth/verify-otp  → Vérification email par OTP (usage unique)
- *   POST   /api/auth/login       → Connexion email + mot de passe
- *   POST   /api/auth/refresh     → Rafraîchissement token (rotation — révoque l'ancien)
- *   POST   /api/auth/logout      → Déconnexion (révoque le refresh token)
- *   GET    /api/auth/me          → Profil utilisateur courant (JWT requis)
+ *   POST   /api/auth/register            → Inscription (crée boutique optionnelle + OTP)
+ *   POST   /api/auth/verify-otp          → Vérification email par OTP (usage unique)
+ *   POST   /api/auth/resend-otp          → Renvoi OTP (réponse anti-énumération)
+ *   POST   /api/auth/login               → Connexion email + mot de passe
+ *   POST   /api/auth/google              → Connexion/inscription OAuth Google One Tap
+ *   POST   /api/auth/complete-onboarding → Crée la boutique d'un compte Google sans boutique (JWT requis)
+ *   POST   /api/auth/refresh             → Rafraîchissement token (rotation — révoque l'ancien)
+ *   POST   /api/auth/logout              → Déconnexion (révoque le refresh token)
+ *   GET    /api/auth/me                  → Profil utilisateur courant (JWT requis)
  *
  * Sécurité :
  *   - Mots de passe : PBKDF2-SHA256 (100 000 itérations) via Web Crypto API
@@ -57,6 +60,7 @@ import {
   findUserByGoogleId,
   linkGoogleId,
   createGoogleUser,
+  attachBoutiqueToUser,
 } from '../services/authService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
@@ -623,6 +627,66 @@ auth.post('/google', async (c) => {
     })
   } catch (e) {
     console.error('[auth/google]', e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── POST /api/auth/complete-onboarding ───────────────────────────────────────
+
+/**
+ * POST /api/auth/complete-onboarding
+ * Crée la boutique d'un utilisateur déjà authentifié mais sans boutique —
+ * cas des comptes créés via `POST /auth/google` (One Tap ne collecte pas
+ * `workshopName`, contrairement à `POST /register`).
+ *
+ * Séquence :
+ *   1. Authentification requise (`authMiddleware`) — refuse si `boutique_id` déjà présent dans le JWT
+ *   2. Crée la boutique via `createBoutiqueWithSettings()` (même fonction que `/register`)
+ *   3. Lie la boutique au user via `attachBoutiqueToUser()` (idempotent, `boutique_id IS NULL` en garde)
+ *   4. Régénère une paire de tokens (l'ancien JWT porte encore `boutique_id: null`)
+ *
+ * Body JSON : { "workshopName": "Mon Atelier" }
+ * @returns 200 { success: true, accessToken, refreshToken, expiresIn, user }
+ * @returns 400 si workshopName manquant
+ * @returns 409 si l'utilisateur a déjà une boutique (JWT ou état DB)
+ * @returns 500 en cas d'erreur serveur
+ */
+auth.post('/complete-onboarding', authMiddleware, async (c) => {
+  try {
+    const jwtUser = c.get('user')
+    if (jwtUser.boutique_id)
+      return c.json({ success: false, error: 'Une boutique est déjà associée à ce compte.' }, 409)
+
+    const { workshopName } = await c.req.json().catch(() => ({}))
+    if (!workshopName || !workshopName.trim())
+      return c.json({ success: false, error: 'Le nom de l\'atelier est requis.' }, 400)
+
+    const boutiqueId = await createBoutiqueWithSettings(c.env.DB, workshopName.trim())
+    if (!boutiqueId)
+      return c.json({ success: false, error: 'Erreur création boutique.' }, 500)
+
+    const linked = await attachBoutiqueToUser(c.env.DB, jwtUser.sub, boutiqueId)
+    if (!linked)
+      return c.json({ success: false, error: 'Une boutique est déjà associée à ce compte.' }, 409)
+
+    // L'ancien JWT porte encore boutique_id: null — régénérer avec l'état à jour
+    const user = await findUserById(c.env.DB, jwtUser.sub)
+    if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
+
+    const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
+    await storeRefreshToken(c.env.KV, user.id, tokens.refreshToken)
+    await auditLog(c.env.DB, {
+      boutique_id: boutiqueId, user_id: user.id,
+      action: 'COMPLETE_ONBOARDING', entite_type: 'boutique', entite_id: boutiqueId,
+    })
+
+    return c.json({
+      success: true,
+      ...tokens,
+      user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role, boutique_id: user.boutique_id }
+    })
+  } catch (e) {
+    console.error('[complete-onboarding]', e)
     return c.json({ success: false, error: 'Erreur serveur.' }, 500)
   }
 })

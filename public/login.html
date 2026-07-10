@@ -24,45 +24,66 @@
         <div style="height:4px;background:linear-gradient(90deg,#b39dff,var(--primary));"></div>
 
         <div style="padding:36px;">
-          <div style="margin-bottom:28px;">
-            <p class="eyebrow" style="margin:0 0 8px;">CONNEXION</p>
-            <h2 style="margin:0 0 8px;font-size:1.8rem;letter-spacing:-0.05em;">Bon retour 👋</h2>
-            <p style="margin:0;color:#667085;font-size:0.95rem;">Connectez-vous à votre espace iziGSM.</p>
+          <!-- Panneau connexion (email/password + Google) -->
+          <div id="login-panel">
+            <div style="margin-bottom:28px;">
+              <p class="eyebrow" style="margin:0 0 8px;">CONNEXION</p>
+              <h2 style="margin:0 0 8px;font-size:1.8rem;letter-spacing:-0.05em;">Bon retour 👋</h2>
+              <p style="margin:0;color:#667085;font-size:0.95rem;">Connectez-vous à votre espace iziGSM.</p>
+            </div>
+
+            <div class="flash-stack" id="flash-area" style="display:none;padding:0;margin-bottom:16px;"></div>
+
+            <form id="login-form" novalidate>
+              <div class="field" style="margin-bottom:16px;">
+                <label for="login-email">Email professionnel *</label>
+                <input type="email" id="login-email" name="email" placeholder="votre@email.fr" required autocomplete="email">
+              </div>
+              <div class="field" style="margin-bottom:8px;">
+                <label for="login-password">Mot de passe *</label>
+                <input type="password" id="login-password" name="password" required autocomplete="current-password">
+              </div>
+              <div style="text-align:right;margin-bottom:22px;">
+                <a href="/reset-password" style="color:var(--primary);font-size:0.88rem;font-weight:600;">Mot de passe oublié ?</a>
+              </div>
+              <button type="submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;">
+                Se connecter
+              </button>
+            </form>
+
+            <div class="separator" style="margin:20px 0;">OU</div>
+
+            <!-- Google One Tap — chargé dynamiquement si GOOGLE_CLIENT_ID disponible -->
+            <div id="google-btn-container" style="display:flex;justify-content:center;margin-bottom:8px;min-height:44px;">
+              <!-- Le bouton Google est injecté ici par initGoogleOneTap() -->
+              <div id="google-btn-fallback" class="oauth-box" style="cursor:not-allowed;opacity:.6;">
+                <span class="oauth-logo">G</span>
+                Google (non configuré)
+              </div>
+            </div>
+
+            <p style="text-align:center;margin:20px 0 0;color:#667085;font-size:0.9rem;">
+              Pas encore de compte ? <a href="/register" style="color:var(--primary);font-weight:700;">Inscription gratuite →</a>
+            </p>
           </div>
 
-          <div class="flash-stack" id="flash-area" style="display:none;padding:0;margin-bottom:16px;"></div>
-
-          <form id="login-form" novalidate>
-            <div class="field" style="margin-bottom:16px;">
-              <label for="login-email">Email professionnel *</label>
-              <input type="email" id="login-email" name="email" placeholder="votre@email.fr" required autocomplete="email">
+          <!-- Panneau onboarding — compte Google connecté mais sans boutique (createGoogleUser
+               ne collecte pas de workshopName). Affiché à la place du panneau connexion. -->
+          <div id="onboarding-panel" style="display:none;">
+            <div style="margin-bottom:28px;">
+              <p class="eyebrow" style="margin:0 0 8px;">DERNIÈRE ÉTAPE</p>
+              <h2 style="margin:0 0 8px;font-size:1.8rem;letter-spacing:-0.05em;">Votre atelier</h2>
+              <p style="margin:0;color:#667085;font-size:0.95rem;">Comment s'appelle votre atelier ? Vous pourrez compléter SIRET, adresse et TVA plus tard depuis les paramètres.</p>
             </div>
-            <div class="field" style="margin-bottom:8px;">
-              <label for="login-password">Mot de passe *</label>
-              <input type="password" id="login-password" name="password" required autocomplete="current-password">
+            <div class="flash-stack" id="onboarding-flash" style="display:none;padding:0;margin-bottom:16px;"></div>
+            <div class="field" style="margin-bottom:22px;">
+              <label for="onboarding-workshop-name">Nom de l'atelier *</label>
+              <input type="text" id="onboarding-workshop-name" placeholder="Mon Atelier" required>
             </div>
-            <div style="text-align:right;margin-bottom:22px;">
-              <a href="/reset-password" style="color:var(--primary);font-size:0.88rem;font-weight:600;">Mot de passe oublié ?</a>
-            </div>
-            <button type="submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;">
-              Se connecter
+            <button type="button" id="btn-onboarding-submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;" onclick="submitOnboarding()">
+              Continuer →
             </button>
-          </form>
-
-          <div class="separator" style="margin:20px 0;">OU</div>
-
-          <!-- Google One Tap — chargé dynamiquement si GOOGLE_CLIENT_ID disponible -->
-          <div id="google-btn-container" style="display:flex;justify-content:center;margin-bottom:8px;min-height:44px;">
-            <!-- Le bouton Google est injecté ici par initGoogleOneTap() -->
-            <div id="google-btn-fallback" class="oauth-box" style="cursor:not-allowed;opacity:.6;">
-              <span class="oauth-logo">G</span>
-              Google (non configuré)
-            </div>
           </div>
-
-          <p style="text-align:center;margin:20px 0 0;color:#667085;font-size:0.9rem;">
-            Pas encore de compte ? <a href="/register" style="color:var(--primary);font-weight:700;">Inscription gratuite →</a>
-          </p>
         </div>
       </div>
     </div>
@@ -194,6 +215,13 @@
       } catch (_) { /* non bloquant */ }
     }
 
+    /**
+     * Callback Google Identity Services. createGoogleUser() côté backend ne crée
+     * jamais de boutique (le One Tap ne collecte pas workshopName) — si boutique_id
+     * est absent (première connexion Google sans passer par /register), on affiche
+     * le panneau onboarding plutôt que de rediriger vers un dashboard vide/cassé.
+     * @param {{credential: string}} response  Réponse Google One Tap
+     */
     async function handleGoogleCredential(response) {
       const flash = document.getElementById('flash-area');
       flash.style.display = 'none';
@@ -206,40 +234,89 @@
         });
         const data = await res.json();
 
-        if (data.success && data.accessToken) {
-          const user = data.user;
-          let boutiqueId   = user.boutique_id   ?? null;
-          let boutiqueName = null;
-
-          if (!boutiqueId) {
-            try {
-              const bRes  = await fetch('/api/boutiques', { headers: { Authorization: `Bearer ${data.accessToken}` } });
-              const bData = await bRes.json();
-              if (bData.success && bData.data?.length > 0) {
-                boutiqueId   = bData.data[0].id;
-                boutiqueName = bData.data[0].nom;
-              }
-            } catch (_) {}
-          }
-
-          localStorage.setItem('izigsm_token',         data.accessToken);
-          localStorage.setItem('izigsm_refresh_token', data.refreshToken);
-          localStorage.setItem('izigsm_session', JSON.stringify({
-            name:          `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
-            email:         user.email,
-            role:          user.role,
-            boutique_id:   boutiqueId,
-            boutique_name: boutiqueName || 'Mon Atelier',
-            company:       boutiqueName || 'Mon Atelier',
-          }));
-          window.location.href = '/dashboard';
-        } else {
+        if (!data.success || !data.accessToken) {
           flash.style.display = 'block';
           flash.innerHTML = `<div class="flash error">❌ ${data.error || 'Erreur Google OAuth.'}</div>`;
+          return;
         }
+
+        storeAuthSession(data);
+
+        if (!data.user.boutique_id) {
+          document.getElementById('login-panel').style.display = 'none';
+          document.getElementById('onboarding-panel').style.display = 'block';
+          return;
+        }
+        window.location.href = '/dashboard';
       } catch (err) {
         flash.style.display = 'block';
         flash.innerHTML = `<div class="flash error">❌ Erreur réseau : ${err.message}</div>`;
+      }
+    }
+
+    /**
+     * Stocke la session (token, refresh, profil) au format attendu par app.js.
+     * Factorisé car appelé après /api/auth/google ET après /api/auth/complete-onboarding.
+     * @param {{accessToken:string, refreshToken:string, user:object}} data
+     */
+    function storeAuthSession(data) {
+      const user = data.user;
+      localStorage.setItem('izigsm_token',         data.accessToken);
+      localStorage.setItem('izigsm_refresh_token', data.refreshToken);
+      localStorage.setItem('izigsm_session', JSON.stringify({
+        name:          `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+        email:         user.email,
+        role:          user.role,
+        boutique_id:   user.boutique_id ?? null,
+        boutique_name: 'Mon Atelier',
+        company:       'Mon Atelier',
+      }));
+    }
+
+    /**
+     * Soumission du panneau onboarding (compte Google sans boutique).
+     * Appelle POST /api/auth/complete-onboarding, remplace la session par les
+     * tokens régénérés (boutique_id à jour), puis redirige vers le dashboard.
+     */
+    async function submitOnboarding() {
+      const name  = document.getElementById('onboarding-workshop-name')?.value?.trim();
+      const flash = document.getElementById('onboarding-flash');
+      flash.style.display = 'none';
+
+      if (!name) {
+        flash.style.display = 'block';
+        flash.innerHTML = `<div class="flash error">⚠️ Le nom de l'atelier est requis.</div>`;
+        return;
+      }
+
+      const btn = document.getElementById('btn-onboarding-submit');
+      btn.disabled = true;
+      btn.textContent = 'Création…';
+
+      try {
+        const token = localStorage.getItem('izigsm_token');
+        const res   = await fetch('/api/auth/complete-onboarding', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body:    JSON.stringify({ workshopName: name }),
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          flash.style.display = 'block';
+          flash.innerHTML = `<div class="flash error">❌ ${data.error || 'Erreur lors de la création de l\'atelier.'}</div>`;
+          btn.disabled = false;
+          btn.textContent = 'Continuer →';
+          return;
+        }
+
+        storeAuthSession(data);
+        window.location.href = '/dashboard';
+      } catch (err) {
+        flash.style.display = 'block';
+        flash.innerHTML = `<div class="flash error">❌ Erreur réseau : ${err.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Continuer →';
       }
     }
 

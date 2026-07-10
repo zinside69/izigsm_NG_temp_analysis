@@ -307,6 +307,30 @@
           </div>
         </div>
 
+        <!-- Onboarding boutique (comptes créés via Google — pas de workshopName collecté par le One Tap) -->
+        <div id="step-onboarding" class="step-panel hidden">
+          <div class="form-nav">
+            <span>INSCRIPTION</span>
+            <span class="sep">·</span>
+            <span class="active">VOTRE ATELIER</span>
+          </div>
+          <div class="form-intro">
+            <h2>Une dernière chose</h2>
+            <p>Comment s'appelle votre atelier ? Vous pourrez compléter SIRET, adresse et TVA plus tard depuis les paramètres.</p>
+          </div>
+          <form id="form-onboarding" class="grid-form" novalidate>
+            <div class="field full">
+              <label for="onboarding_workshop_name">Nom de l'atelier *</label>
+              <input type="text" id="onboarding_workshop_name" name="workshop_name" placeholder="Mon Atelier" required>
+              <span class="field-error" id="err-onboarding_workshop_name"></span>
+            </div>
+          </form>
+          <div class="bottom-row">
+            <span></span>
+            <button class="btn btn-accent" id="btn-onboarding-submit" onclick="submitOnboarding()">Continuer →</button>
+          </div>
+        </div>
+
         <!-- Succès final -->
         <div id="step-success" class="step-panel hidden">
           <div class="success-panel">
@@ -376,6 +400,10 @@
      * et le fait vérifier côté backend (POST /api/auth/google). Contrairement au
      * flow OTP manuel, un compte créé via Google est déjà actif et vérifié
      * (createGoogleUser côté backend) : connexion directe, pas d'étape de code.
+     *
+     * Cas particulier : createGoogleUser() ne crée jamais de boutique (le One Tap
+     * ne collecte pas workshopName). Si boutique_id est absent, on redirige vers
+     * l'étape onboarding (submitOnboarding()) avant le dashboard.
      * @param {{credential: string}} response  Réponse Google One Tap
      */
     async function handleGoogleCredential(response) {
@@ -386,7 +414,23 @@
         return;
       }
 
-      const { accessToken, refreshToken, user } = res.data;
+      storeAuthSession(res.data);
+
+      if (!res.data.user.boutique_id) {
+        goToStep('onboarding');
+        return;
+      }
+      window.location.href = '/dashboard';
+    }
+
+    /**
+     * Stocke la session (token, refresh, profil) au format attendu par app.js.
+     * Factorisé car appelé après /api/auth/google ET après /api/auth/complete-onboarding
+     * (qui régénère les tokens une fois la boutique liée — voir submitOnboarding()).
+     * @param {{accessToken:string, refreshToken:string, user:object}} data
+     */
+    function storeAuthSession(data) {
+      const { accessToken, refreshToken, user } = data;
       localStorage.setItem('izigsm_token', accessToken);
       localStorage.setItem('izigsm_refresh_token', refreshToken);
       localStorage.setItem('izigsm_session', JSON.stringify({
@@ -398,6 +442,35 @@
         company:       'Mon Atelier',
       }));
       localStorage.setItem('reg_email', user.email);
+    }
+
+    /**
+     * Soumission de l'étape onboarding (compte Google sans boutique).
+     * Appelle POST /api/auth/complete-onboarding avec le nom de l'atelier,
+     * remplace la session par les tokens régénérés (boutique_id à jour), puis
+     * redirige vers le dashboard.
+     */
+    async function submitOnboarding() {
+      const name = document.getElementById('onboarding_workshop_name')?.value?.trim();
+      const errEl = document.getElementById('err-onboarding_workshop_name');
+      if (!name) {
+        if (errEl) errEl.textContent = 'Le nom de l\'atelier est requis.';
+        return;
+      }
+      if (errEl) errEl.textContent = '';
+
+      const btn = document.getElementById('btn-onboarding-submit');
+      if (btn) { btn.disabled = true; btn.textContent = 'Création…'; }
+
+      const res = await apiPost('/api/auth/complete-onboarding', { workshopName: name });
+
+      if (!res.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Continuer →'; }
+        if (errEl) errEl.textContent = res.data?.error || 'Erreur lors de la création de l\'atelier.';
+        return;
+      }
+
+      storeAuthSession(res.data);
       window.location.href = '/dashboard';
     }
 

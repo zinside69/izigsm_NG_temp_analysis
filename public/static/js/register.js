@@ -119,17 +119,23 @@ function buildRecap() {
 // ======================== API HELPER (page register — app.js non chargé ici) ========================
 
 /**
- * POST JSON minimal, sans gestion JWT (endpoints publics /api/auth/*).
- * app.js (qui expose apiPostPublic) n'est pas chargé sur cette page — voir register.html.
+ * POST JSON minimal (endpoints publics /api/auth/* ET /api/auth/complete-onboarding,
+ * protégé par JWT une fois le compte Google créé). app.js (qui expose apiPostPublic)
+ * n'est pas chargé sur cette page — voir register.html. Le token, s'il existe déjà en
+ * localStorage (posé par handleGoogleCredential avant l'étape onboarding), est
+ * automatiquement attaché — sans effet sur les endpoints publics qui l'ignorent.
  * @param {string} url  Chemin de l'endpoint (ex: '/api/auth/register')
  * @param {object} body Corps JSON de la requête
  * @returns {Promise<{ok: boolean, status: number, data: object|null}>}
  */
 async function apiPost(url, body) {
   try {
+    const token   = localStorage.getItem('izigsm_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     let data = null;

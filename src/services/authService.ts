@@ -14,6 +14,7 @@
  *   - `findUserByEmailFull()` → cherche avec password_hash pour le login
  *   - `findUserWithProfile()` → cherche avec boutique_nom pour /me
  *   - `createBoutiqueWithSettings()` → crée boutique + boutique_settings en séquence
+ *   - `attachBoutiqueToUser()` → lie une boutique nouvellement créée à un user existant (onboarding post-Google)
  *   - `createUser()`          → insert user inactif avec boutique_id optionnel
  *   - `activateUser()`        → UPDATE actif=1, email_verifie=1 après OTP validé
  *   - `findUserByEmailAfterActivation()` → SELECT avec rôle après activation
@@ -197,6 +198,35 @@ export async function createBoutiqueWithSettings(
   }
 
   return boutiqueId
+}
+
+// ─── attachBoutiqueToUser ───────────────────────────────────────────────────────
+
+/**
+ * Lie une boutique à un utilisateur existant qui n'en a pas encore (`boutique_id IS NULL`).
+ *
+ * Cas d'usage : onboarding post-inscription Google — `createGoogleUser()` crée un
+ * compte actif sans boutique (pas de `workshopName` collecté dans le flow One Tap),
+ * l'utilisateur choisit le nom de son atelier une fois connecté, sur `POST /api/auth/complete-onboarding`.
+ *
+ * La condition `AND boutique_id IS NULL` rend l'opération idempotente et empêche
+ * d'écraser une boutique déjà assignée (double-appel, onglet dupliqué, etc.).
+ *
+ * @param db          Instance D1Database
+ * @param userId      Identifiant de l'utilisateur (JWT `sub`)
+ * @param boutiqueId  Identifiant de la boutique à lier (créée juste avant via `createBoutiqueWithSettings`)
+ * @returns           `true` si la ligne a été mise à jour, `false` si le user avait déjà une boutique
+ */
+export async function attachBoutiqueToUser(
+  db:         D1Database,
+  userId:     number,
+  boutiqueId: number
+): Promise<boolean> {
+  const result = await db.prepare(
+    'UPDATE users SET boutique_id = ? WHERE id = ? AND boutique_id IS NULL'
+  ).bind(boutiqueId, userId).run()
+
+  return (result.meta.changes ?? 0) > 0
 }
 
 // ─── createUser ───────────────────────────────────────────────────────────────
