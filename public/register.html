@@ -89,9 +89,13 @@
             <p>Connectez-vous en 30 secondes pour démarrer votre essai gratuit.</p>
           </div>
 
-          <div class="oauth-box" onclick="alert('OAuth Google — non disponible en démo')">
-            <span class="oauth-logo">G</span>
-            Continuer avec Google
+          <!-- Google One Tap — chargé dynamiquement si GOOGLE_CLIENT_ID disponible -->
+          <div id="google-btn-container" style="display:flex;justify-content:center;margin-bottom:8px;min-height:44px;">
+            <!-- Le bouton Google est injecté ici par initGoogleOneTap() -->
+            <div id="google-btn-fallback" class="oauth-box" style="cursor:not-allowed;opacity:.6;">
+              <span class="oauth-logo">G</span>
+              Google (non configuré)
+            </div>
           </div>
           <div class="separator">OU AVEC VOTRE EMAIL</div>
 
@@ -318,6 +322,80 @@
   </div>
 
   <script src="/static/js/register.js"></script>
+  <!-- Google Identity Services (One Tap) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    /**
+     * Initialise Google One Tap si GOOGLE_CLIENT_ID est exposé via /api/auth/config.
+     * Fallback gracieux : si non configuré, le bouton fallback reste visible.
+     * Miroir de la logique de login.html — un compte créé via Google est déjà
+     * actif et vérifié (createGoogleUser côté backend), pas d'étape OTP.
+     */
+    async function initGoogleOneTap() {
+      try {
+        const res  = await fetch('/api/auth/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (!cfg.googleClientId) return;
+
+        document.getElementById('google-btn-fallback').style.display = 'none';
+
+        await new Promise(resolve => {
+          if (window.google?.accounts) { resolve(); return; }
+          const check = setInterval(() => {
+            if (window.google?.accounts) { clearInterval(check); resolve(); }
+          }, 100);
+          setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+        });
+
+        if (!window.google?.accounts) return;
+
+        google.accounts.id.initialize({
+          client_id:         cfg.googleClientId,
+          callback:          handleGoogleCredential,
+          auto_select:       false,
+          cancel_on_tap_outside: true,
+        });
+
+        google.accounts.id.renderButton(
+          document.getElementById('google-btn-container'),
+          {
+            theme:     'outline',
+            size:      'large',
+            text:      'signup_with',
+            shape:     'rectangular',
+            logo_alignment: 'left',
+            width:     368,
+          }
+        );
+      } catch (_) { /* non bloquant */ }
+    }
+
+    async function handleGoogleCredential(response) {
+      const res  = await apiPost('/api/auth/google', { credential: response.credential });
+
+      if (!res.ok) {
+        showFlashRegister('❌ ' + (res.data?.error || 'Erreur Google OAuth.'), 'error');
+        return;
+      }
+
+      const { accessToken, refreshToken, user } = res.data;
+      localStorage.setItem('izigsm_token', accessToken);
+      localStorage.setItem('izigsm_refresh_token', refreshToken);
+      localStorage.setItem('izigsm_session', JSON.stringify({
+        name:          `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+        email:         user.email,
+        role:          user.role,
+        boutique_id:   user.boutique_id ?? null,
+        boutique_name: 'Mon Atelier',
+        company:       'Mon Atelier',
+      }));
+      localStorage.setItem('reg_email', user.email);
+      window.location.href = '/dashboard';
+    }
+
+    window.addEventListener('DOMContentLoaded', initGoogleOneTap);
+  </script>
   <script src="/static/js/pwa.js"></script>
 </body>
 </html>
