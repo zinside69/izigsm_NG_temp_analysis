@@ -243,6 +243,58 @@ function baseLayout(content: string, boutiqueName: string): string {
 </body></html>`
 }
 
+// ─── Email système (hors contexte boutique) ────────────────────────────────────
+
+/**
+ * Envoie l'email de vérification (code OTP) lors de l'inscription d'un nouveau compte.
+ * Email système : contrairement aux emails métier ci-dessous, il n'y a pas encore de
+ * boutique au moment de l'inscription — utilise directement la clé Resend globale du
+ * compte Cloudflare (`RESEND_API_KEY`) et le domaine d'envoi vérifié `mail.repairdesk.fr`,
+ * plutôt que le système `sendEmail()`/`email_logs` scopé par `boutique_id` (NOT NULL).
+ *
+ * @param apiKey  Clé API Resend (c.env.RESEND_API_KEY)
+ * @param to      Email du nouvel utilisateur
+ * @param prenom  Prénom pour la personnalisation
+ * @param otp     Code à 6 chiffres à afficher dans l'email
+ * @returns       { success: boolean } — ne jette jamais d'exception
+ */
+export async function sendOtpInscription(
+  apiKey: string,
+  to:     string,
+  prenom: string,
+  otp:    string
+): Promise<{ success: boolean }> {
+  const html = baseLayout(`
+    <p>Bonjour <strong>${prenom}</strong>,</p>
+    <p>Merci de votre inscription sur iziGSM. Voici votre code de vérification :</p>
+    <div class="info-box" style="text-align:center; font-size:28px; font-weight:700; letter-spacing:6px; color:#4f46e5;">
+      ${otp}
+    </div>
+    <p>Ce code est valable 10 minutes. Saisissez-le sur la page d'inscription pour activer votre compte.</p>
+    <p>Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.</p>
+  `, 'iziGSM')
+
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        from:    'iziGSM <noreply@mail.repairdesk.fr>',
+        to:      [to],
+        subject: 'Votre code de vérification iziGSM',
+        html,
+      }),
+    })
+    return { success: resp.ok }
+  } catch (e) {
+    console.error('[sendOtpInscription]', e)
+    return { success: false }
+  }
+}
+
 // ─── Emails métier ────────────────────────────────────────────────────────────
 
 /**

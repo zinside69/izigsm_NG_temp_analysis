@@ -43,6 +43,7 @@ import {
 } from '../lib/auth'
 import { validateEmail, auditLog } from '../lib/db'
 import { authMiddleware } from '../lib/middleware'
+import { sendOtpInscription } from '../services/emailService'
 import {
   findUserByEmail,
   findUserByEmailFull,
@@ -58,7 +59,7 @@ import {
   createGoogleUser,
 } from '../services/authService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
 type Variables = { user: any }
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -93,8 +94,9 @@ auth.get('/config', (c) => {
  *   6. Génère un OTP 6 chiffres et le stocke hashé en KV (TTL 10 min)
  *   7. Logue l'action `REGISTER` en audit
  *
- * En mode démo sandbox : l'OTP est retourné en clair dans la réponse (`otpDemo`).
- * En production : l'OTP doit être envoyé par email (via emailService).
+ * L'OTP est envoyé par email via `sendOtpInscription()` (Resend, `RESEND_API_KEY`).
+ * Si la clé n'est pas configurée ou si l'envoi échoue, l'OTP est retourné en clair
+ * dans la réponse (`otpDemo`) en secours — utilisé en dev local sans clé Resend.
  *
  * Body JSON :
  * ```json
@@ -148,15 +150,17 @@ auth.post('/register', async (c) => {
     const otp = generateOtp()
     await storeOtp(c.env.KV, email, otp)
 
+    // Envoyer l'OTP par email (Resend) — fallback en clair si pas de clé ou échec d'envoi
+    const apiKey = c.env.RESEND_API_KEY
+    const emailResult = apiKey ? await sendOtpInscription(apiKey, email, prenom, otp) : { success: false }
+
     // Traçabilité
     await auditLog(c.env.DB, { user_id: userId, action: 'REGISTER', entite_type: 'user', entite_id: userId })
 
     return c.json({
       success: true,
-      message: 'Compte créé. Vérifiez votre email.',
-      // En production : ne pas retourner l'OTP — l'envoyer par email
-      // En démo sandbox : on le retourne pour test
-      otpDemo: otp
+      message: 'Compte créé. Vérifiez votre boîte email pour le code de vérification.',
+      ...(emailResult.success ? {} : { otpDemo: otp }),
     }, 201)
   } catch (e: any) {
     console.error('[register]', e)
@@ -209,10 +213,54 @@ auth.post('/verify-otp', async (c) => {
       success: true,
       message: 'Compte activé !',
       ...tokens,
-      user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role }
+      user: { id: user.id, email: user.email, prenom: user.prenom, nom: user.nom, role: user.role, boutique_id: user.boutique_id }
     })
   } catch (e) {
     console.error('[verify-otp]', e)
+    return c.json({ success: false, error: 'Erreur serveur.' }, 500)
+  }
+})
+
+// ─── POST /api/auth/resend-otp ────────────────────────────────────────────────
+
+/**
+ * POST /api/auth/resend-otp
+ * Régénère et renvoie l'OTP par email pour un compte déjà créé mais pas encore vérifié.
+ * Utilisé par le bouton "Renvoyer le code" du wizard d'inscription.
+ *
+ * Body JSON :
+ * ```json
+ * { "email": "user@example.com" }
+ * ```
+ *
+ * @returns 200 `{ success: true, message, otpDemo? }` — otpDemo seulement si l'envoi email échoue
+ * @returns 400 si email manquant
+ * @returns 404 si aucun compte pour cet email
+ * @returns 409 si le compte est déjà vérifié
+ * @returns 500 en cas d'erreur serveur
+ */
+auth.post('/resend-otp', async (c) => {
+  try {
+    const { email } = await c.req.json()
+    if (!email) return c.json({ success: false, error: 'Email requis.' }, 400)
+
+    const user = await findUserByEmailFull(c.env.DB, email)
+    if (!user) return c.json({ success: false, error: 'Aucun compte associé à cet email.' }, 404)
+    if (user.email_verifie) return c.json({ success: false, error: 'Ce compte est déjà vérifié.' }, 409)
+
+    const otp = generateOtp()
+    await storeOtp(c.env.KV, email, otp)
+
+    const apiKey = c.env.RESEND_API_KEY
+    const emailResult = apiKey ? await sendOtpInscription(apiKey, email, user.prenom, otp) : { success: false }
+
+    return c.json({
+      success: true,
+      message: 'Code renvoyé.',
+      ...(emailResult.success ? {} : { otpDemo: otp }),
+    })
+  } catch (e) {
+    console.error('[resend-otp]', e)
     return c.json({ success: false, error: 'Erreur serveur.' }, 500)
   }
 })

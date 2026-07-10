@@ -112,95 +112,133 @@ function buildRecap() {
 
   const phoneLabel = document.getElementById('otp-phone-label');
   if (phoneLabel) {
-    phoneLabel.textContent = `Saisissez le code reçu au ${w.phone_country} ${w.phone}. Il reste valide 10 minutes.`;
+    phoneLabel.textContent = `Saisissez le code reçu par email à ${a.email}. Il reste valide 10 minutes.`;
+  }
+}
+
+// ======================== API HELPER (page register — app.js non chargé ici) ========================
+async function apiPost(url, body) {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: null };
   }
 }
 
 // ======================== OTP ========================
-function sendOtp() {
+async function sendOtp() {
   const accepted = document.getElementById('accepted_terms')?.checked;
   if (!accepted) {
     showFlashRegister('⚠️ Vous devez accepter les conditions générales avant de continuer.', 'error');
     return;
   }
 
-  // Générer un code OTP simulé
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  registerState.otp = otp;
-  registerState.otpExpires = Date.now() + 600000; // 10 min
+  const btn = document.getElementById('btn-send-otp');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
 
-  console.log('[iziGSM démo] Code OTP :', otp); // Affiché dans la console pour la démo
+  const a = registerState.account;
+  const w = registerState.workshop;
+  const r = await apiPost('/api/auth/register', {
+    email:        a.email,
+    password:     a.password,
+    prenom:       a.firstName,
+    nom:          a.lastName,
+    telephone:    w.phone || null,
+    workshopName: w.company_name || null,
+  });
 
-  // Afficher la box OTP
+  if (!r.ok) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Envoyer le code →'; }
+    showFlashRegister('❌ ' + (r.data?.error || 'Erreur lors de la création du compte.'), 'error');
+    return;
+  }
+
+  registerState.otpDemo = r.data?.otpDemo || null;
+
   const otpBox = document.getElementById('otp-box');
   if (otpBox) otpBox.classList.remove('hidden');
 
-  // Feedback utilisateur
-  const phone = (registerState.workshop.phone_country || '+33') + ' ' + (registerState.workshop.phone || '');
-  showFlashRegister(`✅ Code envoyé par SMS au ${phone} (mode démo : consultez la console pour le code)`, 'success');
+  showFlashRegister(
+    registerState.otpDemo
+      ? `✅ Compte créé (mode démo, pas de clé email configurée) — code : ${registerState.otpDemo}`
+      : `✅ Un email contenant votre code de vérification a été envoyé à ${a.email}.`,
+    'success'
+  );
 
-  // Désactiver le bouton
-  const btn = document.getElementById('btn-send-otp');
-  if (btn) { btn.textContent = '✓ Code envoyé'; btn.disabled = true; }
+  if (btn) { btn.textContent = '✓ Code envoyé'; }
 }
 
-function resendOtp() {
-  registerState.otp = null;
-  registerState.otpExpires = null;
-  const btn = document.getElementById('btn-send-otp');
-  if (btn) { btn.textContent = 'Envoyer le code →'; btn.disabled = false; }
-  sendOtp();
+async function resendOtp() {
+  const btn = document.querySelector('#otp-box .btn-ghost');
+  if (btn) { btn.disabled = true; }
+
+  const r = await apiPost('/api/auth/resend-otp', { email: registerState.account.email });
+
+  if (!r.ok) {
+    showFlashRegister('❌ ' + (r.data?.error || 'Erreur lors du renvoi du code.'), 'error');
+    if (btn) { btn.disabled = false; }
+    return;
+  }
+
+  registerState.otpDemo = r.data?.otpDemo || null;
+  showFlashRegister(
+    registerState.otpDemo
+      ? `✅ Nouveau code (mode démo) : ${registerState.otpDemo}`
+      : `✅ Un nouveau code a été envoyé à ${registerState.account.email}.`,
+    'success'
+  );
+  if (btn) { btn.disabled = false; }
 }
 
-function verifyOtp() {
+async function verifyOtp() {
   const code = document.getElementById('otp-input')?.value?.trim();
-
-  if (!registerState.otp) {
-    showFlashRegister('⚠️ Aucun code actif. Cliquez sur "Envoyer le code" pour recevoir un nouveau code.', 'error');
-    return;
-  }
-  if (Date.now() > registerState.otpExpires) {
-    showFlashRegister('⏱ Le code a expiré. Cliquez sur "Renvoyer le code".', 'error');
-    return;
-  }
-  if (code !== registerState.otp) {
-    showFlashRegister('❌ Code incorrect. Vérifiez le code reçu.', 'error');
+  if (!code) {
+    showFlashRegister('⚠️ Saisissez le code reçu par email.', 'error');
     return;
   }
 
-  // Succès — sauvegarder l'utilisateur
-  const user = {
-    name: registerState.account.firstName + ' ' + registerState.account.lastName,
-    email: registerState.account.email,
-    company: registerState.workshop.company_name,
-    siret: registerState.workshop.siret,
-    city: registerState.workshop.city,
-    loggedAt: Date.now(),
+  const r = await apiPost('/api/auth/verify-otp', { email: registerState.account.email, otp: code });
+
+  if (!r.ok) {
+    showFlashRegister('❌ ' + (r.data?.error || 'Code incorrect ou expiré.'), 'error');
+    return;
+  }
+
+  // Compte activé — session réelle (mêmes clés que app.js/login.js)
+  const { accessToken, refreshToken, user } = r.data;
+  const session = {
+    name:          `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+    email:         user.email,
+    role:          user.role,
+    boutique_id:   registerState.account.boutique_id ?? null,
+    boutique_name: registerState.workshop.company_name || 'Mon Atelier',
+    company:       registerState.workshop.company_name || 'Mon Atelier',
   };
-  localStorage.setItem('izigsm_user', JSON.stringify(user));
-  localStorage.setItem('izigsm_session', JSON.stringify(user));
+  localStorage.setItem('izigsm_token', accessToken);
+  localStorage.setItem('izigsm_refresh_token', refreshToken);
+  localStorage.setItem('izigsm_session', JSON.stringify(session));
   localStorage.setItem('reg_email', user.email);
 
-  // Appel API pour persister (sans auth — endpoint public, fallback gracieux)
-  apiPostPublic('/api/register', {
-    account:  registerState.account,
-    workshop: registerState.workshop,
-  }).catch(() => {}); // Ignorer les erreurs réseau
-
-  // Afficher le succès
   goToStep('success');
   const emailEl = document.getElementById('success-email');
-  if (emailEl) emailEl.textContent = registerState.account.email;
+  if (emailEl) emailEl.textContent = user.email;
   const successChips = document.getElementById('success-chips');
   if (successChips) {
     successChips.innerHTML = [
-      user.company,
-      user.siret,
-      user.city,
-    ].map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('');
+      registerState.workshop.company_name,
+      registerState.workshop.siret,
+      registerState.workshop.city,
+    ].filter(Boolean).map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('');
   }
   const verifyBtn = document.getElementById('btn-go-verify');
-  if (verifyBtn) verifyBtn.href = '/verify-email?email=' + encodeURIComponent(user.email);
+  if (verifyBtn) { verifyBtn.href = '/dashboard'; verifyBtn.textContent = 'Accéder à mon espace →'; }
 }
 
 // ======================== SAISIE MANUELLE ========================
