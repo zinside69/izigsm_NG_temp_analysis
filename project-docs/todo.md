@@ -24,9 +24,10 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 **Migration Cloudflare complète.** `repairdesk.fr` sert l'app en production, plus de dépendance Genspark.
 
 ## Dette technique découverte pendant la migration (voir bugs.md pour le détail)
-- [ ] `/register` cassé — mauvais chemin API, bloque tout onboarding réel (BLOQUANT, hors scope migration)
+- [x] `/register` cassé — **CORRIGÉ le 2026-07-10** (commits `e6b75b9`, `3129836`, déployé) — flow email OTP réel, voir bugs.md
 - [ ] `docs/ARCHITECTURE_MODULES.md` §2 obsolète (noms de tables)
 - [ ] 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
+- [ ] `escapeHtml()` manquant sur `client_prenom` dans 5 templates email (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) — même faille corrigée sur l'email OTP, préexistante ailleurs
 
 ## Dette technique héritée (préexistante, voir bugs.md)
 - [ ] `tests/phoneCatalogService.test.ts` à créer

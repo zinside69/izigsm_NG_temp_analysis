@@ -19,14 +19,23 @@ La purge RGPD met l'IMEI à `NULL`, mais l'art. 321-7 C.pén. impose un registre
 ## `docs/ARCHITECTURE_MODULES.md` §2 (tableau migrations) obsolète
 Constaté le 2026-07-09 (Task 3 migration Cloudflare) : le tableau des tables par migration dans `ARCHITECTURE_MODULES.md` ne reflète plus les noms réels (`statuts_historique`→`tickets_statuts_historique`, `otp_codes`→`otp_tokens`, `tickets_sav`→`sav_dossiers`, `lignes_facture`→`lignes_document`, tables `commissions`/`clotures_journalieres`/`sequences` absentes du tableau). Vérifié : le code (`src/services/*.ts`) et `migrations/*.sql` sont cohérents entre eux — seule la doc a pris du retard, pas de risque fonctionnel. À corriger dans une session dédiée doc, sans lien avec la migration Cloudflare.
 
-## `/register` cassé — mauvais chemin API (BLOQUANT pour l'onboarding réel)
-Constaté le 2026-07-09 (Task 7 validation migration Cloudflare) sur `izigsm.pages.dev`. `public/static/js/register.js:185` appelle `apiPostPublic('/api/register', ...)`. Le backend n'expose que `/api/auth/register` (`src/routes/auth.ts:116`, monté sous `/api/auth` dans `src/index.tsx:128`) — il n'existe **aucune route `/api/register`**. Résultat : la soumission finale du formulaire d'inscription (après l'étape "OTP") échoue en 404 silencieux, aucun compte n'est réellement créé.
+## `/register` cassé — CORRIGÉ le 2026-07-10 (commits `e6b75b9`, `3129836`)
+Constaté le 2026-07-09 (Task 7 validation migration Cloudflare) sur `izigsm.pages.dev`. `public/static/js/register.js:185` appelait `apiPostPublic('/api/register', ...)` — chemin inexistant, ET `apiPostPublic` lui-même n'était pas défini sur la page register (fonction déclarée uniquement dans `app.js`, non chargé par `register.html`). L'étape "OTP" était un mock 100% frontend (`Math.random()`, jamais de SMS/email réel). Aucun compte ne pouvait être créé.
 
-Point additionnel : l'étape "OTP par SMS" du wizard (`registerState.otp`, `public/static/js/register.js:119-140`) est une simulation 100% frontend — code à 6 chiffres généré par `Math.random()` côté navigateur, affiché uniquement dans la console DevTools (`console.log('[iziGSM démo] Code OTP :', otp)`), jamais de SMS ni d'email réellement envoyé à cette étape. Le vrai flow email-OTP documenté (`POST /api/auth/register` + `POST /api/auth/verify-otp`) n'est jamais atteint par ce wizard.
+**Fix appliqué (option "flow complet par email", validée avec l'utilisateur)** :
+- `emailService.ts` : nouvelle fonction `sendOtpInscription()` — email système via Resend (`RESEND_API_KEY` global, domaine `mail.repairdesk.fr`), hors du système `sendEmail()`/`email_logs` scopé par boutique (pas de boutique au moment de l'inscription)
+- `auth.ts` : `/register` envoie le vrai OTP par email ; nouvel endpoint `/resend-otp` ; `verify-otp` renvoie aussi `boutique_id` (alignement avec `/login`)
+- `register.js` : appels réels à `/api/auth/register`, `/api/auth/resend-otp`, `/api/auth/verify-otp` ; stockage des vrais tokens JWT
+- `register.html` : libellés SMS→email, CTA finale vers `/dashboard`
 
-**Impact** : aucune nouvelle boutique ne peut s'inscrire sur l'app actuellement, sur aucun environnement (bug de code, pas lié à l'hébergement). Contournement temporaire utilisé pour valider la migration : connexion directe avec le compte seedé `admin@izigsm.fr` (`seed.sql`, credentials publiques du repo).
+**3 failles introduites puis corrigées avant déploiement final** (review de sécurité automatique sur le commit) :
+- `otpDemo` fuitait le code OTP en clair dès que l'envoi Resend échouait (pas seulement si la clé était absente) — contournement total de la vérification email possible. Corrigé : `otpDemo` uniquement si `RESEND_API_KEY` n'est pas configurée du tout.
+- `/resend-otp` distinguait 404 (compte inconnu) / 409 (déjà vérifié) → énumération de comptes. Corrigé : réponse 200 générique dans tous les cas, même principe que `/login`.
+- Prénom utilisateur (saisie libre) interpolé sans échappement dans le HTML de l'email → injection possible. Corrigé : `escapeHtml()` ajouté dans `emailService.ts`.
 
-**Fix probable** (non appliqué — hors scope de la migration, à valider avec l'utilisateur) : soit corriger `register.js:185` pour appeler `/api/auth/register`, soit refaire tout le wizard pour utiliser le vrai flow email-OTP (`verify-otp`) au lieu du mock SMS — la deuxième option est plus lourde mais évite de faire croire à un SMS qui n'existera jamais sans Twilio (post-MVP, cf. TODO.md).
+Déployé sur `repairdesk.fr` (déploiement `dbea65a7`). Validation bout-en-bout (réception réelle de l'email) à confirmer par l'utilisateur.
+
+**Dette restante, hors scope de ce fix** : les 5 autres templates email de `emailService.ts` (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) interpolent aussi `client_prenom` sans échappement — même classe de faille, préexistante, à corriger dans une passe dédiée.
 
 ## Tests sensibles au fuseau horaire local (3 tests, non-bloquant)
 Constaté le 2026-07-09 lors de la migration Cloudflare (Task 1 du plan, `npm test` sur HEAD `5106d93`) : 3 tests échouent sur une machine en UTC+2 (`agendaService.test.ts` "fin auto-calculée", `statsService.test.ts` "1er du mois courant" ×2) — écart de 2h exact, cohérent avec `new Date().getTimezoneOffset() === -120` sur cette machine. Les services testés (`agendaService.ts`, `statsService.ts`) utilisent probablement `new Date()` en heure locale au lieu de forcer UTC. 702/705 tests passent. Sans lien avec la migration d'hébergement — dette pré-existante, non corrigée (hors scope).
