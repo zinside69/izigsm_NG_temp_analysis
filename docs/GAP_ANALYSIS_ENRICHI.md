@@ -41,7 +41,7 @@
 | B04 | Mention facture + pied de page | ✅ | 2.9 | `mention_facture`, `pied_de_page` sur `boutique_settings` |
 | B05 | Garantie défaut (jours) configurable | ✅ | 2.9 | `garantie_defaut_jours` dans settings |
 | B06 | Notifications email on/off | ✅ | 2.40 | Toggles dans `settings.html` — `notif_relance`, `notif_ticket_cree`, etc. |
-| B07 | Multi-boutiques réseau (cockpit) | ❌ | Post-MVP | JWT multi-boutique, tableau consolidé |
+| B07 | Multi-boutiques réseau (cockpit) | ❌ | **Roadmap confirmée (2026-07-10)** | Vraie intention produit, pas un cas exotique : un client possédant plusieurs boutiques doit pouvoir avoir une visibilité consolidée sur un dashboard, naviguer vers chaque site, et transférer stock/personnel entre boutiques du même groupe. Nécessite : notion de groupe propriétaire (boutiques liées à un même compte), utilisateur avec accès multi-boutiques (le modèle actuel est strictement 1 user = 1 boutique_id dans le JWT), mécanismes de transfert stock/personnel avec traçabilité. Chantier d'architecture à scoper en session dédiée — pas un ajout incrémental sur le modèle d'isolation actuel. |
 | B08 | Horaires d'ouverture | ❌ | Post-MVP | `horaires JSONB` sur boutiques |
 
 ---

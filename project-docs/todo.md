@@ -35,5 +35,13 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 - [ ] `www.repairdesk.fr` → Error 521 (service redirection Gandi injoignable, apex OK)
 
 ## Fonctionnalité manquante — recherche entreprise à l'inscription
-Constaté le 2026-07-10 par l'utilisateur en testant le fix `/register`. Le champ `#search` (étape 2, `register.html:148`, "Rechercher mon entreprise") n'a aucune logique derrière — pas d'appel API annuaire, juste un input texte inerte. Seule la saisie manuelle des champs (nom, SIRET, adresse, etc., tous `required`) fonctionne aujourd'hui.
-- [ ] Intégrer une vraie recherche d'entreprise (ex. `recherche-entreprises.api.gouv.fr`, gratuite et sans clé) qui préremplit nom/SIRET/adresse/forme juridique à partir du nom ou SIRET saisi
+- [x] **FAIT le 2026-07-10** — `GET /api/public/entreprise-search` (`recherche-entreprises.api.gouv.fr`, gratuite, sans clé) : autocomplete fonctionnel sur `register.html` étape 2 + onboarding post-Google (`register.html`/`login.html`), préremplit nom/SIRET/adresse/CP/ville. `createBoutiqueWithSettings()` persiste enfin ces champs (colonnes existaient déjà en base, jamais remplies avant).
+
+## Conformité légale — purge RGPD automatique (Art. 5.1.e)
+Seul vrai gap de conformité restant identifié dans le CDC. `checkAndPurgeExpiredClients()` / `checkAndPurgeExpiredTickets()` n'existent pas — purge sur demande (Art.17) fonctionne, mais pas de purge automatique après expiration des durées légales de conservation. Voir aussi la tension avec le registre anti-recel art. 321-7 (documentée dans `bugs.md`).
+- [ ] Scoper et implémenter la purge automatique (batch + 3 états base active/archive légale/destruction)
+
+## Roadmap confirmée — Multi-sites géré (MOD-16 CDC, ex-B07)
+Confirmé le 2026-07-10 : ce n'est PAS hors périmètre produit. Un client possédant plusieurs boutiques doit pouvoir avoir un dashboard consolidé (vue toutes boutiques), naviguer vers chaque site, et transférer stock/personnel entre boutiques de son groupe. Cohabite avec le modèle actuel (boutiques indépendantes par défaut, façon RepairDesk/MonAtelier) — un client peut simplement posséder plusieurs boutiques indépendantes reliées à son compte.
+Chantier d'architecture, pas un ajout incrémental — le modèle actuel est strictement 1 user = 1 boutique_id (JWT). Nécessite : notion de groupe propriétaire, utilisateur multi-boutiques, mécanismes de transfert stock/personnel tracés. **À scoper en session dédiée** (conception avant code).
+- [ ] Session de conception : modèle de données groupe/multi-accès, impact sur l'isolation multi-tenant actuelle (vérifiée étanche le 2026-07-10), UI dashboard consolidé
