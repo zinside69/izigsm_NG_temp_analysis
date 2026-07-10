@@ -42,7 +42,7 @@ import {
   TAILLE_MAX,
 } from '../services/photosService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; PHOTOS?: R2Bucket }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; PHOTOS?: R2Bucket; RESEND_API_KEY?: string }
 type Variables = { user: any }
 
 const tickets = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -92,8 +92,9 @@ tickets.get('/', async (c) => {
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   // Sprint 2.37 : batch auto-archivage probabiliste (1% des requêtes)
+  // waitUntil() obligatoire — voir commentaire sur sendTicketCree plus bas dans ce fichier
   if (Math.random() < 0.01) {
-    checkAndArchiveTickets(db, boutiqueId, 90).catch(() => {})
+    c.executionCtx.waitUntil(checkAndArchiveTickets(db, boutiqueId, 90).catch(() => {}))
   }
 
   const result = await listTickets(db, boutiqueId, {
@@ -177,14 +178,20 @@ tickets.post('/', async (c) => {
   const clientRow = await getClientEmailPrenom(db, client_id)
 
   if (clientRow?.email) {
-    sendTicketCree(db, boutiqueId, {
-      id:              created.id,
-      numero:          created.numero,
-      tracking_token:  created.tracking_token,
-      client_email:    clientRow.email,
-      client_prenom:   clientRow.prenom ?? 'Client',
-      appareil_marque, appareil_modele, description_panne,
-    }, frontendUrl).catch(() => {})
+    // waitUntil() obligatoire : sans lui, Cloudflare Workers tue l'exécution
+    // dès la réponse HTTP envoyée, avant que la promesse fire-and-forget
+    // n'ait eu le temps d'aboutir — l'email ne partait jamais (bug silencieux
+    // découvert le 2026-07-10 : email_logs vide depuis la création de la base).
+    c.executionCtx.waitUntil(
+      sendTicketCree(db, boutiqueId, {
+        id:              created.id,
+        numero:          created.numero,
+        tracking_token:  created.tracking_token,
+        client_email:    clientRow.email,
+        client_prenom:   clientRow.prenom ?? 'Client',
+        appareil_marque, appareil_modele, description_panne,
+      }, frontendUrl, c.env.RESEND_API_KEY).catch(() => {})
+    )
   }
 
   return c.json({
@@ -256,10 +263,11 @@ tickets.put('/:id/statut', async (c) => {
           const tFull = await getTicketAvecClient(db, id)
 
           if (tFull?.client_email) {
+            // waitUntil() obligatoire — voir commentaire équivalent sur sendTicketCree ci-dessus
             if (statut_apres === 'termine') {
-              sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl).catch(() => {})
+              c.executionCtx.waitUntil(sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
             } else {
-              sendTicketLivre(db, ticketRow.boutique_id, tFull, frontendUrl).catch(() => {})
+              c.executionCtx.waitUntil(sendTicketLivre(db, ticketRow.boutique_id, tFull, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
             }
           }
         } catch { /* non bloquant */ }

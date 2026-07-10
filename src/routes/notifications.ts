@@ -27,7 +27,7 @@ import {
   getEmailConfig,
 } from '../services/emailService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
 const notifications = new Hono<{ Bindings: Bindings }>()
 
 notifications.use('*', authMiddleware)
@@ -167,7 +167,7 @@ notifications.post('/notifications/relances', requireRole('admin', 'manager'), a
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
 
     const frontendUrl = c.env.FRONTEND_URL ?? 'http://localhost:3000'
-    const count       = await processRelances(c.env.DB, boutiqueId, frontendUrl)
+    const count       = await processRelances(c.env.DB, boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
 
     return c.json({
       success: true,
@@ -193,7 +193,7 @@ notifications.post('/notifications/relances-devis', requireRole('admin', 'manage
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
 
     const frontendUrl = c.env.FRONTEND_URL ?? 'http://localhost:3000'
-    const count       = await processRelancesDevis(c.env.DB, boutiqueId, frontendUrl)
+    const count       = await processRelancesDevis(c.env.DB, boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
 
     return c.json({
       success: true,

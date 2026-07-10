@@ -30,3 +30,9 @@
 /devis-public.html    /devis-public    301
 /rdv-public.html      /rdv-public      301
 /suivi.html           /suivi           301
+
+# Rewrite (200, pas redirect) : /suivi/:token doit servir suivi.html tout en
+# gardant l'URL avec le token — le JS de la page extrait le token depuis
+# window.location.pathname. Sans cette règle, /suivi/xxx tombait sur la
+# page d'accueil (bug découvert le 2026-07-10, lien de suivi client cassé).
+/suivi/*              /suivi           200

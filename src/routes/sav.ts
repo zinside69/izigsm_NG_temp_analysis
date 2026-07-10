@@ -34,7 +34,7 @@ import { validateSav, validateSavStatut, validateGarantie } from '../lib/validat
 import { sendSavOuvert } from '../services/emailService'
 import { getClientEmailPrenom } from '../services/clientService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
 
 const sav = new Hono<{ Bindings: Bindings }>()
 
@@ -178,13 +178,14 @@ sav.post('/sav', async (c) => {
     try {
       const clientRow = await getClientEmailPrenom(c.env.DB, dossier.client_id)
       if (clientRow?.email) {
-        sendSavOuvert(c.env.DB, boutiqueId, {
+        // waitUntil() obligatoire — voir routes/tickets.ts
+        c.executionCtx.waitUntil(sendSavOuvert(c.env.DB, boutiqueId, {
           id:            dossier.id,
           numero:        dossier.numero,
           client_email:  clientRow.email,
           client_prenom: clientRow.prenom ?? 'Client',
           motif:         dossier.motif,
-        }).catch(() => {})
+        }, c.env.RESEND_API_KEY).catch(() => {}))
       }
     } catch { /* non bloquant */ }
 

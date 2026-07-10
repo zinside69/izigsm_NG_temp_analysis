@@ -37,14 +37,16 @@ export interface EmailConfig {
 }
 
 export interface SendEmailParams {
-  db:          D1Database
-  boutiqueId:  number
-  to:          string
-  sujet:       string
-  html:        string
-  type:        EmailType
-  entiteType?: string
-  entiteId?:   number
+  db:             D1Database
+  boutiqueId:     number
+  to:             string
+  sujet:          string
+  html:           string
+  type:           EmailType
+  entiteType?:    string
+  entiteId?:      number
+  /** Clé Resend globale (c.env.RESEND_API_KEY) — utilisée si la boutique n'a pas configuré la sienne. */
+  apiKeyFallback?: string
 }
 
 // ─── Config boutique ──────────────────────────────────────────────────────────
@@ -54,13 +56,23 @@ export interface SendEmailParams {
  * Applique des valeurs par défaut si aucune configuration n'existe :
  * provider=resend, from=nom_boutique<email_boutique>, toutes notifs activées.
  *
- * @param db          Binding D1 Cloudflare
- * @param boutiqueId  Identifiant de la boutique
- * @returns           Configuration complète avec clé API, expéditeur et flags notifications
+ * Fallback plateforme (décision 2026-07-10) : si la boutique n'a pas configuré
+ * sa propre clé Resend (`email_api_key` NULL), on utilise `apiKeyFallback`
+ * (la clé globale `RESEND_API_KEY` du compte Cloudflare, même mécanisme que
+ * `sendOtpInscription`) plutôt que de forcer chaque atelier à créer son propre
+ * compte Resend avant de pouvoir écrire à ses clients. Dans ce cas, l'expéditeur
+ * est forcé sur le domaine vérifié `mail.repairdesk.fr` — un `email_from`
+ * personnalisé sur un domaine non vérifié échouerait silencieusement chez Resend.
+ *
+ * @param db              Binding D1 Cloudflare
+ * @param boutiqueId      Identifiant de la boutique
+ * @param apiKeyFallback  Clé Resend globale, utilisée si la boutique n'a pas la sienne
+ * @returns               Configuration complète avec clé API, expéditeur et flags notifications
  */
 export async function getEmailConfig(
-  db:         D1Database,
-  boutiqueId: number
+  db:             D1Database,
+  boutiqueId:     number,
+  apiKeyFallback?: string
 ): Promise<EmailConfig> {
   const s = await db.prepare(`
     SELECT email_provider, email_api_key, email_from,
@@ -72,13 +84,14 @@ export async function getEmailConfig(
     WHERE  bs.boutique_id = ?
   `).bind(boutiqueId).first<any>()
 
-  const nom   = s?.boutique_nom   ?? 'iziGSM'
-  const email = s?.boutique_email ?? 'noreply@izigsm.fr'
+  const nom       = s?.boutique_nom   ?? 'iziGSM'
+  const email     = s?.boutique_email ?? 'noreply@izigsm.fr'
+  const hasOwnKey = !!s?.email_api_key
 
   return {
-    provider:             s?.email_provider    ?? 'resend',
-    api_key:              s?.email_api_key     ?? null,
-    from:                 s?.email_from        ?? `${nom} <${email}>`,
+    provider:             s?.email_provider ?? 'resend',
+    api_key:              s?.email_api_key  ?? apiKeyFallback ?? null,
+    from:                 hasOwnKey ? (s?.email_from ?? `${nom} <${email}>`) : `${nom} via iziGSM <noreply@mail.repairdesk.fr>`,
     notif_ticket_cree:    (s?.email_notif_ticket_cree    ?? 1) === 1,
     notif_ticket_termine: (s?.email_notif_ticket_termine ?? 1) === 1,
     notif_sav_ouvert:     (s?.email_notif_sav_ouvert     ?? 1) === 1,
@@ -102,7 +115,7 @@ export async function getEmailConfig(
  * @returns       `{ success: boolean, simulated: boolean }` — ne jette jamais d'exception
  */
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; simulated: boolean }> {
-  const { db, boutiqueId, to, sujet, html, type, entiteType, entiteId } = params
+  const { db, boutiqueId, to, sujet, html, type, entiteType, entiteId, apiKeyFallback } = params
 
   // Déduplication : même email dans les 5 dernières minutes ?
   if (entiteId && entiteType) {
@@ -116,7 +129,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     if (recent) return { success: true, simulated: false }  // déjà envoyé récemment
   }
 
-  const config = await getEmailConfig(db, boutiqueId)
+  const config = await getEmailConfig(db, boutiqueId, apiKeyFallback)
 
   // Vérifier si la notif est activée
   const notifMap: Record<EmailType, boolean> = {
@@ -319,11 +332,12 @@ export async function sendOtpInscription(
  * Inclut un lien de suivi si `tracking_token` est disponible.
  * Opération silencieuse : les erreurs d'envoi sont logées sans propager d'exception.
  *
- * @param db          Binding D1 Cloudflare
- * @param boutiqueId  Identifiant de la boutique (pour config email + nom expéditeur)
- * @param ticket      Données du ticket (numéro, appareil, client, tracking_token)
- * @param frontendUrl URL de base du frontend (ex: "https://izigsm.pages.dev")
- * @returns           void
+ * @param db             Binding D1 Cloudflare
+ * @param boutiqueId     Identifiant de la boutique (pour config email + nom expéditeur)
+ * @param ticket         Données du ticket (numéro, appareil, client, tracking_token)
+ * @param frontendUrl    URL de base du frontend (ex: "https://izigsm.pages.dev")
+ * @param apiKeyFallback Clé Resend globale (c.env.RESEND_API_KEY) si la boutique n'a pas la sienne
+ * @returns              void
  */
 export async function sendTicketCree(
   db:         D1Database,
@@ -338,7 +352,8 @@ export async function sendTicketCree(
     appareil_modele: string
     description_panne: string
   },
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!ticket.client_email) return
 
@@ -373,6 +388,7 @@ export async function sendTicketCree(
     type:       'ticket_cree',
     entiteType: 'ticket',
     entiteId:   ticket.id,
+    apiKeyFallback,
   })
 }
 
@@ -403,7 +419,8 @@ export async function sendTicketTermine(
     diagnostic:      string | null
   },
   garantie: { date_fin: string; garantie_jours: number } | null,
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!ticket.client_email) return
 
@@ -446,6 +463,7 @@ export async function sendTicketTermine(
     type:       'ticket_termine',
     entiteType: 'ticket',
     entiteId:   ticket.id,
+    apiKeyFallback,
   })
 }
 
@@ -474,7 +492,8 @@ export async function sendTicketLivre(
     prix_final:      number | null
     diagnostic:      string | null
   },
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!ticket.client_email) return
 
@@ -511,6 +530,7 @@ export async function sendTicketLivre(
     type:       'ticket_livre',
     entiteType: 'ticket',
     entiteId:   ticket.id,
+    apiKeyFallback,
   })
 }
 
@@ -534,7 +554,8 @@ export async function sendSavOuvert(
     motif:         string
     appareil_marque?: string
     appareil_modele?: string
-  }
+  },
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!dossier.client_email) return
 
@@ -565,6 +586,7 @@ export async function sendSavOuvert(
     type:       'sav_ouvert',
     entiteType: 'sav',
     entiteId:   dossier.id,
+    apiKeyFallback,
   })
 }
 
@@ -589,7 +611,8 @@ export async function sendRelance(
     appareil_marque: string
     appareil_modele: string
     statut:          string
-  }
+  },
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!ticket.client_email) return
 
@@ -628,6 +651,7 @@ export async function sendRelance(
     type:       'relance',
     entiteType: 'ticket',
     entiteId:   ticket.id,
+    apiKeyFallback,
   })
 }
 
@@ -650,7 +674,8 @@ export async function sendRelance(
 export async function processRelances(
   db:         D1Database,
   boutiqueId: number,
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<number> {
   const settings = await db.prepare(`
     SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?
@@ -678,7 +703,7 @@ export async function processRelances(
 
   let count = 0
   for (const ticket of rows.results ?? []) {
-    await sendRelance(db, boutiqueId, ticket)
+    await sendRelance(db, boutiqueId, ticket, apiKeyFallback)
     count++
   }
   return count
@@ -708,7 +733,8 @@ export async function sendRelanceDevis(
     date_validite: string | null
     public_token:  string
   },
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<void> {
   if (!devis.client_email) return
 
@@ -755,6 +781,7 @@ export async function sendRelanceDevis(
     type:       'relance_devis',
     entiteType: 'devis',
     entiteId:   devis.id,
+    apiKeyFallback,
   })
 }
 
@@ -777,7 +804,8 @@ export async function sendRelanceDevis(
 export async function processRelancesDevis(
   db:          D1Database,
   boutiqueId:  number,
-  frontendUrl: string
+  frontendUrl: string,
+  apiKeyFallback?: string
 ): Promise<number> {
   const settings = await db.prepare(`
     SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?
@@ -805,7 +833,7 @@ export async function processRelancesDevis(
 
   let count = 0
   for (const devis of rows.results ?? []) {
-    await sendRelanceDevis(db, boutiqueId, devis, frontendUrl)
+    await sendRelanceDevis(db, boutiqueId, devis, frontendUrl, apiKeyFallback)
     count++
   }
   return count

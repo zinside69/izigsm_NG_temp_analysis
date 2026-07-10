@@ -23,7 +23,15 @@
       "binding":     "PHOTOS",
       "bucket_name": "izigsm-photos"
     }
-  ]
+  ],
+
+  // ── Variables non-secrètes ────────────────────────────────────────────────
+  // FRONTEND_URL absente jusqu'ici → tous les liens dans les emails (suivi,
+  // devis...) retombaient sur le fallback 'http://localhost:3000' en prod
+  // (bug découvert le 2026-07-10, lien "Suivre ma réparation" cassé pour le client).
+  "vars": {
+    "FRONTEND_URL": "https://repairdesk.fr"
+  }
 
   // ── Secrets ──────────────────────────────────────────────────────────────
   // Configurer via : npx wrangler pages secret put JWT_SECRET --project-name izigsm

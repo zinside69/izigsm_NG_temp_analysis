@@ -20,7 +20,7 @@ import {
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string }
+type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
 type Variables = { user: any }
 
 const facturation = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -162,8 +162,9 @@ facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c
     ? `<p>Ce devis est valable jusqu'au <strong>${new Date(data.date_validite).toLocaleDateString('fr-FR')}</strong>.</p>`
     : ''
 
-  // Envoi email non bloquant
-  sendEmail({
+  // Envoi email non bloquant — waitUntil() obligatoire, voir routes/tickets.ts
+  // (sinon Cloudflare Workers tue l'exécution avant l'envoi réel, bug silencieux)
+  c.executionCtx.waitUntil(sendEmail({
     db:         c.env.DB,
     boutiqueId: data.boutique_id,
     to:         data.client_email,
@@ -182,7 +183,8 @@ facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c
       <hr><p style="color:#888;font-size:11px;">${data.boutique_nom} — ${data.boutique_telephone ?? ''} — ${data.boutique_email ?? ''}</p>
     </body></html>`,
     type: 'devis',
-  }).catch(() => {/* non bloquant */})
+    apiKeyFallback: c.env.RESEND_API_KEY,
+  }).catch(() => {/* non bloquant */}))
 
   return c.json({
     success:      true,
