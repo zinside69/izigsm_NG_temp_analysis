@@ -294,6 +294,10 @@ export async function sendOtpInscription(
         html,
       }),
     })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      console.error('[sendOtpInscription] Resend HTTP', resp.status, body)
+    }
     return { success: resp.ok }
   } catch (e) {
     console.error('[sendOtpInscription]', e)

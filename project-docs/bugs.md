@@ -1,5 +1,8 @@
 # iziGSM — Bugs connus
 
+## `www.repairdesk.fr` → Error 521 (Web server down)
+Constaté le 2026-07-10 par l'utilisateur juste après l'attachement de `repairdesk.fr` à Cloudflare Pages. `www.repairdesk.fr` (CNAME → `webredir.vip.gandi.net`, proxied, non modifié par la migration) renvoie 521 de façon reproductible (Cloudflare ne joint pas le service de redirection Gandi). **L'apex `repairdesk.fr` fonctionne normalement (200)** — vérifié à plusieurs reprises, aucun lien avec la migration Cloudflare. Cause probable : panne ou changement côté service de redirection Gandi, indépendant de nos actions. Non-bloquant (le lien canonique de l'app est l'apex), mais à corriger si des liens/favoris externes pointent vers `www.`.
+
 ## Prod Genspark en retard de version
 `/api/health` sur `https://8096d010-efde-413e-a481-72226566aa0b.vip.gensparksite.com` renvoie encore **v2.44.0** (Sprint 2.41-D) alors que HEAD git est à v2.45.0 + 5 commits non versionnés (nav URLs propres, catalogue fallback statique, SEO noindex). Cause probable : `gsk hosted deploy` déclenché mais jamais approuvé dans l'UI Genspark après Sprint 2.41-E.
 **Sans objet après migration Cloudflare** (on quitte Genspark) — mais si un retour arrière est nécessaire avant la bascule, en tenir compte.
@@ -33,7 +36,7 @@ Constaté le 2026-07-09 (Task 7 validation migration Cloudflare) sur `izigsm.pag
 - `/resend-otp` distinguait 404 (compte inconnu) / 409 (déjà vérifié) → énumération de comptes. Corrigé : réponse 200 générique dans tous les cas, même principe que `/login`.
 - Prénom utilisateur (saisie libre) interpolé sans échappement dans le HTML de l'email → injection possible. Corrigé : `escapeHtml()` ajouté dans `emailService.ts`.
 
-Déployé sur `repairdesk.fr` (déploiement `dbea65a7`). Validation bout-en-bout (réception réelle de l'email) à confirmer par l'utilisateur.
+**Validé bout-en-bout le 2026-07-10 par l'utilisateur** : inscription réelle (`telnet@bbox.fr`), email reçu, code vérifié, compte activé, arrivée sur `/dashboard`. Un log d'erreur a été ajouté sur l'échec HTTP Resend (`sendOtpInscription`, absent jusque-là — un échec non-exception restait totalement silencieux). Déploiement final : `8bcbb1d4`.
 
 **Dette restante, hors scope de ce fix** : les 5 autres templates email de `emailService.ts` (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) interpolent aussi `client_prenom` sans échappement — même classe de faille, préexistante, à corriger dans une passe dédiée.
 

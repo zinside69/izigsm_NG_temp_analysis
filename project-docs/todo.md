@@ -24,7 +24,7 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 **Migration Cloudflare complète.** `repairdesk.fr` sert l'app en production, plus de dépendance Genspark.
 
 ## Dette technique découverte pendant la migration (voir bugs.md pour le détail)
-- [x] `/register` cassé — **CORRIGÉ le 2026-07-10** (commits `e6b75b9`, `3129836`, déployé) — flow email OTP réel, voir bugs.md
+- [x] `/register` cassé — **CORRIGÉ et VALIDÉ le 2026-07-10** (commits `e6b75b9`, `3129836`, déployé `8bcbb1d4`) — flow email OTP réel, testé bout-en-bout par l'utilisateur (inscription → email reçu → code vérifié → dashboard), voir bugs.md
 - [ ] `docs/ARCHITECTURE_MODULES.md` §2 obsolète (noms de tables)
 - [ ] 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
 - [ ] `escapeHtml()` manquant sur `client_prenom` dans 5 templates email (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) — même faille corrigée sur l'email OTP, préexistante ailleurs
@@ -32,3 +32,8 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 ## Dette technique héritée (préexistante, voir bugs.md)
 - [ ] `tests/phoneCatalogService.test.ts` à créer
 - [ ] Investiguer `/robots.txt` 500 sur Genspark (sans objet une fois Genspark abandonné)
+- [ ] `www.repairdesk.fr` → Error 521 (service redirection Gandi injoignable, apex OK)
+
+## Fonctionnalité manquante — recherche entreprise à l'inscription
+Constaté le 2026-07-10 par l'utilisateur en testant le fix `/register`. Le champ `#search` (étape 2, `register.html:148`, "Rechercher mon entreprise") n'a aucune logique derrière — pas d'appel API annuaire, juste un input texte inerte. Seule la saisie manuelle des champs (nom, SIRET, adresse, etc., tous `required`) fonctionne aujourd'hui.
+- [ ] Intégrer une vraie recherche d'entreprise (ex. `recherche-entreprises.api.gouv.fr`, gratuite et sans clé) qui préremplit nom/SIRET/adresse/forme juridique à partir du nom ou SIRET saisi
