@@ -84,8 +84,23 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 - [ ] `src/routes/auth.ts:659` — exemple dans un commentaire JSDoc (`workshopName: "Mon Atelier"`) — cosmétique, à corriger pour cohérence
 - Vérifier aussi les autres pages internes (`dashboard.html`, `settings.html`, etc.) non auditées ici — recherche limitée à `src/` et `public/` en surface
 
-## Page de suivi ticket — feature "Progression" (demandé 2026-07-10)
-Constat : la section "Progression" (`suivi.html:93-94`, timeline visuelle avec icônes/étapes done-active-pending) **existe déjà et semble fonctionnelle** (`renderTimeline()`, `suivi.html:276-303`) — jamais vue en render propre par l'utilisateur à cause du bug email (jamais reçu avant aujourd'hui) et de l'extension navigateur qui a faussé mon test plus tôt. À clarifier avec l'utilisateur : vérifier le rendu réel une fois un lien d'email propre cliqué, et préciser si "ajouter cette feature" signifie un ajout par-dessus l'existant (ex. horodatage par étape, description détaillée) ou si la timeline actuelle ne s'affichait pas correctement pour une autre raison.
+## Page de suivi ticket — étape "Accord" avec double validation boutique→client (spécifié 2026-07-10)
+La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` L276-303) avec une étape `attente_accord` / label "Accord" / icône `fa-handshake` (`STEPS`, `suivi.html:151`) — mais son état est aujourd'hui purement dérivé du statut linéaire du ticket (fait/actif/à venir), sans notion d'approbation client réelle.
+
+**Comportement demandé** : quand la boutique valide un diagnostic/devis (passe le ticket en `attente_accord`), un lien d'approbation est envoyé au client. Dès que le client clique et accepte, l'étape passe au vert (preuve d'acceptation). États chronologiques de l'étape "Accord" :
+- **Gris** : ticket pas encore arrivé à cette étape
+- **Orange** : boutique a validé / lien envoyé, en attente de réponse client
+- **Vert** : client a cliqué et accepté
+
+**Décisions de conception validées avec l'utilisateur (2026-07-10)** :
+1. **Email d'abord, SMS bloqué** : le lien part par email (Resend, même mécanisme que le reste — déjà fiable depuis le fix du jour). Le SMS reste explicitement hors scope tant qu'un fournisseur SMS (Twilio ou autre) n'est pas choisi — c'était Post-MVP partout ailleurs dans le projet, pas de raison de le sortir du lot ici sans décision dédiée.
+2. **Réutiliser le flow devis existant**, ne pas dupliquer un système de token : `devis.ticket_id` (FK optionnelle, `migrations/0006_facturation.sql:10`) et `devis.statut` (`envoye`/`accepte`/`refuse`) couvrent déjà exactement ce besoin. `devis-public.html` + `POST /api/public/devis/:token/repondre` gèrent déjà la page cliquable + l'action d'acceptation.
+
+**Reste à faire pour implémenter** :
+- [ ] Dans `renderTimeline()` (`suivi.html`), calculer l'état de l'étape "Accord" à partir du devis lié au ticket (si `devis.ticket_id = t.id` existe : `envoye`→orange, `accepte`→vert, `refuse`→état à définir) plutôt que du statut ticket seul
+- [ ] `GET /api/public/ticket/:token` (`publicService.ts`) doit exposer les infos du devis lié (statut au minimum) pour que le frontend puisse calculer cet état
+- [ ] Vérifier que l'envoi du devis (`POST /devis/:id/envoyer`, déjà fonctionnel depuis le fix du jour) est bien le déclencheur naturel de l'état "orange"
+- [ ] SMS : décision fournisseur à prendre séparément (Twilio le plus documenté dans le projet) avant d'ajouter ce canal
 
 ## Message utilisateur "Diagnostic" (2026-07-10, sans contexte)
 Reçu seul, sans précision — à clarifier à la reprise de session : diagnostic de quoi précisément ?
