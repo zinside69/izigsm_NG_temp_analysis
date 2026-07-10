@@ -10,6 +10,7 @@
  *   GET  /api/public/catalogue/:slug         → Services publics d'une boutique
  *   GET  /api/public/devis/:token            → Consultation devis par le client
  *   POST /api/public/devis/:token/repondre   → Accepter / refuser un devis
+ *   GET  /api/public/entreprise-search       → Recherche SIRENE (autocomplete inscription)
  */
 
 import { Hono } from 'hono'
@@ -25,6 +26,7 @@ import {
   getDisponibilites,
   createRdvPublic,
 } from '../services/publicService'
+import { searchEntreprises } from '../services/sirenService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 
@@ -395,6 +397,27 @@ pub.post('/rdv', async (c) => {
     console.error('[public/rdv]', e?.message ?? e)
     return c.json({ success: false, error: e.message ?? 'Erreur serveur.' }, status)
   }
+})
+
+// ─── Recherche entreprise (SIRENE) ────────────────────────────────────────────
+
+/**
+ * GET /api/public/entreprise-search
+ * Recherche d'entreprises françaises par nom, SIREN ou SIRET — autocomplete
+ * "Rechercher mon entreprise" (register.html étape 2, onboarding post-Google).
+ * Délègue entièrement à sirenService (aucune logique ici, controller pur).
+ *
+ * @query q  Terme de recherche, minimum 3 caractères
+ * @returns  200 { success: true, data: EntrepriseResult[] } — tableau vide si rien trouvé
+ * @returns  400 si `q` absent ou trop court
+ */
+pub.get('/entreprise-search', async (c) => {
+  const q = c.req.query('q') ?? ''
+  if (q.trim().length < 3)
+    return c.json({ success: false, error: 'Recherche trop courte (3 caractères minimum).' }, 400)
+
+  const results = await searchEntreprises(q)
+  return c.json({ success: true, data: results })
 })
 
 // ─── Endpoint interne désactivé ───────────────────────────────────────────────

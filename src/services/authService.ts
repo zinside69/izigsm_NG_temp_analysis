@@ -13,7 +13,7 @@
  *   - `findUserById()`        → cherche un utilisateur actif par id (refresh + me)
  *   - `findUserByEmailFull()` → cherche avec password_hash pour le login
  *   - `findUserWithProfile()` → cherche avec boutique_nom pour /me
- *   - `createBoutiqueWithSettings()` → crée boutique + boutique_settings en séquence
+ *   - `createBoutiqueWithSettings()` → crée boutique + boutique_settings (nom + détails SIRENE optionnels)
  *   - `attachBoutiqueToUser()` → lie une boutique nouvellement créée à un user existant (onboarding post-Google)
  *   - `createUser()`          → insert user inactif avec boutique_id optionnel
  *   - `activateUser()`        → UPDATE actif=1, email_verifie=1 après OTP validé
@@ -163,14 +163,30 @@ export async function findUserWithProfile(
 // ─── createBoutiqueWithSettings ───────────────────────────────────────────────
 
 /**
+ * Détails optionnels d'une boutique, préremplis via la recherche SIRENE
+ * (`GET /api/public/entreprise-search`) ou saisis manuellement à l'inscription.
+ * Tous les champs sont optionnels — un simple `workshopName` reste suffisant.
+ */
+export interface BoutiqueDetails {
+  siret?:       string
+  tvaNumero?:   string
+  adresse?:     string
+  codePostal?:  string
+  ville?:       string
+  telephone?:   string
+}
+
+/**
  * Crée une boutique et initialise ses paramètres par défaut (`boutique_settings`).
  *
- * Utilisé dans `POST /register` lorsque `workshopName` est fourni.
+ * Utilisé dans `POST /register` et `POST /complete-onboarding` lorsqu'un
+ * `workshopName` est fourni. `details` (SIRET, adresse...) est optionnel — vient
+ * soit de la recherche SIRENE (autocomplete), soit d'une saisie manuelle.
  * L'insertion dans `boutique_settings` utilise les DEFAULT SQL de la table —
  * aucune valeur n'est passée explicitement pour conserver les défauts métier.
  *
  * Séquence (2 opérations) :
- *   1. INSERT INTO boutiques (nom) RETURNING id
+ *   1. INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) RETURNING id
  *   2. INSERT INTO boutique_settings (boutique_id)  ← initialise avec DEFAULT
  *
  * Note : pas de transaction explicite (D1 en local gère l'autocommit).
@@ -179,15 +195,27 @@ export async function findUserWithProfile(
  *
  * @param db            Instance D1Database
  * @param workshopName  Nom commercial de la boutique à créer
+ * @param details       Champs optionnels (SIRET, adresse, TVA, téléphone)
  * @returns             L'identifiant numérique de la boutique créée, `null` si échec
  */
 export async function createBoutiqueWithSettings(
-  db: D1Database,
-  workshopName: string
+  db:           D1Database,
+  workshopName: string,
+  details?:     BoutiqueDetails
 ): Promise<number | null> {
-  const bResult = await db.prepare(
-    'INSERT INTO boutiques (nom) VALUES (?) RETURNING id'
-  ).bind(workshopName).first<{ id: number }>()
+  const bResult = await db.prepare(`
+    INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).bind(
+    workshopName,
+    details?.siret      ?? null,
+    details?.tvaNumero  ?? null,
+    details?.adresse    ?? null,
+    details?.codePostal ?? null,
+    details?.ville      ?? null,
+    details?.telephone  ?? null,
+  ).first<{ id: number }>()
 
   const boutiqueId = bResult?.id ?? null
 

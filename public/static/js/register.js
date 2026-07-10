@@ -116,37 +116,9 @@ function buildRecap() {
   }
 }
 
-// ======================== API HELPER (page register — app.js non chargé ici) ========================
-
-/**
- * POST JSON minimal (endpoints publics /api/auth/* ET /api/auth/complete-onboarding,
- * protégé par JWT une fois le compte Google créé). app.js (qui expose apiPostPublic)
- * n'est pas chargé sur cette page — voir register.html. Le token, s'il existe déjà en
- * localStorage (posé par handleGoogleCredential avant l'étape onboarding), est
- * automatiquement attaché — sans effet sur les endpoints publics qui l'ignorent.
- * @param {string} url  Chemin de l'endpoint (ex: '/api/auth/register')
- * @param {object} body Corps JSON de la requête
- * @returns {Promise<{ok: boolean, status: number, data: object|null}>}
- */
-async function apiPost(url, body) {
-  try {
-    const token   = localStorage.getItem('izigsm_token');
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-    let data = null;
-    try { data = await res.json(); } catch {}
-    return { ok: res.ok, status: res.status, data };
-  } catch (e) {
-    return { ok: false, status: 0, data: null };
-  }
-}
-
 // ======================== OTP ========================
+// Endpoints publics (register/resend-otp/verify-otp) → apiPostPublic() (app.js, Principe 2
+// ARCHITECTURAL_PRINCIPLES.md : aucun fetch() direct hors app.js).
 
 /**
  * Crée le compte (POST /api/auth/register) et déclenche l'envoi du code OTP par email.
@@ -166,13 +138,19 @@ async function sendOtp() {
 
   const a = registerState.account;
   const w = registerState.workshop;
-  const r = await apiPost('/api/auth/register', {
+  const r = await apiPostPublic('/api/auth/register', {
     email:        a.email,
     password:     a.password,
     prenom:       a.firstName,
     nom:          a.lastName,
     telephone:    w.phone || null,
     workshopName: w.company_name || null,
+    // Détails boutique — préremplis via searchEntreprise() ou saisis manuellement à l'étape 2
+    siret:        w.siret      || null,
+    tvaNumero:    w.vat_number || null,
+    adresse:      w.address    || null,
+    codePostal:   w.zip        || null,
+    ville:        w.city       || null,
   });
 
   if (!r.ok) {
@@ -204,7 +182,7 @@ async function resendOtp() {
   const btn = document.querySelector('#otp-box .btn-ghost');
   if (btn) { btn.disabled = true; }
 
-  const r = await apiPost('/api/auth/resend-otp', { email: registerState.account.email });
+  const r = await apiPostPublic('/api/auth/resend-otp', { email: registerState.account.email });
 
   if (!r.ok) {
     showFlashRegister('❌ ' + (r.data?.error || 'Erreur lors du renvoi du code.'), 'error');
@@ -235,7 +213,7 @@ async function verifyOtp() {
     return;
   }
 
-  const r = await apiPost('/api/auth/verify-otp', { email: registerState.account.email, otp: code });
+  const r = await apiPostPublic('/api/auth/verify-otp', { email: registerState.account.email, otp: code });
 
   if (!r.ok) {
     showFlashRegister('❌ ' + (r.data?.error || 'Code incorrect ou expiré.'), 'error');
@@ -270,6 +248,81 @@ async function verifyOtp() {
   }
   const verifyBtn = document.getElementById('btn-go-verify');
   if (verifyBtn) { verifyBtn.href = '/dashboard'; verifyBtn.textContent = 'Accéder à mon espace →'; }
+}
+
+// ======================== RECHERCHE ENTREPRISE (SIRENE) ========================
+// Autocomplete "Rechercher mon entreprise" — GET /api/public/entreprise-search
+// (recherche-entreprises.api.gouv.fr, gratuite/sans clé). Préremplit les champs
+// déjà visibles (company_name/siret/address/zip/city) — saisie manuelle reste
+// possible, ces champs ne sont jamais masqués (voir #workshop-fields).
+
+let searchDebounceTimer = null;
+let searchResultsCache  = [];
+
+/** Debounce 350ms sur l'input #search — évite un appel API à chaque frappe. */
+function onSearchInput() {
+  clearTimeout(searchDebounceTimer);
+  const query = document.getElementById('search')?.value?.trim() || '';
+  if (query.length < 3) {
+    hideSearchResults();
+    return;
+  }
+  searchDebounceTimer = setTimeout(() => searchEntreprise(query), 350);
+}
+
+/**
+ * Interroge GET /api/public/entreprise-search et affiche les résultats.
+ * Échoue silencieusement (pas de flash d'erreur) — c'est une aide optionnelle,
+ * la saisie manuelle reste toujours disponible en dessous.
+ * @param {string} query
+ */
+async function searchEntreprise(query) {
+  const res = await apiGet('/api/public/entreprise-search', { q: query });
+  if (!res.ok || !Array.isArray(res.data?.data) || res.data.data.length === 0) {
+    hideSearchResults();
+    return;
+  }
+  searchResultsCache = res.data.data;
+  renderSearchResults(searchResultsCache);
+}
+
+/** Construit la dropdown de résultats (nom + adresse), un item par entreprise. */
+function renderSearchResults(results) {
+  const box = document.getElementById('search-results');
+  if (!box) return;
+  box.innerHTML = results.map((r, i) => `
+    <div onclick="selectEntreprise(${i})" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;">${escapeHtml(r.nom)}</div>
+      <div style="font-size:0.85rem;color:var(--muted,#667085);">${escapeHtml(r.adresse)} ${escapeHtml(r.code_postal)} ${escapeHtml(r.ville)} · SIRET ${escapeHtml(r.siret)}</div>
+    </div>
+  `).join('');
+  box.classList.remove('hidden');
+}
+
+function hideSearchResults() {
+  const box = document.getElementById('search-results');
+  if (box) box.classList.add('hidden');
+}
+
+/**
+ * Sélectionne un résultat de recherche : préremplit company_name/siret/address/
+ * zip/city (champs déjà visibles, jamais masqués) puis ferme la dropdown.
+ * @param {number} idx  Index dans searchResultsCache
+ */
+function selectEntreprise(idx) {
+  const r = searchResultsCache[idx];
+  if (!r) return;
+
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
+  set('company_name', r.nom);
+  set('siret',         r.siret);
+  set('address',       r.adresse);
+  set('zip',           r.code_postal);
+  set('city',          r.ville);
+
+  const searchInput = document.getElementById('search');
+  if (searchInput) searchInput.value = r.nom;
+  hideSearchResults();
 }
 
 // ======================== SAISIE MANUELLE ========================

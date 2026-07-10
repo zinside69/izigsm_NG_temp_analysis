@@ -110,7 +110,12 @@ auth.get('/config', (c) => {
  *   "prenom":       "Jean",
  *   "nom":          "Dupont",
  *   "telephone":    "0612345678",     // optionnel
- *   "workshopName": "iZiGSM Paris"    // optionnel — crée une boutique liée
+ *   "workshopName": "iZiGSM Paris",   // optionnel — crée une boutique liée
+ *   "siret":        "12345678900012", // optionnel — préremplis via /api/public/entreprise-search
+ *   "tvaNumero":    "FR123456789",    // optionnel
+ *   "adresse":      "12 Rue de la Paix", // optionnel
+ *   "codePostal":   "75001",          // optionnel
+ *   "ville":        "Paris"           // optionnel
  * }
  * ```
  *
@@ -121,7 +126,10 @@ auth.get('/config', (c) => {
  */
 auth.post('/register', async (c) => {
   try {
-    const { email, password, prenom, nom, telephone, workshopName } = await c.req.json()
+    const {
+      email, password, prenom, nom, telephone, workshopName,
+      siret, tvaNumero, adresse, codePostal, ville,
+    } = await c.req.json()
 
     if (!email || !password || !prenom || !nom)
       return c.json({ success: false, error: 'Champs obligatoires : email, password, prenom, nom.' }, 400)
@@ -135,9 +143,9 @@ auth.post('/register', async (c) => {
     if (existing)
       return c.json({ success: false, error: 'Cet email est déjà utilisé.' }, 409)
 
-    // Créer la boutique si workshopName fourni
+    // Créer la boutique si workshopName fourni — détails SIRENE optionnels (autocomplete ou saisie manuelle)
     const boutiqueId = workshopName
-      ? await createBoutiqueWithSettings(c.env.DB, workshopName)
+      ? await createBoutiqueWithSettings(c.env.DB, workshopName, { siret, tvaNumero, adresse, codePostal, ville, telephone })
       : null
 
     // Hasher le mot de passe (PBKDF2-SHA256, 100 000 itérations)
@@ -645,7 +653,17 @@ auth.post('/google', async (c) => {
  *   3. Lie la boutique au user via `attachBoutiqueToUser()` (idempotent, `boutique_id IS NULL` en garde)
  *   4. Régénère une paire de tokens (l'ancien JWT porte encore `boutique_id: null`)
  *
- * Body JSON : { "workshopName": "Mon Atelier" }
+ * Body JSON :
+ * ```json
+ * {
+ *   "workshopName": "Mon Atelier",
+ *   "siret":        "12345678900012", // optionnel — préremplis via /api/public/entreprise-search
+ *   "tvaNumero":    "FR123456789",    // optionnel
+ *   "adresse":      "12 Rue de la Paix", // optionnel
+ *   "codePostal":   "75001",          // optionnel
+ *   "ville":        "Paris"           // optionnel
+ * }
+ * ```
  * @returns 200 { success: true, accessToken, refreshToken, expiresIn, user }
  * @returns 400 si workshopName manquant
  * @returns 409 si l'utilisateur a déjà une boutique (JWT ou état DB)
@@ -657,11 +675,11 @@ auth.post('/complete-onboarding', authMiddleware, async (c) => {
     if (jwtUser.boutique_id)
       return c.json({ success: false, error: 'Une boutique est déjà associée à ce compte.' }, 409)
 
-    const { workshopName } = await c.req.json().catch(() => ({}))
+    const { workshopName, siret, tvaNumero, adresse, codePostal, ville } = await c.req.json().catch(() => ({}))
     if (!workshopName || !workshopName.trim())
       return c.json({ success: false, error: 'Le nom de l\'atelier est requis.' }, 400)
 
-    const boutiqueId = await createBoutiqueWithSettings(c.env.DB, workshopName.trim())
+    const boutiqueId = await createBoutiqueWithSettings(c.env.DB, workshopName.trim(), { siret, tvaNumero, adresse, codePostal, ville })
     if (!boutiqueId)
       return c.json({ success: false, error: 'Erreur création boutique.' }, 500)
 

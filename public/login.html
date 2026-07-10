@@ -73,12 +73,14 @@
             <div style="margin-bottom:28px;">
               <p class="eyebrow" style="margin:0 0 8px;">DERNIÈRE ÉTAPE</p>
               <h2 style="margin:0 0 8px;font-size:1.8rem;letter-spacing:-0.05em;">Votre atelier</h2>
-              <p style="margin:0;color:#667085;font-size:0.95rem;">Comment s'appelle votre atelier ? Vous pourrez compléter SIRET, adresse et TVA plus tard depuis les paramètres.</p>
+              <p style="margin:0;color:#667085;font-size:0.95rem;">Recherchez votre entreprise pour préremplir SIRET et adresse, ou saisissez juste le nom — modifiable plus tard depuis les paramètres.</p>
             </div>
             <div class="flash-stack" id="onboarding-flash" style="display:none;padding:0;margin-bottom:16px;"></div>
-            <div class="field" style="margin-bottom:22px;">
+            <div class="field" style="margin-bottom:22px;position:relative;">
               <label for="onboarding-workshop-name">Nom de l'atelier *</label>
-              <input type="text" id="onboarding-workshop-name" placeholder="Mon Atelier" required>
+              <input type="text" id="onboarding-workshop-name" placeholder="Mon Atelier" required autocomplete="off" oninput="onOnboardingSearchInput()">
+              <!-- Résultats recherche SIRENE — rempli par searchEntrepriseOnboarding() -->
+              <div id="onboarding-search-results" class="hidden" style="position:absolute;z-index:20;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.08);margin-top:4px;max-height:220px;overflow-y:auto;"></div>
             </div>
             <button type="button" id="btn-onboarding-submit" class="btn btn-primary w-full" style="min-height:52px;font-size:1rem;" onclick="submitOnboarding()">
               Continuer →
@@ -89,6 +91,11 @@
     </div>
   </div>
 
+  <!-- app.js : wrapper ApiService (apiPost/apiPostPublic) — Principe 2 ARCHITECTURAL_PRINCIPLES.md,
+       aucun fetch() direct autorisé en dehors de ce fichier. Utilisé par handleGoogleCredential()
+       et submitOnboarding() ci-dessous (le formulaire email/mot de passe reste en fetch() direct —
+       dette préexistante, déjà trackée dans PRINCIPES.md, hors scope de cette session). -->
+  <script src="/static/js/app.js"></script>
   <script>
     /**
      * Soumission du formulaire de connexion.
@@ -173,10 +180,9 @@
      */
     async function initGoogleOneTap() {
       try {
-        const res  = await fetch('/api/auth/config');
-        if (!res.ok) return;
-        const cfg = await res.json();
-        if (!cfg.googleClientId) return;
+        const res = await apiGet('/api/auth/config');
+        if (!res.ok || !res.data?.googleClientId) return;
+        const cfg = res.data;
 
         // Remplacer le bouton fallback
         document.getElementById('google-btn-fallback').style.display = 'none';
@@ -226,32 +232,22 @@
       const flash = document.getElementById('flash-area');
       flash.style.display = 'none';
 
-      try {
-        const res  = await fetch('/api/auth/google', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ credential: response.credential }),
-        });
-        const data = await res.json();
+      const res = await apiPostPublic('/api/auth/google', { credential: response.credential });
 
-        if (!data.success || !data.accessToken) {
-          flash.style.display = 'block';
-          flash.innerHTML = `<div class="flash error">❌ ${data.error || 'Erreur Google OAuth.'}</div>`;
-          return;
-        }
-
-        storeAuthSession(data);
-
-        if (!data.user.boutique_id) {
-          document.getElementById('login-panel').style.display = 'none';
-          document.getElementById('onboarding-panel').style.display = 'block';
-          return;
-        }
-        window.location.href = '/dashboard';
-      } catch (err) {
+      if (!res.ok || !res.data?.accessToken) {
         flash.style.display = 'block';
-        flash.innerHTML = `<div class="flash error">❌ Erreur réseau : ${err.message}</div>`;
+        flash.innerHTML = `<div class="flash error">❌ ${res.data?.error || 'Erreur Google OAuth.'}</div>`;
+        return;
       }
+
+      storeAuthSession(res.data);
+
+      if (!res.data.user.boutique_id) {
+        document.getElementById('login-panel').style.display = 'none';
+        document.getElementById('onboarding-panel').style.display = 'block';
+        return;
+      }
+      window.location.href = '/dashboard';
     }
 
     /**
@@ -273,10 +269,61 @@
       }));
     }
 
+    /** Échappement HTML minimal — pas d'utilitaire partagé sur cette page (app.js n'en expose pas). */
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Recherche entreprise (SIRENE) — panneau onboarding post-Google ──────────
+    // Miroir de register.html (même API GET /api/public/entreprise-search).
+    let onboardingSearchTimer   = null;
+    let onboardingSearchResults = [];
+    let onboardingSelected      = {};
+
+    function onOnboardingSearchInput() {
+      clearTimeout(onboardingSearchTimer);
+      onboardingSelected = {};
+      const query = document.getElementById('onboarding-workshop-name')?.value?.trim() || '';
+      if (query.length < 3) {
+        document.getElementById('onboarding-search-results')?.classList.add('hidden');
+        return;
+      }
+      onboardingSearchTimer = setTimeout(() => searchEntrepriseOnboarding(query), 350);
+    }
+
+    async function searchEntrepriseOnboarding(query) {
+      const res = await apiGet('/api/public/entreprise-search', { q: query });
+      const box = document.getElementById('onboarding-search-results');
+      if (!box) return;
+      if (!res.ok || !Array.isArray(res.data?.data) || res.data.data.length === 0) {
+        box.classList.add('hidden');
+        return;
+      }
+      onboardingSearchResults = res.data.data;
+      box.innerHTML = onboardingSearchResults.map((r, i) => `
+        <div onclick="selectEntrepriseOnboarding(${i})" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          <div style="font-weight:600;">${escapeHtml(r.nom)}</div>
+          <div style="font-size:0.85rem;color:#667085;">${escapeHtml(r.adresse)} ${escapeHtml(r.code_postal)} ${escapeHtml(r.ville)}</div>
+        </div>
+      `).join('');
+      box.classList.remove('hidden');
+    }
+
+    function selectEntrepriseOnboarding(idx) {
+      const r = onboardingSearchResults[idx];
+      if (!r) return;
+      onboardingSelected = r;
+      const input = document.getElementById('onboarding-workshop-name');
+      if (input) input.value = r.nom;
+      document.getElementById('onboarding-search-results')?.classList.add('hidden');
+    }
+
     /**
      * Soumission du panneau onboarding (compte Google sans boutique).
-     * Appelle POST /api/auth/complete-onboarding, remplace la session par les
-     * tokens régénérés (boutique_id à jour), puis redirige vers le dashboard.
+     * Appelle POST /api/auth/complete-onboarding avec le nom de l'atelier et,
+     * si un résultat SIRENE a été sélectionné, le SIRET/adresse associés.
+     * Remplace la session par les tokens régénérés (boutique_id à jour), puis
+     * redirige vers le dashboard.
      */
     async function submitOnboarding() {
       const name  = document.getElementById('onboarding-workshop-name')?.value?.trim();
@@ -293,31 +340,24 @@
       btn.disabled = true;
       btn.textContent = 'Création…';
 
-      try {
-        const token = localStorage.getItem('izigsm_token');
-        const res   = await fetch('/api/auth/complete-onboarding', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body:    JSON.stringify({ workshopName: name }),
-        });
-        const data = await res.json();
+      const res = await apiPost('/api/auth/complete-onboarding', {
+        workshopName: name,
+        siret:        onboardingSelected.siret      || null,
+        adresse:      onboardingSelected.adresse     || null,
+        codePostal:   onboardingSelected.code_postal || null,
+        ville:        onboardingSelected.ville       || null,
+      });
 
-        if (!data.success) {
-          flash.style.display = 'block';
-          flash.innerHTML = `<div class="flash error">❌ ${data.error || 'Erreur lors de la création de l\'atelier.'}</div>`;
-          btn.disabled = false;
-          btn.textContent = 'Continuer →';
-          return;
-        }
-
-        storeAuthSession(data);
-        window.location.href = '/dashboard';
-      } catch (err) {
+      if (!res.ok) {
         flash.style.display = 'block';
-        flash.innerHTML = `<div class="flash error">❌ Erreur réseau : ${err.message}</div>`;
+        flash.innerHTML = `<div class="flash error">❌ ${res.data?.error || 'Erreur lors de la création de l\'atelier.'}</div>`;
         btn.disabled = false;
         btn.textContent = 'Continuer →';
+        return;
       }
+
+      storeAuthSession(res.data);
+      window.location.href = '/dashboard';
     }
 
     // Lancer l'init après chargement

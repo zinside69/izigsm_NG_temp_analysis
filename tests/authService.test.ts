@@ -197,7 +197,7 @@ describe('findUserWithProfile', () => {
 describe('createBoutiqueWithSettings', () => {
   it('retourne l\'id de la boutique créée', async () => {
     const db = createMockD1()
-    db.__setResponse('INSERT INTO boutiques (nom) VALUES (?) RETURNING id', { id: 5 })
+    db.__setResponse('INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     const id = await createBoutiqueWithSettings(db, 'Mon Atelier')
 
@@ -206,7 +206,7 @@ describe('createBoutiqueWithSettings', () => {
 
   it('exécute INSERT boutiques PUIS INSERT boutique_settings en séquence', async () => {
     const db = createMockD1()
-    db.__setResponse('INSERT INTO boutiques (nom) VALUES (?) RETURNING id', { id: 5 })
+    db.__setResponse('INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     await createBoutiqueWithSettings(db, 'Mon Atelier')
 
@@ -217,9 +217,23 @@ describe('createBoutiqueWithSettings', () => {
     expect(calls[1].params).toContain(5)  // boutique_id transmis aux settings
   })
 
+  it('transmet les détails SIRENE optionnels (siret, adresse...) au INSERT', async () => {
+    const db = createMockD1()
+    db.__setResponse('INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
+
+    await createBoutiqueWithSettings(db, 'Mon Atelier', {
+      siret: '12345678900012', adresse: '12 Rue de la Paix', codePostal: '75001', ville: 'Paris',
+    })
+
+    const calls = db.__getCalls()
+    expect(calls[0].params).toEqual([
+      'Mon Atelier', '12345678900012', null, '12 Rue de la Paix', '75001', 'Paris', null,
+    ])
+  })
+
   it('retourne null si l\'INSERT boutique échoue (result.id absent)', async () => {
     const db = createMockD1()
-    db.__setResponse('INSERT INTO boutiques (nom) VALUES (?) RETURNING id', null)
+    db.__setResponse('INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id', null)
 
     const id = await createBoutiqueWithSettings(db, 'Boutique Fantôme')
 
@@ -228,7 +242,7 @@ describe('createBoutiqueWithSettings', () => {
 
   it('ne crée pas de settings si boutique_id est null', async () => {
     const db = createMockD1()
-    db.__setResponse('INSERT INTO boutiques (nom) VALUES (?) RETURNING id', null)
+    db.__setResponse('INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id', null)
 
     await createBoutiqueWithSettings(db, 'Boutique Fantôme')
 

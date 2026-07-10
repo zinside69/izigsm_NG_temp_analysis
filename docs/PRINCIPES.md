@@ -67,6 +67,9 @@ apiDelete(url)            // DELETE
 | ~~`register.js`~~ | ~~185~~ | ✅ **Résolu Fix DP** — `fetch()` direct remplacé par `apiPostPublic()` | |
 | ~~`rachats.js`~~ | ~~458~~ | ✅ **Résolu Fix DP** — `fetch()` export CSV remplacé par `apiBlobGet()` | |
 | ~~`app.js`~~ | ~~427+442~~ | ✅ **Résolu Fix DP** — doublon `apiPut` supprimé | |
+| ~~`register.js`/`register.html`~~ | — | ✅ **Résolu 2026-07-10** — la mention "Fix DP" ci-dessus était incorrecte en pratique : `app.js` n'était en fait jamais chargé sur `register.html`, donc `apiPostPublic` n'existait pas au runtime ; un `fetch()` direct local avait été réintroduit par erreur lors du fix `/register`. Corrigé : `app.js` chargé sur `register.html`, tous les appels utilisent `apiPostPublic`/`apiPost`/`apiGet`. | |
+| ~~`login.html`~~ | `handleGoogleCredential`, `submitOnboarding`, `initGoogleOneTap` | ✅ **Résolu 2026-07-10** — mêmes fonctions ajoutées Sprint OAuth Google, corrigées pour utiliser `apiPostPublic`/`apiPost`/`apiGet` (`app.js` désormais chargé sur cette page) | |
+| 🟡 `login.html` | `login-form` submit handler | Formulaire email/mot de passe pré-existant, jamais migré vers `ApiService` — hors scope du fix OAuth Google, à traiter dans une passe dédiée | |
 
 **Helpers centralisés ajoutés dans `app.js` (Sprint correctif DP) :**
 - `_money(n, symbol)` — alias formatMoney pour templates print
