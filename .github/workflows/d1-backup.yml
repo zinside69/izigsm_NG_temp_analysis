@@ -1,0 +1,63 @@
+# ============================================================
+# Backup automatique D1 — indépendant de Cloudflare
+# ============================================================
+# Objectif : filet de sécurité en plus des garanties natives Cloudflare
+# (Time Travel, export à la demande) — voir project-docs/bugs.md pour le
+# contexte. Un dump SQL complet de izigsm-production est exporté chaque
+# nuit et commité dans ce repo (donc chez GitHub, un hébergeur différent
+# de Cloudflare — vraie redondance de fournisseur).
+#
+# Attention : selon la doc Cloudflare, la base D1 peut être brièvement
+# indisponible en écriture pendant un export sur une grosse base — d'où
+# le déclenchement à 02h00 UTC (heures creuses, hors activité des
+# ateliers). À surveiller si la base grossit significativement.
+#
+# Setup requis (une fois) :
+#   1. Créer un token API Cloudflare avec permission D1 Edit sur le compte
+#      Contact@soteli.fr (dash.cloudflare.com → My Profile → API Tokens)
+#   2. L'ajouter comme secret GitHub : Settings → Secrets and variables →
+#      Actions → New repository secret → nom CLOUDFLARE_API_TOKEN
+
+name: Backup D1 (izigsm-production)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 02h00 UTC chaque jour (~3h-4h heure de Paris selon DST)
+  workflow_dispatch: {}  # déclenchement manuel possible depuis l'onglet Actions
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installer les dépendances (wrangler)
+        run: npm ci
+
+      - name: Exporter la base D1 en SQL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          mkdir -p backups/d1
+          npx wrangler d1 export izigsm-production --remote \
+            --output="backups/d1/backup-$(date -u +%Y-%m-%d).sql"
+
+      - name: Purger les anciens backups (garde les 14 derniers)
+        working-directory: backups/d1
+        run: |
+          ls -1t backup-*.sql | tail -n +15 | xargs -r rm --
+
+      - name: Commiter le backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/d1/
+          git diff --staged --quiet || git commit -m "chore: backup D1 automatique $(date -u +%Y-%m-%d)"
+          git push
