@@ -1,59 +1,60 @@
-# Recovery Prompt — iziGSM — 2026-07-10 (Migration Cloudflare TERMINÉE)
+# Recovery Prompt — iziGSM — 2026-07-10 (checkpoint fin de session)
 
 ## Vue d'ensemble
-SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) de gestion boutique réparation GSM. Repo : `izigsm/webapp/` (remote GitHub `zinside69/izigsm_NG_temp_analysis`).
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Positionnement produit : plateforme façon repairdesk.co/monatelier.net, boutiques indépendantes par défaut, **mais le multi-sites géré (un client = plusieurs boutiques) est une vraie roadmap confirmée**, pas hors scope. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`.
 
-## Ce qu'on fait
-Migration de l'hébergement Genspark (dev/staging, `gsk hosted deploy`) vers Cloudflare direct (compte `Contact@soteli.fr`), domaine cible `repairdesk.fr`. Design et plan approuvés, exécution en mode subagent-driven hybride (voir `decisions.md` pour le détail complet du cadrage).
+## Architecture actuelle
+- Backend Hono/TypeScript sur Cloudflare Workers (via Pages Functions), pattern strict Controller (`routes/`) → Service (`services/`, tout le SQL) → jamais de SQL inline dans une route
+- Frontend HTML/CSS/JS vanilla, wrapper `ApiService` centralisé dans `app.js` (`apiGet`/`apiPost`/`apiPostPublic`/etc.) — **aucun `fetch()` direct** en dehors de ce fichier n'est autorisé (Principe 2, `docs/ARCHITECTURAL_PRINCIPLES.md` + `docs/PRINCIPES.md`, versionnés en git pour la première fois aujourd'hui)
+- Isolation multi-tenant par ligne (`boutique_id` sur toutes les tables métier), une seule base D1 partagée — vérifiée dans le code aujourd'hui, pas juste supposée
+- Auth JWT (access 1h + refresh 7j en KV), `boutique_id` embarqué dans le JWT, jamais fait confiance au client pour son propre scope (`getBoutiqueId()`)
 
-- Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`
-- Plan (9 tâches) : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md`
-- Suivi tâche par tâche : `todo.md`
+## Ce qui s'est passé aujourd'hui (2026-07-10) — session très longue, 24 commits
+1. **Migration Cloudflare terminée** (Genspark → Pages/D1/R2 direct, `repairdesk.fr` en prod)
+2. **Bug `/register` corrigé** — inscription email/OTP jamais fonctionnelle, réparée + 3 failles de sécu trouvées et corrigées (fuite OTP, énumération de comptes, injection HTML)
+3. **OAuth Google** ajouté sur `/login` et `/register`, avec onboarding boutique obligatoire pour les comptes sans boutique (`POST /api/auth/complete-onboarding`)
+4. **Recherche entreprise SIRENE** (`recherche-entreprises.api.gouv.fr`, gratuite) — autocomplete à l'inscription, persiste enfin SIRET/adresse (colonnes existaient, jamais remplies)
+5. **Isolation multi-tenant vérifiée** dans le code suite à une question de l'utilisateur sur la sécurité/étanchéité des données clients
+6. **Backup D1 automatique** quotidien via GitHub Actions (indépendant de Cloudflare), `.github/workflows/d1-backup.yml`
+7. **Bug majeur emails transactionnels** — `email_logs` vide depuis toujours, aucun email n'était jamais réellement parti (3 causes cumulées : `waitUntil()` manquant, pas de clé Resend par boutique, `FRONTEND_URL` absente). Corrigé et validé bout-en-bout en prod.
+8. **Bugs annexes découverts en testant** (non corrigés, notés dans `todo.md`) : boutiques libre-service sans `slug` (vitrine/RDV inaccessible), table `boutique_creneaux` vide sans UI (RDV en ligne sans créneaux), `www.repairdesk.fr` en 521 (Gandi, pas nous)
+9. **Feature "Accord" ticket spécifiée** (pas codée) — double validation boutique→client, réutilise le flow devis existant, email d'abord/SMS différé
+10. **3 items produit ajoutés au backlog** : comparatif monatelier.net, rebranding "Mon Atelier"→"MyDesk" (15 occurrences listées), et le point 9 ci-dessus
 
-## Migration terminée — les 9 tâches sont closes (2026-07-10)
-
-Tasks 1 à 9 terminées et vérifiées (D1 migrée, R2 actif avec bucket `izigsm-photos`, secrets `JWT_SECRET`+`RESEND_API_KEY` posés, code HEAD déployé — déploiement `885cc1e3`, commit `6f26a51` — Task 7 validée via API, `repairdesk.fr` attaché et actif, DNS mail re-vérifié intact).
-
-**Task 7 (validation fonctionnelle)** — faite via API (navigateur Chrome indisponible, extension non connectée) : login seedé `admin@izigsm.fr`/`Admin@2026!` → JWT valide, client + ticket créés, photo uploadée+relue sur R2, 0 erreur en logs.
-
-**Task 8 (attacher `repairdesk.fr`)** — écart au plan : l'A record préexistant (Gandi, `217.70.184.38`) a empêché l'auto-provisioning Cloudflare du CNAME (`"CNAME record not set"`). Confirmation explicite obtenue avant chaque mutation DNS : suppression de l'A record, puis création manuelle du CNAME (`repairdesk.fr → izigsm.pages.dev`, proxied). Domaine `active` ~2 min après, certificat SSL Google CA provisionné. `https://repairdesk.fr/api/health` répond 200 en prod.
-
-**Task 9 (vérification DNS mail)** — MX, SPF, DKIM (`gm1`/`gm2`/`resend`), `webmail.repairdesk.fr`, `www.repairdesk.fr` tous confirmés inchangés. Seul le record racine a changé (A → CNAME), comme prévu.
-
-**Migration Cloudflare terminée.** `repairdesk.fr` sert l'app iziGSM en production. Plus rien en attente sur ce chantier — la reprise concerne maintenant la dette technique (voir Bugs connus) ou de nouvelles demandes.
-
-## Décisions de cadrage (résumé — détail complet dans `decisions.md`)
-1. Pas de migration de données — D1 neuve (schéma seul)
-2. Pages maintenant, Workers plus tard (chantier séparé futur)
-3. Même compte Cloudflare pour DNS `repairdesk.fr` et D1/Pages
-4. R2 activé dans le cadre de cette migration
-5. Secrets régénérés à neuf
-6. Bascule DNS en 2 temps : validation `*.pages.dev` d'abord, `repairdesk.fr` ensuite
-
-## Décisions prises pendant l'exécution (à ajouter à decisions.md si pas déjà fait)
-- R2 : bucket nommé `izigsm-photos` (pas de nom générique type "medias"/"backups" — un seul usage aujourd'hui, photos tickets)
-- Resend : domaine d'envoi configuré sur le **sous-domaine** `mail.repairdesk.fr` (pas la racine `repairdesk.fr`) pour ne jamais toucher aux MX/SPF/webmail Gandi existants. DNS (MX + TXT SPF + TXT DKIM) déjà présents dans la zone au moment de la vérification — probablement posés lors du travail du 08/07.
-- Mode d'exécution : hybride — infra pilotée directement par l'agent en session (pas de worktree, pas de subagent pour les opérations Cloudflare/DNS/secrets qui touchent le compte de prod réel), subagent-driven uniquement pour Task 4 (le seul vrai diff de code, review Approved après un cycle de fix mineur)
+## Décisions prises aujourd'hui (détail complet dans `decisions.md`)
+- Multi-sites géré = vraie roadmap, pas hors scope (corrigé après une supposition erronée de l'agent)
+- Fallback email plateforme (`RESEND_API_KEY` globale) quand une boutique n'a pas sa propre clé Resend — évite de forcer chaque atelier à créer un compte Resend avant de pouvoir écrire à ses clients
+- Feature "Accord" réutilise `devis.ticket_id`/`devis.statut`/`devis-public.html` plutôt qu'un nouveau système de token
+- Plus de `Co-Authored-By: Claude` dans les commits de ce workspace (feedback utilisateur)
+- Commenter systématiquement le code + respecter le pattern existant (feedback utilisateur, applique à tous les projets du workspace)
 
 ## Fichiers importants
-- `wrangler.jsonc` → config Pages, D1 `izigsm-production` (uuid `1e5c6e26-6b55-4b00-bf83-72ba26b6b112`), R2 `izigsm-photos` actif
-- `docs/ARCHITECTURE_MODULES.md` → architecture (⚠️ §2 tableau migrations obsolète, voir bugs.md)
+- `wrangler.jsonc` → config Pages/D1/R2 + `vars.FRONTEND_URL` (ajoutée aujourd'hui)
+- `docs/ARCHITECTURAL_PRINCIPLES.md` + `docs/PRINCIPES.md` → conventions de code obligatoires, à consulter avant toute modification
+- `docs/GAP_ANALYSIS_ENRICHI.md` → comparatif CDC le plus à jour (corrigé aujourd'hui sur A08 OAuth et L01-L09 emails, encore quelques entrées potentiellement stales ailleurs — vérifier dans le code avant de faire confiance à 100%)
+- `.github/workflows/d1-backup.yml` → backup D1 quotidien, nécessite le secret GitHub `CLOUDFLARE_API_TOKEN` (déjà configuré et fonctionnel)
 - `seed.sql` → compte de test `admin@izigsm.fr` / `Admin@2026!`
 
 ## Bugs connus (détail complet dans `bugs.md`)
-- **`/register` cassé** (bloquant, découvert pendant Task 7, hors scope migration mais à traiter vite pour un vrai lancement)
-- Prod Genspark en retard de version (sans objet une fois la migration terminée)
-- `/robots.txt` 500 sur Genspark
-- `phoneCatalogService.ts` non testé
-- RGPD Art.5.1.e non implémenté
-- `docs/ARCHITECTURE_MODULES.md` §2 obsolète
+- Boutiques libre-service sans `slug` → vitrine/RDV publics inaccessibles
+- `boutique_creneaux` vide, aucune UI de config → prise de RDV en ligne sans créneaux
+- `www.repairdesk.fr` → 521 (Gandi, hors de notre contrôle)
+- `/factures/:id/emettre` n'envoie aucun email (jamais implémenté)
+- Purge RGPD automatique non implémentée (seul vrai gap de conformité légale restant)
+- HTML-injection préexistante sur 5 templates email (`client_prenom` non échappé) — même faille corrigée sur l'email OTP, pas propagée aux autres
 - 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
 
 ## Contraintes
-- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr` (validé intacts au 2026-07-10)
+- Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr`
 - Ne jamais faire transiter de secret en clair dans la conversation
-- Toujours proposer avant modification/suppression de fichier existant (règle globale)
-- Historiques de version : toujours ajouter en dessous, jamais écraser (règle globale)
+- Respecter `ARCHITECTURAL_PRINCIPLES.md`/`PRINCIPES.md` — aucun `fetch()` direct hors `app.js`, aucun SQL inline dans les routes
+- Commenter systématiquement le code ajouté (JSDoc backend, sections frontend)
+- Ne jamais ajouter `Co-Authored-By: Claude` dans les commits
+- Toujours proposer avant modification/suppression de fichier existant
 
-## Prochaine étape immédiate à la reprise
-Aucune action en attente sur la migration — chantier clos. Points ouverts pour une future session : fixer le bug `/register` (bloquant onboarding réel, voir `bugs.md`), ou traiter la dette technique listée ci-dessus.
+## Prochaines étapes recommandées
+1. Purge RGPD automatique (conformité légale, priorité la plus claire)
+2. Fix `slug` manquant sur les boutiques libre-service (petit, débloque la vitrine pour toute nouvelle inscription)
+3. UI de configuration des créneaux bookables (`boutique_creneaux`) — débloque la prise de RDV en ligne
+4. Session de conception dédiée pour le multi-sites géré (chantier d'architecture, pas un ajout incrémental)
+5. Implémentation de la feature "Accord" (spec déjà écrite dans `todo.md`)

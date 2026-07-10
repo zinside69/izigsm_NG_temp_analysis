@@ -39,3 +39,28 @@ Design approuvé, spec écrite et commitée, plan d'implémentation écrit et co
 
 ### Écart au plan initial — Task 8 (2026-07-10)
 Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attachement du domaine (la zone étant sur le même compte). En pratique, l'A record préexistant (`repairdesk.fr → 217.70.184.38`, Gandi) a bloqué cette auto-création (`"CNAME record not set"`) même après suppression de l'A record. Le CNAME (`repairdesk.fr → izigsm.pages.dev`, proxied) a dû être créé manuellement — confirmation explicite utilisateur obtenue avant chaque mutation DNS (suppression A record, attachement domaine). Résultat identique à celui prévu, juste une étape manuelle en plus.
+
+---
+
+## 2026-07-10 (suite) — Décisions post-migration
+
+### Positionnement produit confirmé
+**Décision** : iziGSM est une plateforme SaaS multi-boutiques pour centres de réparation indépendants et divers (comparables cités par l'utilisateur : repairdesk.co, monatelier.net), **ET** doit supporter le multi-sites géré (un client possédant plusieurs boutiques, dashboard consolidé, transferts stock/personnel). Les deux modèles cohabitent — ce n'est pas contradictoire.
+
+**Pourquoi** : l'agent avait initialement classé le multi-sites (MOD-16 CDC) comme hors scope/non pertinent vu le positionnement "boutiques indépendantes". L'utilisateur a corrigé : cas d'usage réel (propriétaire de plusieurs magasins), à garder en roadmap.
+
+**Comment appliquer** : ne jamais reclasser le multi-sites comme hors scope. C'est un chantier d'architecture confirmé (le modèle actuel est strictement 1 user = 1 boutique_id), à scoper en session dédiée — pas encore fait. Détail dans `todo.md` et mémoire projet `project_izigsm_product_vision.md`.
+
+### Fallback email plateforme (pas de clé Resend obligatoire par boutique)
+**Décision** : quand une boutique n'a pas configuré sa propre clé Resend (`boutique_settings.email_api_key`), le système utilise automatiquement la clé Resend globale de la plateforme (`RESEND_API_KEY`, même secret que l'OTP), avec un expéditeur forcé sur le domaine vérifié `mail.repairdesk.fr` (format `"{Nom boutique} via iziGSM <noreply@mail.repairdesk.fr>"`).
+
+**Pourquoi** : découvert que `email_api_key` n'a jamais été configurée pour aucune boutique — sans ce fallback, aucun email n'aurait jamais fonctionné pour un client réel sans qu'il configure d'abord son propre compte Resend (friction de mise en route disproportionnée pour un petit atelier). Alternative écartée : forcer chaque boutique à configurer sa clé avant de pouvoir écrire à ses clients.
+
+**Comment appliquer** : chaque boutique garde la possibilité de configurer sa propre clé plus tard (white-label, expéditeur personnalisé) — le fallback n'est qu'un défaut, pas une contrainte. Exception : `POST /api/notifications/test` n'utilise jamais le fallback (doit tester la config propre de la boutique).
+
+### Feature "Accord" ticket — réutilise le flow devis existant
+**Décision** : l'étape "Accord" de la timeline de suivi ticket (double validation boutique→client, couleurs gris/orange/vert) réutilisera `devis.ticket_id` + `devis.statut` + `devis-public.html` + `POST /api/public/devis/:token/repondre` — pas de nouveau système de token/approbation dédié au ticket.
+
+**Pourquoi** : le mécanisme demandé (lien envoyé au client, clic = preuve d'acceptation) existe déjà quasi à l'identique pour les devis. Dupliquer serait un doublon inutile.
+
+**Comment appliquer** : SMS explicitement différé (nécessite un choix de fournisseur type Twilio, non fait) — email uniquement pour la v1, via le mécanisme Resend déjà fiabilisé. Spec complète dans `todo.md`.
