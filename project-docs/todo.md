@@ -101,6 +101,3 @@ La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` 
 - [ ] `GET /api/public/ticket/:token` (`publicService.ts`) doit exposer les infos du devis lié (statut au minimum) pour que le frontend puisse calculer cet état
 - [ ] Vérifier que l'envoi du devis (`POST /devis/:id/envoyer`, déjà fonctionnel depuis le fix du jour) est bien le déclencheur naturel de l'état "orange"
 - [ ] SMS : décision fournisseur à prendre séparément (Twilio le plus documenté dans le projet) avant d'ajouter ce canal
-
-## Message utilisateur "Diagnostic" (2026-07-10, sans contexte)
-Reçu seul, sans précision — à clarifier à la reprise de session : diagnostic de quoi précisément ?
