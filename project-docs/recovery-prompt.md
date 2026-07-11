@@ -1,4 +1,4 @@
-# Recovery Prompt — iziGSM — 2026-07-11 (checkpoint fin de session)
+# Recovery Prompt — iziGSM — 2026-07-11 (checkpoint 2, fin de session)
 
 ## Vue d'ensemble
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Positionnement produit : plateforme façon repairdesk.co/monatelier.net, boutiques indépendantes par défaut, **mais le multi-sites géré (un client = plusieurs boutiques) est une vraie roadmap confirmée**, pas hors scope. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`.
@@ -17,6 +17,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 5. **Faille XSS trouvée par revue de sécurité automatique** — `signature_client` interpolé sans validation fiable dans `<img src>`. Corrigée côté API et frontend avant tout déploiement.
 6. **Bug bloquant création de ticket, corrigé** — `client_id` jamais envoyé + 4 champs mal nommés dans le payload (`marque`/`modele`/`description`/`devis_montant` au lieu de `appareil_marque`/`appareil_modele`/`description_panne`/`prix_estime`) + valeurs de priorité non alignées avec l'enum API. Validé en local sur les deux chemins (client existant / nouveau client créé à la volée).
 7. **Déployé en production** le 2026-07-11 (`wrangler pages deploy`), `/api/health` confirmé 200 après déploiement.
+8. **Correction QualiRépar** — l'évaluation initiale ("ampleur revue à la baisse, pas d'API") était fausse. L'utilisateur a fourni 3 PDF techniques EcoSystem (`docs/Guide d'utilisation de l'API Partenaire réparateur - V3.0.0.pdf` + 2 autres) confirmant qu'une vraie API partenaire "Fonds Réparation" existe (OpenAPI, kit dev complet), avec preuve terrain d'un remboursement réellement perçu. Erreur méthodologique identifiée : j'avais comparé le marketing à une page d'aide *utilisateur final*, sans chercher de doc technique développeur séparée. `docs/ANALYSE_COMPARATIVE_MONATELIER.md` §2.10 et `decisions.md` corrigés et commités (`0c2cf47`).
 
 ## Décisions prises aujourd'hui (détail complet dans `decisions.md`)
 - v3 de l'analyse comparative suffit — pas besoin de garder les versions intermédiaires en fichiers séparés
@@ -26,6 +27,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - `wrangler.jsonc` → config Pages/D1/R2
 - `docs/ANALYSE_COMPARATIVE_MONATELIER.md` → v3, 19/19 pages du centre d'aide monatelier couvertes
 - `docs/monatelier_aide_notes.md` → sitemap complet + notes structurelles pour la future doc iziGSM (site + PDF + base vectorielle agent IA)
+- `docs/Guide d'utilisation de l'API Partenaire réparateur - V3.0.0 - 2022-10-10.pdf` + `docs/ecosystem - API Fonds Réparation - RGPD et Purge des demandes.pdf` + `docs/ecosystem - Pièces Issues de l_Economie Circulaire (PIEC).pdf` → doc technique complète API QualiRépar EcoSystem (non trackées en git, fournies par l'utilisateur) — référence si le chantier QualiRépar est scopé
 - `docs/GAP_ANALYSIS_ENRICHI.md` → comparatif CDC, pas mis à jour aujourd'hui (à rafraîchir : slug, prise en charge, signature ne sont pas encore reflétés)
 - `seed.sql` → compte de test `admin@izigsm.fr` / `Admin@2026!`
 
@@ -50,3 +52,4 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 4. UI de configuration des créneaux bookables (`boutique_creneaux`)
 5. Rafraîchir `docs/GAP_ANALYSIS_ENRICHI.md` pour refléter les changements du 2026-07-11 (slug, prise en charge, signature)
 6. Décider quels items de la section "💡 À s'inspirer" de l'analyse comparative construire (fichier modèle import, badge RDV→ticket, aperçu notification, tableau CA/marge/délai par technicien)
+7. QualiRépar : intégration API désormais bien documentée (3 PDF EcoSystem dans `docs/`) — envisager une session de cadrage dédiée si ce chantier devient prioritaire

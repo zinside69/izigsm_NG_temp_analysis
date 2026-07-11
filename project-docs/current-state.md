@@ -1,4 +1,4 @@
-# iziGSM — État courant (MàJ : 2026-07-11, fin de session — checkpoint)
+# iziGSM — État courant (MàJ : 2026-07-11, fin de session — checkpoint 2)
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
 - Migration Cloudflare terminée (Genspark abandonné) — Pages + D1 + R2, domaine actif, DNS mail Gandi intact
@@ -22,7 +22,7 @@
 - Multi-sites géré (MOD-16 CDC) — roadmap confirmée, à scoper en session dédiée
 - Outils marketing boutique : parrainage, avis clients, email/SMS anniversaire (widget dashboard chez monatelier), dépôt à distance (plus riche que supposé : statut `EN_TRANSIT` dédié, réexpédition trackée)
 - SAV Constructeur Agréé (Apple/Samsung) — nouveau gap identifié dans l'analyse comparative v3, absent à 100%
-- QualiRépar — absent à 100%, mais ampleur revue à la baisse après lecture du centre d'aide officiel : un bouton de remise pré-remplie par catégorie d'appareil, pas une intégration API de tracking comme le suggérait le marketing
+- QualiRépar — absent à 100% côté iziGSM. **Ampleur confirmée réelle** (corrigé après une évaluation initiale erronée le même jour) : l'API partenaire EcoSystem "Fonds Réparation" existe bel et bien (standard OpenAPI, kit dev complet, 3 PDF techniques fournis par l'utilisateur dans `docs/`), workflow de suivi jusqu'au paiement confirmé par une preuve terrain (remboursement réellement perçu)
 - Feature "Accord" avec double validation boutique→client (spec déjà écrite dans `todo.md`)
 - Rebranding "Mon Atelier"/"monatelier" → "MyDesk" (15 occurrences listées dans `todo.md`)
 
@@ -31,3 +31,4 @@
 - Déploiement : `npm run build && npx wrangler pages deploy dist --project-name izigsm --branch main` — redéployé le 2026-07-11, `https://repairdesk.fr/api/health` confirmé 200 après déploiement
 - Secrets Cloudflare Pages configurés : `JWT_SECRET`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`
 - Migrations `0032` (backfill slug) et `0033` (colonnes prise en charge : `etat_appareil`, `code_deverrouillage`, `code_sim`, `signature_client`, `signature_date`) appliquées en production le 2026-07-11
+- Git : tout commité et pushé sur `origin/main` (`92f0db8` chantier prise en charge + `0c2cf47` correction QualiRépar), aucun reste en attente pour cette session
