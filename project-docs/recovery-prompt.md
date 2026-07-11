@@ -27,7 +27,9 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - `wrangler.jsonc` → config Pages/D1/R2
 - `docs/ANALYSE_COMPARATIVE_MONATELIER.md` → v3, 19/19 pages du centre d'aide monatelier couvertes
 - `docs/monatelier_aide_notes.md` → sitemap complet + notes structurelles pour la future doc iziGSM (site + PDF + base vectorielle agent IA)
-- `docs/Guide d'utilisation de l'API Partenaire réparateur - V3.0.0 - 2022-10-10.pdf` + `docs/ecosystem - API Fonds Réparation - RGPD et Purge des demandes.pdf` + `docs/ecosystem - Pièces Issues de l_Economie Circulaire (PIEC).pdf` → doc technique complète API QualiRépar EcoSystem (non trackées en git, fournies par l'utilisateur) — référence si le chantier QualiRépar est scopé
+- `docs/Guide d'utilisation de l'API Partenaire réparateur - V3.0.0 - 2022-10-10.pdf` + `docs/ecosystem - API Fonds Réparation - RGPD et Purge des demandes.pdf` + `docs/ecosystem - Pièces Issues de l_Economie Circulaire (PIEC).pdf` → doc technique complète API QualiRépar EcoSystem, désormais trackées en git — référence si le chantier QualiRépar est scopé
+- `docs/260115000258.PDF`/`.CSV` → preuve terrain d'un remboursement QualiRépar réellement perçu, désormais tracké en git
+- `docs/CDC_izigsm.pdf` → remplacé par la version complète (314 Ko, l'ancienne version trackée était un placeholder cassé de 5,5 Ko) ; `docs/CDC_izigsm.docx`, `docs/CDC izigsm_sections.docx`, `docs/CDC_izigsm Manus.docx`, `docs/LISTE_FONCTIONNALITES_TECHNIQUES.md` également ajoutés au repo le 2026-07-11
 - `docs/GAP_ANALYSIS_ENRICHI.md` → comparatif CDC, pas mis à jour aujourd'hui (à rafraîchir : slug, prise en charge, signature ne sont pas encore reflétés)
 - `seed.sql` → compte de test `admin@izigsm.fr` / `Admin@2026!`
 
