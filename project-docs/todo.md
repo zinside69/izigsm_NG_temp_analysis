@@ -1,5 +1,29 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## Analyse comparative monatelier.net — couverture complète (2026-07-11 v3)
+
+- [x] **FAIT** — Les 19 pages du centre d'aide `monatelier.net/aide/*` lues intégralement (v2 n'en couvrait que 9, via les liens précédent/suivant qui ratent 10 pages non reliées linéairement — sitemap complet retrouvé via le menu latéral). `docs/ANALYSE_COMPARATIVE_MONATELIER.md` v3.
+  - Nouveaux gaps trouvés : SAV Constructeur Agréé (Apple/Samsung, absent à 100%), prise en charge à distance plus riche que supposé (statut EN_TRANSIT dédié, réexpédition trackée), badge "Réceptionné par" distinct du technicien assigné, import Excel (pas juste CSV) avec fichier modèle téléchargeable, tableau de bord équipe (CA/marge/délai moyen par technicien)
+  - Nuance importante : QualiRépar chez monatelier est un simple bouton de remise pré-remplie par catégorie d'appareil (pas une intégration API de tracking Soumis→Validé→Remboursé comme le suggérait le marketing en v2) — le gap reste réel côté iziGSM mais l'ampleur du travail est revue à la baisse
+  - Section "💡 À s'inspirer" ajoutée : 7 idées concrètes à faible coût (fichier modèle import, badge RDV→ticket, aperçu notification avant envoi, tableau CA/marge/délai par technicien, PIN switch déjà fait côté iziGSM)
+  - `docs/monatelier_aide_notes.md` mis à jour avec le sitemap complet 19 pages + notes structurelles gestion d'équipe (pertinent pour le futur `populateTechniciens()`)
+
+## Chantier prise en charge — état/sécurité/signature (démarré 2026-07-11)
+
+Point de départ : `docs/ANALYSE_COMPARATIVE_MONATELIER.md` §1 (gaps liés à l'écran de prise en charge).
+
+- [x] Migration `migrations/0033_ticket_prise_en_charge.sql` — colonnes `etat_appareil` (JSON), `code_deverrouillage`, `code_sim`, `signature_client`, `signature_date` sur `tickets`. **Appliquée en production.**
+- [x] Backend `ticketService.ts`/`routes/tickets.ts` — champs optionnels sur create/update, exclus de `listTickets()`/`getKanban()` (uniquement dans `getTicketById()`)
+- [x] Frontend `tickets.html`/`tickets.js` — nouvel onglet "État & Sécurité" (checklist + codes), signature réellement capturée et envoyée (avant : booléen seulement, dessin jamais transmis)
+- [x] Affichage fiche détail (checklist + codes + image signature) et fiche imprimable existante (`printTicket()`) mise à jour pour montrer l'état constaté + la vraie signature si capturée
+- [x] Tests `ticketService.test.ts` mis à jour, suite complète 704/707 (3 échecs = tests fuseau horaire déjà connus, sans lien)
+- [x] Validé en local (navigateur réel, D1 local) — checklist, codes, signature dessinée à la main, persistance confirmée, absence des champs sensibles en liste
+- [x] **Faille XSS corrigée le 2026-07-11** — `signature_client` validé strictement (data URL PNG/JPEG base64 uniquement) côté API ET frontend avant toute interpolation dans `<img src>`, trouvée par revue de sécurité automatique. Détail dans `bugs.md`.
+- [x] **Bug bloquant création de ticket corrigé le 2026-07-11** — `client_id` jamais envoyé + 4 champs mal nommés (`marque`/`modele`/`description`/`devis_montant` → `appareil_marque`/`appareil_modele`/`description_panne`/`prix_estime`) + valeurs de priorité non alignées avec l'enum API. Validé en local sur les deux chemins (client existant / nouveau client créé à la volée). Détail complet dans `bugs.md`. **Ce chantier est maintenant réellement utilisable de bout en bout.**
+- [ ] Non corrigé, hors scope (fonctionnalité à construire, pas un renommage) : assignation technicien à la création — `<select id="t-technician">` contient des noms en dur, jamais les vrais employés, `technicien_id` jamais envoyé. Nécessite un `populateTechniciens()` sur le modèle de `populateClients()`.
+- [ ] Décision à prendre : multi-appareils par ticket (`appareil_id` est singulier en base aujourd'hui) — identifié dans l'analyse comparative §1.4, pas encore scopé
+- [ ] Décision à prendre : acompte structuré à la prise en charge (§1.6 de l'analyse) — actuellement une convention informelle en notes libres
+
 ## Migration Cloudflare — TERMINÉE le 2026-07-10
 
 Plan complet : `docs/superpowers/plans/2026-07-09-migration-cloudflare.md` (9 tâches).
@@ -73,7 +97,11 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 - Détail complet dans `bugs.md`. Dette restante notée là-bas : `/factures/:id/emettre` n'envoie toujours aucun email (jamais implémenté, GAP_ANALYSIS_ENRICHI.md corrigé en conséquence).
 
 ## Analyse comparative — monatelier.net vs repairdesk.fr (demandé 2026-07-10)
-- [ ] Faire une analyse comparative des fonctionnalités entre `https://monatelier.net/aide/` (centre d'aide du concurrent — bonne source pour lister leurs features réelles) et l'état actuel d'iziGSM/repairdesk.fr. Objectif : repérer les écarts fonctionnels non déjà couverts par `GAP_ANALYSIS_ENRICHI.md` (qui compare au CDC, pas à la concurrence directement).
+- [x] **FAIT le 2026-07-11 (v2)** — Analyse comparative complète : `docs/ANALYSE_COMPARATIVE_MONATELIER.md`. v1 basée sur du marketing seul (pages `/aide/*` = SPA inaccessibles au fetch simple) ; v2 relit `/aide/*` intégralement via navigateur (Claude in Chrome) — 9 pages, dont `/aide/premiers-pas` (répartition officielle Solo/Pro, source la plus fiable trouvée). Chaque gap recoupé avec le code iziGSM (`Grep src/`), pas seulement avec `GAP_ANALYSIS_ENRICHI.md`.
+  - Gaps prioritaires liés au chantier prise en charge en cours : signature électronique bon de dépôt (dès plan Solo monatelier), codes de sécurité appareil (PIN/schéma déverrouillage — absent à 100% côté iziGSM), état des lieux structuré (checklist rayures/dégâts — absent, iziGSM n'a que des notes libres), multi-appareils par ticket (`appareil_id` est singulier en base, à corriger si retenu), acompte structuré (actuellement une convention informelle en notes libres, pas un champ dédié)
+  - Autres gaps confirmés : signature eIDAS devis (`G08`, déjà connu), QualiRépar (absent à 100%, jamais scopé), TVA sur la marge pour le rachat/reconditionné (nouveau — vrai sujet de conformité fiscale, à vérifier sérieusement), SMS transactionnels (`L10`), Retours client/RMA fournisseurs (`H07`/`H08`), parrainage (`C10`), export FEC (`F11`), éditeur de templates email/SMS, widget anniversaires
+  - **Corrections vs v1** : vente directe en caisse et remises par ligne sont en fait déjà implémentées côté iziGSM (`caisseService.ts`, `factureService.ts` `remise_pct`) — v1 les avait citées comme gaps par erreur ; inventaire temps réel retiré (la doc officielle monatelier ne décrit qu'un dashboard, pas un comptage physique) ; logo boutique sur documents probablement déjà en place (`boutiques.logo_url` existe et est utilisé)
+  - Parité ou avantage iziGSM confirmé : Agenda/RDV (iziGSM en avance — booking en ligne déjà actif), livre de police 321-7, SAV garanties/tickets, à-commander/CUMP, vitrine publique, rapports/KPIs, caisse NF525, granularité des statuts ticket (9 statuts iziGSM vs 7 colonnes monatelier), avoirs & bons d'achat
 
 ## Rebranding — retirer "Mon Atelier" / "monatelier", remplacer par "MyDesk" (demandé 2026-07-10)
 "Mon Atelier" est utilisé comme nom de boutique par défaut/placeholder à plusieurs endroits du code — à remplacer par "MyDesk" pour ne pas rappeler la marque du concurrent monatelier.net. Occurrences trouvées (recherche `mon atelier|monatelier`, insensible à la casse) :

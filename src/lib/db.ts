@@ -12,6 +12,7 @@
  *  - `calculLignes()`  : agrégat de lignes document (facture, devis, avoir)
  *  - `auditLog()`      : traçabilité des mutations en base
  *  - Validateurs       : email, IMEI, téléphone (regex)
+ *  - `slugify()`       : génération de slug URL-safe (boutiques)
  */
 
 // ─── Numérotation automatique ─────────────────────────────────────────────────
@@ -153,6 +154,26 @@ export function validateImei(imei: string): boolean {
  */
 export function validateTelephone(tel: string): boolean {
   return /^(\+33|0)[1-9](\d{8})$/.test(tel.replace(/\s/g, ''))
+}
+
+// ─── Slug ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Génère un slug URL-safe depuis un nom (boutique, etc.) : minuscules, espaces
+ * remplacés par des tirets, accents normalisés, caractères hors [a-z0-9-] retirés.
+ *
+ * Utilisé partout où un slug de boutique est créé (`POST /api/boutiques`,
+ * inscription libre-service, onboarding Google) pour garantir un format identique.
+ *
+ * @param nom  Nom source (ex: nom de boutique)
+ * @returns    Slug normalisé (peut être vide si `nom` ne contient aucun caractère alphanumérique)
+ */
+export function slugify(nom: string): string {
+  return nom.toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[éèêë]/g, 'e').replace(/[àâ]/g, 'a')
+    .replace(/[ôö]/g, 'o').replace(/[ùûü]/g, 'u')
+    .replace(/[^a-z0-9-]/g, '')
 }
 
 // ─── Calculs TVA ──────────────────────────────────────────────────────────────

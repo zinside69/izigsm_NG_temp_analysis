@@ -295,7 +295,7 @@ describe('createTicket()', () => {
     )
     // INSERT ticket RETURNING id
     db.__setResponseFn(
-      `INSERT INTO tickets (boutique_id, numero, client_id, appareil_id, appareil_marque, appareil_modele, description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO tickets (boutique_id, numero, client_id, appareil_id, appareil_marque, appareil_modele, description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token, etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       () => ({ id: 42 })
     )
   })

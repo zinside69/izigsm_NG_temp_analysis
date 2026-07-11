@@ -1,36 +1,33 @@
-# iziGSM — État courant (MàJ : 2026-07-10, fin de session — checkpoint)
+# iziGSM — État courant (MàJ : 2026-07-11, fin de session — checkpoint)
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
-- Migration Cloudflare **terminée** (Genspark abandonné) — Pages + D1 + R2, domaine actif, DNS mail Gandi intact
-- Inscription email/OTP **réelle et fonctionnelle** (corrigée aujourd'hui — était cassée depuis le début)
-- OAuth Google **fonctionnel** sur `/login` et `/register`, avec onboarding boutique obligatoire pour les comptes sans boutique
-- Recherche entreprise SIRENE (autocomplete gratuit gouv.fr) fonctionnelle à l'inscription + onboarding Google
-- Isolation multi-tenant **vérifiée dans le code** (pas supposée) : `getBoutiqueId()` + `WHERE boutique_id = ?` sur 14 fichiers routes
-- **Emails transactionnels réellement envoyés** (corrigé aujourd'hui — n'avaient jamais fonctionné depuis la création de la base, `email_logs` vide)
-- Backup D1 automatique quotidien (GitHub Actions, indépendant de Cloudflare, `.github/workflows/d1-backup.yml`)
-- Vitrine publique + catalogue services : fonctionnels (testés avec `iziGSM Paris 11`, slug `izigsm-paris-11`)
-- Page de suivi ticket client : fonctionnelle (timeline "Progression" déjà présente et opérationnelle)
+- Migration Cloudflare terminée (Genspark abandonné) — Pages + D1 + R2, domaine actif, DNS mail Gandi intact
+- Inscription email/OTP, OAuth Google, recherche SIRENE, isolation multi-tenant, emails transactionnels, backup D1 quotidien — tout ce qui avait été corrigé le 2026-07-10, toujours opérationnel
+- **Slug boutiques libre-service corrigé** — `createBoutiqueWithSettings()` génère désormais un slug (`slugify()` extrait dans `lib/db.ts`, réutilisé par la route admin) ; backfill appliqué en prod pour SOTELI (id 2 → `soteli`) et Desk1 (id 3 → `desk1`)
+- **Chantier prise en charge livré** : onglet "État & Sécurité" (checklist état des lieux + codes PIN/SIM), signature client réellement capturée et persistée (avant : booléen fictif, dessin jamais transmis), affichage fiche détail + fiche imprimable existante mise à jour pour montrer l'état constaté et la vraie signature
+- **Création de ticket via `/tickets` réellement fonctionnelle** — 3 bugs bloquants corrigés le même jour (voir § Bugs connus), testée en local sur les deux chemins (client existant / nouveau client créé à la volée)
+- **Faille XSS corrigée** — `signature_client` validé strictement (data URL PNG/JPEG uniquement) côté API ET frontend avant toute interpolation dans un `<img src>`, trouvée par revue de sécurité automatique avant toute exposition en prod
 
 ## Bugs connus non corrigés (détail complet dans `bugs.md`)
-- Boutiques créées en libre-service (`/register`, onboarding Google) n'ont **pas de `slug`** → leur vitrine/RDV public est inaccessible (`createBoutiqueWithSettings()` ne reprend pas la logique de `boutiques.ts:137`)
-- Prise de RDV en ligne : table `boutique_creneaux` vide pour toutes les boutiques, **aucune UI pour la configurer** — le moteur de disponibilité est correct (croise déjà avec les vrais RDV), juste jamais alimenté
+- Prise de RDV en ligne : table `boutique_creneaux` vide pour toutes les boutiques, aucune UI pour la configurer
 - `www.repairdesk.fr` → Error 521 (service redirection Gandi, indépendant de nous)
-- `/factures/:id/emettre` n'envoie aucun email (jamais implémenté, contrairement à ce qu'affirmait `GAP_ANALYSIS_ENRICHI.md` avant correction)
-- Champ "Rechercher mon entreprise"… (résolu aujourd'hui, ne plus confondre avec le point ci-dessus)
+- `/factures/:id/emettre` n'envoie aucun email (jamais implémenté)
 - 3 tests unitaires sensibles au fuseau horaire (non-bloquant, connu depuis la migration)
+- **Assignation technicien à la création de ticket non fonctionnelle** — `<select id="t-technician">` contient des noms en dur, jamais les vrais employés ; `technicien_id` jamais envoyé. Nécessite un `populateTechniciens()` sur le modèle de `populateClients()` — fonctionnalité à construire, pas un simple renommage (contrairement aux 3 bugs de création de ticket corrigés aujourd'hui)
+- Multi-appareils par ticket non supporté (`appareil_id` singulier en base) — décision à prendre, identifié dans l'analyse comparative monatelier §1.4
+- Acompte à la prise en charge : convention informelle en notes libres, pas de champ structuré — décision à prendre, §1.6 de l'analyse comparative
 
 ## Chantiers identifiés pour plus tard (voir `todo.md` pour le détail complet)
 - Purge RGPD automatique (Art. 5.1.e) — seul vrai gap de conformité légale restant
-- Multi-sites géré (MOD-16 CDC) — **confirmé comme vraie roadmap produit** (pas hors scope), à scoper en session dédiée
-- Outils marketing boutique : parrainage, avis clients, email anniversaire, dépôt à distance — tous Post-MVP mais identifiés comme proches de "killer features" concurrentes
-- Feature "Accord" avec double validation boutique→client (spec précise déjà écrite dans `todo.md` : réutilise le flow devis existant, email d'abord, SMS bloqué en attente choix fournisseur)
-- Rebranding : retirer "Mon Atelier"/"monatelier" → "MyDesk" (15 occurrences listées précisément dans `todo.md`)
-- Analyse comparative fonctionnalités monatelier.net/aide/ vs repairdesk.fr
+- Multi-sites géré (MOD-16 CDC) — roadmap confirmée, à scoper en session dédiée
+- Outils marketing boutique : parrainage, avis clients, email/SMS anniversaire (widget dashboard chez monatelier), dépôt à distance (plus riche que supposé : statut `EN_TRANSIT` dédié, réexpédition trackée)
+- SAV Constructeur Agréé (Apple/Samsung) — nouveau gap identifié dans l'analyse comparative v3, absent à 100%
+- QualiRépar — absent à 100%, mais ampleur revue à la baisse après lecture du centre d'aide officiel : un bouton de remise pré-remplie par catégorie d'appareil, pas une intégration API de tracking comme le suggérait le marketing
+- Feature "Accord" avec double validation boutique→client (spec déjà écrite dans `todo.md`)
+- Rebranding "Mon Atelier"/"monatelier" → "MyDesk" (15 occurrences listées dans `todo.md`)
 
 ## Repo et déploiement
 - Repo : `izigsm/webapp/` (racine git), remote `zinside69/izigsm_NG_temp_analysis`, branche `main`
-- 24 commits aujourd'hui (2026-07-10) — voir `git log --oneline --since="2026-07-10 00:00"`
-- Déploiement : `npm run build && npx wrangler pages deploy dist --project-name izigsm --branch main`
+- Déploiement : `npm run build && npx wrangler pages deploy dist --project-name izigsm --branch main` — redéployé le 2026-07-11, `https://repairdesk.fr/api/health` confirmé 200 après déploiement
 - Secrets Cloudflare Pages configurés : `JWT_SECRET`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`
-- Var non-secrète ajoutée aujourd'hui : `FRONTEND_URL=https://repairdesk.fr` (`wrangler.jsonc`, était absente → liens emails cassés vers localhost)
-- `CACHE_VERSION` sw.js à v2.47 (bumpée 2× aujourd'hui — mécanisme de cache-busting du Service Worker était resté figé depuis Sprint 2.17, tout déploiement depuis restait invisible aux navigateurs avec le SW déjà installé)
+- Migrations `0032` (backfill slug) et `0033` (colonnes prise en charge : `etat_appareil`, `code_deverrouillage`, `code_sim`, `signature_client`, `signature_date`) appliquées en production le 2026-07-11

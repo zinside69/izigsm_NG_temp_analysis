@@ -64,3 +64,26 @@ Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attach
 **Pourquoi** : le mécanisme demandé (lien envoyé au client, clic = preuve d'acceptation) existe déjà quasi à l'identique pour les devis. Dupliquer serait un doublon inutile.
 
 **Comment appliquer** : SMS explicitement différé (nécessite un choix de fournisseur type Twilio, non fait) — email uniquement pour la v1, via le mécanisme Resend déjà fiabilisé. Spec complète dans `todo.md`.
+
+---
+
+## 2026-07-11 — Décisions de la session
+
+### Ordre d'exécution fin de session : déployer avant de committer
+**Décision** : sur demande explicite de l'utilisateur, séquence "déploie → checkpoint → commit → push" plutôt que l'ordre plus classique commit → push → déploiement (CI/CD). Déploiement Cloudflare Pages fait via `wrangler pages deploy`, indépendant de l'état git — cohérent avec le fonctionnement déjà établi de ce projet (le déploiement n'a jamais été automatisé depuis git dans ce repo).
+
+**Comment appliquer** : ne pas supposer que "commit puis push" doit précéder un déploiement dans ce projet, sauf indication contraire. Vérifier l'ordre souhaité si l'utilisateur redemande une séquence déploiement + git dans une session future.
+
+### Analyse comparative monatelier — v3 comme version de référence, pas d'archivage des versions intermédiaires
+**Décision** : le fichier `docs/ANALYSE_COMPARATIVE_MONATELIER.md` est réécrit sur place à chaque révision (v1 marketing seul → v2 9 pages du centre d'aide → v3 19/19 pages) plutôt que d'archiver chaque version dans un fichier séparé.
+
+**Pourquoi** : l'utilisateur a confirmé explicitement que "v3 actuel suffit" quand la question de garder les versions précédentes a été posée.
+
+**Comment appliquer** : ne pas créer de fichiers `_v2`/`_v3` pour ce document à l'avenir, sauf si l'utilisateur change d'avis. Si une future révision est nécessaire, réécrire le fichier en place comme fait jusqu'ici — ne s'applique qu'à ce document précis, pas aux fichiers soumis à la règle générale d'accumulation des historiques de version (SPEC.md, CLAUDE.md).
+
+### QualiRépar — ampleur revue à la baisse après lecture du centre d'aide officiel
+**Décision** : ne pas scoper QualiRépar comme une intégration API de tracking (Soumis→Validé→Remboursé avec EcoSystem/EcoLogic) tant que cette hypothèse n'est pas confirmée par une recherche externe dédiée sur les API réellement disponibles auprès de ces éco-organismes.
+
+**Pourquoi** : la page marketing de monatelier (`/bonus-reparation-qualirepar`) affirme une intégration API complète avec suivi de statuts, mais la page officielle du centre d'aide (`/aide/remises`) décrit une fonctionnalité bien plus simple — un bouton de remise avec montant pré-rempli par catégorie d'appareil et mention réglementaire sur la facture, sans aucune mention de soumission API ou de suivi de remboursement. Les deux sources se contredisent ; la doc d'aide (orientée utilisateur) est jugée plus fiable que le marketing (orienté conversion).
+
+**Comment appliquer** : si ce chantier est repris, scoper d'abord la version minimale alignée sur la doc d'aide (remise rapide + montant pré-rempli + mention réglementaire, réutilisant `remise_pct` déjà existant dans `factureService.ts`) avant d'envisager une intégration API tierce. Vérifier l'existence réelle d'une API publique EcoSystem/EcoLogic avant de s'engager sur cette voie plus lourde.

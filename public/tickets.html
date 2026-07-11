@@ -161,8 +161,9 @@
       <div class="modal-body">
         <div class="tabs">
           <button class="tab-btn active" onclick="switchTab('info')">Informations</button>
+          <button class="tab-btn" onclick="switchTab('etat-securite')">État & Sécurité</button>
           <button class="tab-btn" onclick="switchTab('attachments')">Pièces jointes</button>
-          <button class="tab-btn" onclick="switchTab('signature')">Signature</button>
+          <button class="tab-btn" onclick="switchTab('signature'); resizeSigCanvas();">Signature</button>
         </div>
 
         <!-- Onglet Info -->
@@ -244,6 +245,42 @@
             <div class="form-field full">
               <label>Notes internes</label>
               <textarea id="t-notes" placeholder="Notes visibles uniquement par votre équipe..." rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Onglet État & Sécurité -->
+        <div class="tab-content" id="tab-etat-securite">
+          <label style="font-size:0.8rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#667085;display:block;margin-bottom:8px;">État de l'appareil à l'entrée</label>
+          <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Cochez l'état constaté au dépôt — vous protège en cas de litige à la restitution.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+            <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.9rem;">
+              <input type="checkbox" class="t-etat-item" value="rayures" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;"> Rayures visibles
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.9rem;">
+              <input type="checkbox" class="t-etat-item" value="ecran_fissure" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;"> Écran fissuré
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.9rem;">
+              <input type="checkbox" class="t-etat-item" value="degats_eaux" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;"> Traces de dégâts des eaux
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.9rem;">
+              <input type="checkbox" class="t-etat-item" value="boitier_endommage" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;"> Boîtier endommagé / déformé
+            </label>
+          </div>
+          <div class="form-field full" style="margin-bottom:20px;">
+            <label>Autre observation</label>
+            <input type="text" id="t-etat-autre" placeholder="Ex : autocollant décoratif sur la coque">
+          </div>
+          <label style="font-size:0.8rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#667085;display:block;margin-bottom:8px;">Codes de sécurité</label>
+          <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Visibles uniquement par votre équipe — jamais imprimés sur le bon de dépôt.</p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Code PIN / schéma de déverrouillage</label>
+              <input type="text" id="t-code-deverrouillage" placeholder="Ex : 1234 ou schéma décrit">
+            </div>
+            <div class="form-field">
+              <label>Code PIN carte SIM</label>
+              <input type="text" id="t-code-sim" placeholder="Si nécessaire">
             </div>
           </div>
         </div>

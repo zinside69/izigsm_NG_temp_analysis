@@ -14,6 +14,7 @@
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { validateSignatureDataUrl } from '../lib/validators'
 import {
   listTickets,
   getKanban,
@@ -154,16 +155,26 @@ tickets.get('/:id', async (c) => {
  * Hook email non bloquant : envoi confirmation de dépôt au client.
  * @body client_id, appareil_marque, appareil_modele, description_panne (obligatoires)
  * @body boutique_id, technicien_id?, prix_estime?, date_promesse?, notes_internes? (optionnels)
+ * @body etat_appareil?, code_deverrouillage?, code_sim?, signature_client?, signature_date? (prise en charge, optionnels)
  * @returns { success, id, numero, tracking_token }
  */
 tickets.post('/', async (c) => {
   const { user, db, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
   const { client_id, appareil_id, appareil_marque, appareil_modele,
-          description_panne, technicien_id, prix_estime, date_promesse, notes_internes } = body
+          description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
+          etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date } = body
 
   if (!client_id || !appareil_marque || !appareil_modele || !description_panne)
     return c.json({ success: false, error: 'Champs obligatoires manquants (client_id, appareil_marque, appareil_modele, description_panne).' }, 400)
+
+  // Signature : n'accepter qu'un data URL image PNG/JPEG en base64 — évite qu'une
+  // valeur arbitraire (appel API direct, hors canvas de dessin) finisse interpolée
+  // sans échappement fiable dans un <img src="..."> côté frontend (tickets.js).
+  if (signature_client) {
+    const sigError = validateSignatureDataUrl(signature_client)
+    if (sigError) return c.json({ success: false, error: sigError }, 400)
+  }
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -171,6 +182,7 @@ tickets.post('/', async (c) => {
   const created = await createTicket(db, boutiqueId, user.sub, {
     client_id, appareil_id, appareil_marque, appareil_modele,
     description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
+    etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date,
   })
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
@@ -208,13 +220,20 @@ tickets.post('/', async (c) => {
  * Met à jour les champs éditables d'un ticket (hors statut).
  * @param id — ID du ticket
  * @body description_panne?, diagnostic?, technicien_id?, prix_estime?, prix_final?,
- *       date_promesse?, notes_internes?, priorite?
+ *       date_promesse?, notes_internes?, priorite?, etat_appareil?, code_deverrouillage?,
+ *       code_sim?, signature_client?, signature_date?
  * @returns { success, message }
  */
 tickets.put('/:id', async (c) => {
   const { user, db } = ctx(c)
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
+
+  // Même contrainte de format qu'à la création — voir POST / ci-dessus.
+  if (body.signature_client) {
+    const sigError = validateSignatureDataUrl(body.signature_client)
+    if (sigError) return c.json({ success: false, error: sigError }, 400)
+  }
 
   try {
     await updateTicket(db, id, user.sub, body)

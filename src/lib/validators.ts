@@ -132,6 +132,24 @@ export function validateTicket(body: any): string | null {
   return null
 }
 
+/**
+ * Valide qu'une signature client (prise en charge) est un data URL image PNG/JPEG
+ * en base64 — rien d'autre. Rejette toute autre valeur avant stockage.
+ *
+ * Nécessaire car `signature_client` est ensuite interpolé dans un `<img src="...">`
+ * côté frontend (`tickets.js`) — l'échappement `esc()` utilisé ailleurs n'échappe
+ * pas les guillemets et ne protège donc pas ce contexte attribut. Valider le format
+ * en amont (charset restreint au base64) empêche toute injection HTML, y compris
+ * via un appel API direct qui contournerait le canvas de dessin.
+ *
+ * @returns null si valide, message d'erreur sinon
+ */
+export function validateSignatureDataUrl(value: string): string | null {
+  if (!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(value))
+    return 'Signature invalide (format data URL image attendu).'
+  return null
+}
+
 // ─── SAV & Garanties ──────────────────────────────────────────────────────────
 
 const STATUTS_SAV_VALIDES = ['ouvert', 'en_traitement', 'resolu', 'refuse', 'clos']

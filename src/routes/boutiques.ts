@@ -32,6 +32,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../lib/middleware'
 import { verifyChain, clotureJournaliere } from '../lib/nf525'
+import { slugify } from '../lib/db'
 import {
   listAllBoutiques,
   listBoutiqueForUser,
@@ -134,11 +135,7 @@ boutiques.post('/', requireRole('admin'), async (c) => {
   if (!nom) return c.json({ success: false, error: 'Nom obligatoire.' }, 400)
 
   // Auto-générer le slug depuis le nom si non fourni
-  const slug = nom.toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[éèêë]/g, 'e').replace(/[àâ]/g, 'a')
-    .replace(/[ôö]/g, 'o').replace(/[ùûü]/g, 'u')
-    .replace(/[^a-z0-9-]/g, '')
+  const slug = slugify(nom)
 
   const input: CreateBoutiqueInput = {
     nom, slug,

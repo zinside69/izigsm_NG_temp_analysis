@@ -58,6 +58,11 @@ export interface TicketRow {
   date_livraison:      string | null
   notes_internes:      string | null
   tracking_token:      string
+  etat_appareil:       string | null   // JSON, ex: '{"items":["rayures","ecran_fissure"],"autre":"..."}'
+  code_deverrouillage: string | null
+  code_sim:            string | null
+  signature_client:    string | null   // data URL PNG
+  signature_date:      string | null
   actif:               number
   created_at:          string
   updated_at:          string
@@ -75,26 +80,38 @@ export interface ListTicketsOpts {
 }
 
 export interface CreateTicketData {
-  client_id:          number
-  appareil_id?:       number | null
-  appareil_marque:    string
-  appareil_modele:    string
-  description_panne:  string
-  technicien_id?:     number | null
-  prix_estime?:       number | null
-  date_promesse?:     string | null
-  notes_internes?:    string | null
+  client_id:            number
+  appareil_id?:         number | null
+  appareil_marque:      string
+  appareil_modele:      string
+  description_panne:    string
+  technicien_id?:       number | null
+  prix_estime?:         number | null
+  date_promesse?:       string | null
+  notes_internes?:      string | null
+  // ── Prise en charge (checklist état + sécurité + signature) ──
+  etat_appareil?:       string | null   // JSON `{ items: string[], autre?: string }`
+  code_deverrouillage?: string | null   // PIN / schéma — jamais imprimé sur le bon de dépôt
+  code_sim?:            string | null
+  signature_client?:    string | null   // data URL PNG (canvas.toDataURL côté client)
+  signature_date?:      string | null   // ISO — posée uniquement si signature_client est fourni
 }
 
 export interface UpdateTicketData {
-  description_panne?: string | null
-  diagnostic?:        string | null
-  technicien_id?:     number | null
-  prix_estime?:       number | null
-  prix_final?:        number | null
-  date_promesse?:     string | null
-  notes_internes?:    string | null
-  priorite?:          PrioriteTicket | null
+  description_panne?:   string | null
+  diagnostic?:          string | null
+  technicien_id?:       number | null
+  prix_estime?:         number | null
+  prix_final?:          number | null
+  date_promesse?:       string | null
+  notes_internes?:      string | null
+  priorite?:            PrioriteTicket | null
+  // ── Prise en charge — mêmes champs que CreateTicketData, éditables après coup ──
+  etat_appareil?:       string | null
+  code_deverrouillage?: string | null
+  code_sim?:            string | null
+  signature_client?:    string | null
+  signature_date?:      string | null
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -362,6 +379,10 @@ export async function getTicketById(
  * Crée un nouveau ticket, génère le numéro séquentiel et le tracking_token.
  * Enregistre l'entrée initiale dans tickets_statuts_historique.
  *
+ * Champs prise en charge (Sprint 2026-07-11, voir docs/ANALYSE_COMPARATIVE_MONATELIER.md §1) :
+ * `etat_appareil`/`code_deverrouillage`/`code_sim`/`signature_client`/`signature_date` sont
+ * tous optionnels et null par défaut — un ticket créé sans ces infos reste valide.
+ *
  * @param db          — Instance D1Database
  * @param boutiqueId  — ID boutique
  * @param userId      — ID de l'utilisateur créateur (pour audit + historique)
@@ -380,8 +401,9 @@ export async function createTicket(
   const result = await db.prepare(`
     INSERT INTO tickets
       (boutique_id, numero, client_id, appareil_id, appareil_marque, appareil_modele,
-       description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token,
+       etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -396,6 +418,11 @@ export async function createTicket(
     data.date_promesse   ?? null,
     data.notes_internes  ?? null,
     trackingToken,
+    data.etat_appareil       ?? null,
+    data.code_deverrouillage ?? null,
+    data.code_sim             ?? null,
+    data.signature_client     ?? null,
+    data.signature_date       ?? null,
   ).first<{ id: number }>()
 
   const ticketId = result!.id
@@ -420,7 +447,9 @@ export async function createTicket(
 
 /**
  * Met à jour les champs éditables d'un ticket (hors statut).
- * Utilise COALESCE pour ne modifier que les champs fournis.
+ * Utilise COALESCE pour ne modifier que les champs fournis — inclut les champs
+ * prise en charge (état, codes de sécurité, signature), éditables après création
+ * (ex : signature recueillie après coup, code communiqué plus tard par le client).
  *
  * @param db      — Instance D1Database
  * @param id      — ID du ticket
@@ -446,25 +475,35 @@ export async function updateTicket(
 
   await db.prepare(`
     UPDATE tickets SET
-      description_panne = COALESCE(?, description_panne),
-      diagnostic        = COALESCE(?, diagnostic),
-      technicien_id     = COALESCE(?, technicien_id),
-      prix_estime       = COALESCE(?, prix_estime),
-      prix_final        = COALESCE(?, prix_final),
-      date_promesse     = COALESCE(?, date_promesse),
-      notes_internes    = COALESCE(?, notes_internes),
-      priorite          = COALESCE(?, priorite),
-      updated_at        = CURRENT_TIMESTAMP
+      description_panne   = COALESCE(?, description_panne),
+      diagnostic          = COALESCE(?, diagnostic),
+      technicien_id       = COALESCE(?, technicien_id),
+      prix_estime         = COALESCE(?, prix_estime),
+      prix_final          = COALESCE(?, prix_final),
+      date_promesse       = COALESCE(?, date_promesse),
+      notes_internes      = COALESCE(?, notes_internes),
+      priorite            = COALESCE(?, priorite),
+      etat_appareil       = COALESCE(?, etat_appareil),
+      code_deverrouillage = COALESCE(?, code_deverrouillage),
+      code_sim            = COALESCE(?, code_sim),
+      signature_client    = COALESCE(?, signature_client),
+      signature_date      = COALESCE(?, signature_date),
+      updated_at          = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
-    data.description_panne ?? null,
-    data.diagnostic        ?? null,
-    data.technicien_id     ?? null,
-    data.prix_estime       ?? null,
-    data.prix_final        ?? null,
-    data.date_promesse     ?? null,
-    data.notes_internes    ?? null,
-    data.priorite          ?? null,
+    data.description_panne   ?? null,
+    data.diagnostic          ?? null,
+    data.technicien_id       ?? null,
+    data.prix_estime         ?? null,
+    data.prix_final          ?? null,
+    data.date_promesse       ?? null,
+    data.notes_internes      ?? null,
+    data.priorite            ?? null,
+    data.etat_appareil       ?? null,
+    data.code_deverrouillage ?? null,
+    data.code_sim            ?? null,
+    data.signature_client    ?? null,
+    data.signature_date      ?? null,
     id,
   ).run()
 

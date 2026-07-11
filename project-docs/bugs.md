@@ -1,5 +1,35 @@
 # iziGSM — Bugs connus
 
+## Création de ticket via `/tickets` impossible — CORRIGÉ le 2026-07-11
+`saveTicket()` (`public/static/js/tickets.js`) avait **deux bugs cumulés**, chacun suffisant à lui seul pour bloquer toute création de ticket via le formulaire :
+
+1. **`client_id` jamais envoyé** — ni `<select id="t-client">` (client existant) ni le champ texte libre "Ou nouveau client" n'étaient jamais lus dans la charge utile envoyée à l'API, qui exige `client_id`.
+2. **4 champs mal nommés** — le payload envoyait `marque`/`modele`/`description`/`devis_montant` alors que l'API (`CreateTicketData`, `ticketService.ts`) attend `appareil_marque`/`appareil_modele`/`description_panne`/`prix_estime`. Ces 3 derniers (marque/modele/description) sont obligatoires côté serveur — silencieusement ignorés, ils déclenchaient la même erreur "Champs obligatoires manquants" même une fois `client_id` corrigé. `prix_estime` (optionnel) était lui aussi perdu sans erreur visible.
+3. **Valeurs de priorité non alignées** — le select affiche `Basse`/`Moyenne`/`Haute` (FR capitalisé), l'API attend l'enum `PrioriteTicket` en minuscules (`basse`/`normale`/`haute`/`urgente`). Sans mapping, une modification de priorité en édition (`PUT`, qui valide la valeur) aurait échoué avec une 422 — pas bloquant à la création (le champ n'est même pas accepté par `CreateTicketData`), mais bloquant en édition.
+
+Découvert et corrigé le 2026-07-11 en testant en local le chantier prise en charge. **Fix appliqué** :
+- `saveTicket()` résout `client_id` : client sélectionné dans la liste en priorité, sinon création à la volée via `POST /api/clients` (nom libre découpé en prénom/nom sur le premier espace) depuis le champ texte
+- Les 4 clés renommées pour matcher l'API (`appareil_marque`, `appareil_modele`, `description_panne`, `prix_estime`)
+- `PRIORITE_MAP` ajouté pour convertir les labels FR vers l'enum API
+- `t-client` réinitialisé dans `clearTicketForm()` (n'était pas remis à zéro entre deux ouvertures du formulaire)
+
+**Validé en local** (navigateur réel) sur les deux chemins : client existant sélectionné (ticket créé, lié au bon client) et nouveau client tapé en texte libre (client créé avec prénom/nom/téléphone corrects, ticket lié). Tous les champs auparavant perdus (marque, modèle, description, prix, priorité) confirmés persistés via `GET /api/tickets/:id`. Tickets et pas de nouveau client de test laissés en base locale (nettoyés après coup) — aucune donnée de production affectée.
+
+**Non corrigé, hors scope (même famille de bug, mais plus gros)** : l'assignation de technicien à la création reste non fonctionnelle — `<select id="t-technician">` contient des noms en dur ("Jean D.", "Marie L.", "Pierre M.", jamais les vrais employés) et `technicien_id` n'est jamais envoyé par `saveTicket()`. Contrairement aux 3 bugs ci-dessus (renommage de champ), corriger ça demande de construire un vrai `populateTechniciens()` (sur le modèle de `populateClients()`) branché sur l'API personnel — une fonctionnalité à part, pas juste un typo.
+
+## Bouton "+ Nouvelle prise en charge" plantait systématiquement — CORRIGÉ le 2026-07-11
+`isSigEmpty()` (`tickets.js`) appelait `getImageData()` sur le canvas de signature alors que celui-ci a une taille 0x0 tant que l'onglet "Signature" n'a jamais été affiché (`.tab-content:not(.active)` est `display:none`, donc `resizeSigCanvas()` mesurait un `#sig-area` de dimensions nulles). `getImageData()` sur une largeur 0 lève `IndexSizeError`, ce qui arrêtait `openNewTicket()` avant l'appel à `openModal()` — **la modal de création de ticket ne s'ouvrait jamais**, silencieusement (aucun message utilisateur, juste un plantage JS). Bug 100% préexistant, indépendant de tout ajout de cette session — découvert en testant en navigateur réel (Claude in Chrome) plutôt qu'en s'arrêtant aux tests unitaires.
+
+**Fix appliqué** : garde dans `isSigEmpty()` (retourne `true` si canvas 0x0) + `resizeSigCanvas()` rappelé au clic sur l'onglet Signature (`tickets.html`), au moment où `#sig-area` devient réellement visible.
+
+## Signature client jamais persistée malgré une UI de capture fonctionnelle — CORRIGÉ le 2026-07-11
+L'onglet "Signature" de `tickets.html` a toujours eu un canvas de dessin fonctionnel, mais `saveTicket()` n'envoyait qu'un booléen `hasSignature` — le dessin lui-même n'était jamais transmis ni stocké. Corrigé avec l'ajout de la colonne `tickets.signature_client` (data URL PNG) — voir § chantier prise en charge dans `todo.md`. Sans lien avec la signature devis (`devis.signature_client`), qui elle a une colonne et un endpoint prêts (`saveSignatureDevis()`, `POST /api/public/devis/:token/repondre`) mais aucune UI ne l'appelle encore (`devis-public.html` n'a pas de canvas de signature) — ce gap-là reste non corrigé, `G08` du gap analysis reste valide.
+
+## Signature client vulnérable à l'injection HTML (XSS via attribut `img src`) — CORRIGÉ le 2026-07-11
+Trouvé par la revue de sécurité automatique sur le commit du chantier prise en charge. `signature_client` (nouvelle colonne, data URL PNG) était interpolé directement dans `<img src="${t.signature_client}">` sans validation ni échappement fiable, à 3 endroits (`renderEtatSecuriteDetail()`, `_buildTicketHTML()` pour la fiche imprimable, badge signature). `esc()` (utilisé partout ailleurs dans le fichier) n'échappe que `<`/`>`, pas les guillemets — insuffisant en contexte attribut. Un appel API direct à `POST`/`PUT /api/tickets` (pas nécessairement via le canvas de dessin) aurait pu stocker une valeur du type `" onerror="...` et l'exécuter dans le navigateur de tout membre de l'équipe consultant ce ticket.
+
+**Fix appliqué** : validation stricte du format (`^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$`) — côté API (`lib/validators.ts` → `validateSignatureDataUrl()`, appelée dans `POST`/`PUT /api/tickets`, rejette avec 400 sinon) ET côté frontend (`isValidSignatureDataUrl()` dans `tickets.js`, re-vérifiée avant toute interpolation — défense en profondeur, ne fait pas confiance aux données juste parce qu'elles viennent du serveur). Aucune donnée de production affectée (colonne ajoutée cette même session, aucune signature encore écrite en prod).
+
 ## Emails transactionnels jamais envoyés depuis la création de la base — CORRIGÉ le 2026-07-10
 Découvert en testant les emails automatiques à la demande de l'utilisateur. `email_logs` était **totalement vide depuis toujours** — aucun email transactionnel (ticket créé/terminé/livré, SAV ouvert, devis, relances) n'était jamais réellement parti, malgré le code semblant fonctionnel et documenté comme "✅ Fait" dans `GAP_ANALYSIS_ENRICHI.md`. Trois bugs cumulés, chacun masquant le suivant :
 

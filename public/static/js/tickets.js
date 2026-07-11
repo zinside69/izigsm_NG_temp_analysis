@@ -9,6 +9,10 @@ let attachmentFiles = [];
 let allTicketsCache  = [];  // cache local depuis l'API
 let ticketsUseApi    = true;
 
+// Le select #t-priority affiche des labels FR capitalisés (UX historique), l'API
+// attend l'enum PrioriteTicket en minuscules — voir saveTicket().
+const PRIORITE_MAP = { Basse: 'basse', Moyenne: 'normale', Haute: 'haute' };
+
 document.addEventListener('DOMContentLoaded', function() {
   buildSidebar('tickets');
   loadTickets();   // remplace renderTickets() direct
@@ -143,7 +147,7 @@ function openNewTicket() {
   switchTab('info');
 }
 
-function editTicket(id) {
+async function editTicket(id) {
   const ticket = allTicketsCache.find(t => t.id === id);
   if (!ticket) return;
   currentTicketId = id;
@@ -159,7 +163,17 @@ function editTicket(id) {
   document.getElementById('t-price').value = ticket.price || '';
   document.getElementById('t-description').value = ticket.description || '';
   document.getElementById('t-notes').value = ticket.notes || '';
+  clearEtatSecuriteFields();
   openModal('modal-ticket');
+
+  // État/sécurité/signature absents du cache liste (SELECT allégé côté API) —
+  // récupérés depuis la fiche détail au moment de l'édition.
+  if (ticketsUseApi) {
+    try {
+      const result = await apiGet('/api/tickets/' + id);
+      if (result.ok) populateEtatSecurite(result.data?.data || result.data);
+    } catch {}
+  }
 }
 
 function viewTicket(id) {
@@ -205,13 +219,14 @@ function viewTicket(id) {
       </div>` : ''}
       <div>
         <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Signature</div>
-        <span class="${ticket.hasSignature ? 'status-badge status-done' : 'status-badge status-draft'}">${ticket.hasSignature ? '✓ Signée' : 'Non signée'}</span>
+        <span id="detail-signature-badge" class="${ticket.hasSignature ? 'status-badge status-done' : 'status-badge status-draft'}">${ticket.hasSignature ? '✓ Signée' : 'Non signée'}</span>
       </div>
       <div>
         <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Créé le</div>
         <div style="font-size:0.9rem;">${formatDate(ticket.createdAt)}</div>
       </div>
     </div>
+    <div id="detail-etat-securite"></div>
     <div style="margin-top:16px;">
       <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Changer le statut</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -235,6 +250,61 @@ function viewTicket(id) {
   // Réinitialiser l'onglet sur "Informations" à chaque ouverture
   switchDetailTab('detail-info');
   openModal('modal-ticket-detail');
+
+  // État/sécurité/signature réelle absents du cache liste — chargés depuis la fiche détail.
+  if (ticketsUseApi) {
+    apiGet('/api/tickets/' + id)
+      .then(result => { if (result.ok) renderEtatSecuriteDetail(result.data?.data || result.data); })
+      .catch(() => {});
+  }
+}
+
+/** Affiche état des lieux + codes de sécurité + signature réelle dans la fiche détail. */
+function renderEtatSecuriteDetail(t) {
+  const el = document.getElementById('detail-etat-securite');
+  if (!el || !t) return;
+
+  // Le badge "Signature" du bloc infos vient du cache liste (hasSignature, toujours
+  // false — cette info n'est pas dans listTickets()) — corrigé ici avec la vraie donnée.
+  const badge = document.getElementById('detail-signature-badge');
+  if (badge && t.signature_client && isValidSignatureDataUrl(t.signature_client)) {
+    badge.className = 'status-badge status-done';
+    badge.textContent = '✓ Signée';
+  }
+
+  let etat = {};
+  try { etat = t.etat_appareil ? JSON.parse(t.etat_appareil) : {}; } catch {}
+  const ETAT_LABELS = {
+    rayures: 'Rayures visibles', ecran_fissure: 'Écran fissuré',
+    degats_eaux: 'Dégâts des eaux', boitier_endommage: 'Boîtier endommagé',
+  };
+  const items = (etat.items || []).map(k => ETAT_LABELS[k] || k);
+  const etatLines = [...items, etat.autre].filter(Boolean);
+  const hasCodes = t.code_deverrouillage || t.code_sim;
+
+  el.innerHTML = `
+    ${etatLines.length ? `
+    <div style="margin-top:16px;">
+      <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">État à l'entrée</div>
+      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px;font-size:0.88rem;">
+        ${etatLines.map(l => `• ${esc(l)}`).join('<br>')}
+      </div>
+    </div>` : ''}
+    ${hasCodes ? `
+    <div style="margin-top:16px;">
+      <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Codes de sécurité</div>
+      <div style="background:#fff9ec;border:1px solid #ffe0a1;border-radius:10px;padding:12px;font-size:0.88rem;color:#7a5a1a;">
+        ${t.code_deverrouillage ? `Déverrouillage : <strong>${esc(t.code_deverrouillage)}</strong>` : ''}
+        ${t.code_deverrouillage && t.code_sim ? '<br>' : ''}
+        ${t.code_sim ? `Code SIM : <strong>${esc(t.code_sim)}</strong>` : ''}
+      </div>
+    </div>` : ''}
+    ${t.signature_client && isValidSignatureDataUrl(t.signature_client) ? `
+    <div style="margin-top:16px;">
+      <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Signature client</div>
+      <img src="${t.signature_client}" alt="Signature client" style="max-width:220px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:8px;">
+    </div>` : ''}
+  `;
 }
 
 // ─── Impression fiche ticket (Sprint 2.13) ────────────────────────────────────
@@ -312,6 +382,8 @@ async function _fetchTicketPrintData(id) {
     technicien: t.technicien_nom   || t.technician     || '—',
     priorite:   t.priorite         || t.priority       || 'normale',
     tracking:   t.tracking_token   || '',
+    etatAppareil:     t.etat_appareil    || null,
+    signatureClient:  t.signature_client || null,
   };
 }
 
@@ -326,7 +398,7 @@ function _buildTicketHTML(d) {
   const STATUT_LABELS = {
     recu:           'Reçu',
     en_diagnostic:  'En diagnostic',
-    attente_accord: 'En attente d'accord',
+    attente_accord: "En attente d'accord",
     a_commander:    'À commander',
     commande:       'Commandé',
     pieces_recues:  'Pièces reçues',
@@ -344,6 +416,26 @@ function _buildTicketHTML(d) {
   const prixHTML    = d.prix > 0
     ? _money(d.prix)
     : 'Sur devis';
+
+  // État de l'appareil constaté au dépôt (checklist onglet État & Sécurité)
+  const ETAT_LABELS = {
+    rayures: 'Rayures visibles', ecran_fissure: 'Écran fissuré',
+    degats_eaux: 'Dégâts des eaux', boitier_endommage: 'Boîtier endommagé',
+  };
+  let etatParsed = {};
+  try { etatParsed = d.etatAppareil ? JSON.parse(d.etatAppareil) : {}; } catch {}
+  const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
+  const etatHTML = etatLines.length ? `
+      <div style="margin-bottom:6mm;" class="print-no-break">
+        <div class="print-notes-label" style="margin-bottom:2mm;">État constaté au dépôt</div>
+        <div class="print-notes">${etatLines.map(esc).join(' · ')}</div>
+      </div>` : '';
+
+  // Signature client : image réelle si capturée (et de format valide — voir
+  // isValidSignatureDataUrl()), sinon case blanche pour signature manuscrite
+  const signatureBoxHTML = (d.signatureClient && isValidSignatureDataUrl(d.signatureClient))
+    ? `<img src="${d.signatureClient}" alt="Signature client" style="max-width:100%;max-height:24mm;">`
+    : `<div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>`;
 
   return `
     <div id="print-root">
@@ -398,6 +490,8 @@ function _buildTicketHTML(d) {
         <div class="print-notes">${esc(d.panne) || '<em style="color:#aaa;">Non renseignée</em>'}</div>
       </div>
 
+      ${etatHTML}
+
       ${d.notes ? `
       <div style="margin-bottom:6mm;" class="print-no-break">
         <div class="print-notes-label" style="margin-bottom:2mm;">Notes internes</div>
@@ -422,7 +516,7 @@ function _buildTicketHTML(d) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
         <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
           <div class="print-notes-label" style="margin-bottom:2mm;">Signature du client</div>
-          <div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>
+          ${signatureBoxHTML}
         </div>
         <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
           <div class="print-notes-label" style="margin-bottom:2mm;">Signature du technicien</div>
@@ -493,19 +587,78 @@ async function saveTicket() {
 
   const boutiqueId = getBoutiqueId();
 
+  // Résolution client_id — bug préexistant (voir bugs.md) : ni le client sélectionné
+  // dans la liste, ni la saisie libre "nouveau client" n'étaient jamais transmis à
+  // l'API, qui exige client_id — la création de ticket échouait systématiquement.
+  // Le client existant sélectionné est prioritaire ; sinon, création à la volée
+  // depuis le champ texte libre. Uniquement pour une NOUVELLE prise en charge via
+  // l'API réelle : l'édition ne change jamais le client, et le mode localStorage
+  // (fallback hors-ligne) n'a pas de contrainte de clé étrangère.
+  let clientId = document.getElementById('t-client').value || null;
+  if (ticketsUseApi && !currentTicketId && !clientId) {
+    const newClientName = document.getElementById('t-new-client').value.trim();
+    if (!newClientName) {
+      showFlash('Sélectionnez un client existant ou renseignez un nouveau client.', 'error');
+      return;
+    }
+    const [prenom, ...rest] = newClientName.split(/\s+/);
+    const nom = rest.join(' ') || prenom;
+    const createdClient = await apiPost('/api/clients', {
+      prenom, nom,
+      telephone:   document.getElementById('t-phone').value.trim(),
+      email:       document.getElementById('t-email').value.trim(),
+      boutique_id: boutiqueId,
+    });
+    if (!createdClient.ok) {
+      showFlash('Erreur création client : ' + (createdClient.error || 'inconnue'), 'error');
+      return;
+    }
+    clientId = createdClient.data?.id;
+  }
+
+  // État de l'appareil à l'entrée (onglet État & Sécurité) : sérialisé en un seul
+  // JSON `{ items: string[], autre?: string }` — colonne unique `etat_appareil`,
+  // pas une table séparée, pour rester simple tant que la checklist est fixe.
+  const etatItems  = Array.from(document.querySelectorAll('.t-etat-item:checked')).map(cb => cb.value);
+  const etatAutre  = document.getElementById('t-etat-autre').value.trim();
+  const etatAppareil = (etatItems.length || etatAutre)
+    ? JSON.stringify({ items: etatItems, autre: etatAutre || undefined })
+    : null;
+
+  // Signature réelle du canvas (PNG base64) — jusqu'ici seul un booléen `hasSignature`
+  // était envoyé, le dessin n'était jamais persisté (voir docs/ANALYSE_COMPARATIVE_MONATELIER.md §1.1).
+  const signed          = !!sigCanvas && !isSigEmpty();
+  const signatureClient = signed ? sigCanvas.toDataURL('image/png') : null;
+  const signatureDate   = signed ? new Date().toISOString() : null;
+
   const ticket = {
-    // Champs API D1
-    client_nom:     clientName,
-    client_tel:     document.getElementById('t-phone').value.trim(),
-    client_email:   document.getElementById('t-email').value.trim(),
-    marque:         document.getElementById('t-device-type').value,
-    modele:         document.getElementById('t-device-model').value.trim(),
-    imei:           document.getElementById('t-imei').value.trim(),
-    priorite:       document.getElementById('t-priority').value,
-    description,
-    notes_internes: document.getElementById('t-notes').value.trim(),
-    devis_montant:  parseFloat(document.getElementById('t-price').value) || 0,
-    boutique_id:    boutiqueId,
+    // Champs API D1 — les noms doivent matcher CreateTicketData/UpdateTicketData
+    // (ticketService.ts) : appareil_marque/appareil_modele/description_panne/
+    // prix_estime, pas marque/modele/description/devis_montant. Bug préexistant
+    // (voir bugs.md) : ces 4 clés étaient mal nommées, donc silencieusement
+    // ignorées par l'API — la création ET la modification de ticket échouaient
+    // ou perdaient ces champs sans erreur visible pour prix/description en édition.
+    client_id:         clientId,
+    client_nom:        clientName,
+    client_tel:        document.getElementById('t-phone').value.trim(),
+    client_email:      document.getElementById('t-email').value.trim(),
+    appareil_marque:   document.getElementById('t-device-type').value,
+    appareil_modele:   document.getElementById('t-device-model').value.trim(),
+    imei:              document.getElementById('t-imei').value.trim(),
+    // PRIORITE_MAP : le select affiche Basse/Moyenne/Haute (français, capitalisé),
+    // l'API attend l'enum PrioriteTicket ('basse'|'normale'|'haute'|'urgente') —
+    // même bug de valeurs non alignées, envoyer "Moyenne" tel quel fait échouer
+    // la validation de updateTicket() avec une 422.
+    priorite:          PRIORITE_MAP[document.getElementById('t-priority').value] || 'normale',
+    description_panne: description,
+    notes_internes:    document.getElementById('t-notes').value.trim(),
+    prix_estime:       parseFloat(document.getElementById('t-price').value) || 0,
+    boutique_id:       boutiqueId,
+    etat_appareil:       etatAppareil,
+    code_deverrouillage: document.getElementById('t-code-deverrouillage').value.trim() || null,
+    code_sim:            document.getElementById('t-code-sim').value.trim() || null,
+    signature_client:    signatureClient,
+    signature_date:      signatureDate,
     // Champs legacy pour fallback localStorage
     clientName,
     phone:      document.getElementById('t-phone').value.trim(),
@@ -517,7 +670,7 @@ async function saveTicket() {
     price:      parseFloat(document.getElementById('t-price').value) || 0,
     notes:      document.getElementById('t-notes').value.trim(),
     status: 'Nouveau',
-    hasSignature: !!sigCanvas && !isSigEmpty(),
+    hasSignature: signed,
     attachments: attachmentFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
   };
 
@@ -549,13 +702,37 @@ async function saveTicket() {
 }
 
 function clearTicketForm() {
-  ['t-new-client','t-phone','t-email','t-device-model','t-imei','t-price','t-description','t-notes'].forEach(id => {
+  ['t-client','t-new-client','t-phone','t-email','t-device-model','t-imei','t-price','t-description','t-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  clearEtatSecuriteFields();
   attachmentFiles = [];
   document.getElementById('attachments-list').innerHTML = '';
   clearSignature();
+}
+
+// ─── État & Sécurité (prise en charge) ────────────────────────────────────────
+/** Réinitialise la checklist d'état + les codes de sécurité (nouveau ticket ou avant re-population en édition). */
+function clearEtatSecuriteFields() {
+  document.querySelectorAll('.t-etat-item').forEach(cb => cb.checked = false);
+  const autre = document.getElementById('t-etat-autre');
+  const pin   = document.getElementById('t-code-deverrouillage');
+  const sim   = document.getElementById('t-code-sim');
+  if (autre) autre.value = '';
+  if (pin)   pin.value = '';
+  if (sim)   sim.value = '';
+}
+
+/** Peuple l'onglet État & Sécurité depuis la fiche détail (absent du cache liste). */
+function populateEtatSecurite(t) {
+  if (!t) return;
+  let etat = {};
+  try { etat = t.etat_appareil ? JSON.parse(t.etat_appareil) : {}; } catch {}
+  document.querySelectorAll('.t-etat-item').forEach(cb => cb.checked = (etat.items || []).includes(cb.value));
+  document.getElementById('t-etat-autre').value = etat.autre || '';
+  document.getElementById('t-code-deverrouillage').value = t.code_deverrouillage || '';
+  document.getElementById('t-code-sim').value = t.code_sim || '';
 }
 
 function exportTickets() { showFlash('📥 Export CSV — disponible en production avec backend', 'info'); }
@@ -622,7 +799,13 @@ function clearSignature() {
   updateSigStatus();
 }
 function isSigEmpty() {
-  if (!sigCanvas) return true;
+  // Bug préexistant (2026-07-11) : le canvas garde une taille 0x0 tant que l'onglet
+  // Signature n'a jamais été affiché (resizeSigCanvas() mesure #sig-area via
+  // getBoundingClientRect(), qui vaut 0x0 tant que .tab-content est display:none —
+  // voir tickets.html, le bouton d'onglet appelle resizeSigCanvas() à l'affichage).
+  // Sans ce garde, getImageData() sur largeur 0 lève IndexSizeError et casse tout
+  // openNewTicket() dès que clearTicketForm() → clearSignature() est appelé.
+  if (!sigCanvas || sigCanvas.width === 0 || sigCanvas.height === 0) return true;
   const data = sigCtx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
   return !data.some(v => v !== 0);
 }
@@ -713,6 +896,15 @@ async function populateClients() {
 }
 
 function esc(s) { return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/**
+ * Valide qu'une signature (data URL image PNG/JPEG base64) est sûre à interpoler
+ * dans un `<img src="...">`. `esc()` n'échappe pas les guillemets — insuffisant en
+ * contexte attribut — donc on valide le charset au lieu d'échapper. Défense en
+ * profondeur : la même règle est déjà appliquée côté API (lib/validators.ts),
+ * mais on ne fait pas confiance à la donnée juste parce qu'elle vient du serveur.
+ */
+function isValidSignatureDataUrl(s) { return /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(s || ''); }
 
 // ======================== ARCHIVAGE + RGPD (Sprint 2.37) ========================
 

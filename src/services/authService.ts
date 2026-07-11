@@ -29,6 +29,8 @@
  * @see lib/auth.ts     Cryptographie (hashPassword, JWT, OTP) — séparée de la DB
  */
 
+import { slugify } from '../lib/db'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -185,8 +187,13 @@ export interface BoutiqueDetails {
  * L'insertion dans `boutique_settings` utilise les DEFAULT SQL de la table —
  * aucune valeur n'est passée explicitement pour conserver les défauts métier.
  *
+ * Le `slug` est auto-généré depuis `workshopName` via `slugify()` (même logique
+ * que `POST /api/boutiques`, admin) — sans lui, la vitrine publique et la prise
+ * de RDV en ligne de la boutique restent inaccessibles (`slug` colonne UNIQUE
+ * partielle, `WHERE slug IS NOT NULL`).
+ *
  * Séquence (2 opérations) :
- *   1. INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone) RETURNING id
+ *   1. INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) RETURNING id
  *   2. INSERT INTO boutique_settings (boutique_id)  ← initialise avec DEFAULT
  *
  * Note : pas de transaction explicite (D1 en local gère l'autocommit).
@@ -204,11 +211,12 @@ export async function createBoutiqueWithSettings(
   details?:     BoutiqueDetails
 ): Promise<number | null> {
   const bResult = await db.prepare(`
-    INSERT INTO boutiques (nom, siret, tva_numero, adresse, code_postal, ville, telephone)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     workshopName,
+    slugify(workshopName),
     details?.siret      ?? null,
     details?.tvaNumero  ?? null,
     details?.adresse    ?? null,
