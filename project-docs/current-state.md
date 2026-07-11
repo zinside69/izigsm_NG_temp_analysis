@@ -31,4 +31,4 @@
 - Déploiement : `npm run build && npx wrangler pages deploy dist --project-name izigsm --branch main` — redéployé le 2026-07-11, `https://repairdesk.fr/api/health` confirmé 200 après déploiement
 - Secrets Cloudflare Pages configurés : `JWT_SECRET`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`
 - Migrations `0032` (backfill slug) et `0033` (colonnes prise en charge : `etat_appareil`, `code_deverrouillage`, `code_sim`, `signature_client`, `signature_date`) appliquées en production le 2026-07-11
-- Git : tout commité et pushé sur `origin/main` (`92f0db8` chantier prise en charge + `0c2cf47` correction QualiRépar), aucun reste en attente pour cette session
+- Git : tout commité et pushé sur `origin/main` (`92f0db8` chantier prise en charge, `0c2cf47` correction QualiRépar, `b6b4050` checkpoint, `ea6fea3` fichiers de référence CDC + API QualiRépar EcoSystem) — working tree propre, rien en attente pour cette session
