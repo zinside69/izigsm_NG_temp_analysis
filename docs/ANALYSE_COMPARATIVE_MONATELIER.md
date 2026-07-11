@@ -55,7 +55,7 @@
 | 2.7 | **Programme anniversaire client** — détection auto des anniversaires du jour, widget dashboard, email/SMS en un clic depuis la fiche client | Déjà noté en v2 comme gap (`todo.md`). Confirmé avec plus de détail : c'est aussi un widget dashboard, pas juste un envoi automatique en tâche de fond. | 🔴 |
 | 2.8 | **8 statuts de réparation nommés différemment** avec 2 statuts d'échec distincts : `Abandonné` et `Réparation impossible` (en plus de restitué/prêt) | iziGSM n'a qu'`annule` comme statut négatif générique (`D02`, 9 statuts). Différence de granularité, pas forcément un manque — à évaluer si distinguer "abandonné par le client" de "réparation techniquement impossible" a de la valeur métier (reporting, stats). | 🟡 |
 | 2.9 | **Notification client opt-in par statut**, pas automatique par défaut — case à cocher "Notifier le client" à chaque changement, message pré-rempli éditable avant envoi | Nuance vs la v2 : la doc officielle décrit un mécanisme **manuel/opt-in avec aperçu**, pas du tout automatique comme suggéré par le marketing ("SMS et email partent automatiquement"). iziGSM `L02`/`L08` envoie automatiquement sans étape de confirmation — à l'inverse, iziGSM est plus automatisé que ce que documente réellement monatelier. | ⚪ |
-| 2.10 | **QualiRépar — nuance importante vs marketing** : la page d'aide officielle décrit un simple bouton "remise rapide" avec montant pré-rempli par type d'appareil et libellé réglementaire, PAS un tableau de bord de suivi Soumis→Validé→Remboursé avec API EcoSystem/EcoLogic comme l'affirmaient les pages marketing lues en v2. | Gap `2.2` (v2) reste valide (absence totale côté iziGSM) mais l'ampleur réelle du travail semble plus proche d'"ajouter un bouton de remise avec montant pré-rempli par catégorie d'appareil" que d'"intégrer une API tierce de tracking". Réévalue positivement la faisabilité de ce chantier. | 🔴 (ampleur révisée à la baisse) |
+| 2.10 | **QualiRépar — CORRIGÉ le 2026-07-11** : l'API partenaire EcoSystem "Fonds Réparation" existe réellement (doc technique complète fournie par l'utilisateur, standard OpenAPI, kit développeur Postman/SwaggerHub) — authentification, `GET /catalog` (tarifs), création de demande en 3 étapes (`new-claim`→pièces jointes→`confirm-claim`), suivi `GET /reimbursement-claims`/`GET /payments`, extension PIEC (pièces d'économie circulaire, bonus +20%). Le marketing lu en v2 (Soumis→Validé→Remboursé) décrivait fidèlement cette API — ma réévaluation à la baisse (faite plus tôt le 2026-07-11 après lecture de `/aide/remises`, orientée usage produit fini) était une erreur : je comparais une page d'aide *utilisateur final* à une page marketing, sans chercher la doc technique développeur séparée. Preuve terrain fournie par l'utilisateur : remboursement QualiRépar réellement perçu (fichiers de suivi de paiement). | Gap `2.2` reste valide (absence totale côté iziGSM), et l'ampleur initiale (vraie intégration API tierce, pas juste un bouton de remise) est confirmée. Détail technique complet dans les 3 PDF `docs/` (guide API partenaire, RGPD/purge, PIEC). | 🔴 |
 
 ---
 
@@ -107,7 +107,7 @@ Non repris en détail ici pour éviter la duplication — voir historique du fic
 
 - **Sitemap complet obtenu via le menu latéral** (`document.querySelectorAll('button')` sur une page authentifiée-side rendue) plutôt que les liens précédent/suivant utilisés en v2, qui ne couvraient qu'un sous-ensemble linéaire. Les 19 pages listées au §1 sont — sauf erreur — la totalité du centre d'aide accessible publiquement à cette date.
 - Reste non lu : pages marketing hors `/aide/*` autres que celles déjà croisées en v2 (tarifs, comparatifs concurrents).
-- Le §2.10 illustre pourquoi le contenu marketing doit être traité avec prudence même après une v2 qui le signalait déjà — la doc officielle contredit parfois les pages commerciales sur l'ampleur réelle d'une fonctionnalité.
+- Le §2.10 illustre l'inverse d'une leçon attendue : une page d'aide *utilisateur final* ne contredit pas forcément le marketing sur l'ampleur technique réelle d'une fonctionnalité — elle décrit juste une couche différente (usage produit fini vs API technique sous-jacente). Downgrader un gap confirmé par le marketing sur la seule base d'une doc d'aide utilisateur muette sur le sujet est une erreur si une doc technique développeur séparée n'a pas été cherchée.
 - Aucune tarification comparée — hors périmètre d'une analyse *fonctionnelle*.
 
 ---
@@ -120,5 +120,10 @@ Non repris en détail ici pour éviter la duplication — voir historique du fic
 **Observation terrain (fiable, secondaire)** : `docs/monatelier_observations.md`
 
 **Contenu marketing (signal seulement, déjà utilisé en v2)** : `/logiciel-reparation-telephone`, `/module-caisse-nf525-reparateur`, `/bonus-reparation-qualirepar`, `/tarifs`, `/alternative-phonilab` / `-sasgestion` / `-laast`
+
+**Documentation technique EcoSystem (fiable, fournie par l'utilisateur le 2026-07-11)** :
+- `docs/Guide d'utilisation de l'API Partenaire réparateur - V3.0.0 - 2022-10-10.pdf` — spec complète API Fonds Réparation (OpenAPI)
+- `docs/ecosystem - API Fonds Réparation - RGPD et Purge des demandes.pdf` — politique de conservation/anonymisation des données
+- `docs/ecosystem - Pièces Issues de l_Economie Circulaire (PIEC).pdf` — extension bonus majoré pièces réemploi
 
 **Référence iziGSM** : `docs/GAP_ANALYSIS_ENRICHI.md` v4.3, `docs/CDC_Manus.md`, `project-docs/todo.md`/`bugs.md`, vérifications directes dans `src/services/*.ts`, `src/routes/*.ts`, `public/*.html`
