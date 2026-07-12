@@ -125,7 +125,7 @@ Régression introduite par la livraison de `populateTechniciens()` le même jour
 
 **Fix appliqué** : `listTickets()` (`ticketService.ts`) sélectionne désormais aussi `t.technicien_id` (absent avant, seul `technicien_nom` joint était remonté). `loadTickets()` (`tickets.js`) porte ce champ dans le cache (`technicianId`). `editTicket()` assigne `ticket.technicianId ?? ''` au lieu du nom texte.
 
-## `POST /api/tickets` → 500 pour Desk1 (boutique_id=3) — ROOT CAUSE CONFIRMÉE le 2026-07-12, NON corrigé (fix décidé, exécution différée)
+## `POST /api/tickets` → 500 pour Desk1 (boutique_id=3) — CORRIGÉ le 2026-07-12 (migration `0034_numero_unique_par_boutique.sql`)
 
 **Découverte initiale** : le 2026-07-12 pendant la validation en production de `populateTechniciens()` (Task 6 du chantier Ports & Adapters) — création de ticket impossible pour Desk1. `D1_ERROR: UNIQUE constraint failed: tickets.numero` dans `nextNumero()` (`src/lib/db.ts`).
 
@@ -141,4 +141,6 @@ Régression introduite par la livraison de `populateTechniciens()` le même jour
 
 **Pourquoi différé** : `factures`/`avoirs` sont sous contrainte NF525 (numérotation séquentielle sans trou, verrouillage post-émission — voir CLAUDE.md racine du workspace). Une migration de schéma sur ces tables mérite une session dédiée avec validation explicite avant exécution, pas un fix rapide en fin de session. Alternatives écartées à ce stade : préfixe distinct par boutique (contournement rapide sans migration, mais ne corrige pas le défaut structurel — une future boutique avec le même préfixe par défaut re-heurterait le bug) ; fix `tickets` seul d'abord (plus rapide/moins risqué mais partiel — décision utilisateur du 2026-07-12 : traiter les 5 tables ensemble).
 
-**Impact actuel** : Desk1 ne peut créer aucun ticket. SOTELI (boutique 2) créera son premier ticket/facture/devis sans problème tant que son compteur ne recoupe pas la plage de Paris 11 — latent, pas encore déclenché.
+**Fix appliqué et validé** (même jour, migration `migrations/0034_numero_unique_par_boutique.sql`) : les 5 tables recréées avec `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global — pattern SQLite standard (create table corrigée → copie explicite des colonnes → drop → rename → recréation des index). Découverte favorable en cours d'investigation : `devis`/`factures`/`avoirs`/`rachats` étaient **vides en production** (0 ligne), seule `tickets` avait des données réelles (10 lignes, aucun doublon `boutique_id+numero` préexistant) — risque NF525 sur données existantes finalement nul.
+
+**Validation** : testé en local (`wrangler d1 migrations apply --local`) avant toute application prod — même `numero` sur 2 boutiques différentes accepté, même `numero` sur la même boutique toujours rejeté (`UNIQUE constraint failed: tickets.boutique_id, tickets.numero`), AUTOINCREMENT et contraintes FK confirmés intacts. Appliqué en prod (`wrangler d1 migrations apply izigsm-production --remote`, 52 commandes, aucune erreur), puis **revalidé en live** : `POST /api/tickets` pour Desk1 (boutique_id=3) → 201, `numero: TKT-2026-00007` (exactement le numero qui collisionnait avant avec la boutique 1). Ticket et client de test supprimés après coup.

@@ -147,12 +147,10 @@ Spec : `docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md`
 - [ ] `GET /api/users` réservé aux rôles admin/manager — un technicien ouvrant "Nouvelle prise en charge" ne voit pas la liste se remplir (échec silencieux). Envisager un endpoint dédié accessible à tous les rôles authentifiés si ça devient gênant en usage réel
 - [ ] Adaptateur Postgres, migration des données, déploiement Node.js sur VPS — hors scope tant que non engagé
 
-## Bug prod critique — numérotation documents non isolée par boutique (root cause confirmée 2026-07-12)
+## Bug prod critique — numérotation documents non isolée par boutique — CORRIGÉ le 2026-07-12
 
-Détail complet dans `bugs.md`. Découvert via l'échec de création de ticket sur Desk1, mais **root cause structurelle** confirmée par requêtes en lecture seule sur la prod : `numero` a une contrainte `UNIQUE` globale (`tickets`, `factures`, `devis`, `avoirs`, `rachats`) alors que les compteurs (`sequences`) sont calculés indépendamment par boutique. Toute boutique dont le compteur recoupe la plage d'une autre boutique (même préfixe par défaut partout) percute une collision. Desk1 est bloquée dès maintenant ; SOTELI (boutique 2) le sera à sa première création de document.
+Détail complet dans `bugs.md`. Root cause : `numero` avait une contrainte `UNIQUE` globale (`tickets`, `factures`, `devis`, `avoirs`, `rachats`) alors que les compteurs (`sequences`) sont calculés indépendamment par boutique.
 
-**Fix décidé, exécution différée à une session dédiée** (validation explicite requise avant exécution, tables `factures`/`avoirs` sous contrainte légale NF525) :
-- [ ] Migration schéma : `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global sur les 5 tables (`tickets`, `factures`, `devis`, `avoirs`, `rachats`) — recréation de table (SQLite ne supporte pas `ALTER ... DROP CONSTRAINT`)
-- [ ] Écrire et tester la migration en local avant toute application prod (`wrangler d1 execute --local` puis `--remote` avec confirmation à chaque étape)
-- [ ] Vérifier qu'aucune donnée existante ne viole la nouvelle contrainte composite avant de l'appliquer (les 10 tickets boutique 1 + le compteur Desk1 à 6 ne devraient pas entrer en conflit une fois scopés par boutique — à re-vérifier au moment du fix)
-- [ ] Une fois corrigé, tester la création de ticket réelle sur Desk1 (bloquée depuis la découverte du bug)
+- [x] Migration `migrations/0034_numero_unique_par_boutique.sql` : `UNIQUE(boutique_id, numero)` sur les 5 tables, testée en local puis appliquée en prod
+- [x] Validé en local : même numero accepté sur 2 boutiques différentes, toujours rejeté sur la même boutique, AUTOINCREMENT/FK intacts
+- [x] Validé en prod : création de ticket Desk1 (boutique_id=3) → 201 (échouait en 500 avant), ticket/client de test nettoyés
