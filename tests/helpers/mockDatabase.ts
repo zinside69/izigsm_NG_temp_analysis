@@ -6,10 +6,18 @@
  */
 import type { Database } from '../../src/ports/database'
 
+/**
+ * Normalise une requête SQL pour le matching :
+ * trim + collapse espaces/newlines → une seule espace entre tokens.
+ */
 function normalizeSQL(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Crée un mock Database en mémoire.
+ * L'objet retourné expose `.all()`, `.get()`, `.run()` (interface Database) + `.__set*()` (API test).
+ */
 export function createMockDatabase() {
   const singleResponses = new Map<string, any>()
   const listResponses   = new Map<string, any[]>()
@@ -17,22 +25,27 @@ export function createMockDatabase() {
   const listFns         = new Map<string, (params: unknown[]) => any[]>()
   const calls: Array<{ sql: string; params: unknown[] }> = []
 
+  /** Enregistre une réponse pour `.get<T>()` */
   function __setResponse(sql: string, value: any) {
     singleResponses.set(normalizeSQL(sql), value)
   }
 
+  /** Enregistre une liste pour `.all<T>()` */
   function __setListResponse(sql: string, values: any[]) {
     listResponses.set(normalizeSQL(sql), values)
   }
 
+  /** Enregistre une fonction callback pour `.get<T>()` / `.run()` — accès aux params */
   function __setResponseFn(sql: string, fn: (params: unknown[]) => any) {
     responseFns.set(normalizeSQL(sql), fn)
   }
 
+  /** Enregistre une fonction callback pour `.all<T>()` — accès aux params */
   function __setListFn(sql: string, fn: (params: unknown[]) => any[]) {
     listFns.set(normalizeSQL(sql), fn)
   }
 
+  /** Retourne tous les appels SQL enregistrés (pour assertion) */
   function __getCalls() {
     return [...calls]
   }
