@@ -1,4 +1,4 @@
-# Recovery Prompt — iziGSM — 2026-07-12 (checkpoint 3)
+# Recovery Prompt — iziGSM — 2026-07-12 (checkpoint 4)
 
 ## Vue d'ensemble
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Objectif long terme confirmé cette session : pouvoir héberger sur un VPS avec sa propre base de données (Postgres), sans dépendre de Cloudflare — chantier engagé aujourd'hui (voir ci-dessous), pas terminé.
@@ -17,7 +17,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 4. **2 corrections appliquées après la revue finale** (déployées et validées en prod) :
    - `technicien_id` n'était jamais vérifié contre le `boutique_id` du ticket (faille d'isolation multi-tenant, pré-existante mais devenue exploitable avec `populateTechniciens()`) — corrigé, testé (5 nouveaux tests), validé en live (rejet 422 cross-boutique confirmé, création réussie same-boutique confirmée).
    - `editTicket()` ne présélectionnait plus le technicien assigné (régression du jour, cosmétique, zéro perte de données grâce à `COALESCE`) — corrigé.
-5. **Bug prod découvert et investigué** (root cause confirmée, fix non exécuté) : `POST /api/tickets` → 500 sur Desk1 (boutique_id=3). Root cause : `numero` a une contrainte `UNIQUE` **globale** sur 5 tables (tickets/factures/devis/avoirs/rachats) alors que les compteurs `sequences` sont calculés indépendamment par boutique — collision garantie dès que deux boutiques partagent le même préfixe par défaut (le cas partout). Pas isolé à Desk1 : SOTELI (boutique 2) heurtera le même mur à sa première création de document. Fix décidé (`UNIQUE(boutique_id, numero)` sur les 5 tables, migration schéma SQLite par recréation de table) mais **exécution différée** — `factures`/`avoirs` sous contrainte légale NF525, décision de traiter les 5 tables ensemble dans une session dédiée plutôt qu'un fix rapide.
+5. **Bug prod découvert, investigué et CORRIGÉ** : `POST /api/tickets` → 500 sur Desk1 (boutique_id=3). Root cause : `numero` avait une contrainte `UNIQUE` **globale** sur 5 tables (tickets/factures/devis/avoirs/rachats) alors que les compteurs `sequences` sont calculés indépendamment par boutique — collision garantie dès que deux boutiques partagent le même préfixe par défaut (le cas partout). Pas isolé à Desk1 : SOTELI (boutique 2) aurait heurté le même mur à sa première création de document. **Fix appliqué le même jour** (migration `migrations/0034_numero_unique_par_boutique.sql`, `UNIQUE(boutique_id, numero)` sur les 5 tables, recréation de table SQLite) — découverte favorable : `factures`/`devis`/`avoirs`/`rachats` étaient vides en prod (0 ligne), risque NF525 sur données existantes finalement nul. Testé en local avant application prod, puis validé en live : création de ticket Desk1 → 201 (`TKT-2026-00007`, exactement le numero qui collisionnait avant).
 
 ## Décisions prises aujourd'hui (détail complet dans `decisions.md` — à mettre à jour si besoin de plus de détail)
 - Ports & Adapters plutôt que microservices ou réécriture PHP — voir spec §Décision d'architecture
@@ -52,7 +52,6 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - Migrations de schéma touchant `factures`/`avoirs` (NF525) → validation explicite obligatoire avant exécution, jamais en fin de session
 
 ## Prochaines étapes recommandées
-1. **Session dédiée** : migration `UNIQUE(boutique_id, numero)` sur les 5 tables numérotées — débloque Desk1, prévient le même bug pour SOTELI et toute future boutique
-2. Continuer la migration des 17 services restants vers le port `Database` (rollout service par service, un candidat simple à la fois)
-3. `populateTechniciens()` : envisager un filtre par rôle ou un endpoint dédié accessible aux techniciens (actuellement admin/manager only)
-4. Reprendre les chantiers déjà identifiés avant aujourd'hui : `populateTechniciens()` livré, reste multi-appareils/ticket, acompte structuré, purge RGPD auto, UI créneaux bookables (voir `todo.md` pour le détail complet)
+1. Continuer la migration des 17 services restants vers le port `Database` (rollout service par service, un candidat simple à la fois)
+2. `populateTechniciens()` : envisager un filtre par rôle ou un endpoint dédié accessible aux techniciens (actuellement admin/manager only)
+3. Reprendre les chantiers déjà identifiés avant aujourd'hui : multi-appareils/ticket, acompte structuré, purge RGPD auto, UI créneaux bookables (voir `todo.md` pour le détail complet)
