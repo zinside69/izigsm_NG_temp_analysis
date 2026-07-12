@@ -111,3 +111,9 @@ Aucun changement de contrat : exceptions JS standard, catchées au niveau route 
 
 - **Drift progressif** si le rollout service par service s'étale dans le temps : certains services sur D1 direct, d'autres déjà migrés vers les ports — acceptable tant que chaque service migré est entièrement cohérent en interne (pas de mélange direct/port dans un même fichier)
 - **Disparité de comportement SQLite vs Postgres** non détectable avant la bascule réelle (ex : contraintes de types plus strictes en Postgres) — atténué par le choix Drizzle (même schéma déclaratif pour les deux dialectes) et par les tests d'adaptateur prévus en Section Tests
+
+## Addendum — 2026-07-12 (revue finale de branche, chantier `userService.listUsers()`)
+
+**Précision importante sur la portée réelle de la portabilité offerte par le port `Database`** : l'implémentation retenue (`all/get/run` en SQL brut, voir "Choix techniques validés") garantit une portabilité de **driver** (D1 → Postgres), pas de **dialecte SQL**. Le SQL déjà écrit dans les services (hors `userService.listUsers()`, seul migré à ce stade) contient des constructions SQLite-only qui ne fonctionneront pas telles quelles sous Postgres : `julianday()`, `datetime('now', '-N days')`, concaténation `||`, `INSERT ... RETURNING id` (syntaxe différente sous Postgres), booléens stockés en `0`/`1`. Ce n'est pas un défaut du code livré — c'est une conséquence assumée du choix "SQL brut plutôt que query-builder Drizzle" documenté plus haut, qui reste justifié pour ce chantier (mécanique, vérifiable, pas de réécriture forcée des sous-requêtes corrélées existantes).
+
+**Comment appliquer** : au moment de la bascule VPS/Postgres, chaque service migré vers le port `Database` nécessitera une revue ligne à ligne de son SQL pour traduire les constructions SQLite-only — pas seulement un changement d'adaptateur de connexion. À anticiper dans le plan de bascule (déjà noté comme hors scope des tâches actuelles).
