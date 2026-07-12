@@ -1,7 +1,12 @@
+import type { Database } from '../ports/database'
+
 /**
  * @module services/boutiqueService
  * @description Service Boutiques — toutes les opérations SQL liées à la gestion
  *              des boutiques, de leurs paramètres et de leurs statistiques.
+ *
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) — les 8
+ * fonctions sont migrées intégralement, aucune ne dépend d'`auditLog()`.
  *
  * Rôle architectural (P1 Modularité) :
  *   Ce service est le seul endroit où des requêtes SQL concernant `boutiques`,
@@ -162,14 +167,11 @@ export interface UpdateSettingsInput {
  * Retourne toutes les boutiques triées par nom.
  * Réservé aux utilisateurs avec le rôle `admin`.
  *
- * @param db  Instance D1Database
+ * @param db  Port Database
  * @returns   Tableau de boutiques actives, trié alphabétiquement
  */
-export async function listAllBoutiques(db: D1Database): Promise<Boutique[]> {
-  const rows = await db.prepare(
-    'SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom'
-  ).all<Boutique>()
-  return rows.results
+export async function listAllBoutiques(db: Database): Promise<Boutique[]> {
+  return db.all<Boutique>('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom')
 }
 
 // ─── listBoutiqueForUser ──────────────────────────────────────────────────────
@@ -180,18 +182,15 @@ export async function listAllBoutiques(db: D1Database): Promise<Boutique[]> {
  * Un utilisateur non-admin ne peut accéder qu'à sa propre boutique.
  * Retourne un tableau (vide ou avec 1 élément) pour cohérence avec `listAllBoutiques()`.
  *
- * @param db         Instance D1Database
+ * @param db         Port Database
  * @param boutiqueId Identifiant de la boutique de l'utilisateur (issu du JWT)
  * @returns          Tableau contenant 0 ou 1 boutique
  */
 export async function listBoutiqueForUser(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<Boutique[]> {
-  const rows = await db.prepare(
-    'SELECT * FROM boutiques WHERE id = ? AND actif = 1'
-  ).bind(boutiqueId).all<Boutique>()
-  return rows.results
+  return db.all<Boutique>('SELECT * FROM boutiques WHERE id = ? AND actif = 1', [boutiqueId])
 }
 
 // ─── getBoutiqueById ──────────────────────────────────────────────────────────
@@ -202,17 +201,15 @@ export async function listBoutiqueForUser(
  * Utilisé dans `GET /:id` pour le détail d'une boutique.
  * La clause `AND actif = 1` empêche l'accès aux boutiques désactivées.
  *
- * @param db  Instance D1Database
+ * @param db  Port Database
  * @param id  Identifiant numérique de la boutique
  * @returns   `Boutique` si trouvée et active, `null` sinon
  */
 export async function getBoutiqueById(
-  db: D1Database,
+  db: Database,
   id: number
 ): Promise<Boutique | null> {
-  return db.prepare(
-    'SELECT * FROM boutiques WHERE id = ? AND actif = 1'
-  ).bind(id).first<Boutique>()
+  return db.get<Boutique>('SELECT * FROM boutiques WHERE id = ? AND actif = 1', [id])
 }
 
 // ─── getBoutiqueSettings ──────────────────────────────────────────────────────
@@ -224,17 +221,15 @@ export async function getBoutiqueById(
  * Peut retourner `null` si la boutique n'a pas encore de settings (cas rare —
  * normalement créés avec `createBoutique()`).
  *
- * @param db         Instance D1Database
+ * @param db         Port Database
  * @param boutiqueId Identifiant numérique de la boutique
  * @returns          `BoutiqueSettings` ou `null` si non initialisés
  */
 export async function getBoutiqueSettings(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<BoutiqueSettings | null> {
-  return db.prepare(
-    'SELECT * FROM boutique_settings WHERE boutique_id = ?'
-  ).bind(boutiqueId).first<BoutiqueSettings>()
+  return db.get<BoutiqueSettings>('SELECT * FROM boutique_settings WHERE boutique_id = ?', [boutiqueId])
 }
 
 // ─── createBoutique ───────────────────────────────────────────────────────────
@@ -248,29 +243,27 @@ export async function getBoutiqueSettings(
  *
  * Le slug est auto-généré dans le controller avant l'appel (normalisation des accents).
  *
- * @param db    Instance D1Database
+ * @param db    Port Database
  * @param data  Données de la boutique à créer (voir `CreateBoutiqueInput`)
  * @returns     L'identifiant numérique de la boutique créée, `null` si échec
  */
 export async function createBoutique(
-  db: D1Database,
+  db: Database,
   data: CreateBoutiqueInput
 ): Promise<number | null> {
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).bind(
+  `, [
     data.nom, data.slug, data.siret, data.tva_numero,
     data.adresse, data.code_postal, data.ville,
     data.telephone, data.email
-  ).first<{ id: number }>()
+  ])
 
   if (result?.id) {
     // Initialiser les settings avec les valeurs par défaut (colonnes DEFAULT en SQL)
-    await db.prepare(
-      'INSERT INTO boutique_settings (boutique_id) VALUES (?)'
-    ).bind(result.id).run()
+    await db.run('INSERT INTO boutique_settings (boutique_id) VALUES (?)', [result.id])
   }
 
   return result?.id ?? null
@@ -289,17 +282,17 @@ export async function createBoutique(
  * telephone, email, site_web, slug, description, facebook_url, instagram_url,
  * google_maps_url.
  *
- * @param db   Instance D1Database
+ * @param db   Port Database
  * @param id   Identifiant numérique de la boutique à modifier
  * @param data Données de mise à jour (voir `UpdateBoutiqueInput`)
  * @returns    Promesse résolue après l'UPDATE (pas de valeur de retour)
  */
 export async function updateBoutique(
-  db: D1Database,
+  db: Database,
   id: number,
   data: UpdateBoutiqueInput
 ): Promise<void> {
-  await db.prepare(`
+  await db.run(`
     UPDATE boutiques SET
       nom=COALESCE(?,nom), siret=COALESCE(?,siret), tva_numero=COALESCE(?,tva_numero),
       adresse=COALESCE(?,adresse), code_postal=COALESCE(?,code_postal), ville=COALESCE(?,ville),
@@ -309,14 +302,14 @@ export async function updateBoutique(
       google_maps_url=COALESCE(?,google_maps_url),
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
-  `).bind(
+  `, [
     data.nom, data.siret, data.tva_numero,
     data.adresse, data.code_postal, data.ville,
     data.telephone, data.email, data.site_web,
     data.slug, data.description,
     data.facebook_url, data.instagram_url, data.google_maps_url,
     id
-  ).run()
+  ])
 }
 
 // ─── updateBoutiqueSettings ───────────────────────────────────────────────────
@@ -335,13 +328,13 @@ export async function updateBoutique(
  *   - Email            : `email_provider`, `email_api_key`, `email_from`, `email_notif_*`
  *   - Notifications    : `notif_email_actif`, `notif_sms_actif`, `horaires`
  *
- * @param db         Instance D1Database
+ * @param db         Port Database
  * @param boutiqueId Identifiant numérique de la boutique
  * @param data       Paramètres à mettre à jour (voir `UpdateSettingsInput`)
  * @returns          Promesse résolue après l'UPDATE (pas de valeur de retour)
  */
 export async function updateBoutiqueSettings(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   data: UpdateSettingsInput
 ): Promise<void> {
@@ -349,7 +342,7 @@ export async function updateBoutiqueSettings(
   const toInt = (v: boolean | null | undefined): number | null =>
     v != null ? (v ? 1 : 0) : null
 
-  await db.prepare(`
+  await db.run(`
     UPDATE boutique_settings SET
       tva_taux_defaut=?, horaires=?, notif_email_actif=?, notif_sms_actif=?,
       paiement_especes=?, paiement_cb=?, paiement_cheque=?, paiement_virement=?,
@@ -370,7 +363,7 @@ export async function updateBoutiqueSettings(
       email_notif_relance=COALESCE(?,email_notif_relance),
       updated_at=CURRENT_TIMESTAMP
     WHERE boutique_id=?
-  `).bind(
+  `, [
     data.tva_taux_defaut ?? 20,
     data.horaires ? JSON.stringify(data.horaires) : null,
     toInt(data.notif_email_actif) ?? 0,
@@ -395,7 +388,7 @@ export async function updateBoutiqueSettings(
     toInt(data.email_notif_sav_ouvert),
     toInt(data.email_notif_relance),
     boutiqueId
-  ).run()
+  ])
 }
 
 // ─── getStatsBoutique ─────────────────────────────────────────────────────────
@@ -412,31 +405,31 @@ export async function updateBoutiqueSettings(
  *   - `ca_mois`            : CA TTC des factures `payee` du mois courant
  *   - `produits_stock_bas` : produits dont `stock_actuel <= stock_minimum`
  *
- * @param db         Instance D1Database
+ * @param db         Port Database
  * @param boutiqueId Identifiant numérique de la boutique
  * @returns          `StatsBoutique` avec les 4 indicateurs (0 si aucune donnée)
  */
 export async function getStatsBoutique(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<StatsBoutique> {
   // 4 requêtes en parallèle via Promise.all pour optimiser la latence
   const [clients, tickets, ca_mois, stock_bas] = await Promise.all([
-    db.prepare(
-      'SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1'
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1', [boutiqueId]
+    ),
 
-    db.prepare(
-      "SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1"
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(
+      "SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1", [boutiqueId]
+    ),
 
-    db.prepare(
-      "SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')"
-    ).bind(boutiqueId).first<{ ca: number }>(),
+    db.get<{ ca: number }>(
+      "SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')", [boutiqueId]
+    ),
 
-    db.prepare(
-      'SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1'
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1', [boutiqueId]
+    ),
   ])
 
   return {

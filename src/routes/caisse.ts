@@ -33,11 +33,16 @@ import {
   getKpisCaisse,
   listClotures,
 } from '../services/caisseService'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-const caisse = new Hono<{ Bindings: Bindings }>()
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// par toutes les fonctions sauf createVente (dépend de nextNumero(), non migré,
+// Ports & Adapters 2026-07-12).
+type Variables = { db: Database }
+const caisse = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // ─── Helper contexte (même pattern que sav.ts) ────────────────────────────────
 
@@ -109,7 +114,7 @@ caisse.get('/caisse/kpis', async (c) => {
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   try {
-    const kpis = await getKpisCaisse(c.env.DB, boutiqueId)
+    const kpis = await getKpisCaisse(c.get('db'), boutiqueId)
     return c.json({ success: true, data: kpis })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -140,7 +145,7 @@ caisse.get('/caisse/journal', async (c) => {
     return c.json({ success: false, error: 'Format date invalide (YYYY-MM-DD).' }, 400)
 
   try {
-    const journal = await getCaisseJournal(c.env.DB, boutiqueId, date)
+    const journal = await getCaisseJournal(c.get('db'), boutiqueId, date)
     return c.json({ success: true, data: journal })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -247,7 +252,7 @@ caisse.post('/caisse/encaissement', async (c) => {
 
   try {
     const journal = await enregistrerEncaissement(
-      c.env.DB,
+      c.get('db'),
       boutiqueId,
       user.sub,
       Number(body.facture_id),
@@ -281,7 +286,7 @@ caisse.get('/caisse/clotures', async (c) => {
   const limit = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam, 10))) : 30
 
   try {
-    const clotures = await listClotures(c.env.DB, boutiqueId, limit)
+    const clotures = await listClotures(c.get('db'), boutiqueId, limit)
     return c.json({ success: true, data: clotures })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -318,7 +323,7 @@ caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
     return c.json({ success: false, error: 'Format date invalide (YYYY-MM-DD).' }, 400)
 
   try {
-    const cloture = await cloturerJournee(c.env.DB, boutiqueId, user.sub, date)
+    const cloture = await cloturerJournee(c.get('db'), boutiqueId, user.sub, date)
     return c.json({ success: true, data: cloture }, 201)
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 400)
@@ -353,7 +358,7 @@ caisse.get('/caisse/integrite', requireRole('admin', 'gerant'), async (c) => {
   const dateFin   = sp.get('date_fin')   ?? undefined
 
   try {
-    const result = await verifierIntegriteChaine(c.env.DB, boutiqueId, dateDebut, dateFin)
+    const result = await verifierIntegriteChaine(c.get('db'), boutiqueId, dateDebut, dateFin)
     return c.json({ success: true, data: result })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)

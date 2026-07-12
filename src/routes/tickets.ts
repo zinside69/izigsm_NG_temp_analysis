@@ -15,6 +15,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { validateSignatureDataUrl } from '../lib/validators'
+import type { Database } from '../ports/database'
 import {
   listTickets,
   getKanban,
@@ -44,7 +45,9 @@ import {
 } from '../services/photosService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; PHOTOS?: R2Bucket; RESEND_API_KEY?: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// uniquement par les fonctions déjà migrées (Ports & Adapters, 2026-07-12).
+type Variables = { user: any; db: Database }
 
 const tickets = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 tickets.use('*', authMiddleware)
@@ -60,9 +63,14 @@ function ctx(c: any) {
   return {
     user:            c.get('user'),
     db:              c.env.DB as D1Database,
+    dbPort:          c.get('db') as Database,
     queryBoutiqueId: c.req.query('boutique_id') ?? undefined,
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONSULTATION (Kanban, liste)
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /api/tickets/kanban ── (déclaré AVANT /:id pour éviter collision) ────
 /**
@@ -111,6 +119,10 @@ tickets.get('/', async (c) => {
   return c.json({ success: true, ...result })
 })
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ARCHIVAGE
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── POST /api/tickets/:id/archiver (Sprint 2.37) ──────────────────────────────
 /**
  * Archive manuellement un ticket terminal (livre ou annule).
@@ -132,6 +144,10 @@ tickets.post('/:id/archiver', requireRole('admin', 'manager'), async (c) => {
     return c.json({ success: false, error: err.message }, status)
   }
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DÉTAIL & CRÉATION
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /api/tickets/:id ──────────────────────────────────────────────────────
 /**
@@ -219,6 +235,10 @@ tickets.post('/', async (c) => {
     message:        'Ticket créé.',
   }, 201)
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MISE À JOUR
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── PUT /api/tickets/:id ──────────────────────────────────────────────────────
 /**
@@ -312,6 +332,10 @@ tickets.put('/:id/statut', async (c) => {
   }
 })
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SUPPRESSION
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── DELETE /api/tickets/:id ───────────────────────────────────────────────────
 /**
  * Soft-delete un ticket (actif = 0). Réservé admin/manager.
@@ -326,7 +350,10 @@ tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
   return c.json({ success: true, message: 'Ticket supprimé.' })
 })
 
-// ─── Photos (Sprint 2.36 — MOD-01) ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// PHOTOS (Sprint 2.36 — MOD-01) — getTicketForPhoto/listPhotos/getPhotoById migrées
+// vers le port Database ; uploadPhoto/deletePhoto restent sur D1Database (auditLog)
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /api/tickets/:id/photos ───────────────────────────────────────────────
 /**
@@ -335,11 +362,11 @@ tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, data: PhotoRow[] }
  */
 tickets.get('/:id/photos', async (c) => {
-  const { user, db } = ctx(c)
+  const { dbPort } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   try {
-    const ticket = await getTicketForPhoto(db, ticketId)
+    const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
     const boutiqueId = getBoutiqueId(c)
@@ -347,7 +374,7 @@ tickets.get('/:id/photos', async (c) => {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 
-    const photos = await listPhotos(db, ticketId)
+    const photos = await listPhotos(dbPort, ticketId)
     return c.json({ success: true, data: photos })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500)
@@ -365,7 +392,7 @@ tickets.get('/:id/photos', async (c) => {
  * @returns { success, data: PhotoRow }
  */
 tickets.post('/:id/photos', async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   const r2 = c.env.PHOTOS
@@ -374,7 +401,7 @@ tickets.post('/:id/photos', async (c) => {
   }
 
   try {
-    const ticket = await getTicketForPhoto(db, ticketId)
+    const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
     const boutiqueId = getBoutiqueId(c)
@@ -426,14 +453,14 @@ tickets.post('/:id/photos', async (c) => {
  * @returns Binaire de l'image avec Content-Type correct
  */
 tickets.get('/:id/photos/:photoId/view', async (c) => {
-  const { db } = ctx(c)
+  const { dbPort } = ctx(c)
   const photoId = parseInt(c.req.param('photoId'), 10)
 
   const r2 = c.env.PHOTOS
   if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
 
   try {
-    const meta = await getPhotoById(db, photoId)
+    const meta = await getPhotoById(dbPort, photoId)
     if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
 
     const obj = await r2.get(meta.r2_key)
@@ -459,7 +486,7 @@ tickets.get('/:id/photos/:photoId/view', async (c) => {
  * @returns { success, message }
  */
 tickets.delete('/:id/photos/:photoId', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
   const photoId  = parseInt(c.req.param('photoId'), 10)
 
@@ -467,7 +494,7 @@ tickets.delete('/:id/photos/:photoId', requireRole('admin', 'manager', 'technici
   if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
 
   try {
-    const meta = await getPhotoById(db, photoId)
+    const meta = await getPhotoById(dbPort, photoId)
     if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
     if (meta.ticket_id !== ticketId) return c.json({ success: false, error: 'Photo non liée à ce ticket.' }, 403)
 

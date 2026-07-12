@@ -14,9 +14,12 @@ import {
   listEmployes, getEmploye, createEmploye, updateEmploye, desactiverEmploye,
   pointer, pointagesAujourdhui, rapportPointage, statutsTempsReel,
 } from '../services/personnelService'
+import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé par
+// toutes les fonctions sauf createEmploye (dépend d'auditLog, non migré, Ports & Adapters 2026-07-12).
+type Variables = { user: any; db: Database }
 
 const personnel = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 personnel.use('*', authMiddleware)
@@ -35,7 +38,7 @@ personnel.get('/employes', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await listEmployes(c.env.DB, boutiqueId)
+  const data = await listEmployes(c.get('db'), boutiqueId)
   return c.json({ success: true, data })
 })
 
@@ -45,7 +48,7 @@ personnel.get('/employes', async (c) => {
  */
 personnel.get('/employes/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getEmploye(c.env.DB, id)
+  const data = await getEmploye(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Employé introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -78,7 +81,7 @@ personnel.put('/employes/:id', requireRole('admin', 'manager'), async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
 
-  await updateEmploye(c.env.DB, id, body)
+  await updateEmploye(c.get('db'), id, body)
   return c.json({ success: true, message: 'Employé mis à jour.' })
 })
 
@@ -88,7 +91,7 @@ personnel.put('/employes/:id', requireRole('admin', 'manager'), async (c) => {
  */
 personnel.delete('/employes/:id', requireRole('admin'), async (c) => {
   const id = parseInt(c.req.param('id'), 10)
-  await desactiverEmploye(c.env.DB, id)
+  await desactiverEmploye(c.get('db'), id)
   return c.json({ success: true, message: 'Employé désactivé.' })
 })
 
@@ -107,7 +110,7 @@ personnel.post('/pointage/:employeId/pointer', async (c) => {
   const body      = await c.req.json().catch(() => ({}))
 
   try {
-    const result = await pointer(c.env.DB, employeId, user.sub, body)
+    const result = await pointer(c.get('db'), employeId, user.sub, body)
     return c.json({ success: true, ...result })
   } catch (err: any) {
     const status = err.code === 'JOURNEE_TERMINEE'   ? 422
@@ -122,7 +125,7 @@ personnel.post('/pointage/:employeId/pointer', async (c) => {
  */
 personnel.get('/pointage/:employeId/aujourd-hui', async (c) => {
   const employeId = parseInt(c.req.param('employeId'), 10)
-  const result    = await pointagesAujourdhui(c.env.DB, employeId)
+  const result    = await pointagesAujourdhui(c.get('db'), employeId)
   return c.json({ success: true, employe_id: employeId, ...result })
 })
 
@@ -140,7 +143,7 @@ personnel.get('/pointage/rapport', requireRole('admin', 'manager'), async (c) =>
   const dateDebut = query.date_debut ?? new Date(Date.now() - 7 * 86_400_000).toISOString().split('T')[0]
   const dateFin   = query.date_fin   ?? new Date().toISOString().split('T')[0]
 
-  const data = await rapportPointage(c.env.DB, boutiqueId, dateDebut, dateFin)
+  const data = await rapportPointage(c.get('db'), boutiqueId, dateDebut, dateFin)
   return c.json({ success: true, periode: { debut: dateDebut, fin: dateFin }, data })
 })
 
@@ -154,7 +157,7 @@ personnel.get('/pointage/statuts', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await statutsTempsReel(c.env.DB, boutiqueId)
+  const result = await statutsTempsReel(c.get('db'), boutiqueId)
   return c.json({ success: true, ...result })
 })
 

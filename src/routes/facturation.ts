@@ -19,9 +19,14 @@ import {
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
+import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// par listFactures/getFacture/listAvoirs/getAvoir/getDevisPourNf525/updateFactureHash,
+// migrées (Ports & Adapters, 2026-07-12). ajouterPaiement/emettreFacture/createAvoir
+// restent sur c.env.DB (dépendent d'auditLog/enregistrerTransaction/nextNumero/batch, non migrés).
+type Variables = { user: any; db: Database }
 
 const facturation = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 facturation.use('*', authMiddleware)
@@ -205,7 +210,7 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
     const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
 
     // ── NF525 : enregistrer la transaction chaînée ─────────────────────────
-    const devis = await getDevisPourNf525(c.env.DB, devisId)
+    const devis = await getDevisPourNf525(c.get('db'), devisId)
     if (devis) {
       const hashNf525 = await enregistrerTransaction(c.env.DB, {
         boutique_id: devis.boutique_id, type_transaction: 'facture',
@@ -214,7 +219,7 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
         montant_ht: devis.total_ht, montant_tva: devis.total_tva, montant_ttc: devis.total_ttc,
         date_transaction: new Date().toISOString(), user_id: user.sub,
       })
-      await updateFactureHash(c.env.DB, facture_id, hashNf525)
+      await updateFactureHash(c.get('db'), facture_id, hashNf525)
     }
 
     return c.json({ success: true, facture_id, facture_numero, message: 'Devis converti en facture.' })
@@ -237,7 +242,7 @@ facturation.get('/factures', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listFactures(c.env.DB, boutiqueId, c.req.query())
+  const result = await listFactures(c.get('db'), boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
@@ -247,7 +252,7 @@ facturation.get('/factures', async (c) => {
  */
 facturation.get('/factures/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getFacture(c.env.DB, id)
+  const data = await getFacture(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -316,7 +321,7 @@ facturation.get('/avoirs', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listAvoirs(c.env.DB, boutiqueId, c.req.query())
+  const result = await listAvoirs(c.get('db'), boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
@@ -326,7 +331,7 @@ facturation.get('/avoirs', async (c) => {
  */
 facturation.get('/avoirs/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getAvoir(c.env.DB, id)
+  const data = await getAvoir(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Avoir introuvable.' }, 404)
   return c.json({ success: true, data })
 })

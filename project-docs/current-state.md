@@ -1,31 +1,46 @@
-# iziGSM — État courant (MàJ : 2026-07-12, checkpoint 4)
+# iziGSM — État courant (MàJ : 2026-07-12, checkpoint 5)
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
-- Tout ce qui était opérationnel au 2026-07-11 (migration Cloudflare, auth, slug boutiques, chantier prise en charge, création de ticket) — toujours en place, aucune régression.
-- **Pattern Ports & Adapters introduit** : `src/ports/database.ts` (interface `Database`) + `src/adapters/cloudflare/d1Database.ts` (adaptateur D1, seule implémentation active) — préparation portabilité VPS/Postgres. Un service migré (`userService.listUsers()`), les 17 autres restent sur `D1Database` direct, migration incrémentale prévue.
-- **`populateTechniciens()` livré et déployé** — le select "Technicien" à la création de ticket affiche les vrais utilisateurs (`GET /api/users`) au lieu de 3 noms en dur, `technicien_id` numérique envoyé et persisté correctement.
-- **Isolation multi-tenant renforcée** : `technicien_id` désormais validé contre le `boutique_id` du ticket (`createTicket`/`updateTicket`) — un admin/manager ne peut plus assigner un technicien d'une autre boutique. Validé en live (422 rejeté cross-boutique, 201 réussi same-boutique).
-- **`editTicket()` corrigé** — présélectionne à nouveau le technicien assigné (régression du jour introduite puis corrigée avant impact utilisateur réel signalé).
-- **Numérotation documents corrigée** (migration `0034_numero_unique_par_boutique.sql`) — `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global sur `tickets`/`devis`/`factures`/`avoirs`/`rachats`. Desk1 peut de nouveau créer des tickets (validé en live : 201, `TKT-2026-00007`).
+- Tout ce qui était opérationnel au checkpoint 4 (migration Cloudflare, auth, slug boutiques, chantier prise en charge, technicien_id, numérotation par boutique) — toujours en place, aucune régression.
+- **⚠ Le travail décrit ci-dessous (checkpoint 5) n'est PAS encore déployé en production** — développé, testé (unitaire + local live), documenté, mais pas encore buildé/déployé sur Cloudflare Pages ni poussé sur `origin/main` au moment de ce checkpoint. Voir section "Repo et déploiement".
+
+## Chantier Ports & Adapters — 7/20 services migrés (session du 2026-07-12)
+Pattern établi : `src/ports/database.ts` (interface `Database`) + `src/adapters/cloudflare/d1Database.ts` (adaptateur D1). Ordre de migration complet dans `todo.md`. Fonctions dépendant d'`auditLog()`/`nextNumero()`/`enregistrerTransaction()`/`db.batch()` (encore sur `D1Database` brut) restent non migrées au sein de chaque service — migration partielle assumée, pas un blocage.
+
+Services migrés aujourd'hui (dans l'ordre) :
+1. `photosService.ts` — partiel (3/5 fns)
+2. `publicService.ts` — intégral (8/8)
+3. `boutiqueService.ts` — intégral (8/8)
+4. `rachatService.ts` — partiel (3/5), 0 test existant → 17 écrits
+5. `personnelService.ts` — partiel (8/9)
+6. `caisseService.ts` — partiel (7/8), tests 14→31
+7. `factureService.ts` — partiel (6/9), tests restructurés (41/41)
+
+Chaque service : migré, testé unitairement (`mockDatabase` pour les fonctions migrées, `mockD1` pour les restantes), vérifié sans nouvelle erreur `tsc`, **et validé en local live réelle** (`wrangler d1 migrations apply --local` + `npm run dev` + requêtes HTTP réelles, données de test nettoyées après coup) — exigence explicite de l'utilisateur.
+
+## Fuseau horaire France — `src/lib/timezone.ts` (créé aujourd'hui)
+`parseUtcTimestamp()` + `todayParis()` + `currentMonthParis()` (DST auto via Intl/ICU). Appliqué à `personnelService.ts` (bug réel corrigé : heures travaillées gonflées de l'écart local/UTC) et `caisseService.ts` (`DATE('now')`/`strftime` → jour/mois français, critique pour clôture NF525). Vérifié sur `factureService.ts` : rien à corriger (horodatages déjà UTC-Z explicites). Principe à appliquer lors de la migration de `ticketService.ts`, `garantiesService.ts`, `agendaService.ts`, `statsService.ts` (détail exact dans `todo.md`).
+
+## 2 bugs de production découverts et corrigés aujourd'hui (sans lien avec la migration, confirmés pré-existants via `git show HEAD`)
+- **`GET /api/rachats/export` → 404 depuis toujours** — collision de route avec `/rachats/:id` (déclarée avant). Fixé en réordonnant, même pattern que `/kanban` dans `tickets.ts`.
+- **🔴 Vente POS d'un produit en stock cassée à 100% + facture orpheline NF525** — `mouvements_stock` INSERT référençait des colonnes inexistantes (`raison`/`reference_id` au lieu de `motif`, `stock_avant`/`stock_apres` NOT NULL jamais fournies). Conséquence grave : facture déjà `payee` créée avant le crash, sans entrée `journal_nf525` correspondante (violation de conformité). Corrigé, testé, revalidé en live (flux complet vente→KPIs→journal→clôture→intégrité chaîne).
 
 ## Bugs connus non corrigés (détail complet dans `bugs.md`)
 - Prise de RDV en ligne : table `boutique_creneaux` vide, aucune UI pour la configurer
 - `www.repairdesk.fr` → Error 521 (Gandi, indépendant de nous)
 - `/factures/:id/emettre` n'envoie aucun email
-- 3 tests unitaires sensibles au fuseau horaire (non-bloquant, stable)
+- 3 tests unitaires sensibles au fuseau horaire (non-bloquant, stable, `agendaService`/`statsService`)
 - `populateTechniciens()` liste tous les rôles (admin/manager/technicien), pas juste les techniciens
 - Pas de test dédié pour `D1DatabaseAdapter`
-- `GET /api/users` réservé admin/manager — un technicien ne voit pas la liste se remplir dans "Nouvelle prise en charge" (échec silencieux, comportement volontairement identique à `populateClients()`)
 
 ## Chantiers identifiés pour plus tard (voir `todo.md` pour le détail complet)
-- Continuer la migration des 17 services restants vers le port `Database`
-- Ports `Storage`/`Cache` (R2/D1KV → disque local/Redis) — pas nécessaires avant d'engager la bascule VPS
-- Adaptateur Postgres, migration des données, déploiement Node.js sur VPS — hors scope tant que non engagé
-- Purge RGPD automatique, multi-sites géré, multi-appareils par ticket, acompte structuré, UI créneaux bookables, rebranding "Mon Atelier"→"MyDesk" — chantiers déjà identifiés avant aujourd'hui, toujours en attente
+- Continuer la migration des 13 services restants vers le port `Database` (prochain : `devisService.ts`)
+- Appliquer `lib/timezone.ts` à `ticketService.ts`/`garantiesService.ts`/`agendaService.ts`/`statsService.ts` lors de leur migration
+- Ports `Storage`/`Cache`, adaptateur Postgres, bascule VPS — hors scope tant que non engagé
+- Purge RGPD automatique, multi-sites géré, multi-appareils par ticket, acompte structuré, UI créneaux bookables, rebranding "Mon Atelier"→"MyDesk" — toujours en attente
 
 ## Repo et déploiement
 - Repo : `izigsm/webapp/` (racine git), remote `zinside69/izigsm_NG_temp_analysis`, branche `main`
-- Déploiement : `npm run build && npx wrangler pages deploy dist --project-name izigsm --branch main` — redéployé 2 fois le 2026-07-12 (injection port Database + routes/users.ts ; technicien_id + editTicket), `https://repairdesk.fr/api/health` confirmé 200 après chaque déploiement
-- Migration D1 `0034_numero_unique_par_boutique.sql` appliquée en prod le 2026-07-12 (`wrangler d1 migrations apply izigsm-production --remote`, 52 commandes, testée en local d'abord)
-- Suite de tests : 712/715 (3 échecs fuseau horaire pré-existants, sans lien), +8 tests ajoutés aujourd'hui (3 `userService.test.ts` migration port + 5 `ticketService.test.ts` validation technicien_id)
-- Git : 18 commits aujourd'hui (`3ceaff7` → `114dd16`), tous sur `main` directement (pas de branche dédiée, choix explicite de l'utilisateur), working tree propre, poussé sur `origin/main`
+- **Rien déployé aujourd'hui** — tout le travail du checkpoint 5 est local, testé, non buildé/non poussé au moment de ce checkpoint
+- Suite de tests : 746/749 (mêmes 3 échecs fuseau horaire pré-existants, +34 tests ajoutés aujourd'hui : 17 rachatService + 16 caisseService + 1 mockDatabase.__setNotFound)
+- Git : working tree avec modifications non commitées au moment de ce checkpoint (23 fichiers modifiés + 2 nouveaux : `src/lib/timezone.ts`, `tests/rachatService.test.ts`) — commit proposé à l'utilisateur juste après ce checkpoint

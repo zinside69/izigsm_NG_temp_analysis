@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listAllBoutiques,
   listBoutiqueForUser,
@@ -65,7 +65,7 @@ const SETTINGS_1: BoutiqueSettings = {
 
 describe('listAllBoutiques', () => {
   it('retourne toutes les boutiques actives triées par nom', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setListResponse('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom', [BOUTIQUE_1, BOUTIQUE_2])
 
     const result = await listAllBoutiques(db)
@@ -76,7 +76,7 @@ describe('listAllBoutiques', () => {
   })
 
   it('retourne un tableau vide si aucune boutique active', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setListResponse('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom', [])
 
     const result = await listAllBoutiques(db)
@@ -89,7 +89,7 @@ describe('listAllBoutiques', () => {
 
 describe('listBoutiqueForUser', () => {
   it('retourne uniquement la boutique de l\'utilisateur', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setListResponse('SELECT * FROM boutiques WHERE id = ? AND actif = 1', [BOUTIQUE_1])
 
     const result = await listBoutiqueForUser(db, 1)
@@ -99,7 +99,7 @@ describe('listBoutiqueForUser', () => {
   })
 
   it('retourne un tableau vide si boutique_id invalide ou inactive', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setListResponse('SELECT * FROM boutiques WHERE id = ? AND actif = 1', [])
 
     const result = await listBoutiqueForUser(db, 999)
@@ -108,7 +108,7 @@ describe('listBoutiqueForUser', () => {
   })
 
   it('transmet le boutique_id en paramètre SQL', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await listBoutiqueForUser(db, 7)
 
@@ -121,7 +121,7 @@ describe('listBoutiqueForUser', () => {
 
 describe('getBoutiqueById', () => {
   it('retourne la boutique si elle est active', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('SELECT * FROM boutiques WHERE id = ? AND actif = 1', BOUTIQUE_1)
 
     const result = await getBoutiqueById(db, 1)
@@ -132,7 +132,7 @@ describe('getBoutiqueById', () => {
   })
 
   it('retourne null si boutique inactive ou inexistante', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setNotFound('SELECT * FROM boutiques WHERE id = ? AND actif = 1')
 
     const result = await getBoutiqueById(db, 99)
@@ -145,7 +145,7 @@ describe('getBoutiqueById', () => {
 
 describe('getBoutiqueSettings', () => {
   it('retourne les paramètres de la boutique', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('SELECT * FROM boutique_settings WHERE boutique_id = ?', SETTINGS_1)
 
     const result = await getBoutiqueSettings(db, 1)
@@ -157,7 +157,7 @@ describe('getBoutiqueSettings', () => {
   })
 
   it('retourne null si settings non initialisés', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setNotFound('SELECT * FROM boutique_settings WHERE boutique_id = ?')
 
     const result = await getBoutiqueSettings(db, 99)
@@ -177,7 +177,7 @@ describe('createBoutique', () => {
   }
 
   it('retourne l\'id de la boutique créée', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
       () => ({ id: 3 })
@@ -189,7 +189,7 @@ describe('createBoutique', () => {
   })
 
   it('exécute INSERT boutiques PUIS INSERT boutique_settings', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
       () => ({ id: 3 })
@@ -205,7 +205,7 @@ describe('createBoutique', () => {
   })
 
   it('transmet le slug dans le premier INSERT', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
       () => ({ id: 3 })
@@ -219,7 +219,7 @@ describe('createBoutique', () => {
   })
 
   it('retourne null si INSERT échoue', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponse → first() retourne null
 
     const id = await createBoutique(db, INPUT)
@@ -240,7 +240,7 @@ describe('updateBoutique', () => {
   }
 
   it('appelle UPDATE boutiques avec l\'id correct', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await updateBoutique(db, 1, INPUT)
 
@@ -253,7 +253,7 @@ describe('updateBoutique', () => {
   })
 
   it('inclut CURRENT_TIMESTAMP dans le SQL (updated_at)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await updateBoutique(db, 1, INPUT)
 
@@ -262,7 +262,7 @@ describe('updateBoutique', () => {
   })
 
   it('passe null pour les champs non fournis (comportement COALESCE)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await updateBoutique(db, 1, INPUT)
 
@@ -292,7 +292,7 @@ describe('updateBoutiqueSettings', () => {
   }
 
   it('appelle UPDATE boutique_settings avec le boutique_id', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await updateBoutiqueSettings(db, 1, BASE_INPUT)
 
@@ -303,7 +303,7 @@ describe('updateBoutiqueSettings', () => {
   })
 
   it('convertit les booléens en 0/1 pour SQLite', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await updateBoutiqueSettings(db, 1, BASE_INPUT)
 
@@ -315,7 +315,7 @@ describe('updateBoutiqueSettings', () => {
   })
 
   it('sérialise les horaires en JSON string', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     const inputWithHoraires: UpdateSettingsInput = {
       ...BASE_INPUT,
       horaires: { lun: '9h-19h', mar: '9h-19h' }
@@ -329,7 +329,7 @@ describe('updateBoutiqueSettings', () => {
   })
 
   it('ne retourne rien (void)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     const result = await updateBoutiqueSettings(db, 1, BASE_INPUT)
 
@@ -341,7 +341,7 @@ describe('updateBoutiqueSettings', () => {
 
 describe('getStatsBoutique', () => {
   it('retourne les 4 KPIs en parallèle', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setListResponse('SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1', [])
     db.__setListResponse("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1", [])
     db.__setListResponse("SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')", [])
@@ -374,7 +374,7 @@ describe('getStatsBoutique', () => {
   })
 
   it('retourne 0 pour tous les KPIs si aucune donnée', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponses enregistrées → first() retourne null → fallback 0
 
     const stats = await getStatsBoutique(db, 99)
@@ -386,7 +386,7 @@ describe('getStatsBoutique', () => {
   })
 
   it('exécute exactement 4 requêtes SQL (Promise.all)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await getStatsBoutique(db, 1)
 
@@ -395,7 +395,7 @@ describe('getStatsBoutique', () => {
   })
 
   it('toutes les requêtes utilisent le boutique_id fourni', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await getStatsBoutique(db, 7)
 

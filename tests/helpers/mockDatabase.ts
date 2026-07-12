@@ -30,6 +30,11 @@ export function createMockDatabase() {
     singleResponses.set(normalizeSQL(sql), value)
   }
 
+  /** Enregistre une réponse null pour `.get<T>()` (simule "not found") */
+  function __setNotFound(sql: string) {
+    singleResponses.set(normalizeSQL(sql), null)
+  }
+
   /** Enregistre une liste pour `.all<T>()` */
   function __setListResponse(sql: string, values: any[]) {
     listResponses.set(normalizeSQL(sql), values)
@@ -89,6 +94,7 @@ export function createMockDatabase() {
 
   return Object.assign(db, {
     __setResponse,
+    __setNotFound,
     __setListResponse,
     __setResponseFn,
     __setListFn,

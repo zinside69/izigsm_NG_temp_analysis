@@ -17,9 +17,13 @@ import {
   PIECES_VALIDES, ETATS_VALIDES, MODES_PAIEMENT_VALIDES, STATUTS_VALIDES,
   type CreateRachatInput,
 } from '../services/rachatService'
+import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// par listRachats/getRachat/exportLivrePolice, migrées (Ports & Adapters, 2026-07-12).
+// createRachat/updateStatutRachat restent sur c.env.DB (dépendent d'auditLog/nextNumero, non migrés).
+type Variables = { user: any; db: Database }
 
 const rachats = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 rachats.use('*', authMiddleware)
@@ -38,8 +42,61 @@ rachats.get('/rachats', async (c) => {
   const boutiqueId = getBoutiqueId(user, query.boutique_id)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listRachats(c.env.DB, boutiqueId, query)
+  const result = await listRachats(c.get('db'), boutiqueId, query)
   return c.json({ success: true, ...result })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPORT LIVRE DE POLICE (format CSV réglementaire) — déclaré AVANT /:id pour éviter collision
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/rachats/export
+ * Génère un CSV conforme registre police.
+ * Query : boutique_id, date_debut?, date_fin?
+ *
+ * Bug corrigé le 2026-07-12 : cette route était déclarée après `/rachats/:id`,
+ * qui capturait `/rachats/export` (id="export") avant d'atteindre celle-ci —
+ * l'export CSV était inaccessible (404 "Rachat introuvable") depuis toujours.
+ * Découvert en validation live lors de la migration Ports & Adapters.
+ */
+rachats.get('/rachats/export', requireRole('admin', 'manager'), async (c) => {
+  const user       = c.get('user')
+  const query      = c.req.query()
+  const boutiqueId = getBoutiqueId(user, query.boutique_id)
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const rows = await exportLivrePolice(c.get('db'), boutiqueId, {
+    date_debut: query.date_debut,
+    date_fin:   query.date_fin,
+  })
+
+  const headers = [
+    'N° LP', 'Date', 'Vendeur Nom', 'Vendeur Prénom', 'Date Naissance',
+    'Adresse', 'CP', 'Ville', 'Pièce', 'N° Pièce',
+    'Marque', 'Modèle', 'IMEI', 'Couleur', 'Capacité', 'État',
+    'Prix Rachat', 'Mode Paiement', 'Statut', 'Opérateur',
+  ]
+
+  const csvLines = [
+    headers.join(';'),
+    ...rows.map((r: any) => [
+      r.numero, r.date_rachat,
+      r.vendeur_nom, r.vendeur_prenom, r.vendeur_naissance ?? '',
+      r.vendeur_adresse ?? '', r.vendeur_cp ?? '', r.vendeur_ville ?? '',
+      r.vendeur_piece, r.vendeur_piece_num,
+      r.marque, r.modele, r.imei ?? '',
+      r.couleur ?? '', r.capacite ?? '', r.etat,
+      r.prix_rachat, r.mode_paiement, r.statut, r.operateur,
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')),
+  ]
+
+  return new Response(csvLines.join('\n'), {
+    headers: {
+      'Content-Type':        'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="livre-police-${boutiqueId}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    },
+  })
 })
 
 /**
@@ -48,7 +105,7 @@ rachats.get('/rachats', async (c) => {
  */
 rachats.get('/rachats/:id', async (c) => {
   const id    = parseInt(c.req.param('id'), 10)
-  const data  = await getRachat(c.env.DB, id)
+  const data  = await getRachat(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Rachat introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -133,54 +190,6 @@ rachats.patch('/rachats/:id/statut', requireRole('admin', 'manager'), async (c) 
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, err.message.includes('introuvable') ? 404 : 422)
   }
-})
-
-// ══════════════════════════════════════════════════════════════════════════════
-// EXPORT LIVRE DE POLICE (format CSV réglementaire)
-// ══════════════════════════════════════════════════════════════════════════════
-
-/**
- * GET /api/rachats/export
- * Génère un CSV conforme registre police.
- * Query : boutique_id, date_debut?, date_fin?
- */
-rachats.get('/rachats/export', requireRole('admin', 'manager'), async (c) => {
-  const user       = c.get('user')
-  const query      = c.req.query()
-  const boutiqueId = getBoutiqueId(user, query.boutique_id)
-  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-
-  const rows = await exportLivrePolice(c.env.DB, boutiqueId, {
-    date_debut: query.date_debut,
-    date_fin:   query.date_fin,
-  })
-
-  const headers = [
-    'N° LP', 'Date', 'Vendeur Nom', 'Vendeur Prénom', 'Date Naissance',
-    'Adresse', 'CP', 'Ville', 'Pièce', 'N° Pièce',
-    'Marque', 'Modèle', 'IMEI', 'Couleur', 'Capacité', 'État',
-    'Prix Rachat', 'Mode Paiement', 'Statut', 'Opérateur',
-  ]
-
-  const csvLines = [
-    headers.join(';'),
-    ...rows.map((r: any) => [
-      r.numero, r.date_rachat,
-      r.vendeur_nom, r.vendeur_prenom, r.vendeur_naissance ?? '',
-      r.vendeur_adresse ?? '', r.vendeur_cp ?? '', r.vendeur_ville ?? '',
-      r.vendeur_piece, r.vendeur_piece_num,
-      r.marque, r.modele, r.imei ?? '',
-      r.couleur ?? '', r.capacite ?? '', r.etat,
-      r.prix_rachat, r.mode_paiement, r.statut, r.operateur,
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')),
-  ]
-
-  return new Response(csvLines.join('\n'), {
-    headers: {
-      'Content-Type':        'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="livre-police-${boutiqueId}-${new Date().toISOString().slice(0, 10)}.csv"`,
-    },
-  })
 })
 
 export default rachats

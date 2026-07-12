@@ -17,6 +17,8 @@
  */
 
 import { auditLog } from '../lib/db'
+import { parseUtcTimestamp, todayParis } from '../lib/timezone'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,11 +68,16 @@ export const STATUT_LABELS: Record<StatutPointage, string> = {
 
 /**
  * Liste des employés actifs d'une boutique avec statut de pointage temps réel.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * `DATE('now')` (UTC serveur) remplacé par `todayParis()` (jour métier
+ * français, DST auto) — sinon "aujourd'hui" décale près de minuit selon
+ * l'écart UTC/France, et dépend du fuseau du runtime (voir lib/timezone.ts).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  */
-export async function listEmployes(db: D1Database, boutiqueId: number): Promise<any[]> {
-  const rows = await db.prepare(`
+export async function listEmployes(db: Database, boutiqueId: number): Promise<any[]> {
+  const today = todayParis()
+  return db.all<any>(`
     SELECT e.id, e.prenom, e.nom, e.poste, e.email, e.telephone,
            e.statut_pointage, e.commission_pct, e.taux_horaire, e.actif,
            p.horodatage as dernier_pointage,
@@ -82,12 +89,12 @@ export async function listEmployes(db: D1Database, boutiqueId: number): Promise<
              JOIN pointages p2 ON p2.employe_id = p1.employe_id AND p2.id = (
                SELECT MIN(id) FROM pointages
                WHERE employe_id = p1.employe_id AND id > p1.id
-                 AND DATE(horodatage) = DATE('now')
+                 AND DATE(horodatage) = ?
              )
              WHERE p1.employe_id = e.id
                AND (p1.statut_avant = 'absent' OR p1.statut_avant = 'pause')
                AND p1.statut_apres = 'en_poste'
-               AND DATE(p1.horodatage) = DATE('now')
+               AND DATE(p1.horodatage) = ?
              ), 2
            ) as heures_aujourd_hui
     FROM   employes e
@@ -96,31 +103,30 @@ export async function listEmployes(db: D1Database, boutiqueId: number): Promise<
     )
     WHERE  e.boutique_id = ? AND e.actif = 1
     ORDER  BY e.prenom, e.nom
-  `).bind(boutiqueId).all<any>()
-
-  return rows.results ?? []
+  `, [today, today, boutiqueId])
 }
 
 /**
  * Détail complet d'un employé avec ses 50 derniers pointages.
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db - Port Database
  * @param id - ID de l'employé
  */
-export async function getEmploye(db: D1Database, id: number): Promise<any | null> {
+export async function getEmploye(db: Database, id: number): Promise<any | null> {
   const [employe, pointages] = await Promise.all([
-    db.prepare('SELECT * FROM employes WHERE id = ? AND actif = 1').bind(id).first<any>(),
-    db.prepare(`
+    db.get<any>('SELECT * FROM employes WHERE id = ? AND actif = 1', [id]),
+    db.all<any>(`
       SELECT p.*, u.prenom || ' ' || u.nom as valide_par_nom
       FROM   pointages p
       LEFT JOIN users u ON u.id = p.valide_par
       WHERE  p.employe_id = ?
       ORDER  BY p.horodatage DESC
       LIMIT  50
-    `).bind(id).all<any>(),
+    `, [id]),
   ])
 
   if (!employe) return null
-  return { ...employe, pointages: pointages.results ?? [] }
+  return { ...employe, pointages: pointages ?? [] }
 }
 
 /**
@@ -166,16 +172,17 @@ export async function createEmploye(
 
 /**
  * Met à jour les informations d'un employé.
- * @param db    - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db    - Port Database
  * @param id    - ID de l'employé
  * @param input - Champs modifiables
  */
 export async function updateEmploye(
-  db:    D1Database,
+  db:    Database,
   id:    number,
   input: UpdateEmployeInput
 ): Promise<void> {
-  await db.prepare(`
+  await db.run(`
     UPDATE employes
     SET prenom         = ?,
         nom            = ?,
@@ -186,7 +193,7 @@ export async function updateEmploye(
         commission_pct = ?,
         updated_at     = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).bind(
+  `, [
     input.prenom,
     input.nom,
     input.poste          ?? 'technicien',
@@ -195,16 +202,17 @@ export async function updateEmploye(
     input.taux_horaire   ?? null,
     input.commission_pct ?? 0,
     id,
-  ).run()
+  ])
 }
 
 /**
  * Désactive un employé (soft delete — actif = 0).
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db - Port Database
  * @param id - ID de l'employé
  */
-export async function desactiverEmploye(db: D1Database, id: number): Promise<void> {
-  await db.prepare('UPDATE employes SET actif = 0 WHERE id = ?').bind(id).run()
+export async function desactiverEmploye(db: Database, id: number): Promise<void> {
+  await db.run('UPDATE employes SET actif = 0 WHERE id = ?', [id])
 }
 
 // ─── Pointage ─────────────────────────────────────────────────────────────────
@@ -213,13 +221,14 @@ export async function desactiverEmploye(db: D1Database, id: number): Promise<voi
  * Effectue une transition de pointage selon la machine à états.
  * Choisit automatiquement la transition si une seule est disponible,
  * sinon applique le statut demandé.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param employeId  - ID de l'employé
  * @param userId     - ID de l'opérateur (peut différer de l'employé → valide_par)
  * @param opts       - Statut demandé + géolocalisation + notes
  */
 export async function pointer(
-  db:         D1Database,
+  db:         Database,
   employeId:  number,
   userId:     number,
   opts: {
@@ -236,9 +245,9 @@ export async function pointer(
   message:               string
   prochaines_transitions: StatutPointage[]
 }> {
-  const employe = await db.prepare(
-    'SELECT id, prenom, nom, statut_pointage, boutique_id FROM employes WHERE id = ? AND actif = 1'
-  ).bind(employeId).first<{ id: number; prenom: string; nom: string; statut_pointage: StatutPointage; boutique_id: number }>()
+  const employe = await db.get<{ id: number; prenom: string; nom: string; statut_pointage: StatutPointage; boutique_id: number }>(
+    'SELECT id, prenom, nom, statut_pointage, boutique_id FROM employes WHERE id = ? AND actif = 1', [employeId]
+  )
 
   if (!employe) throw new Error('Employé introuvable.')
 
@@ -264,23 +273,24 @@ export async function pointer(
   }
 
   // Enregistrer le pointage
-  await db.prepare(`
+  await db.run(`
     INSERT INTO pointages
       (employe_id, boutique_id, statut_avant, statut_apres, latitude, longitude, valide_par, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
+  `, [
     employeId, employe.boutique_id,
     employe.statut_pointage, nouveauStatut,
     opts.latitude  ?? null,
     opts.longitude ?? null,
     userId !== employeId ? userId : null,   // valide_par si manager différent
     opts.notes ?? null,
-  ).run()
+  ])
 
   // Mise à jour statut employé
-  await db.prepare(
-    'UPDATE employes SET statut_pointage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).bind(nouveauStatut, employeId).run()
+  await db.run(
+    'UPDATE employes SET statut_pointage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [nouveauStatut, employeId]
+  )
 
   const horodatage = new Date().toISOString()
 
@@ -296,22 +306,26 @@ export async function pointer(
 
 /**
  * Pointages d'un employé pour aujourd'hui + calcul des heures travaillées.
- * @param db        - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * `DATE('now')` remplacé par `todayParis()` (jour métier français, DST auto)
+ * et `parseUtcTimestamp()` corrige l'interprétation des horodatages stockés
+ * ("YYYY-MM-DD HH:MM:SS" UTC sans suffixe) — bug découvert le 2026-07-12 :
+ * `new Date(...)` brut les interprétait en heure locale du runtime, gonflant
+ * les heures travaillées de l'écart UTC/local (2h constatées en UTC+2).
+ * @param db        - Port Database
  * @param employeId - ID de l'employé
  */
 export async function pointagesAujourdhui(
-  db:        D1Database,
+  db:        Database,
   employeId: number
 ): Promise<{ pointages: any[]; heures_travaillees: number }> {
-  const rows = await db.prepare(`
+  const pointages = await db.all<any>(`
     SELECT p.*, u.prenom || ' ' || u.nom as valide_par_nom
     FROM   pointages p
     LEFT JOIN users u ON u.id = p.valide_par
-    WHERE  p.employe_id = ? AND DATE(p.horodatage) = DATE('now')
+    WHERE  p.employe_id = ? AND DATE(p.horodatage) = ?
     ORDER  BY p.horodatage ASC
-  `).bind(employeId).all<any>()
-
-  const pointages = rows.results ?? []
+  `, [employeId, todayParis()])
 
   // Calcul heures hors pauses (en JavaScript — léger, pas de SQL complexe)
   let heuresTravaillees = 0
@@ -321,13 +335,13 @@ export async function pointagesAujourdhui(
     if (p.statut_apres === 'en_poste') {
       entreeEnPoste = p.horodatage
     } else if ((p.statut_apres === 'pause' || p.statut_apres === 'termine') && entreeEnPoste) {
-      heuresTravaillees += (new Date(p.horodatage).getTime() - new Date(entreeEnPoste).getTime()) / 3_600_000
+      heuresTravaillees += (parseUtcTimestamp(p.horodatage).getTime() - parseUtcTimestamp(entreeEnPoste).getTime()) / 3_600_000
       entreeEnPoste = null
     }
   }
   // Si encore en poste — comptabiliser jusqu'à maintenant
   if (entreeEnPoste) {
-    heuresTravaillees += (Date.now() - new Date(entreeEnPoste).getTime()) / 3_600_000
+    heuresTravaillees += (Date.now() - parseUtcTimestamp(entreeEnPoste).getTime()) / 3_600_000
   }
 
   return {
@@ -340,18 +354,19 @@ export async function pointagesAujourdhui(
 
 /**
  * Rapport de présences sur une période (jours présents, premières entrées/sorties).
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param dateDebut  - Date début (YYYY-MM-DD)
  * @param dateFin    - Date fin (YYYY-MM-DD)
  */
 export async function rapportPointage(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   dateDebut:   string,
   dateFin:     string
 ): Promise<any[]> {
-  const rows = await db.prepare(`
+  return db.all<any>(`
     SELECT e.id, e.prenom, e.nom, e.poste,
            COUNT(DISTINCT DATE(p.horodatage)) as jours_presents,
            MIN(p.horodatage)                  as premiere_entree,
@@ -363,22 +378,21 @@ export async function rapportPointage(
     WHERE  e.boutique_id = ? AND e.actif = 1
     GROUP  BY e.id
     ORDER  BY e.nom, e.prenom
-  `).bind(dateDebut, dateFin, boutiqueId).all<any>()
-
-  return rows.results ?? []
+  `, [dateDebut, dateFin, boutiqueId])
 }
 
 /**
  * Statuts temps réel de tous les employés actifs, groupés par statut.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  */
-export async function statutsTempsReel(db: D1Database, boutiqueId: number): Promise<{
+export async function statutsTempsReel(db: Database, boutiqueId: number): Promise<{
   data:    any[]
   resume:  { total: number; en_poste: number; pause: number; absent: number; termine: number }
   details: Record<string, any[]>
 }> {
-  const rows = await db.prepare(`
+  const data = await db.all<any>(`
     SELECT e.id, e.prenom, e.nom, e.poste, e.statut_pointage,
            p.horodatage as depuis
     FROM   employes e
@@ -387,9 +401,7 @@ export async function statutsTempsReel(db: D1Database, boutiqueId: number): Prom
     )
     WHERE  e.boutique_id = ? AND e.actif = 1
     ORDER  BY e.prenom
-  `).bind(boutiqueId).all<any>()
-
-  const data = rows.results ?? []
+  `, [boutiqueId])
 
   const grouped = data.reduce((acc: Record<string, any[]>, e: any) => {
     const key = e.statut_pointage as string

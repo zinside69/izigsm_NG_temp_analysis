@@ -17,6 +17,7 @@
 
 import { nextNumero, auditLog, parsePagination, calculLignes } from '../lib/db'
 import { enregistrerTransaction } from '../lib/nf525'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,12 +50,13 @@ export interface CreateAvoirInput {
 
 /**
  * Liste des factures d'une boutique avec pagination.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param opts       - Query params : page, limit, statut, client_id
  */
 export async function listFactures(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   opts:        Record<string, string | undefined> = {}
 ): Promise<{ data: any[]; pagination: any }> {
@@ -71,10 +73,9 @@ export async function listFactures(
   const where = conditions.join(' AND ')
 
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) as cnt FROM factures f WHERE ${where}`)
-      .bind(...params).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM factures f WHERE ${where}`, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT f.id, f.numero, f.statut, f.total_ttc, f.montant_paye,
              f.date_emission, f.issued_at, f.locked, f.hash_nf525,
              f.devis_id, f.ticket_id,
@@ -84,11 +85,11 @@ export async function listFactures(
       WHERE  ${where}
       ORDER  BY f.created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows ?? [],
     pagination: {
       page, limit,
       total: countRow?.cnt ?? 0,
@@ -99,12 +100,13 @@ export async function listFactures(
 
 /**
  * Détail complet d'une facture (+ lignes + paiements).
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db - Port Database
  * @param id - ID de la facture
  */
-export async function getFacture(db: D1Database, id: number): Promise<any | null> {
+export async function getFacture(db: Database, id: number): Promise<any | null> {
   const [facture, lignes, paiements] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT f.*,
              c.prenom || ' ' || c.nom AS client_nom,
              c.email     AS client_email,
@@ -120,24 +122,26 @@ export async function getFacture(db: D1Database, id: number): Promise<any | null
       JOIN   clients   c ON c.id = f.client_id
       JOIN   boutiques b ON b.id = f.boutique_id
       WHERE  f.id = ?
-    `).bind(id).first<any>(),
+    `, [id]),
 
-    db.prepare(
-      "SELECT * FROM lignes_document WHERE document_type = 'facture' AND document_id = ? ORDER BY ordre"
-    ).bind(id).all<any>(),
+    db.all<any>(
+      "SELECT * FROM lignes_document WHERE document_type = 'facture' AND document_id = ? ORDER BY ordre", [id]
+    ),
 
-    db.prepare(
-      'SELECT * FROM paiements WHERE facture_id = ? ORDER BY created_at'
-    ).bind(id).all<any>(),
+    db.all<any>(
+      'SELECT * FROM paiements WHERE facture_id = ? ORDER BY created_at', [id]
+    ),
   ])
 
   if (!facture) return null
-  return { ...facture, lignes: lignes.results ?? [], paiements: paiements.results ?? [] }
+  return { ...facture, lignes: lignes ?? [], paiements: paiements ?? [] }
 }
 
 /**
  * Enregistre un paiement sur une facture et met à jour son statut.
  * Rejette si la facture est verrouillée après émission NF525.
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend d'`auditLog()`, qui prend encore un `D1Database` brut.
  * @param db        - Instance D1Database
  * @param factureId - ID de la facture
  * @param userId    - ID de l'utilisateur
@@ -193,6 +197,9 @@ export async function ajouterPaiement(
 /**
  * Émet une facture brouillon : verrouillage NF525 + hash SHA-256 + tracking_token.
  * Conforme CGI art. 289 — la facture devient inaltérable après émission.
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend d'`enregistrerTransaction()` (lib/nf525.ts) et d'`auditLog()`, tous
+ * deux encore sur `D1Database` brut.
  * @param db        - Instance D1Database
  * @param factureId - ID de la facture
  * @param userId    - ID de l'utilisateur
@@ -253,12 +260,13 @@ export async function emettreFacture(
 
 /**
  * Liste des avoirs d'une boutique avec filtres et pagination.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param opts       - Query params : page, limit, statut, facture_id, client_id
  */
 export async function listAvoirs(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   opts:        Record<string, string | undefined> = {}
 ): Promise<{ data: any[]; pagination: any }> {
@@ -274,10 +282,9 @@ export async function listAvoirs(
   const where = 'WHERE ' + conditions.join(' AND ')
 
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) as cnt FROM avoirs a ${where}`)
-      .bind(...bindings).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM avoirs a ${where}`, bindings),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT a.id, a.numero, a.type, a.motif, a.statut, a.total_ttc,
              a.date_emission, a.facture_id, a.hash_nf525,
              f.numero AS facture_numero,
@@ -288,11 +295,11 @@ export async function listAvoirs(
       ${where}
       ORDER  BY a.created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...bindings, limit, offset).all<any>(),
+    `, [...bindings, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows ?? [],
     pagination: {
       page, limit,
       total: countRow?.cnt ?? 0,
@@ -303,12 +310,13 @@ export async function listAvoirs(
 
 /**
  * Détail complet d'un avoir (+ lignes).
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db - Port Database
  * @param id - ID de l'avoir
  */
-export async function getAvoir(db: D1Database, id: number): Promise<any | null> {
+export async function getAvoir(db: Database, id: number): Promise<any | null> {
   const [avoir, lignes] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT a.*,
              c.prenom || ' ' || c.nom AS client_nom,
              c.email     AS client_email,
@@ -324,20 +332,23 @@ export async function getAvoir(db: D1Database, id: number): Promise<any | null> 
       JOIN   boutiques b ON b.id = a.boutique_id
       JOIN   factures  f ON f.id = a.facture_id
       WHERE  a.id = ?
-    `).bind(id).first<any>(),
+    `, [id]),
 
-    db.prepare(
-      'SELECT * FROM lignes_avoir WHERE avoir_id = ? ORDER BY ordre'
-    ).bind(id).all<any>(),
+    db.all<any>(
+      'SELECT * FROM lignes_avoir WHERE avoir_id = ? ORDER BY ordre', [id]
+    ),
   ])
 
   if (!avoir) return null
-  return { ...avoir, lignes: lignes.results ?? [] }
+  return { ...avoir, lignes: lignes ?? [] }
 }
 
 /**
  * Crée un avoir sur une facture émise (NF525 — chaîne SHA-256 obligatoire).
  * La facture source doit être locked (émise) pour émettre un avoir.
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend de `nextNumero()`, `enregistrerTransaction()`, `auditLog()` (tous
+ * encore sur `D1Database` brut) et de `db.batch()` (absent du port `Database`).
  * @param db     - Instance D1Database
  * @param userId - ID de l'utilisateur
  * @param input  - Données de l'avoir
@@ -434,12 +445,13 @@ export async function createAvoir(
  * Charge les données brutes d'un devis nécessaires à l'enregistrement NF525
  * lors de la conversion en facture (`PUT /api/devis/:id/convertir`).
  *
- * @param db      - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db      - Port Database
  * @param devisId - ID du devis converti
  * @returns       Données devis (boutique_id, client_id, totaux) ou `null` si inexistant
  */
 export async function getDevisPourNf525(
-  db:      D1Database,
+  db:      Database,
   devisId: number
 ): Promise<{
   boutique_id: number
@@ -448,24 +460,24 @@ export async function getDevisPourNf525(
   total_tva:   number
   total_ttc:   number
 } | null> {
-  return db.prepare(
-    'SELECT boutique_id, client_id, total_ht, total_tva, total_ttc FROM devis WHERE id = ?'
-  ).bind(devisId).first()
+  return db.get(
+    'SELECT boutique_id, client_id, total_ht, total_tva, total_ttc FROM devis WHERE id = ?', [devisId]
+  )
 }
 
 /**
  * Écrit le hash NF525 calculé sur une facture.
  * Appelé après `convertirDevis()` + `enregistrerTransaction()`.
  *
- * @param db        - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db        - Port Database
  * @param factureId - ID de la facture à mettre à jour
  * @param hash      - Hash NF525 hex 64 caractères
  */
 export async function updateFactureHash(
-  db:        D1Database,
+  db:        Database,
   factureId: number,
   hash:      string
 ): Promise<void> {
-  await db.prepare('UPDATE factures SET hash_nf525 = ? WHERE id = ?')
-    .bind(hash, factureId).run()
+  await db.run('UPDATE factures SET hash_nf525 = ? WHERE id = ?', [hash, factureId])
 }

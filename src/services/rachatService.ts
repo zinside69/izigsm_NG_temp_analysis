@@ -14,6 +14,7 @@
  */
 
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,12 +75,14 @@ export const STATUTS_VALIDES:      StatutRachat[]         = ['en_stock', 'vendu'
 
 /**
  * Liste paginée des rachats du livre de police.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) —
+ * fonction de lecture pure, pas d'appel `auditLog` à découpler.
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param opts       - Filtres : statut, search (nom/IMEI/numéro/marque), date_debut, date_fin
  */
 export async function listRachats(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   opts:        ListRachatsOpts = {}
 ): Promise<{ data: any[]; pagination: any }> {
@@ -111,10 +114,9 @@ export async function listRachats(
   const where = 'WHERE ' + conditions.join(' AND ')
 
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) as cnt FROM rachats r ${where}`)
-      .bind(...bindings).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM rachats r ${where}`, bindings),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT r.id, r.numero, r.date_rachat, r.statut,
              r.vendeur_nom, r.vendeur_prenom,
              r.marque, r.modele, r.imei, r.etat,
@@ -125,11 +127,11 @@ export async function listRachats(
       ${where}
       ORDER  BY r.date_rachat DESC
       LIMIT  ? OFFSET ?
-    `).bind(...bindings, limit, offset).all<any>(),
+    `, [...bindings, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows ?? [],
     pagination: {
       page, limit,
       total: countRow?.cnt ?? 0,
@@ -142,11 +144,12 @@ export async function listRachats(
 
 /**
  * Détail complet d'un rachat (+ infos opérateur + boutique).
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db - Port Database
  * @param id - ID du rachat
  */
-export async function getRachat(db: D1Database, id: number): Promise<any | null> {
-  const rachat = await db.prepare(`
+export async function getRachat(db: Database, id: number): Promise<any | null> {
+  return db.get<any>(`
     SELECT r.*,
            u.prenom || ' ' || u.nom as operateur_nom,
            u.email                  as operateur_email,
@@ -159,9 +162,7 @@ export async function getRachat(db: D1Database, id: number): Promise<any | null>
     JOIN   users     u ON u.id = r.user_id
     JOIN   boutiques b ON b.id = r.boutique_id
     WHERE  r.id = ?
-  `).bind(id).first<any>()
-
-  return rachat ?? null
+  `, [id])
 }
 
 // ─── Rachat — Création ────────────────────────────────────────────────────────
@@ -300,12 +301,13 @@ export async function updateStatutRachat(
 
 /**
  * Données brutes pour l'export CSV réglementaire du livre de police.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param opts       - Filtres date_debut / date_fin
  */
 export async function exportLivrePolice(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   opts:        { date_debut?: string; date_fin?: string } = {}
 ): Promise<any[]> {
@@ -323,7 +325,7 @@ export async function exportLivrePolice(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const rows = await db.prepare(`
+  return db.all<any>(`
     SELECT r.numero, r.date_rachat,
            r.vendeur_nom, r.vendeur_prenom, r.vendeur_naissance,
            r.vendeur_adresse, r.vendeur_cp, r.vendeur_ville,
@@ -336,7 +338,5 @@ export async function exportLivrePolice(
     JOIN   users   u ON u.id = r.user_id
     ${where}
     ORDER  BY r.date_rachat ASC
-  `).bind(...bindings).all<any>()
-
-  return rows.results ?? []
+  `, bindings)
 }

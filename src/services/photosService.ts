@@ -16,6 +16,7 @@
  */
 
 import { auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,15 +60,19 @@ function genR2Key(ticketId: number, mime: string): string {
 /**
  * Vérifie qu'un ticket existe et retourne son boutique_id.
  * Utilisé par les routes pour valider les accès multi-tenant.
+ *
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) —
+ * fonction de lecture pure, pas d'appel `auditLog` à découpler.
+ * @param db — Port Database (implémentation D1 aujourd'hui, Postgres à la bascule VPS)
  */
 export async function getTicketForPhoto(
-  db: D1Database,
+  db: Database,
   ticketId: number
 ): Promise<{ boutique_id: number } | null> {
-  const row = await db.prepare(
-    `SELECT boutique_id FROM tickets WHERE id = ? AND actif = 1`
-  ).bind(ticketId).first<{ boutique_id: number }>()
-  return row ?? null
+  return db.get<{ boutique_id: number }>(
+    `SELECT boutique_id FROM tickets WHERE id = ? AND actif = 1`,
+    [ticketId]
+  )
 }
 
 /**
@@ -147,41 +152,47 @@ export async function uploadPhoto(
 
 /**
  * Liste toutes les photos d'un ticket, triées par type puis date.
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db — Port Database
  * @returns PhotoRow[] (sans données binaires)
  */
 export async function listPhotos(
-  db:       D1Database,
+  db:       Database,
   ticketId: number
 ): Promise<PhotoRow[]> {
-  const rows = await db.prepare(`
+  return db.all<PhotoRow>(`
     SELECT id, ticket_id, r2_key, nom_fichier, type_photo, mime_type, taille, created_at, created_by
     FROM   ticket_photos
     WHERE  ticket_id = ?
     ORDER  BY
       CASE type_photo WHEN 'avant' THEN 1 WHEN 'apres' THEN 2 ELSE 3 END,
       created_at ASC
-  `).bind(ticketId).all<PhotoRow>()
-  return rows.results ?? []
+  `, [ticketId])
 }
 
 /**
  * Retourne les métadonnées d'une photo par son ID.
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db — Port Database
  * @returns PhotoRow ou null si introuvable
  */
 export async function getPhotoById(
-  db:      D1Database,
+  db:      Database,
   photoId: number
 ): Promise<PhotoRow | null> {
-  const row = await db.prepare(`
+  return db.get<PhotoRow>(`
     SELECT id, ticket_id, r2_key, nom_fichier, type_photo, mime_type, taille, created_at, created_by
     FROM   ticket_photos
     WHERE  id = ?
-  `).bind(photoId).first<PhotoRow>()
-  return row ?? null
+  `, [photoId])
 }
 
 /**
  * Supprime une photo : DELETE dans R2 + DELETE dans D1.
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend de `auditLog()`, qui prend encore un `D1Database` brut — requête de
+ * lecture dupliquée ici plutôt que d'appeler `getPhotoById()` (migré) pour
+ * éviter de faire dépendre le service d'un adaptateur concret.
  * @throws si photo introuvable
  */
 export async function deletePhoto(
@@ -190,7 +201,11 @@ export async function deletePhoto(
   photoId: number,
   userId:  number
 ): Promise<void> {
-  const photo = await getPhotoById(db, photoId)
+  const photo = await db.prepare(`
+    SELECT id, ticket_id, r2_key, nom_fichier, type_photo, mime_type, taille, created_at, created_by
+    FROM   ticket_photos
+    WHERE  id = ?
+  `).bind(photoId).first<PhotoRow>()
   if (!photo) throw new Error(`Photo #${photoId} introuvable.`)
 
   // Supprimer de R2 (non bloquant si clé absente)

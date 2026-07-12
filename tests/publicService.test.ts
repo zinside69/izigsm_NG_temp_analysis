@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   getTicketPublicByToken,
   getBoutiquePublicBySlug,
@@ -81,16 +81,16 @@ const SERVICE_ROW = {
 // ─── getTicketPublicByToken ───────────────────────────────────────────────────
 
 describe('getTicketPublicByToken', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne TicketPublic si token valide', async () => {
     db.__setResponse(SQL_TICKET_TOKEN, TICKET_PUBLIC)
 
-    const result = await getTicketPublicByToken(db as any, 'abc123def456abc1')
+    const result = await getTicketPublicByToken(db, 'abc123def456abc1')
 
     expect(result).not.toBeNull()
     expect(result!.numero).toBe('TKT-2026-00001')
@@ -101,7 +101,7 @@ describe('getTicketPublicByToken', () => {
   it('retourne null si token inconnu ou ticket inactif', async () => {
     db.__setResponse(SQL_TICKET_TOKEN, null)
 
-    const result = await getTicketPublicByToken(db as any, 'INVALID_TOKEN')
+    const result = await getTicketPublicByToken(db, 'INVALID_TOKEN')
 
     expect(result).toBeNull()
   })
@@ -109,7 +109,7 @@ describe('getTicketPublicByToken', () => {
   it('token transmis comme premier binding', async () => {
     db.__setResponse(SQL_TICKET_TOKEN, TICKET_PUBLIC)
 
-    await getTicketPublicByToken(db as any, 'my-tracking-token-xyz')
+    await getTicketPublicByToken(db, 'my-tracking-token-xyz')
 
     const calls = db.__getCalls()
     const tokenCall = calls.find(c => c.sql.includes('t.tracking_token = ?'))
@@ -119,7 +119,7 @@ describe('getTicketPublicByToken', () => {
   it('champs clés présents dans TicketPublic', async () => {
     db.__setResponse(SQL_TICKET_TOKEN, TICKET_PUBLIC)
 
-    const result = await getTicketPublicByToken(db as any, 'abc123def456abc1')
+    const result = await getTicketPublicByToken(db, 'abc123def456abc1')
 
     expect(result).toHaveProperty('statut')
     expect(result).toHaveProperty('appareil_marque')
@@ -131,16 +131,16 @@ describe('getTicketPublicByToken', () => {
 // ─── getBoutiquePublicBySlug ──────────────────────────────────────────────────
 
 describe('getBoutiquePublicBySlug', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne BoutiquePublic si slug valide', async () => {
     db.__setResponse(SQL_BOUTIQUE_SLUG, BOUTIQUE_PUBLIC)
 
-    const result = await getBoutiquePublicBySlug(db as any, 'izigsm-paris')
+    const result = await getBoutiquePublicBySlug(db, 'izigsm-paris')
 
     expect(result).not.toBeNull()
     expect(result!.nom).toBe('iziGSM Paris')
@@ -150,7 +150,7 @@ describe('getBoutiquePublicBySlug', () => {
   it('retourne null si slug inconnu ou boutique inactive', async () => {
     db.__setResponse(SQL_BOUTIQUE_SLUG, null)
 
-    const result = await getBoutiquePublicBySlug(db as any, 'boutique-inconnue')
+    const result = await getBoutiquePublicBySlug(db, 'boutique-inconnue')
 
     expect(result).toBeNull()
   })
@@ -158,7 +158,7 @@ describe('getBoutiquePublicBySlug', () => {
   it('slug transmis comme premier binding', async () => {
     db.__setResponse(SQL_BOUTIQUE_SLUG, BOUTIQUE_PUBLIC)
 
-    await getBoutiquePublicBySlug(db as any, 'mon-slug-test')
+    await getBoutiquePublicBySlug(db, 'mon-slug-test')
 
     const calls = db.__getCalls()
     const slugCall = calls.find(c => c.sql.includes('WHERE slug = ?'))
@@ -169,16 +169,16 @@ describe('getBoutiquePublicBySlug', () => {
 // ─── getStatsBoutiquePublic ───────────────────────────────────────────────────
 
 describe('getStatsBoutiquePublic', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne total_tickets et tickets_done', async () => {
     db.__setResponse(SQL_STATS_BOUTIQUE, { total_tickets: 42, tickets_done: 38 })
 
-    const result = await getStatsBoutiquePublic(db as any, 1)
+    const result = await getStatsBoutiquePublic(db, 1)
 
     expect(result.total_tickets).toBe(42)
     expect(result.tickets_done).toBe(38)
@@ -187,7 +187,7 @@ describe('getStatsBoutiquePublic', () => {
   it('fallback 0 si SQL retourne null', async () => {
     db.__setResponse(SQL_STATS_BOUTIQUE, null)
 
-    const result = await getStatsBoutiquePublic(db as any, 1)
+    const result = await getStatsBoutiquePublic(db, 1)
 
     expect(result.total_tickets).toBe(0)
     expect(result.tickets_done).toBe(0)
@@ -196,7 +196,7 @@ describe('getStatsBoutiquePublic', () => {
   it('boutiqueId transmis comme binding', async () => {
     db.__setResponse(SQL_STATS_BOUTIQUE, { total_tickets: 0, tickets_done: 0 })
 
-    await getStatsBoutiquePublic(db as any, 55)
+    await getStatsBoutiquePublic(db, 55)
 
     const calls = db.__getCalls()
     const statsCall = calls.find(c => c.sql.includes('COUNT(*) AS total_tickets'))
@@ -207,16 +207,16 @@ describe('getStatsBoutiquePublic', () => {
 // ─── getBoutiqueIdBySlug ──────────────────────────────────────────────────────
 
 describe('getBoutiqueIdBySlug', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { id, nom } si slug trouvé', async () => {
     db.__setResponse(SQL_BOUTIQUE_ID_BY_SLUG, { id: 1, nom: 'iziGSM Paris' })
 
-    const result = await getBoutiqueIdBySlug(db as any, 'izigsm-paris')
+    const result = await getBoutiqueIdBySlug(db, 'izigsm-paris')
 
     expect(result).not.toBeNull()
     expect(result!.id).toBe(1)
@@ -226,7 +226,7 @@ describe('getBoutiqueIdBySlug', () => {
   it('retourne null si slug inconnu', async () => {
     db.__setResponse(SQL_BOUTIQUE_ID_BY_SLUG, null)
 
-    const result = await getBoutiqueIdBySlug(db as any, 'slug-inconnu')
+    const result = await getBoutiqueIdBySlug(db, 'slug-inconnu')
 
     expect(result).toBeNull()
   })
@@ -234,7 +234,7 @@ describe('getBoutiqueIdBySlug', () => {
   it('slug transmis comme binding', async () => {
     db.__setResponse(SQL_BOUTIQUE_ID_BY_SLUG, { id: 2, nom: 'Test' })
 
-    await getBoutiqueIdBySlug(db as any, 'mon-slug')
+    await getBoutiqueIdBySlug(db, 'mon-slug')
 
     const calls = db.__getCalls()
     const slugCall = calls.find(c => c.sql.includes('SELECT id, nom FROM boutiques'))
@@ -245,16 +245,16 @@ describe('getBoutiqueIdBySlug', () => {
 // ─── getCategoriesPubliques ───────────────────────────────────────────────────
 
 describe('getCategoriesPubliques', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne la liste des catégories actives', async () => {
     db.__setListResponse(SQL_CATEGORIES, [CATEGORIE_ROW])
 
-    const result = await getCategoriesPubliques(db as any, 1)
+    const result = await getCategoriesPubliques(db, 1)
 
     expect(result).toHaveLength(1)
     expect(result[0].nom).toBe('Smartphones')
@@ -264,7 +264,7 @@ describe('getCategoriesPubliques', () => {
   it('retourne tableau vide si aucune catégorie', async () => {
     db.__setListResponse(SQL_CATEGORIES, [])
 
-    const result = await getCategoriesPubliques(db as any, 1)
+    const result = await getCategoriesPubliques(db, 1)
 
     expect(result).toHaveLength(0)
   })
@@ -272,7 +272,7 @@ describe('getCategoriesPubliques', () => {
   it('boutiqueId transmis comme premier binding', async () => {
     db.__setListResponse(SQL_CATEGORIES, [])
 
-    await getCategoriesPubliques(db as any, 99)
+    await getCategoriesPubliques(db, 99)
 
     const calls = db.__getCalls()
     const catCall = calls.find(c => c.sql.includes('FROM categories_services'))
@@ -283,16 +283,16 @@ describe('getCategoriesPubliques', () => {
 // ─── getServicesPublics ───────────────────────────────────────────────────────
 
 describe('getServicesPublics', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne la liste des services actifs', async () => {
     db.__setListResponse(SQL_SERVICES, [SERVICE_ROW])
 
-    const result = await getServicesPublics(db as any, 1)
+    const result = await getServicesPublics(db, 1)
 
     expect(result).toHaveLength(1)
     expect(result[0].nom).toBe('Remplacement écran iPhone 14')
@@ -303,7 +303,7 @@ describe('getServicesPublics', () => {
   it('retourne tableau vide si aucun service', async () => {
     db.__setListResponse(SQL_SERVICES, [])
 
-    const result = await getServicesPublics(db as any, 1)
+    const result = await getServicesPublics(db, 1)
 
     expect(result).toHaveLength(0)
   })
@@ -311,7 +311,7 @@ describe('getServicesPublics', () => {
   it('boutiqueId transmis comme binding', async () => {
     db.__setListResponse(SQL_SERVICES, [])
 
-    await getServicesPublics(db as any, 77)
+    await getServicesPublics(db, 77)
 
     const calls = db.__getCalls()
     const svcCall = calls.find(c => c.sql.includes('FROM services s'))
@@ -321,7 +321,7 @@ describe('getServicesPublics', () => {
   it('service contient tous les champs attendus', async () => {
     db.__setListResponse(SQL_SERVICES, [SERVICE_ROW])
 
-    const result = await getServicesPublics(db as any, 1)
+    const result = await getServicesPublics(db, 1)
 
     expect(result[0]).toHaveProperty('id')
     expect(result[0]).toHaveProperty('nom')
@@ -334,20 +334,20 @@ describe('getServicesPublics', () => {
 // ─── getDisponibilites ────────────────────────────────────────────────────────
 
 describe('getDisponibilites()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  // SQL normalisés — espaces collapsés pour correspondre au mockD1.normalizeSQL()
+  // SQL normalisés — espaces collapsés pour correspondre au mock (normalizeSQL())
   const SQL_CRENEAUX = `SELECT heure_debut, heure_fin, duree_slot FROM boutique_creneaux WHERE boutique_id = ? AND jour_semaine = ? AND actif = 1 ORDER BY heure_debut ASC`
   const SQL_RDV_DATE = `SELECT debut, fin FROM rendez_vous WHERE boutique_id = ? AND actif = 1 AND DATE(debut) = ? AND statut NOT IN ('CANCELLED') ORDER BY debut ASC`
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne tableau vide si aucune plage horaire configurée', async () => {
     db.__setListResponse(SQL_CRENEAUX, [])
 
-    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+    const result = await getDisponibilites(db, 1, '2099-12-15')
 
     expect(result).toHaveLength(0)
     // Pas de 2ème requête si aucune plage
@@ -365,7 +365,7 @@ describe('getDisponibilites()', () => {
       { debut: '2099-12-15 09:00', fin: '2099-12-15 09:30' },
     ])
 
-    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+    const result = await getDisponibilites(db, 1, '2099-12-15')
 
     // Le slot 09:00 est occupé, seul 09:30 reste
     expect(result).toHaveLength(1)
@@ -380,7 +380,7 @@ describe('getDisponibilites()', () => {
     ])
     db.__setListResponse(SQL_RDV_DATE, [])
 
-    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+    const result = await getDisponibilites(db, 1, '2099-12-15')
 
     expect(result).toHaveLength(3)
     expect(result[0].debut).toContain('14:00')
@@ -392,7 +392,7 @@ describe('getDisponibilites()', () => {
     db.__setListResponse(SQL_CRENEAUX, [])
 
     // 2099-12-15 = mardi → dayOfWeek = 2
-    await getDisponibilites(db as any, 42, '2099-12-15')
+    await getDisponibilites(db, 42, '2099-12-15')
 
     const calls = db.__getCalls()
     const creneauxCall = calls.find(c => c.sql.includes('boutique_creneaux'))
@@ -406,7 +406,7 @@ describe('getDisponibilites()', () => {
     ])
     db.__setListResponse(SQL_RDV_DATE, [])
 
-    const result = await getDisponibilites(db as any, 1, '2099-12-15')
+    const result = await getDisponibilites(db, 1, '2099-12-15')
 
     expect(result).toHaveLength(1)
     expect(result[0]).toHaveProperty('debut')
@@ -419,7 +419,7 @@ describe('getDisponibilites()', () => {
 // ─── createRdvPublic ──────────────────────────────────────────────────────────
 
 describe('createRdvPublic()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL_INSERT_RDV = `INSERT INTO rendez_vous (boutique_id, client_id, ticket_id, user_id, titre, description, debut, fin, duree_minutes, statut, type_rdv, nom_client, telephone_client, rappel_minutes, ical_token, couleur, notes) VALUES (?,NULL,NULL,NULL,?,?,?,?,?,'PENDING',?,?,?,60,?,'#F59E0B',?) RETURNING id, ical_token, debut, fin, titre`
 
@@ -427,7 +427,7 @@ describe('createRdvPublic()', () => {
   const DEBUT_FUTUR = '2099-12-15 10:00'
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('crée un RDV public et retourne id + titre', async () => {
@@ -436,7 +436,7 @@ describe('createRdvPublic()', () => {
       fin: '2099-12-15 10:30', titre: 'RDV en ligne',
     })
 
-    const result = await createRdvPublic(db as any, 1, {
+    const result = await createRdvPublic(db, 1, {
       debut:            DEBUT_FUTUR,
       nom_client:       'Jean Dupont',
       telephone_client: '0601020304',
@@ -452,7 +452,7 @@ describe('createRdvPublic()', () => {
       fin: '2099-12-15 10:30', titre: 'Remplacement écran',
     })
 
-    const result = await createRdvPublic(db as any, 1, {
+    const result = await createRdvPublic(db, 1, {
       debut:      DEBUT_FUTUR,
       nom_client: 'Marie Martin',
       service_nom: 'Remplacement écran',
@@ -467,19 +467,19 @@ describe('createRdvPublic()', () => {
 
   it('lève une erreur si debut absent', async () => {
     await expect(
-      createRdvPublic(db as any, 1, { nom_client: 'Test' })
+      createRdvPublic(db, 1, { nom_client: 'Test' })
     ).rejects.toThrow('requise')
   })
 
   it('lève une erreur si nom_client et telephone_client absents', async () => {
     await expect(
-      createRdvPublic(db as any, 1, { debut: DEBUT_FUTUR })
+      createRdvPublic(db, 1, { debut: DEBUT_FUTUR })
     ).rejects.toThrow('requis')
   })
 
   it('lève une erreur si debut dans le passé', async () => {
     await expect(
-      createRdvPublic(db as any, 1, {
+      createRdvPublic(db, 1, {
         debut:      '2020-01-01 10:00',
         nom_client: 'Test',
       })

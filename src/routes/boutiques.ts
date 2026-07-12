@@ -46,12 +46,19 @@ import {
   type UpdateBoutiqueInput,
   type UpdateSettingsInput,
 } from '../services/boutiqueService'
+import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// par boutiqueService.ts, entièrement migré (Ports & Adapters, 2026-07-12).
+type Variables = { user: any; db: Database }
 
 const boutiques = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 boutiques.use('*', authMiddleware)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LISTE & DÉTAIL BOUTIQUES
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ─── GET /api/boutiques ───────────────────────────────────────────────────────
 
@@ -70,8 +77,8 @@ boutiques.get('/', async (c) => {
 
   // Admin voit toutes les boutiques ; les autres rôles voient uniquement la leur
   const data = user.role === 'admin'
-    ? await listAllBoutiques(c.env.DB)
-    : await listBoutiqueForUser(c.env.DB, user.boutique_id)
+    ? await listAllBoutiques(c.get('db'))
+    : await listBoutiqueForUser(c.get('db'), user.boutique_id)
 
   return c.json({ success: true, data })
 })
@@ -96,13 +103,17 @@ boutiques.get('/:id', async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const boutique = await getBoutiqueById(c.env.DB, id)
+  const boutique = await getBoutiqueById(c.get('db'), id)
   if (!boutique) return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
-  const settings = await getBoutiqueSettings(c.env.DB, id)
+  const settings = await getBoutiqueSettings(c.get('db'), id)
 
   return c.json({ success: true, data: { ...boutique, settings } })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CRÉATION BOUTIQUE
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ─── POST /api/boutiques ──────────────────────────────────────────────────────
 
@@ -148,9 +159,13 @@ boutiques.post('/', requireRole('admin'), async (c) => {
     email:       email       ?? null,
   }
 
-  const id = await createBoutique(c.env.DB, input)
+  const id = await createBoutique(c.get('db'), input)
   return c.json({ success: true, id, message: 'Boutique créée.' }, 201)
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MISE À JOUR BOUTIQUE & PARAMÈTRES
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ─── PUT /api/boutiques/:id ───────────────────────────────────────────────────
 
@@ -198,7 +213,7 @@ boutiques.put('/:id', requireRole('admin', 'manager'), async (c) => {
     google_maps_url: google_maps_url ?? null,
   }
 
-  await updateBoutique(c.env.DB, id, input)
+  await updateBoutique(c.get('db'), id, input)
   return c.json({ success: true, message: 'Boutique mise à jour.' })
 })
 
@@ -273,9 +288,13 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
     email_notif_relance:        email_notif_relance        ?? null,
   }
 
-  await updateBoutiqueSettings(c.env.DB, id, input)
+  await updateBoutiqueSettings(c.get('db'), id, input)
   return c.json({ success: true, message: 'Paramètres mis à jour.' })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATISTIQUES
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ─── GET /api/boutiques/:id/stats ─────────────────────────────────────────────
 
@@ -299,9 +318,13 @@ boutiques.get('/:id/stats', async (c) => {
   if (user.role !== 'admin' && user.boutique_id !== id)
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const data = await getStatsBoutique(c.env.DB, id)
+  const data = await getStatsBoutique(c.get('db'), id)
   return c.json({ success: true, data })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NF525 (CONFORMITÉ LÉGALE — CAISSE)
+// ══════════════════════════════════════════════════════════════════════════════
 
 // ─── GET /api/boutiques/:id/nf525/verify ──────────────────────────────────────
 

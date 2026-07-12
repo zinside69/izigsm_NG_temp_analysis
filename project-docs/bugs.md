@@ -1,5 +1,27 @@
 # iziGSM — Bugs connus
 
+## Vente POS d'un produit en stock — CASSÉE DEPUIS TOUJOURS + facture orpheline NF525 — CORRIGÉ le 2026-07-12
+
+Découvert en validation live lors de la migration Ports & Adapters de `caisseService.ts`. `createVente()` insérait dans `mouvements_stock` avec des colonnes **qui n'existent pas dans le schéma réel** :
+- `raison` → la vraie colonne s'appelle `motif`
+- `reference_id` → n'existe pas (la table a `ticket_id`, pas de colonne générique de référence)
+- `stock_avant`/`stock_apres` (NOT NULL, sans défaut) → jamais fournies
+
+**Résultat** : `D1_ERROR: table mouvements_stock has no column named raison` — **toute vente en caisse référençant un produit suivi en stock (`produit_id` fourni) échouait à 100%**, sans exception. Confirmé pré-existant via `git show HEAD` (SQL identique avant migration).
+
+**Conséquence aggravante** : D1 ne supporte pas les transactions multi-requêtes ici (déjà documenté dans le code). La facture était déjà créée et marquée `payee`, et le stock déjà décrémenté, **avant** que l'INSERT invalide ne plante — laissant une **facture `payee` sans entrée `journal_nf525` correspondante**. Violation directe de la conformité NF525 (chaque transaction facturée doit être tracée dans le journal fiscal chaîné).
+
+**Fix appliqué** : `createVente()` lit désormais `stock_actuel` avant décrément (`SELECT ... WHERE id = ? AND boutique_id = ?`), calcule `stock_avant`/`stock_apres` en JS, et insère dans `mouvements_stock` avec les colonnes réelles (`motif` au lieu de `raison`, retrait de `reference_id`, ajout de `stock_avant`/`stock_apres`). Bénéfice secondaire : si le produit n'appartient pas à la boutique (id invalide), plus aucun mouvement fantôme n'est tracé (l'ancien `UPDATE` sans lecture préalable ne levait aucune erreur mais ne faisait rien non plus — comportement préservé, juste plus propre).
+
+**Validé en local live** (2026-07-12) : vente POS avec `produit_id` réel → 201 (facture + journal NF525 créés), stock décrémenté (12→11), mouvement tracé avec les bonnes colonnes, KPIs/journal du jour à jour, clôture NF525 réussie, intégrité de chaîne de hash vérifiée (`integre: true`). Données de test nettoyées après coup (factures/paiements/journal/clôtures/mouvements supprimés, stock restauré).
+
+## `GET /api/rachats/export` → 404 "Rachat introuvable" — CORRIGÉ le 2026-07-12
+Découvert en validation live lors de la migration Ports & Adapters de `rachatService.ts`. `routes/rachats.ts` déclarait `rachats.get('/rachats/:id', ...)` **avant** `rachats.get('/rachats/export', ...)` — Hono capturait toute requête vers `/rachats/export` avec la route `:id` (id="export"), avant même d'atteindre la vraie route d'export. L'export CSV réglementaire du livre de police (art. 321-7) était **inaccessible depuis toujours**, sans lien avec la migration en cours (confirmé pré-existant via `git show HEAD` sur l'ordre des routes).
+
+**Fix appliqué** : route `/rachats/export` déplacée avant `/rachats/:id`, même pattern déjà utilisé dans `routes/tickets.ts` pour `/kanban` ("déclaré AVANT /:id pour éviter collision").
+
+**Validé en local live** : `GET /api/rachats/export?boutique_id=1` → 200 CSV (avant fix : 404) ; `GET /api/rachats/:id` avec un id numérique réel toujours fonctionnel (404 correct si introuvable).
+
 ## Création de ticket via `/tickets` impossible — CORRIGÉ le 2026-07-11
 `saveTicket()` (`public/static/js/tickets.js`) avait **deux bugs cumulés**, chacun suffisant à lui seul pour bloquer toute création de ticket via le formulaire :
 

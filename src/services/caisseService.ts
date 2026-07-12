@@ -25,6 +25,8 @@
  */
 
 import { nextNumero, calculLignes } from '../lib/db'
+import { todayParis, currentMonthParis } from '../lib/timezone'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,20 +143,24 @@ function buildDonneesHash(
  *
  * Ce hash est le `hash_precedent` de la prochaine transaction à insérer.
  *
- * @param db          Binding D1 Cloudflare
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * `createVente()` reste sur `D1Database` (dépend de `nextNumero()`, non porté)
+ * et duplique cette requête en interne plutôt que d'appeler cette fonction —
+ * évite de coupler un appelant non migré à un adaptateur concret.
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @returns           Hash hex de 64 caractères ("000..." pour la première transaction)
  */
 export async function getHashPrecedent(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<string> {
-  const row = await db.prepare(`
+  const row = await db.get<{ hash_courant: string }>(`
     SELECT hash_courant FROM journal_nf525
     WHERE  boutique_id = ?
     ORDER  BY id DESC
     LIMIT  1
-  `).bind(boutiqueId).first<{ hash_courant: string }>()
+  `, [boutiqueId])
 
   return row?.hash_courant ?? '0000000000000000000000000000000000000000000000000000000000000000'
 }
@@ -162,21 +168,21 @@ export async function getHashPrecedent(
 /**
  * Récupère le hash de la dernière clôture journalière.
  * Utilisé pour chaîner les clôtures inter-journées (hash_precedent de la clôture).
- *
- * @param db          Binding D1 Cloudflare
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @returns           Hash hex 64 caractères ("000..." si aucune clôture précédente)
  */
 async function getHashPrecedentCloture(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<string> {
-  const row = await db.prepare(`
+  const row = await db.get<{ hash_cloture: string }>(`
     SELECT hash_cloture FROM clotures_journalieres
     WHERE  boutique_id = ?
     ORDER  BY id DESC
     LIMIT  1
-  `).bind(boutiqueId).first<{ hash_cloture: string }>()
+  `, [boutiqueId])
 
   return row?.hash_cloture ?? '0000000000000000000000000000000000000000000000000000000000000000'
 }
@@ -195,6 +201,9 @@ async function getHashPrecedentCloture(
  *  6. Insertion du paiement
  *  7. Calcul du rendu monnaie si paiement en espèces
  *  8. Insertion dans `journal_nf525` avec hash SHA-256 chaîné
+ *
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend de `nextNumero()`, qui prend encore un `D1Database` brut.
  *
  * @param db          Binding D1 Cloudflare
  * @param boutiqueId  Identifiant de la boutique
@@ -295,18 +304,33 @@ export async function createVente(
 
     // Décrémenter stock si produit
     if (l.produit_id) {
-      await db.prepare(`
-        UPDATE produits
-        SET stock_actuel = MAX(0, stock_actuel - ?), updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND boutique_id = ?
-      `).bind(l.quantite, l.produit_id, boutiqueId).run()
+      const produit = await db.prepare(
+        'SELECT stock_actuel FROM produits WHERE id = ? AND boutique_id = ?'
+      ).bind(l.produit_id, boutiqueId).first<{ stock_actuel: number }>()
 
-      // Mouvement de stock
-      await db.prepare(`
-        INSERT INTO mouvements_stock
-          (boutique_id, produit_id, type_mouvement, quantite, raison, reference_id, user_id)
-        VALUES (?, ?, 'sortie', ?, 'Vente POS', ?, ?)
-      `).bind(boutiqueId, l.produit_id, l.quantite, facture.id, userId).run()
+      // Produit inexistant pour cette boutique — aucun mouvement à tracer (même
+      // comportement que l'ancien UPDATE, qui ne touchait aucune ligne dans ce cas)
+      if (produit) {
+        const stockAvant = produit.stock_actuel
+        const stockApres = Math.max(0, stockAvant - l.quantite)
+
+        await db.prepare(`
+          UPDATE produits
+          SET stock_actuel = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND boutique_id = ?
+        `).bind(stockApres, l.produit_id, boutiqueId).run()
+
+        // Mouvement de stock — colonnes alignées sur le schéma réel de
+        // `mouvements_stock` (bug corrigé le 2026-07-12 : `raison`/`reference_id`
+        // n'existent pas, `stock_avant`/`stock_apres` NOT NULL jamais fournis —
+        // faisait échouer TOUTE vente POS d'un produit suivi en stock, en
+        // laissant en plus la facture déjà créée `payee` sans entrée NF525).
+        await db.prepare(`
+          INSERT INTO mouvements_stock
+            (boutique_id, produit_id, type_mouvement, quantite, stock_avant, stock_apres, motif, user_id)
+          VALUES (?, ?, 'sortie', ?, ?, ?, 'Vente POS', ?)
+        `).bind(boutiqueId, l.produit_id, l.quantite, stockAvant, stockApres, userId).run()
+      }
     }
   }
 
@@ -337,7 +361,15 @@ export async function createVente(
   }
 
   // ── 7. Entrée Journal NF525 avec hash chaîné ──────────────────────────────
-  const hashPrecedent  = await getHashPrecedent(db, boutiqueId)
+  // Requête dupliquée de getHashPrecedent() (migrée vers le port Database) —
+  // createVente() reste sur D1Database (dépend de nextNumero(), non porté).
+  const hashPrecedentRow = await db.prepare(`
+    SELECT hash_courant FROM journal_nf525
+    WHERE  boutique_id = ?
+    ORDER  BY id DESC
+    LIMIT  1
+  `).bind(boutiqueId).first<{ hash_courant: string }>()
+  const hashPrecedent = hashPrecedentRow?.hash_courant ?? '0000000000000000000000000000000000000000000000000000000000000000'
   const dateTransaction = dateEmission
   const donneesHash    = buildDonneesHash('vente', numero, totaux.total_ttc, dateTransaction, hashPrecedent)
   const hashCourant    = await sha256(donneesHash)
@@ -377,8 +409,9 @@ export async function createVente(
  * Marque la facture comme `payee`, crée le paiement et trace dans le journal NF525.
  *
  * Cas d'usage : une facture devis/SAV est réglée physiquement au comptoir.
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
  *
- * @param db            Binding D1 Cloudflare
+ * @param db            Port Database
  * @param boutiqueId    Identifiant de la boutique
  * @param userId        Identifiant du caissier
  * @param factureId     Identifiant de la facture à encaisser
@@ -387,30 +420,30 @@ export async function createVente(
  * @throws              Error si facture introuvable ou déjà payée
  */
 export async function enregistrerEncaissement(
-  db:           D1Database,
+  db:           Database,
   boutiqueId:   number,
   userId:       number,
   factureId:    number,
   modePaiement: string
 ): Promise<JournalEntry> {
-  const facture = await db.prepare(`
-    SELECT * FROM factures WHERE id = ? AND boutique_id = ? LIMIT 1
-  `).bind(factureId, boutiqueId).first<any>()
+  const facture = await db.get<any>(
+    'SELECT * FROM factures WHERE id = ? AND boutique_id = ? LIMIT 1', [factureId, boutiqueId]
+  )
 
   if (!facture) throw new Error('Facture introuvable.')
   if (facture.statut === 'payee') throw new Error('Facture déjà payée.')
 
   // Marquer la facture comme payée
-  await db.prepare(`
-    UPDATE factures SET statut = 'payee', updated_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).bind(factureId).run()
+  await db.run(
+    "UPDATE factures SET statut = 'payee', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [factureId]
+  )
 
   // Créer le paiement
-  await db.prepare(`
+  await db.run(`
     INSERT INTO paiements
       (facture_id, boutique_id, montant, mode_paiement, date_paiement, user_id)
     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-  `).bind(factureId, boutiqueId, facture.total_ttc, modePaiement, userId).run()
+  `, [factureId, boutiqueId, facture.total_ttc, modePaiement, userId])
 
   // Entrée Journal NF525
   const hashPrecedent   = await getHashPrecedent(db, boutiqueId)
@@ -418,7 +451,7 @@ export async function enregistrerEncaissement(
   const donneesHash     = buildDonneesHash('encaissement', facture.numero, facture.total_ttc, dateTransaction, hashPrecedent)
   const hashCourant     = await sha256(donneesHash)
 
-  const journal = await db.prepare(`
+  const journal = await db.get<JournalEntry>(`
     INSERT INTO journal_nf525
       (boutique_id, type_transaction, reference_id, reference_numero,
        client_id, montant_ht, montant_tva, montant_ttc,
@@ -426,7 +459,7 @@ export async function enregistrerEncaissement(
        est_cloture, user_id)
     VALUES (?, 'encaissement', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
     RETURNING *
-  `).bind(
+  `, [
     boutiqueId,
     factureId,
     facture.numero,
@@ -439,7 +472,7 @@ export async function enregistrerEncaissement(
     donneesHash,
     hashCourant,
     userId
-  ).first<JournalEntry>()
+  ])
 
   if (!journal) throw new Error('Échec enregistrement journal NF525.')
   return journal
@@ -450,19 +483,23 @@ export async function enregistrerEncaissement(
 /**
  * Retourne le journal de caisse pour une date donnée (défaut : aujourd'hui).
  * Exécute 2 requêtes en parallèle : transactions du jour + clôture éventuelle.
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * "Aujourd'hui" par défaut = `todayParis()` (jour métier français, DST auto)
+ * plutôt que l'UTC du serveur — un journal de caisse doit suivre la journée
+ * commerciale française, pas la date UTC.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
- * @param date        Date ciblée au format "YYYY-MM-DD" (défaut : aujourd'hui)
+ * @param date        Date ciblée au format "YYYY-MM-DD" (défaut : aujourd'hui, heure française)
  * @returns           `{ date, transactions, totaux, est_cloture, cloture? }`
  *                    - `totaux` : agrégat HT/TVA/TTC + nb transactions du jour
  *                    - `est_cloture` : true si une clôture existe pour cette date
  *                    - `cloture` : détail de la clôture si existante
  */
 export async function getCaisseJournal(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
-  date?:      string  // format YYYY-MM-DD — défaut : today
+  date?:      string  // format YYYY-MM-DD — défaut : today (heure française)
 ): Promise<{
   date:         string
   transactions: JournalEntry[]
@@ -475,26 +512,25 @@ export async function getCaisseJournal(
   est_cloture:  boolean
   cloture?:     ClotureSummary
 }> {
-  const targetDate = date ?? new Date().toISOString().slice(0, 10)
+  const targetDate = date ?? todayParis()
 
-  const [rows, cloture] = await Promise.all([
-    db.prepare(`
+  const [transactions, cloture] = await Promise.all([
+    db.all<any>(`
       SELECT j.*, u.prenom || ' ' || u.nom AS caissier_nom
       FROM   journal_nf525 j
       LEFT   JOIN users u ON u.id = j.user_id
       WHERE  j.boutique_id = ?
         AND  DATE(j.date_transaction) = ?
       ORDER  BY j.id ASC
-    `).bind(boutiqueId, targetDate).all<any>(),
+    `, [boutiqueId, targetDate]),
 
-    db.prepare(`
+    db.get<ClotureSummary>(`
       SELECT * FROM clotures_journalieres
       WHERE  boutique_id = ? AND date_cloture = ?
       LIMIT  1
-    `).bind(boutiqueId, targetDate).first<ClotureSummary>(),
+    `, [boutiqueId, targetDate]),
   ])
 
-  const transactions = rows.results ?? []
   const totaux = transactions.reduce(
     (acc, t) => ({
       nb_transactions: acc.nb_transactions + 1,
@@ -531,41 +567,44 @@ export async function getCaisseJournal(
  * IMPORTANT : Conforme NF525 (CGI art. 289) — opération irréversible.
  * Une clôture ne peut pas être annulée ni modifiée.
  *
- * @param db          Binding D1 Cloudflare
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * "Aujourd'hui" par défaut = `todayParis()` (jour métier français, DST auto) —
+ * critique ici : une clôture NF525 doit correspondre à la journée commerciale
+ * française, pas à la date UTC du serveur.
+ *
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @param userId      Identifiant de l'utilisateur effectuant la clôture
- * @param date        Date à clôturer "YYYY-MM-DD" (défaut : aujourd'hui)
+ * @param date        Date à clôturer "YYYY-MM-DD" (défaut : aujourd'hui, heure française)
  * @returns           Résumé de la clôture (`ClotureSummary`)
  * @throws            Error si journée déjà clôturée ou aucune transaction à clôturer
  */
 export async function cloturerJournee(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   userId:     number,
-  date?:      string  // défaut : aujourd'hui
+  date?:      string  // défaut : aujourd'hui (heure française)
 ): Promise<ClotureSummary> {
-  const targetDate = date ?? new Date().toISOString().slice(0, 10)
+  const targetDate = date ?? todayParis()
 
   // Vérifier qu'une clôture n'existe pas déjà
-  const existante = await db.prepare(`
-    SELECT id FROM clotures_journalieres
-    WHERE boutique_id = ? AND date_cloture = ?
-  `).bind(boutiqueId, targetDate).first()
+  const existante = await db.get(
+    'SELECT id FROM clotures_journalieres WHERE boutique_id = ? AND date_cloture = ?',
+    [boutiqueId, targetDate]
+  )
 
   if (existante) {
     throw new Error(`Journée du ${targetDate} déjà clôturée.`)
   }
 
   // Récupérer toutes les transactions non clôturées du jour
-  const rows = await db.prepare(`
+  const transactions = await db.all<JournalEntry>(`
     SELECT * FROM journal_nf525
     WHERE  boutique_id = ?
       AND  DATE(date_transaction) = ?
       AND  est_cloture = 0
     ORDER  BY id ASC
-  `).bind(boutiqueId, targetDate).all<JournalEntry>()
-
-  const transactions = rows.results ?? []
+  `, [boutiqueId, targetDate])
 
   if (transactions.length === 0) {
     throw new Error(`Aucune transaction à clôturer pour le ${targetDate}.`)
@@ -589,23 +628,23 @@ export async function cloturerJournee(
   const hashCloture = await sha256(donneesHashCloture)
 
   // Marquer les transactions comme clôturées
-  await db.prepare(`
+  await db.run(`
     UPDATE journal_nf525
     SET    est_cloture = 1, periode_cloture = ?
     WHERE  boutique_id = ?
       AND  DATE(date_transaction) = ?
       AND  est_cloture = 0
-  `).bind(targetDate, boutiqueId, targetDate).run()
+  `, [targetDate, boutiqueId, targetDate])
 
   // Insérer la clôture
-  const cloture = await db.prepare(`
+  const cloture = await db.get<ClotureSummary>(`
     INSERT INTO clotures_journalieres
       (boutique_id, date_cloture, nb_transactions,
        total_ht, total_tva, total_ttc,
        hash_cloture, hash_precedent, user_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).bind(
+  `, [
     boutiqueId,
     targetDate,
     transactions.length,
@@ -615,7 +654,7 @@ export async function cloturerJournee(
     hashCloture,
     hashPrecedentCloture,
     userId
-  ).first<ClotureSummary>()
+  ])
 
   if (!cloture) throw new Error('Échec enregistrement clôture NF525.')
   return cloture
@@ -631,7 +670,8 @@ export async function cloturerJournee(
  *
  * Cette vérification peut être effectuée par l'administration fiscale ou l'exploitant.
  *
- * @param db          Binding D1 Cloudflare
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @param dateDebut   (optionnel) Début de plage "YYYY-MM-DD" — défaut : toutes
  * @param dateFin     (optionnel) Fin de plage "YYYY-MM-DD"
@@ -639,7 +679,7 @@ export async function cloturerJournee(
  *                    — `anomalies` est vide si la chaîne est intègre
  */
 export async function verifierIntegriteChaine(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   dateDebut?:  string,
   dateFin?:    string
@@ -657,8 +697,7 @@ export async function verifierIntegriteChaine(
   if (dateFin)   { query += ' AND DATE(date_transaction) <= ?'; params.push(dateFin)   }
   query += ' ORDER BY id ASC'
 
-  const rows = await db.prepare(query).bind(...params).all<JournalEntry>()
-  const transactions = rows.results ?? []
+  const transactions = await db.all<JournalEntry>(query, params)
 
   const anomalies: Array<{ id: number; reference_numero: string; details: string }> = []
 
@@ -691,14 +730,19 @@ export async function verifierIntegriteChaine(
 
 /**
  * Retourne les KPIs caisse pour le tableau de bord.
- * Exécute 4 requêtes en parallèle (aujourd'hui, mois, clôtures, dernière clôture).
+ * Exécute 4 requêtes en parallèle (aujourd'hui, mois, clôtures, dernière clôture)
+ * + 1 requête de vérification de clôture du jour.
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * "Aujourd'hui"/"ce mois" = `todayParis()`/`currentMonthParis()` (heure
+ * française, DST auto) plutôt que `DATE('now')`/`strftime(...,'now')` (UTC
+ * serveur) — les KPIs caisse doivent suivre le calendrier commercial français.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @returns           `{ today: { nb_transactions, total_ttc, total_ht, est_cloture }, mois, derniere_cloture?, nb_clotures_mois }`
  */
 export async function getKpisCaisse(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<{
   today: {
@@ -714,42 +758,40 @@ export async function getKpisCaisse(
   derniere_cloture?: string
   nb_clotures_mois:  number
 }> {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayParis()
+  const mois  = currentMonthParis()
 
   const [kpiDay, kpiMois, clotureMois, derniereClot] = await Promise.all([
-    db.prepare(`
+    db.get<{ nb: number; ttc: number; ht: number }>(`
       SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc, COALESCE(SUM(montant_ht),0) as ht
       FROM journal_nf525
       WHERE boutique_id = ? AND DATE(date_transaction) = ?
-    `).bind(boutiqueId, today).first<{ nb: number; ttc: number; ht: number }>(),
+    `, [boutiqueId, today]),
 
-    db.prepare(`
+    db.get<{ nb: number; ttc: number }>(`
       SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc
       FROM journal_nf525
       WHERE boutique_id = ?
-        AND strftime('%Y-%m', date_transaction) = strftime('%Y-%m', 'now')
-    `).bind(boutiqueId).first<{ nb: number; ttc: number }>(),
+        AND strftime('%Y-%m', date_transaction) = ?
+    `, [boutiqueId, mois]),
 
-    db.prepare(`
+    db.get<{ nb: number }>(`
       SELECT COUNT(*) as nb FROM clotures_journalieres
       WHERE boutique_id = ?
-        AND strftime('%Y-%m', date_cloture) = strftime('%Y-%m', 'now')
-    `).bind(boutiqueId).first<{ nb: number }>(),
+        AND strftime('%Y-%m', date_cloture) = ?
+    `, [boutiqueId, mois]),
 
-    db.prepare(`
+    db.get<{ date_cloture: string }>(`
       SELECT date_cloture FROM clotures_journalieres
       WHERE boutique_id = ? ORDER BY id DESC LIMIT 1
-    `).bind(boutiqueId).first<{ date_cloture: string }>(),
-
-    db.prepare(`
-      SELECT id FROM clotures_journalieres WHERE boutique_id = ? AND date_cloture = ? LIMIT 1
-    `).bind(boutiqueId, today).first(),
+    `, [boutiqueId]),
   ])
 
-  // Vérifier si today est clôturé (5ème promesse)
-  const clotureToday = await db.prepare(`
-    SELECT id FROM clotures_journalieres WHERE boutique_id = ? AND date_cloture = ? LIMIT 1
-  `).bind(boutiqueId, today).first()
+  // Vérifier si today est clôturé
+  const clotureToday = await db.get(
+    'SELECT id FROM clotures_journalieres WHERE boutique_id = ? AND date_cloture = ? LIMIT 1',
+    [boutiqueId, today]
+  )
 
   return {
     today: {
@@ -773,24 +815,23 @@ export async function getKpisCaisse(
  * Retourne l'historique des clôtures journalières NF525.
  * Inclut le nom du caissier ayant effectué chaque clôture.
  *
- * @param db          Binding D1 Cloudflare
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @param limit       Nombre maximum de clôtures retournées (défaut : 30)
  * @returns           Liste de `ClotureSummary` enrichis du nom caissier, ordre anti-chronologique
  */
 export async function listClotures(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   limit       = 30
 ): Promise<ClotureSummary[]> {
-  const rows = await db.prepare(`
+  return db.all<any>(`
     SELECT cj.*, u.prenom || ' ' || u.nom AS caissier_nom
     FROM   clotures_journalieres cj
     LEFT   JOIN users u ON u.id = cj.user_id
     WHERE  cj.boutique_id = ?
     ORDER  BY cj.id DESC
     LIMIT  ?
-  `).bind(boutiqueId, limit).all<any>()
-
-  return rows.results ?? []
+  `, [boutiqueId, limit])
 }

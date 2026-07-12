@@ -19,6 +19,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   getTicketForPhoto,
   uploadPhoto,
@@ -92,14 +93,14 @@ const BUFFER_6MB = new ArrayBuffer(6 * 1024 * 1024) // 6 Mo — dépasse la limi
 // ─── getTicketForPhoto() ──────────────────────────────────────────────────────
 
 describe('getTicketForPhoto()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne { boutique_id } si le ticket existe', async () => {
     db.__setResponse(SQL_TICKET_FOR_PHOTO, { boutique_id: 5 })
 
-    const result = await getTicketForPhoto(db as any, 42)
+    const result = await getTicketForPhoto(db, 42)
 
     expect(result).toEqual({ boutique_id: 5 })
   })
@@ -107,7 +108,7 @@ describe('getTicketForPhoto()', () => {
   it('retourne null si le ticket est introuvable ou inactif', async () => {
     db.__setResponse(SQL_TICKET_FOR_PHOTO, null)
 
-    const result = await getTicketForPhoto(db as any, 999)
+    const result = await getTicketForPhoto(db, 999)
 
     expect(result).toBeNull()
   })
@@ -115,7 +116,7 @@ describe('getTicketForPhoto()', () => {
   it('transmet ticketId en binding SQL', async () => {
     db.__setResponse(SQL_TICKET_FOR_PHOTO, { boutique_id: 1 })
 
-    await getTicketForPhoto(db as any, 42)
+    await getTicketForPhoto(db, 42)
 
     const calls = db.__getCalls()
     const call = calls.find(c => c.sql === SQL_TICKET_FOR_PHOTO)
@@ -187,14 +188,14 @@ describe('uploadPhoto()', () => {
 // ─── listPhotos() ─────────────────────────────────────────────────────────────
 
 describe('listPhotos()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne un tableau vide si aucune photo', async () => {
     db.__setListResponse(SQL_LIST_PHOTOS, [])
 
-    const result = await listPhotos(db as any, 42)
+    const result = await listPhotos(db, 42)
 
     expect(result).toEqual([])
   })
@@ -203,7 +204,7 @@ describe('listPhotos()', () => {
     const PHOTO_APRES = { ...PHOTO_ROW, id: 8, type_photo: 'apres' } as PhotoRow
     db.__setListResponse(SQL_LIST_PHOTOS, [PHOTO_ROW, PHOTO_APRES])
 
-    const result = await listPhotos(db as any, 42)
+    const result = await listPhotos(db, 42)
 
     expect(result).toHaveLength(2)
     expect(result[0].type_photo).toBe('avant')
@@ -212,7 +213,7 @@ describe('listPhotos()', () => {
   it('transmet ticketId en binding SQL', async () => {
     db.__setListResponse(SQL_LIST_PHOTOS, [])
 
-    await listPhotos(db as any, 99)
+    await listPhotos(db, 99)
 
     const calls = db.__getCalls()
     const call = calls.find(c => c.sql === SQL_LIST_PHOTOS)
@@ -224,14 +225,14 @@ describe('listPhotos()', () => {
 // ─── getPhotoById() ───────────────────────────────────────────────────────────
 
 describe('getPhotoById()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne la PhotoRow si elle existe', async () => {
     db.__setResponse(SQL_GET_PHOTO, PHOTO_ROW)
 
-    const result = await getPhotoById(db as any, 7)
+    const result = await getPhotoById(db, 7)
 
     expect(result).toEqual(PHOTO_ROW)
   })
@@ -239,7 +240,7 @@ describe('getPhotoById()', () => {
   it('retourne null si la photo est introuvable', async () => {
     db.__setResponse(SQL_GET_PHOTO, null)
 
-    const result = await getPhotoById(db as any, 999)
+    const result = await getPhotoById(db, 999)
 
     expect(result).toBeNull()
   })
@@ -247,7 +248,7 @@ describe('getPhotoById()', () => {
   it('transmet photoId en binding SQL', async () => {
     db.__setResponse(SQL_GET_PHOTO, PHOTO_ROW)
 
-    await getPhotoById(db as any, 7)
+    await getPhotoById(db, 7)
 
     const calls = db.__getCalls()
     const call = calls.find(c => c.sql === SQL_GET_PHOTO)

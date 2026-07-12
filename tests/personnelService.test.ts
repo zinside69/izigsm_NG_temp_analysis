@@ -20,6 +20,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   TRANSITIONS_POINTAGE,
   STATUT_LABELS,
@@ -37,7 +38,7 @@ import {
 
 // ─── SQL normalisés ───────────────────────────────────────────────────────────
 
-const SQL_LIST_EMPLOYES = `SELECT e.id, e.prenom, e.nom, e.poste, e.email, e.telephone, e.statut_pointage, e.commission_pct, e.taux_horaire, e.actif, p.horodatage as dernier_pointage, ROUND( (SELECT SUM( (julianday(p2.horodatage) - julianday(p1.horodatage)) * 24 ) FROM pointages p1 JOIN pointages p2 ON p2.employe_id = p1.employe_id AND p2.id = ( SELECT MIN(id) FROM pointages WHERE employe_id = p1.employe_id AND id > p1.id AND DATE(horodatage) = DATE('now') ) WHERE p1.employe_id = e.id AND (p1.statut_avant = 'absent' OR p1.statut_avant = 'pause') AND p1.statut_apres = 'en_poste' AND DATE(p1.horodatage) = DATE('now') ), 2 ) as heures_aujourd_hui FROM employes e LEFT JOIN pointages p ON p.id = ( SELECT MAX(id) FROM pointages WHERE employe_id = e.id ) WHERE e.boutique_id = ? AND e.actif = 1 ORDER BY e.prenom, e.nom`
+const SQL_LIST_EMPLOYES = `SELECT e.id, e.prenom, e.nom, e.poste, e.email, e.telephone, e.statut_pointage, e.commission_pct, e.taux_horaire, e.actif, p.horodatage as dernier_pointage, ROUND( (SELECT SUM( (julianday(p2.horodatage) - julianday(p1.horodatage)) * 24 ) FROM pointages p1 JOIN pointages p2 ON p2.employe_id = p1.employe_id AND p2.id = ( SELECT MIN(id) FROM pointages WHERE employe_id = p1.employe_id AND id > p1.id AND DATE(horodatage) = ? ) WHERE p1.employe_id = e.id AND (p1.statut_avant = 'absent' OR p1.statut_avant = 'pause') AND p1.statut_apres = 'en_poste' AND DATE(p1.horodatage) = ? ), 2 ) as heures_aujourd_hui FROM employes e LEFT JOIN pointages p ON p.id = ( SELECT MAX(id) FROM pointages WHERE employe_id = e.id ) WHERE e.boutique_id = ? AND e.actif = 1 ORDER BY e.prenom, e.nom`
 
 const SQL_GET_EMPLOYE = `SELECT * FROM employes WHERE id = ? AND actif = 1`
 
@@ -57,7 +58,7 @@ const SQL_INSERT_POINTAGE = `INSERT INTO pointages (employe_id, boutique_id, sta
 
 const SQL_UPDATE_STATUT_EMPLOYE = `UPDATE employes SET statut_pointage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
 
-const SQL_POINTAGES_AUJOURDHUI = `SELECT p.*, u.prenom || ' ' || u.nom as valide_par_nom FROM pointages p LEFT JOIN users u ON u.id = p.valide_par WHERE p.employe_id = ? AND DATE(p.horodatage) = DATE('now') ORDER BY p.horodatage ASC`
+const SQL_POINTAGES_AUJOURDHUI = `SELECT p.*, u.prenom || ' ' || u.nom as valide_par_nom FROM pointages p LEFT JOIN users u ON u.id = p.valide_par WHERE p.employe_id = ? AND DATE(p.horodatage) = ? ORDER BY p.horodatage ASC`
 
 const SQL_RAPPORT = `SELECT e.id, e.prenom, e.nom, e.poste, COUNT(DISTINCT DATE(p.horodatage)) as jours_presents, MIN(p.horodatage) as premiere_entree, MAX(p.horodatage) as derniere_sortie FROM employes e LEFT JOIN pointages p ON p.employe_id = e.id AND DATE(p.horodatage) BETWEEN ? AND ? AND p.statut_apres = 'en_poste' WHERE e.boutique_id = ? AND e.actif = 1 GROUP BY e.id ORDER BY e.nom, e.prenom`
 
@@ -102,16 +103,16 @@ describe('STATUT_LABELS', () => {
 // ─── listEmployes ─────────────────────────────────────────────────────────────
 
 describe('listEmployes', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne la liste des employés actifs', async () => {
     db.__setListResponse(SQL_LIST_EMPLOYES, [EMPLOYE_ROW])
 
-    const result = await listEmployes(db as any, 1)
+    const result = await listEmployes(db, 1)
 
     expect(result).toHaveLength(1)
     expect(result[0].prenom).toBe('Jean')
@@ -120,29 +121,33 @@ describe('listEmployes', () => {
   it('retourne tableau vide si aucun employé', async () => {
     db.__setListResponse(SQL_LIST_EMPLOYES, [])
 
-    const result = await listEmployes(db as any, 1)
+    const result = await listEmployes(db, 1)
 
     expect(result).toHaveLength(0)
   })
 
-  it('boutique_id transmis comme binding', async () => {
+  it('boutique_id transmis comme dernier binding (après les 2 dates du jour)', async () => {
     db.__setListResponse(SQL_LIST_EMPLOYES, [])
 
-    await listEmployes(db as any, 42)
+    await listEmployes(db, 42)
 
     const calls = db.__getCalls()
     const listCall = calls.find(c => c.sql.includes('FROM employes e'))
-    expect(listCall!.params[0]).toBe(42)
+    expect(listCall!.params).toHaveLength(3)
+    expect(listCall!.params[2]).toBe(42)
+    // Les 2 premiers params sont todayParis() (YYYY-MM-DD), identiques entre eux
+    expect(listCall!.params[0]).toBe(listCall!.params[1])
+    expect(listCall!.params[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })
 
 // ─── getEmploye ───────────────────────────────────────────────────────────────
 
 describe('getEmploye', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne employé + pointages si trouvé', async () => {
@@ -151,7 +156,7 @@ describe('getEmploye', () => {
       { id: 1, statut_apres: 'en_poste', horodatage: '2026-07-05T08:00:00Z' },
     ])
 
-    const result = await getEmploye(db as any, 3)
+    const result = await getEmploye(db, 3)
 
     expect(result).not.toBeNull()
     expect(result!.prenom).toBe('Jean')
@@ -161,7 +166,7 @@ describe('getEmploye', () => {
   it('retourne null si employé introuvable', async () => {
     db.__setResponse(SQL_GET_EMPLOYE, null)
 
-    const result = await getEmploye(db as any, 999)
+    const result = await getEmploye(db, 999)
 
     expect(result).toBeNull()
   })
@@ -170,7 +175,7 @@ describe('getEmploye', () => {
     db.__setResponse(SQL_GET_EMPLOYE, EMPLOYE_ROW)
     db.__setListResponse(SQL_GET_POINTAGES, [])
 
-    const result = await getEmploye(db as any, 3)
+    const result = await getEmploye(db, 3)
 
     expect(result!.pointages).toHaveLength(0)
   })
@@ -231,14 +236,14 @@ describe('createEmploye', () => {
 // ─── updateEmploye ────────────────────────────────────────────────────────────
 
 describe('updateEmploye', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('SQL UPDATE envoyé avec le bon id en dernier param', async () => {
-    await updateEmploye(db as any, 7, { prenom: 'A', nom: 'B' })
+    await updateEmploye(db, 7, { prenom: 'A', nom: 'B' })
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.includes('UPDATE employes SET prenom'))
@@ -246,7 +251,7 @@ describe('updateEmploye', () => {
   })
 
   it('poste défaut = technicien si non fourni', async () => {
-    await updateEmploye(db as any, 3, { prenom: 'A', nom: 'B' })
+    await updateEmploye(db, 3, { prenom: 'A', nom: 'B' })
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.includes('UPDATE employes SET prenom'))
@@ -255,7 +260,7 @@ describe('updateEmploye', () => {
   })
 
   it('commission_pct défaut = 0 si non fourni', async () => {
-    await updateEmploye(db as any, 3, { prenom: 'A', nom: 'B' })
+    await updateEmploye(db, 3, { prenom: 'A', nom: 'B' })
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.includes('UPDATE employes SET prenom'))
@@ -266,14 +271,14 @@ describe('updateEmploye', () => {
 // ─── desactiverEmploye ────────────────────────────────────────────────────────
 
 describe('desactiverEmploye', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('SQL UPDATE actif=0 envoyé', async () => {
-    await desactiverEmploye(db as any, 3)
+    await desactiverEmploye(db, 3)
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql === SQL_DESACTIVER)
@@ -282,7 +287,7 @@ describe('desactiverEmploye', () => {
   })
 
   it('SQL SET actif = 0 WHERE id = ?', async () => {
-    await desactiverEmploye(db as any, 99)
+    await desactiverEmploye(db, 99)
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.includes('SET actif = 0 WHERE id = ?'))
@@ -293,10 +298,10 @@ describe('desactiverEmploye', () => {
 // ─── pointer ──────────────────────────────────────────────────────────────────
 
 describe('pointer', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   function setupEmploye(statut: StatutPointage) {
@@ -308,7 +313,7 @@ describe('pointer', () => {
   it('absent → en_poste : transition automatique', async () => {
     setupEmploye('absent')
 
-    const result = await pointer(db as any, 3, 5)
+    const result = await pointer(db, 3, 5)
 
     expect(result.statut_avant).toBe('absent')
     expect(result.statut_apres).toBe('en_poste')
@@ -317,7 +322,7 @@ describe('pointer', () => {
   it('en_poste → pause : transition explicite', async () => {
     setupEmploye('en_poste')
 
-    const result = await pointer(db as any, 3, 5, { statut: 'pause' })
+    const result = await pointer(db, 3, 5, { statut: 'pause' })
 
     expect(result.statut_apres).toBe('pause')
   })
@@ -325,7 +330,7 @@ describe('pointer', () => {
   it('en_poste → termine : transition explicite', async () => {
     setupEmploye('en_poste')
 
-    const result = await pointer(db as any, 3, 5, { statut: 'termine' })
+    const result = await pointer(db, 3, 5, { statut: 'termine' })
 
     expect(result.statut_apres).toBe('termine')
   })
@@ -333,7 +338,7 @@ describe('pointer', () => {
   it('termine → aucune transition : lève JOURNEE_TERMINEE', async () => {
     setupEmploye('termine')
 
-    await expect(pointer(db as any, 3, 5)).rejects.toMatchObject({
+    await expect(pointer(db, 3, 5)).rejects.toMatchObject({
       code: 'JOURNEE_TERMINEE',
     })
   })
@@ -341,7 +346,7 @@ describe('pointer', () => {
   it('transition invalide : lève TRANSITION_INVALIDE', async () => {
     setupEmploye('absent')
 
-    await expect(pointer(db as any, 3, 5, { statut: 'termine' })).rejects.toMatchObject({
+    await expect(pointer(db, 3, 5, { statut: 'termine' })).rejects.toMatchObject({
       code: 'TRANSITION_INVALIDE',
     })
   })
@@ -349,13 +354,13 @@ describe('pointer', () => {
   it('employé introuvable : lève Error', async () => {
     db.__setResponse(SQL_GET_EMPLOYE_POINTER, null)
 
-    await expect(pointer(db as any, 999, 5)).rejects.toThrow('Employé introuvable.')
+    await expect(pointer(db, 999, 5)).rejects.toThrow('Employé introuvable.')
   })
 
   it('prochaines_transitions = TRANSITIONS_POINTAGE[statut_apres]', async () => {
     setupEmploye('absent')
 
-    const result = await pointer(db as any, 3, 5)
+    const result = await pointer(db, 3, 5)
 
     expect(result.prochaines_transitions).toEqual(TRANSITIONS_POINTAGE['en_poste'])
   })
@@ -363,7 +368,7 @@ describe('pointer', () => {
   it('INSERT pointage + UPDATE employe écrits', async () => {
     setupEmploye('absent')
 
-    await pointer(db as any, 3, 5)
+    await pointer(db, 3, 5)
 
     const calls = db.__getCalls()
     expect(calls.find(c => c.sql.includes('INSERT INTO pointages'))).toBeDefined()
@@ -374,16 +379,16 @@ describe('pointer', () => {
 // ─── pointagesAujourdhui ──────────────────────────────────────────────────────
 
 describe('pointagesAujourdhui', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne tableau vide + heures_travaillees=0 si aucun pointage', async () => {
     db.__setListResponse(SQL_POINTAGES_AUJOURDHUI, [])
 
-    const result = await pointagesAujourdhui(db as any, 3)
+    const result = await pointagesAujourdhui(db, 3)
 
     expect(result.pointages).toHaveLength(0)
     expect(result.heures_travaillees).toBe(0)
@@ -398,7 +403,7 @@ describe('pointagesAujourdhui', () => {
       { id: 2, statut_apres: 'pause',    horodatage: fin   },
     ])
 
-    const result = await pointagesAujourdhui(db as any, 3)
+    const result = await pointagesAujourdhui(db, 3)
 
     expect(result.heures_travaillees).toBe(2) // 2h exactes
   })
@@ -413,7 +418,7 @@ describe('pointagesAujourdhui', () => {
       { statut_apres: 'termine',  horodatage: t(13) },  // fin bloc 2 → 2h
     ])
 
-    const result = await pointagesAujourdhui(db as any, 3)
+    const result = await pointagesAujourdhui(db, 3)
 
     expect(result.heures_travaillees).toBe(4) // 2+2
   })
@@ -423,7 +428,7 @@ describe('pointagesAujourdhui', () => {
       { id: 1, statut_apres: 'en_poste', horodatage: '2026-07-05T08:00:00Z' },
     ])
 
-    const result = await pointagesAujourdhui(db as any, 3)
+    const result = await pointagesAujourdhui(db, 3)
 
     expect(result.pointages).toHaveLength(1)
   })
@@ -432,10 +437,10 @@ describe('pointagesAujourdhui', () => {
 // ─── rapportPointage ──────────────────────────────────────────────────────────
 
 describe('rapportPointage', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne le résultat SQL groupé par employé', async () => {
@@ -443,7 +448,7 @@ describe('rapportPointage', () => {
       { id: 3, prenom: 'Jean', nom: 'Tech', jours_presents: 5 },
     ])
 
-    const result = await rapportPointage(db as any, 1, '2026-07-01', '2026-07-05')
+    const result = await rapportPointage(db, 1, '2026-07-01', '2026-07-05')
 
     expect(result).toHaveLength(1)
     expect(result[0].jours_presents).toBe(5)
@@ -452,7 +457,7 @@ describe('rapportPointage', () => {
   it('bindings : dateDebut, dateFin, boutiqueId', async () => {
     db.__setListResponse(SQL_RAPPORT, [])
 
-    await rapportPointage(db as any, 99, '2026-07-01', '2026-07-31')
+    await rapportPointage(db, 99, '2026-07-01', '2026-07-31')
 
     const calls = db.__getCalls()
     const rapportCall = calls.find(c => c.sql.includes('jours_presents'))
@@ -465,16 +470,16 @@ describe('rapportPointage', () => {
 // ─── statutsTempsReel ─────────────────────────────────────────────────────────
 
 describe('statutsTempsReel', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { data, resume, details }', async () => {
     db.__setListResponse(SQL_STATUTS_TEMPS_REEL, [])
 
-    const result = await statutsTempsReel(db as any, 1)
+    const result = await statutsTempsReel(db, 1)
 
     expect(result).toHaveProperty('data')
     expect(result).toHaveProperty('resume')
@@ -487,7 +492,7 @@ describe('statutsTempsReel', () => {
       { id: 2, statut_pointage: 'absent',   prenom: 'C', nom: 'D', poste: 'tech', depuis: null },
     ])
 
-    const result = await statutsTempsReel(db as any, 1)
+    const result = await statutsTempsReel(db, 1)
 
     expect(result.resume.total).toBe(2)
     expect(result.resume.en_poste).toBe(1)
@@ -500,7 +505,7 @@ describe('statutsTempsReel', () => {
       { id: 2, statut_pointage: 'pause',    prenom: 'C', nom: 'D', poste: 'tech', depuis: null },
     ])
 
-    const result = await statutsTempsReel(db as any, 1)
+    const result = await statutsTempsReel(db, 1)
 
     expect(result.details['en_poste']).toHaveLength(1)
     expect(result.details['pause']).toHaveLength(1)
@@ -511,7 +516,7 @@ describe('statutsTempsReel', () => {
       { id: 1, statut_pointage: 'absent', prenom: 'A', nom: 'B', poste: 'tech', depuis: null },
     ])
 
-    const result = await statutsTempsReel(db as any, 1)
+    const result = await statutsTempsReel(db, 1)
 
     expect(result.resume.pause).toBe(0)
     expect(result.resume.termine).toBe(0)

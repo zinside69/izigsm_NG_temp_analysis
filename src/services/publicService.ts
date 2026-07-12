@@ -1,9 +1,15 @@
+import type { Database } from '../ports/database'
+
 /**
  * @module publicService
  * @description Model layer — accès aux données pour les routes publiques (sans authentification).
  *
  * Routes consommatrices : `routes/public.ts`
  * Principes : P1 (0 SQL dans les controllers) · P4 (JSDoc exhaustif)
+ *
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) — les 8
+ * fonctions sont des lectures/écritures publiques sans `auditLog()` (action
+ * anonyme, pas d'utilisateur à tracer), aucune ne dépend de `D1Database` direct.
  *
  * Fonctions exportées :
  *   getTicketPublicByToken(db, token)       — Suivi ticket client (JOIN clients + boutiques)
@@ -99,15 +105,15 @@ export interface ServicePublic {
  * Retourne les données publiques d'un ticket à partir de son tracking_token.
  * Fait un JOIN clients + boutiques pour exposer les coordonnées utiles au client.
  *
- * @param db    - Instance D1Database (Cloudflare binding)
+ * @param db    - Port Database (implémentation D1 aujourd'hui, Postgres à la bascule VPS)
  * @param token - Valeur du `tracking_token` du ticket (≥ 16 caractères)
  * @returns     `TicketPublic` si trouvé et actif, `null` sinon
  */
 export async function getTicketPublicByToken(
-  db:    D1Database,
+  db:    Database,
   token: string
 ): Promise<TicketPublic | null> {
-  return db.prepare(`
+  return db.get<TicketPublic>(`
     SELECT
       t.id,
       t.numero,
@@ -134,7 +140,7 @@ export async function getTicketPublicByToken(
     JOIN   clients  c ON c.id = t.client_id
     JOIN   boutiques b ON b.id = t.boutique_id
     WHERE  t.tracking_token = ? AND t.actif = 1
-  `).bind(token).first<TicketPublic>()
+  `, [token])
 }
 
 // ─── Boutique publique ────────────────────────────────────────────────────────
@@ -143,41 +149,41 @@ export async function getTicketPublicByToken(
  * Retourne les informations publiques d'une boutique à partir de son slug.
  * Seules les boutiques actives (`actif = 1`) sont retournées.
  *
- * @param db   - Instance D1Database
+ * @param db   - Port Database
  * @param slug - Slug URL de la boutique (ex. `"izigsm-paris-11"`)
  * @returns    `BoutiquePublic` si trouvée et active, `null` sinon
  */
 export async function getBoutiquePublicBySlug(
-  db:   D1Database,
+  db:   Database,
   slug: string
 ): Promise<BoutiquePublic | null> {
-  return db.prepare(`
+  return db.get<BoutiquePublic>(`
     SELECT id, nom, siret, adresse, code_postal, ville, telephone, email,
            site_web, logo_url, description, horaires, slug,
            facebook_url, instagram_url, google_maps_url
     FROM boutiques
     WHERE slug = ? AND actif = 1
-  `).bind(slug).first<BoutiquePublic>()
+  `, [slug])
 }
 
 /**
  * Retourne les compteurs publics d'activité d'une boutique.
  * Utilisé sur la vitrine pour afficher « N réparations effectuées ».
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID interne de la boutique
  * @returns          `StatsBoutiquePublic` (never null — fallback 0 si aucune donnée)
  */
 export async function getStatsBoutiquePublic(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<StatsBoutiquePublic> {
-  const row = await db.prepare(`
+  const row = await db.get<StatsBoutiquePublic>(`
     SELECT
       COUNT(*) AS total_tickets,
       SUM(CASE WHEN statut = 'DELIVERED' THEN 1 ELSE 0 END) AS tickets_done
     FROM tickets WHERE boutique_id = ? AND actif = 1
-  `).bind(boutiqueId).first<StatsBoutiquePublic>()
+  `, [boutiqueId])
 
   return {
     total_tickets: row?.total_tickets ?? 0,
@@ -191,39 +197,37 @@ export async function getStatsBoutiquePublic(
  * Résout un slug en identifiant et nom de boutique (accès minimal).
  * Utilisé avant de charger le catalogue pour ne pas joindre toutes les colonnes.
  *
- * @param db   - Instance D1Database
+ * @param db   - Port Database
  * @param slug - Slug URL de la boutique
  * @returns    `{ id, nom }` si active, `null` sinon
  */
 export async function getBoutiqueIdBySlug(
-  db:   D1Database,
+  db:   Database,
   slug: string
 ): Promise<BoutiqueSlugRef | null> {
-  return db.prepare(
-    'SELECT id, nom FROM boutiques WHERE slug = ? AND actif = 1'
-  ).bind(slug).first<BoutiqueSlugRef>()
+  return db.get<BoutiqueSlugRef>(
+    'SELECT id, nom FROM boutiques WHERE slug = ? AND actif = 1', [slug]
+  )
 }
 
 /**
  * Retourne les catégories de services racines (sans parent) actives d'une boutique.
  * Triées par ordre d'affichage puis par nom.
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @returns          Liste de `CategoriePublique` (peut être vide)
  */
 export async function getCategoriesPubliques(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<CategoriePublique[]> {
-  const rows = await db.prepare(`
+  return db.all<CategoriePublique>(`
     SELECT id, nom, description, couleur, ordre
     FROM categories_services
     WHERE boutique_id = ? AND actif = 1 AND parent_id IS NULL
     ORDER BY ordre ASC, nom ASC
-  `).bind(boutiqueId).all<CategoriePublique>()
-
-  return rows.results ?? []
+  `, [boutiqueId])
 }
 
 /**
@@ -231,23 +235,21 @@ export async function getCategoriesPubliques(
  * Le prix TTC est calculé côté appelant (`prix_ht × (1 + tva_taux/100)`).
  * Triés par catégorie puis par nom.
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @returns          Liste de `ServicePublic` (peut être vide)
  */
 export async function getServicesPublics(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<ServicePublic[]> {
-  const rows = await db.prepare(`
+  return db.all<ServicePublic>(`
     SELECT s.id, s.nom, s.description, s.prix_ht, s.tva_taux,
            s.duree_minutes, s.categorie_id
     FROM   services s
     WHERE  s.boutique_id = ? AND s.actif = 1
     ORDER  BY s.categorie_id ASC, s.nom ASC
-  `).bind(boutiqueId).all<ServicePublic>()
-
-  return rows.results ?? []
+  `, [boutiqueId])
 }
 
 // ─── Prise de RDV public (MOD-14) ────────────────────────────────────────────
@@ -278,13 +280,13 @@ export interface RdvPublicResult {
  *  4. Éliminer les slots déjà occupés (chevauchement)
  *  5. Éliminer les slots dans le passé
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param date       - Date cible au format "YYYY-MM-DD"
  * @returns          Liste de créneaux disponibles (peut être vide)
  */
 export async function getDisponibilites(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   date:       string
 ): Promise<CreneauDisponible[]> {
@@ -293,14 +295,13 @@ export async function getDisponibilites(
   const dayOfWeek  = dateObj.getDay() || 7          // 0 (dimanche) → 7
 
   // 1. Plages horaires configurées pour ce jour
-  const creneauxRows = await db.prepare(`
+  const plages = await db.all<{ heure_debut: string; heure_fin: string; duree_slot: number }>(`
     SELECT heure_debut, heure_fin, duree_slot
     FROM boutique_creneaux
     WHERE boutique_id = ? AND jour_semaine = ? AND actif = 1
     ORDER BY heure_debut ASC
-  `).bind(boutiqueId, dayOfWeek).all<{ heure_debut: string; heure_fin: string; duree_slot: number }>()
+  `, [boutiqueId, dayOfWeek])
 
-  const plages = creneauxRows.results ?? []
   if (plages.length === 0) return []
 
   // 2. Générer tous les slots possibles
@@ -326,16 +327,14 @@ export async function getDisponibilites(
   }
 
   // 3. RDV existants non-annulés sur cette date
-  const rdvRows = await db.prepare(`
+  const rdvExistants = await db.all<{ debut: string; fin: string }>(`
     SELECT debut, fin
     FROM rendez_vous
     WHERE boutique_id = ? AND actif = 1
       AND DATE(debut) = ?
       AND statut NOT IN ('CANCELLED')
     ORDER BY debut ASC
-  `).bind(boutiqueId, date).all<{ debut: string; fin: string }>()
-
-  const rdvExistants = rdvRows.results ?? []
+  `, [boutiqueId, date])
 
   // 4 & 5. Filtrer : slot non occupé ET dans le futur
   const now = Date.now()
@@ -379,14 +378,14 @@ export async function getDisponibilites(
  *  - `nom_client` ou `telephone_client` requis
  *  - `service_nom` utilisé comme titre si `titre` absent
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  * @param body       - Données du formulaire public
  * @returns          `RdvPublicResult` avec id + ical_token
  * @throws           Error si validation échoue ou insertion échoue
  */
 export async function createRdvPublic(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   body:       any
 ): Promise<RdvPublicResult> {
@@ -415,7 +414,7 @@ export async function createRdvPublic(
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   const token = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 
-  const result = await db.prepare(`
+  const result = await db.get<RdvPublicResult>(`
     INSERT INTO rendez_vous
       (boutique_id, client_id, ticket_id, user_id,
        titre, description, debut, fin, duree_minutes,
@@ -424,7 +423,7 @@ export async function createRdvPublic(
        rappel_minutes, ical_token, couleur, notes)
     VALUES (?,NULL,NULL,NULL,?,?,?,?,?,'PENDING',?,?,?,60,?,'#F59E0B',?)
     RETURNING id, ical_token, debut, fin, titre
-  `).bind(
+  `, [
     boutiqueId,
     titre,
     email_client ? `Email : ${email_client}` : null,
@@ -436,7 +435,7 @@ export async function createRdvPublic(
     (telephone_client || '').slice(0, 30),
     token,
     (notes || '').slice(0, 500) || null
-  ).first<RdvPublicResult>()
+  ])
 
   if (!result?.id) throw new Error('Erreur lors de la création du rendez-vous.')
   return result

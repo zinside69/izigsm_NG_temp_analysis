@@ -27,10 +27,14 @@ import {
   createRdvPublic,
 } from '../services/publicService'
 import { searchEntreprises } from '../services/sirenService'
+import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
+// par les fonctions de publicService.ts, entièrement migrées (Ports & Adapters, 2026-07-12).
+type Variables = { db: Database }
 
-const pub = new Hono<{ Bindings: Bindings }>()
+const pub = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // CORS large pour les pages publiques (clients sans compte)
 pub.use('/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'OPTIONS'] }))
@@ -61,7 +65,9 @@ const STATUT_DEVIS_CLIENT: Record<string, { label: string; description: string; 
   annule:  { label: 'Annulé',             description: 'Ce devis a été annulé par le technicien.',                      emoji: '🚫', peutRepondre: false },
 }
 
-// ─── Suivi ticket par token ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// SUIVI TICKET PAR TOKEN
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/public/ticket/:token
@@ -76,7 +82,7 @@ pub.get('/ticket/:token', async (c) => {
     if (!token || token.length < 16)
       return c.json({ success: false, error: 'Token invalide.' }, 400)
 
-    const ticket = await getTicketPublicByToken(c.env.DB, token)
+    const ticket = await getTicketPublicByToken(c.get('db'), token)
     if (!ticket)
       return c.json({ success: false, error: 'Ticket introuvable ou lien invalide.' }, 404)
 
@@ -117,7 +123,9 @@ pub.get('/ticket/:token', async (c) => {
   }
 })
 
-// ─── Vitrine boutique ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// VITRINE BOUTIQUE & CATALOGUE
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/public/boutique/:slug
@@ -129,11 +137,11 @@ pub.get('/ticket/:token', async (c) => {
 pub.get('/boutique/:slug', async (c) => {
   try {
     const slug     = c.req.param('slug').toLowerCase()
-    const boutique = await getBoutiquePublicBySlug(c.env.DB, slug)
+    const boutique = await getBoutiquePublicBySlug(c.get('db'), slug)
     if (!boutique)
       return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
-    const stats = await getStatsBoutiquePublic(c.env.DB, boutique.id)
+    const stats = await getStatsBoutiquePublic(c.get('db'), boutique.id)
 
     return c.json({
       success: true,
@@ -158,13 +166,13 @@ pub.get('/boutique/:slug', async (c) => {
 pub.get('/catalogue/:slug', async (c) => {
   try {
     const slug     = c.req.param('slug').toLowerCase()
-    const boutique = await getBoutiqueIdBySlug(c.env.DB, slug)
+    const boutique = await getBoutiqueIdBySlug(c.get('db'), slug)
     if (!boutique)
       return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
     const [categories, services] = await Promise.all([
-      getCategoriesPubliques(c.env.DB, boutique.id),
-      getServicesPublics(c.env.DB, boutique.id),
+      getCategoriesPubliques(c.get('db'), boutique.id),
+      getServicesPublics(c.get('db'), boutique.id),
     ])
 
     // Grouper services par catégorie + calculer prix TTC
@@ -195,7 +203,9 @@ pub.get('/catalogue/:slug', async (c) => {
   }
 })
 
-// ─── Devis public (accès client sans authentification) ───────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// DEVIS PUBLIC (accès client sans authentification)
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/public/devis/:token
@@ -322,7 +332,9 @@ pub.post('/devis/:token/repondre', async (c) => {
   }
 })
 
-// ─── Disponibilités (MOD-14) ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// DISPONIBILITÉS & RDV PUBLIC (MOD-14)
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/public/boutique/:slug/disponibilites?date=YYYY-MM-DD
@@ -335,7 +347,7 @@ pub.post('/devis/:token/repondre', async (c) => {
 pub.get('/boutique/:slug/disponibilites', async (c) => {
   try {
     const slug     = c.req.param('slug').toLowerCase()
-    const boutique = await getBoutiqueIdBySlug(c.env.DB, slug)
+    const boutique = await getBoutiqueIdBySlug(c.get('db'), slug)
     if (!boutique)
       return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
@@ -347,7 +359,7 @@ pub.get('/boutique/:slug/disponibilites', async (c) => {
       date = tomorrow.toISOString().slice(0, 10)
     }
 
-    const creneaux = await getDisponibilites(c.env.DB, boutique.id, date)
+    const creneaux = await getDisponibilites(c.get('db'), boutique.id, date)
 
     return c.json({
       success:  true,
@@ -376,11 +388,11 @@ pub.post('/rdv', async (c) => {
     if (!slug)
       return c.json({ success: false, error: 'slug de la boutique requis.' }, 400)
 
-    const boutique = await getBoutiqueIdBySlug(c.env.DB, slug.toLowerCase())
+    const boutique = await getBoutiqueIdBySlug(c.get('db'), slug.toLowerCase())
     if (!boutique)
       return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
 
-    const rdv = await createRdvPublic(c.env.DB, boutique.id, body)
+    const rdv = await createRdvPublic(c.get('db'), boutique.id, body)
 
     return c.json({
       success: true,
@@ -399,7 +411,9 @@ pub.post('/rdv', async (c) => {
   }
 })
 
-// ─── Recherche entreprise (SIRENE) ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// RECHERCHE ENTREPRISE (SIRENE)
+// ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /api/public/entreprise-search
