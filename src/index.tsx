@@ -22,6 +22,8 @@ import statsRoutes                from './routes/stats'
 import { reconditionnementRoutes, bonsAchatRoutes } from './routes/reconditionnement'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 import { createD1KV, d1KvCleanup } from './lib/d1kv'
+import { D1DatabaseAdapter } from './adapters/cloudflare/d1Database'
+import type { Database } from './ports/database'
 
 /**
  * @module index
@@ -60,7 +62,13 @@ type Bindings = {
   // KV supprimé — remplacé par D1AsKV (createD1KV) pour compatibilité gsk-hosted-deploy
 }
 
-const app = new Hono<{ Bindings: Bindings }>()
+// Variables de contexte Hono injectées par le middleware global (voir plus bas) :
+// 'db' expose le port Database (architecture ports & adapters) découplé de D1.
+type Variables = {
+  db: Database
+}
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use('/api/*', cors({
@@ -70,13 +78,10 @@ app.use('/api/*', cors({
   credentials: true,
 }))
 
-// ─── Middleware global : injection D1AsKV + nettoyage TTL probabiliste ────────
-// Remplace c.env.KV par un objet D1AsKV sur chaque requête.
-// Nettoyage passif 1/100 requêtes (évite la surcharge D1).
+// ─── Middleware global : injection D1AsKV + Database port + nettoyage TTL ────
 app.use('*', async (c, next) => {
-  // Injecter D1AsKV dans l'environnement sous la clé KV
   ;(c.env as any).KV = createD1KV(c.env.DB)
-  // Nettoyage TTL probabiliste (1% des requêtes)
+  c.set('db', new D1DatabaseAdapter(c.env.DB))
   if (Math.random() < 0.01) {
     d1KvCleanup(c.env.DB).catch(() => {}) // non bloquant
   }

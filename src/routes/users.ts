@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import type { Database } from '../ports/database'
 import {
   setPIN, verifyPIN, deletePIN, getPINStatus, resetPINAdmin,
   getPermissions, setPermissions, listUsers,
@@ -14,7 +15,9 @@ import {
 } from '../services/userService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+// 'db' : port Database injecté par le middleware global (src/index.tsx) — découple
+// ce router de l'implémentation D1 concrète (architecture ports & adapters).
+type Variables = { user: any; db: Database }
 
 const users = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 users.use('*', authMiddleware)
@@ -165,7 +168,7 @@ users.get('/users', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(adminUser, query.boutique_id)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await listUsers(c.env.DB, adminUser, boutiqueId)
+  const data = await listUsers(c.get('db'), adminUser, boutiqueId)
   return c.json({ success: true, data })
 })
 
