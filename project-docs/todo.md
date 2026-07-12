@@ -129,3 +129,26 @@ La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` 
 - [ ] `GET /api/public/ticket/:token` (`publicService.ts`) doit exposer les infos du devis lié (statut au minimum) pour que le frontend puisse calculer cet état
 - [ ] Vérifier que l'envoi du devis (`POST /devis/:id/envoyer`, déjà fonctionnel depuis le fix du jour) est bien le déclencheur naturel de l'état "orange"
 - [ ] SMS : décision fournisseur à prendre séparément (Twilio le plus documenté dans le projet) avant d'ajouter ce canal
+
+## Chantier Ports & Adapters + assignation technicien (2026-07-12)
+
+Spec : `docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md`. Plan : `docs/superpowers/plans/2026-07-12-ports-adapters-technicien-assignment.md`. Objectif long terme : sortir de Cloudflare (VPS + Postgres), sans changer le CDC fonctionnel.
+
+- [x] Port `Database` (`src/ports/database.ts`) + adaptateur D1 (`src/adapters/cloudflare/d1Database.ts`) + mock de test (`tests/helpers/mockDatabase.ts`)
+- [x] Premier service migré : `userService.listUsers()` (candidat plus sûr que `personnelService.ts` cité en exemple dans le spec — zéro test préexistant à risquer)
+- [x] Injection du port dans le contexte Hono (`index.tsx`) + branchement `routes/users.ts`
+- [x] `populateTechniciens()` — remplace les 3 noms en dur du select technicien par les vrais utilisateurs (`GET /api/users`), `saveTicket()` envoie `technicien_id` numérique
+- [x] **Corrigé le 2026-07-12** (revue finale de branche) : `technicien_id` validé contre `boutique_id` du ticket (isolation multi-tenant) — détail dans `bugs.md`
+- [x] **Corrigé le 2026-07-12** : `editTicket()` présélectionne à nouveau le technicien assigné — détail dans `bugs.md`
+- [ ] Migrer les 17 autres services vers le port `Database` (rollout service par service, hors scope de ce chantier initial)
+- [ ] Ports `Storage`/`Cache` (R2/D1KV → disque local/Redis) — pas nécessaires tant que la bascule VPS n'est pas engagée
+- [ ] `populateTechniciens()` liste tous les rôles (admin/manager/technicien), pas seulement les techniciens — fonctionnel mais sémantiquement flou, envisager un filtre par rôle
+- [ ] Pas de test dédié pour `D1DatabaseAdapter` (seuls le service migré et le mock sont couverts) — validé en live, à ajouter quand pertinent
+- [ ] `GET /api/users` réservé aux rôles admin/manager — un technicien ouvrant "Nouvelle prise en charge" ne voit pas la liste se remplir (échec silencieux). Envisager un endpoint dédié accessible à tous les rôles authentifiés si ça devient gênant en usage réel
+- [ ] Adaptateur Postgres, migration des données, déploiement Node.js sur VPS — hors scope tant que non engagé
+
+## Bug prod urgent — création de ticket impossible pour Desk1 (boutique_id=3)
+
+Découvert le 2026-07-12, détail complet dans `bugs.md`. `POST /api/tickets` → 500, `UNIQUE constraint failed: tickets.numero` dans `nextNumero()`. Sans lien avec le chantier Ports & Adapters (confirmé par la revue). **Non investigué, non corrigé** — probable désync de la table `sequences` pour cette boutique.
+- [ ] Investiguer `sequences`/`nextNumero()` pour boutique_id=3 — vérifier `dernier_num` vs `numero` déjà existants en base
+- [ ] Une fois la cause confirmée, corriger + vérifier si d'autres boutiques sont dans le même état
