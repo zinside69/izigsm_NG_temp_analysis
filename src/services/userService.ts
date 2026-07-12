@@ -12,6 +12,7 @@
 
 import { hashPassword, verifyPassword } from '../lib/auth'
 import { auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -264,19 +265,24 @@ export async function setPermissions(
  * Liste des utilisateurs.
  * Admin global → tous les users toutes boutiques.
  * Manager       → uniquement les users de sa boutique.
- * @param db         - Instance D1Database
+ *
+ * Premier service migré vers le port `Database` (Sprint architecture Ports & Adapters,
+ * voir docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md) : `db`
+ * n'est plus le binding D1 brut (`D1Database`, API `.prepare().bind().all()`) mais
+ * l'abstraction `all/get/run` — objectif portabilité VPS/Postgres, aucun changement
+ * de comportement métier. Le câblage de l'appelant (`routes/users.ts`) sur l'adaptateur
+ * D1 réel se fait dans une tâche séparée du même chantier.
+ * @param db         - Port Database (implémentation D1 aujourd'hui, Postgres à la bascule VPS)
  * @param adminUser  - Utilisateur effectuant la requête
  * @param boutiqueId - ID boutique (ignoré pour admin global)
  */
 export async function listUsers(
-  db:          D1Database,
+  db:          Database,
   adminUser:   { role: string; boutique_id?: number | null },
   boutiqueId:  number
 ): Promise<any[]> {
-  let rows
-
   if (adminUser.role === 'admin') {
-    rows = await db.prepare(`
+    return db.all<any>(`
       SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.actif,
              u.pin_actif, r.nom as role, u.boutique_id,
              b.nom as boutique_nom, u.created_at
@@ -284,17 +290,15 @@ export async function listUsers(
       JOIN   roles r ON r.id = u.role_id
       LEFT JOIN boutiques b ON b.id = u.boutique_id
       ORDER  BY u.created_at ASC
-    `).all<any>()
-  } else {
-    rows = await db.prepare(`
-      SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.actif,
-             u.pin_actif, r.nom as role, u.boutique_id, u.created_at
-      FROM   users u
-      JOIN   roles r ON r.id = u.role_id
-      WHERE  u.boutique_id = ?
-      ORDER  BY u.created_at ASC
-    `).bind(boutiqueId).all<any>()
+    `)
   }
 
-  return rows.results ?? []
+  return db.all<any>(`
+    SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.actif,
+           u.pin_actif, r.nom as role, u.boutique_id, u.created_at
+    FROM   users u
+    JOIN   roles r ON r.id = u.role_id
+    WHERE  u.boutique_id = ?
+    ORDER  BY u.created_at ASC
+  `, [boutiqueId])
 }
