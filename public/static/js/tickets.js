@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadTickets();   // remplace renderTickets() direct
   initSignature();
   populateClients();
+  populateTechniciens();
 });
 
 // ─── Chargement API ────────────────────────────────────────────────────────
@@ -666,7 +667,9 @@ async function saveTicket() {
     deviceType: document.getElementById('t-device-type').value,
     deviceModel: document.getElementById('t-device-model').value.trim(),
     priority:   document.getElementById('t-priority').value,
-    technician: document.getElementById('t-technician')?.value || 'Non assigné',
+    technicien_id: document.getElementById('t-technician')?.value
+      ? parseInt(document.getElementById('t-technician').value, 10)
+      : null,
     price:      parseFloat(document.getElementById('t-price').value) || 0,
     notes:      document.getElementById('t-notes').value.trim(),
     status: 'Nouveau',
@@ -892,6 +895,32 @@ async function populateClients() {
       opt.textContent = `${c.first || ''} ${c.last || ''}`.trim() || `Client #${c.id}`;
       select.appendChild(opt);
     });
+  }
+}
+
+// ======================== TECHNICIEN LIST ========================
+// Dépend de GET /api/users (admin/manager uniquement, cf. routes/users.ts) —
+// pour un rôle technicien l'appel échoue en 403 et le select reste sur
+// "Non assigné" (échec silencieux, même style que populateClients() ci-dessus).
+async function populateTechniciens() {
+  const select = document.getElementById('t-technician');
+  if (!select) return;
+  try {
+    const r = await apiGet('/api/users');
+    const techniciens = (r.data?.data || []).map(u => ({
+      id:  u.id,
+      nom: (u.prenom || '') + ' ' + (u.nom || ''),
+    }));
+    techniciens.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.nom.trim() || `Utilisateur #${t.id}`;
+      select.appendChild(opt);
+    });
+  } catch {
+    // Échec silencieux (ex: rôle technicien sans accès à GET /api/users) —
+    // même style que populateClients() ci-dessus. Le select reste sur
+    // "Non assigné" uniquement.
   }
 }
 
