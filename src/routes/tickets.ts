@@ -179,11 +179,16 @@ tickets.post('/', async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const created = await createTicket(db, boutiqueId, user.sub, {
-    client_id, appareil_id, appareil_marque, appareil_modele,
-    description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
-    etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date,
-  })
+  let created: { id: number; numero: string; tracking_token: string }
+  try {
+    created = await createTicket(db, boutiqueId, user.sub, {
+      client_id, appareil_id, appareil_marque, appareil_modele,
+      description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
+      etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date,
+    })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
   const frontendUrl  = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'

@@ -46,7 +46,8 @@ async function loadTickets() {
       status:      mapStatutToLegacy(t.statut || t.status),
       statut:      t.statut       || '',
       priority:    t.priorite     || t.priority     || 'Moyenne',
-      technician:  t.technicien_nom || t.technician || 'Non assigné',
+      technician:   t.technicien_nom || t.technician || 'Non assigné',
+      technicianId: t.technicien_id ?? null,
       price:       t.devis_montant  || t.price      || 0,
       numero:      t.numero       || '',
       hasSignature: false,
@@ -160,7 +161,7 @@ async function editTicket(id) {
   document.getElementById('t-device-model').value = ticket.deviceModel || '';
   document.getElementById('t-imei').value = ticket.imei || '';
   document.getElementById('t-priority').value = ticket.priority || 'Moyenne';
-  document.getElementById('t-technician').value = ticket.technician || 'Non assigné';
+  document.getElementById('t-technician').value = ticket.technicianId ?? '';
   document.getElementById('t-price').value = ticket.price || '';
   document.getElementById('t-description').value = ticket.description || '';
   document.getElementById('t-notes').value = ticket.notes || '';

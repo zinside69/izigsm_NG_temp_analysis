@@ -26,6 +26,31 @@
 
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
 
+/**
+ * Vérifie que le technicien assigné appartient bien à la boutique du ticket —
+ * empêche qu'un admin/manager assigne (via l'API) un technicien d'une autre
+ * boutique, ce qui exposerait son nom via la jointure `users` (isolation
+ * multi-tenant, voir project-docs/bugs.md).
+ * @param db           — Instance D1Database
+ * @param technicienId — ID utilisateur à valider (ignoré si null/undefined)
+ * @param boutiqueId   — ID boutique attendue
+ * @throws             — Error si le technicien n'existe pas dans cette boutique
+ */
+async function validateTechnicienBoutique(
+  db: D1Database,
+  technicienId: number | null | undefined,
+  boutiqueId: number
+): Promise<void> {
+  if (technicienId == null) return
+
+  const user = await db
+    .prepare('SELECT id FROM users WHERE id = ? AND boutique_id = ?')
+    .bind(technicienId, boutiqueId)
+    .first()
+
+  if (!user) throw new Error('Technicien introuvable dans cette boutique.')
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type StatutTicket =
@@ -235,6 +260,7 @@ export async function listTickets(
     SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne,
            t.appareil_marque, t.appareil_modele,
            t.prix_estime, t.prix_final, t.date_reception, t.date_promesse,
+           t.technicien_id,
            c.prenom || ' ' || c.nom   AS client_nom,
            c.telephone                AS client_telephone,
            u.prenom || ' ' || u.nom   AS technicien_nom
@@ -395,6 +421,8 @@ export async function createTicket(
   userId: number,
   data: CreateTicketData
 ): Promise<{ id: number; numero: string; tracking_token: string }> {
+  await validateTechnicienBoutique(db, data.technicien_id, boutiqueId)
+
   const numero        = await nextNumero(db, boutiqueId, 'ticket')
   const trackingToken = genererTrackingToken()
 
@@ -468,10 +496,12 @@ export async function updateTicket(
   }
 
   const existing = await db
-    .prepare('SELECT id FROM tickets WHERE id = ? AND actif = 1')
+    .prepare('SELECT id, boutique_id FROM tickets WHERE id = ? AND actif = 1')
     .bind(id)
-    .first()
+    .first<{ id: number; boutique_id: number }>()
   if (!existing) throw new Error('Ticket introuvable.')
+
+  await validateTechnicienBoutique(db, data.technicien_id, existing.boutique_id)
 
   await db.prepare(`
     UPDATE tickets SET

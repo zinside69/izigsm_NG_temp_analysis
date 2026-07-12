@@ -133,7 +133,7 @@ describe('listTickets()', () => {
   let db: ReturnType<typeof createMockD1>
 
   const SQL_COUNT = 'SELECT COUNT(*) AS cnt FROM tickets t WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL'
-  const SQL_LIST  = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
+  const SQL_LIST  = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
 
   beforeEach(() => {
     db = createMockD1()
@@ -341,6 +341,36 @@ describe('createTicket()', () => {
     expect(histoCall?.params).toContain(42)  // ticketId retourné par le mock
     expect(histoCall?.params).toContain(5)   // userId
   })
+
+  // Isolation multi-tenant : le technicien assigné doit appartenir à la boutique du ticket
+  const SQL_TECHNICIEN = 'SELECT id FROM users WHERE id = ? AND boutique_id = ?'
+
+  it('crée le ticket si le technicien appartient à la boutique', async () => {
+    db.__setResponse(SQL_TECHNICIEN, { id: 9 })
+    const res = await createTicket(db, 1, 5, {
+      client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+      description_panne: 'Écran cassé', technicien_id: 9,
+    })
+    expect(res.id).toBe(42)
+  })
+
+  it('rejette la création si le technicien appartient à une autre boutique', async () => {
+    db.__setNotFound(SQL_TECHNICIEN)
+    await expect(createTicket(db, 1, 5, {
+      client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+      description_panne: 'Écran cassé', technicien_id: 999,
+    })).rejects.toThrow('Technicien introuvable dans cette boutique.')
+  })
+
+  it('ne vérifie pas de technicien si technicien_id absent', async () => {
+    const res = await createTicket(db, 1, 5, {
+      client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+      description_panne: 'Écran cassé',
+    })
+    expect(res.id).toBe(42)
+    const calls = db.__getCalls()
+    expect(calls.find(c => c.sql === SQL_TECHNICIEN)).toBeUndefined()
+  })
 })
 
 // ─── updateTicket ─────────────────────────────────────────────────────────────
@@ -348,7 +378,7 @@ describe('createTicket()', () => {
 describe('updateTicket()', () => {
   let db: ReturnType<typeof createMockD1>
 
-  const SQL_SELECT = 'SELECT id FROM tickets WHERE id = ? AND actif = 1'
+  const SQL_SELECT = 'SELECT id, boutique_id FROM tickets WHERE id = ? AND actif = 1'
 
   beforeEach(() => {
     db = createMockD1()
@@ -367,11 +397,30 @@ describe('updateTicket()', () => {
   })
 
   it('appelle UPDATE avec les bons champs', async () => {
-    db.__setResponse(SQL_SELECT, { id: 42 })
+    db.__setResponse(SQL_SELECT, { id: 42, boutique_id: 1 })
     await updateTicket(db, 42, 5, { diagnostic: 'Fusible grillé', prix_final: 80 })
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.startsWith('UPDATE tickets SET'))
     expect(updateCall).toBeDefined()
+  })
+
+  // Isolation multi-tenant : le technicien assigné doit appartenir à la boutique du ticket
+  const SQL_TECHNICIEN = 'SELECT id FROM users WHERE id = ? AND boutique_id = ?'
+
+  it('accepte la mise à jour si le technicien appartient à la boutique du ticket', async () => {
+    db.__setResponse(SQL_SELECT, { id: 42, boutique_id: 1 })
+    db.__setResponse(SQL_TECHNICIEN, { id: 9 })
+    await expect(updateTicket(db, 42, 5, { technicien_id: 9 })).resolves.toBeUndefined()
+    const calls = db.__getCalls()
+    const techCall = calls.find(c => c.sql === SQL_TECHNICIEN)
+    expect(techCall?.params).toEqual([9, 1])  // technicien_id, boutique_id du ticket
+  })
+
+  it('rejette la mise à jour si le technicien appartient à une autre boutique', async () => {
+    db.__setResponse(SQL_SELECT, { id: 42, boutique_id: 1 })
+    db.__setNotFound(SQL_TECHNICIEN)
+    await expect(updateTicket(db, 42, 5, { technicien_id: 999 }))
+      .rejects.toThrow('Technicien introuvable dans cette boutique.')
   })
 })
 
