@@ -89,3 +89,37 @@ Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attach
 **Pourquoi je m'étais trompé** : j'ai comparé une page marketing à une page d'aide *utilisateur final* (`/aide/remises`, orientée usage du bouton dans l'UI monatelier) sans chercher s'il existait une doc technique développeur séparée — ce qui est presque toujours le cas pour une intégration API (l'aide utilisateur décrit l'usage produit fini, pas les specs techniques sous-jacentes). Les deux sources ne se contredisaient pas : elles décrivaient juste deux couches différentes (UI produit vs API technique).
 
 **Comment appliquer** : si ce chantier est repris, l'intégration API réelle (pas juste un bouton de remise) est un scope valide et documenté. Détail technique complet disponible dans les 3 PDF `docs/`. Ne pas réévaluer à la baisse un gap "confirmé par le marketing mais absent de la doc d'aide utilisateur" sans vérifier explicitement s'il existe une doc technique développeur séparée avant de conclure à une exagération marketing.
+
+---
+
+## 2026-07-12 — Architecture Ports & Adapters (préparation sortie Cloudflare)
+
+### Décision principale : Ports & Adapters plutôt que microservices ou réécriture PHP
+**Contexte** : l'utilisateur a proposé une réécriture complète en "services indépendants communiquant via un router", inspirée d'un CDC reverse-engineered (`CDC_Manus.md`) et d'un fichier `docs/ARCHITECTURAL_PRINCIPLES.md` découvert en cours de brainstorming (daté 16 février 2026), qui mandate explicitement PHP (BFF frontend) + microservices Node.js + communication API stricte entre modules — l'inverse du code réel (0% PHP, monolithe Hono, services qui lisent D1 directement, jamais via API interne).
+
+**Décision** : ni microservices, ni PHP. Le vrai besoin identifié après cadrage était la portabilité d'infrastructure (VPS + Postgres, sans dépendre de Cloudflare), pas un découpage physique ni un changement de langage. Architecture retenue : pattern Ports & Adapters — les services dépendent d'interfaces abstraites (`Database`, `Storage`, `Cache` à terme) plutôt que des bindings Cloudflare en dur, monolithe Hono conservé.
+
+**Pourquoi** : Hono tourne déjà nativement sur Node.js (`@hono/node-server`) — sortir de Cloudflare ne nécessite pas de changer de framework ni de langage, juste l'adaptateur DB/Storage et le runtime de déploiement. Les microservices ajouteraient latence/coût/complexité sans bénéfice à l'échelle actuelle et compliqueraient la sortie de Cloudflare (Service Bindings n'existent que là-bas). PHP jetterait 18 services TypeScript déjà testés et validés en production.
+
+**`docs/ARCHITECTURAL_PRINCIPLES.md`** : jugé obsolète/aspirationnel par l'utilisateur (décision explicite) — le code réel ne le respecte sur aucun des 3 axes (frontend, backend, communication modules) depuis toujours, aucune trace dans l'historique de session d'un chantier PHP/microservices en cours. Pas archivé ni corrigé pour l'instant, juste écarté comme référence pour ce chantier.
+
+**Comment appliquer** : toute future proposition d'architecture pour iziGSM doit d'abord vérifier l'objectif réel derrière la demande (ici : portabilité, pas découplage physique) avant de proposer une réécriture. Le spec complet est dans `docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md`.
+
+### Sous-décisions techniques (détail complet dans le spec)
+| Sujet | Décision | Justification |
+|---|---|---|
+| Premier service migré | `userService.listUsers()`, pas `personnelService.ts` (exemple du spec) | Zéro test préexistant à risquer, requêtes simples (2 branches, pas de sous-requêtes corrélées) |
+| API du port `Database` | SQL brut (`all/get/run`), pas le query-builder Drizzle | Éviter de forcer la réécriture de requêtes SQLite complexes (`julianday()`, sous-requêtes corrélées) dès cette étape ; Drizzle reste prévu pour le schéma/migrations au moment de la bascule Postgres |
+| Base de données cible VPS | PostgreSQL, pas MariaDB | JSONB natif indexable (utilisé par plusieurs champs du CDC), MariaDB stocke en TEXT |
+| Clés primaires | INTEGER/SERIAL conservées, pas UUID (suggéré par CDC_Manus §4.2) | Éviter de toucher toutes les FK des 33 migrations existantes pour un gain non nécessaire |
+| Storage cible VPS | Disque local direct, pas MinIO | MinIO a dégradé son édition open-source (retrait console web) en 2025 ; disque local suffit à l'échelle actuelle (1 VPS) |
+| Séquencement | Ports introduits dès maintenant (D1 comme seule implémentation), pas de retrofit en bloc en fin de chantier | Évite un gros refactor risqué juste avant la bascule VPS ; chaque nouvelle fonctionnalité utilise directement les ports |
+
+### Migration `UNIQUE(boutique_id, numero)` — décidée, exécution différée
+**Contexte** : bug prod découvert le 2026-07-12 (création de ticket impossible pour Desk1, `POST /api/tickets` → 500). Root cause confirmée par requêtes en lecture seule sur la prod (`wrangler d1 execute --remote`) : `numero` a une contrainte `UNIQUE` globale sur 5 tables (tickets/factures/devis/avoirs/rachats) alors que les compteurs (`sequences`) sont calculés indépendamment par boutique — collision garantie dès que deux boutiques partagent le même préfixe par défaut (le cas partout). Pas isolé à Desk1 : SOTELI heurtera le même mur à sa première création de document.
+
+**Décision** : corriger les 5 tables ensemble (`UNIQUE(boutique_id, numero)`), pas juste `tickets` en premier — mais **exécution différée à une session dédiée**, pas traitée en fin de session comme le fix `technicien_id` du même jour.
+
+**Pourquoi** : `factures`/`avoirs` sont sous contrainte légale NF525 (numérotation séquentielle sans trou, verrouillage post-émission). Une migration de schéma sur ces tables mérite une validation explicite et une session dédiée, pas un fix rapide en clôture de session — contrairement au fix `technicien_id` (pure logique applicative, pas de migration de schéma, risque contenu).
+
+**Comment appliquer** : ne pas traiter cette migration comme un fix mineur au détour d'une autre session — prévoir du temps dédié, tester en local avant toute application prod, vérifier qu'aucune donnée existante ne viole la nouvelle contrainte composite. Détail complet et preuves dans `bugs.md`.
