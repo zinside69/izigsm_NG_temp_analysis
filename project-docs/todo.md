@@ -147,8 +147,12 @@ Spec : `docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md`
 - [ ] `GET /api/users` réservé aux rôles admin/manager — un technicien ouvrant "Nouvelle prise en charge" ne voit pas la liste se remplir (échec silencieux). Envisager un endpoint dédié accessible à tous les rôles authentifiés si ça devient gênant en usage réel
 - [ ] Adaptateur Postgres, migration des données, déploiement Node.js sur VPS — hors scope tant que non engagé
 
-## Bug prod urgent — création de ticket impossible pour Desk1 (boutique_id=3)
+## Bug prod critique — numérotation documents non isolée par boutique (root cause confirmée 2026-07-12)
 
-Découvert le 2026-07-12, détail complet dans `bugs.md`. `POST /api/tickets` → 500, `UNIQUE constraint failed: tickets.numero` dans `nextNumero()`. Sans lien avec le chantier Ports & Adapters (confirmé par la revue). **Non investigué, non corrigé** — probable désync de la table `sequences` pour cette boutique.
-- [ ] Investiguer `sequences`/`nextNumero()` pour boutique_id=3 — vérifier `dernier_num` vs `numero` déjà existants en base
-- [ ] Une fois la cause confirmée, corriger + vérifier si d'autres boutiques sont dans le même état
+Détail complet dans `bugs.md`. Découvert via l'échec de création de ticket sur Desk1, mais **root cause structurelle** confirmée par requêtes en lecture seule sur la prod : `numero` a une contrainte `UNIQUE` globale (`tickets`, `factures`, `devis`, `avoirs`, `rachats`) alors que les compteurs (`sequences`) sont calculés indépendamment par boutique. Toute boutique dont le compteur recoupe la plage d'une autre boutique (même préfixe par défaut partout) percute une collision. Desk1 est bloquée dès maintenant ; SOTELI (boutique 2) le sera à sa première création de document.
+
+**Fix décidé, exécution différée à une session dédiée** (validation explicite requise avant exécution, tables `factures`/`avoirs` sous contrainte légale NF525) :
+- [ ] Migration schéma : `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global sur les 5 tables (`tickets`, `factures`, `devis`, `avoirs`, `rachats`) — recréation de table (SQLite ne supporte pas `ALTER ... DROP CONSTRAINT`)
+- [ ] Écrire et tester la migration en local avant toute application prod (`wrangler d1 execute --local` puis `--remote` avec confirmation à chaque étape)
+- [ ] Vérifier qu'aucune donnée existante ne viole la nouvelle contrainte composite avant de l'appliquer (les 10 tickets boutique 1 + le compteur Desk1 à 6 ne devraient pas entrer en conflit une fois scopés par boutique — à re-vérifier au moment du fix)
+- [ ] Une fois corrigé, tester la création de ticket réelle sur Desk1 (bloquée depuis la découverte du bug)

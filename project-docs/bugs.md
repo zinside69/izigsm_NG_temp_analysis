@@ -125,5 +125,20 @@ Régression introduite par la livraison de `populateTechniciens()` le même jour
 
 **Fix appliqué** : `listTickets()` (`ticketService.ts`) sélectionne désormais aussi `t.technicien_id` (absent avant, seul `technicien_nom` joint était remonté). `loadTickets()` (`tickets.js`) porte ce champ dans le cache (`technicianId`). `editTicket()` assigne `ticket.technicianId ?? ''` au lieu du nom texte.
 
-## `POST /api/tickets` → 500 pour Desk1 (boutique_id=3) — NON corrigé, à investiguer
-Découvert le 2026-07-12 pendant la validation en production de `populateTechniciens()` (Task 6 du chantier Ports & Adapters) — création de ticket impossible pour la boutique Desk1 spécifiquement. `D1_ERROR: UNIQUE constraint failed: tickets.numero` dans `nextNumero()` (`src/lib/db.ts`). Reproduit de façon identique avec et sans `technicien_id`, sur 3 essais — confirmé sans lien avec le chantier en cours (aucun fichier touché par Ports & Adapters/populateTechniciens ne touche `lib/db.ts` ni la logique de numérotation). Cause probable : désync de la table `sequences` pour la boutique 3 (`dernier_num` en retard ou en conflit avec des `numero` déjà existants en base). **Non investigué en profondeur, non corrigé** — Desk1 ne peut probablement créer aucun ticket tant que ce n'est pas résolu. Priorité haute, session dédiée recommandée.
+## `POST /api/tickets` → 500 pour Desk1 (boutique_id=3) — ROOT CAUSE CONFIRMÉE le 2026-07-12, NON corrigé (fix décidé, exécution différée)
+
+**Découverte initiale** : le 2026-07-12 pendant la validation en production de `populateTechniciens()` (Task 6 du chantier Ports & Adapters) — création de ticket impossible pour Desk1. `D1_ERROR: UNIQUE constraint failed: tickets.numero` dans `nextNumero()` (`src/lib/db.ts`).
+
+**Root cause confirmée** (investigation `wrangler d1 execute izigsm-production --remote`, lecture seule) : **ce n'est pas une désync isolée à Desk1, c'est un défaut de conception structurel.**
+
+- `tickets.numero` (et `factures.numero`, `devis.numero`, `avoirs.numero`, `rachats.numero` — vérifié sur les 5 tables) portent une contrainte `UNIQUE` **globale**, pas scopée par boutique (`numero TEXT NOT NULL UNIQUE`, pas `UNIQUE(boutique_id, numero)`).
+- `nextNumero()` calcule un compteur **indépendant par boutique** (table `sequences`, clé `boutique_id + type + annee`).
+- Les 3 boutiques partagent le même préfixe par défaut (`TKT`, format `annee`, padding 5), jamais personnalisé dans `boutique_settings`.
+- **Preuve** : boutique 1 (Paris 11) possède déjà `TKT-2026-00001` → `TKT-2026-00010`. La séquence de Desk1 était à `dernier_num=6` → tentative `TKT-2026-00007`, déjà pris par la boutique 1 → collision globale → 500. Chaque retry incrémente (7→8→9→10) et retombe dans la plage déjà occupée par la boutique 1, expliquant les 3 échecs identiques observés.
+- **Boutique 2 (SOTELI) n'a encore aucune séquence créée** — elle heurtera le même mur dès sa première création de ticket/facture/devis, pour la même raison. Pas un problème Desk1-only : dormant pour toute boutique dont le compteur recoupe la plage d'une autre.
+
+**Fix retenu (décision du 2026-07-12, exécution différée)** : migration de schéma pour scoper l'unicité par boutique — `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global, sur les 5 tables (`tickets`, `factures`, `devis`, `avoirs`, `rachats`). SQLite ne supporte pas `ALTER TABLE ... DROP CONSTRAINT` — nécessite le pattern standard de recréation de table (create table corrigée → copie des données → drop ancienne table → rename).
+
+**Pourquoi différé** : `factures`/`avoirs` sont sous contrainte NF525 (numérotation séquentielle sans trou, verrouillage post-émission — voir CLAUDE.md racine du workspace). Une migration de schéma sur ces tables mérite une session dédiée avec validation explicite avant exécution, pas un fix rapide en fin de session. Alternatives écartées à ce stade : préfixe distinct par boutique (contournement rapide sans migration, mais ne corrige pas le défaut structurel — une future boutique avec le même préfixe par défaut re-heurterait le bug) ; fix `tickets` seul d'abord (plus rapide/moins risqué mais partiel — décision utilisateur du 2026-07-12 : traiter les 5 tables ensemble).
+
+**Impact actuel** : Desk1 ne peut créer aucun ticket. SOTELI (boutique 2) créera son premier ticket/facture/devis sans problème tant que son compteur ne recoupe pas la plage de Paris 11 — latent, pas encore déclenché.
