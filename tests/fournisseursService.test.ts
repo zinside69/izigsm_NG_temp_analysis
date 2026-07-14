@@ -15,10 +15,17 @@
  *   - receptionnerBonCommande()  — CUMP, stock, mouvement, Error si reçu/annulé
  *   - getKpisFournisseurs()      — 2 requêtes parallèles
  *   - getProduitsACommander()    — produits sous seuil, alerte rupture/bas, quantite_suggere
+ *
+ * Migration Ports & Adapters (2026-07-14) : listFournisseurs/getFournisseur/listBonsCommande/
+ * getBonCommande/getKpisFournisseurs/getProduitsACommander migrées vers le port Database
+ * (mockDatabase). createFournisseur/updateFournisseur/deleteFournisseur/createBonCommande/
+ * updateStatutBonCommande/receptionnerBonCommande restent sur D1Database (mockD1) — dépendent
+ * d'auditLog(), non porté.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listFournisseurs,
   getFournisseur,
@@ -135,10 +142,10 @@ const SQL_PRODUITS_A_COMMANDER = `SELECT p.id, p.nom, p.sku, p.marque, p.stock_a
 // ─── listFournisseurs ─────────────────────────────────────────────────────────
 
 describe('listFournisseurs()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT_FOURNISSEURS, { cnt: 1 })
     db.__setListResponse(SQL_LIST_FOURNISSEURS, [{ ...FOURNISSEUR_ROW, nb_commandes: 3, nb_en_attente: 1 }])
   })
@@ -192,10 +199,10 @@ describe('listFournisseurs()', () => {
 // ─── getFournisseur ───────────────────────────────────────────────────────────
 
 describe('getFournisseur()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne null si fournisseur absent', async () => {
@@ -350,10 +357,10 @@ describe('deleteFournisseur()', () => {
 // ─── listBonsCommande ─────────────────────────────────────────────────────────
 
 describe('listBonsCommande()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT_BC, { cnt: 2 })
     db.__setListResponse(SQL_LIST_BC, [
       { ...BC_ROW, fournisseur_nom: 'Apple Distribution', nb_lignes: 2 },
@@ -406,10 +413,10 @@ describe('listBonsCommande()', () => {
 // ─── getBonCommande ───────────────────────────────────────────────────────────
 
 describe('getBonCommande()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne null si BC absent', async () => {
@@ -749,10 +756,10 @@ describe('receptionnerBonCommande()', () => {
 // ─── getKpisFournisseurs ──────────────────────────────────────────────────────
 
 describe('getKpisFournisseurs()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les 6 champs KPI attendus', async () => {
@@ -821,7 +828,7 @@ describe('getKpisFournisseurs()', () => {
 // ─── getProduitsACommander ────────────────────────────────────────────────────
 
 describe('getProduitsACommander()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const PRODUIT_BAS = {
     id: 5, nom: 'Écran iPhone 14', sku: 'SCR-IP14',
@@ -840,7 +847,7 @@ describe('getProduitsACommander()', () => {
   }
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les produits sous seuil', async () => {

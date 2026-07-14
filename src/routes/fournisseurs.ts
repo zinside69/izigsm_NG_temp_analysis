@@ -21,14 +21,15 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { validateFournisseur, validateBonCommande } from '../lib/validators'
+import type { Database } from '../ports/database'
 import {
   listFournisseurs, getFournisseur, createFournisseur, updateFournisseur, deleteFournisseur,
   listBonsCommande, getBonCommande, createBonCommande, updateStatutBonCommande,
   receptionnerBonCommande, getKpisFournisseurs, getProduitsACommander
 } from '../services/fournisseursService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Variables = { user: any; db: Database }
 
 const fournisseurs = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 fournisseurs.use('*', authMiddleware)
@@ -40,7 +41,7 @@ fournisseurs.get('/fournisseurs/kpis', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const kpis = await getKpisFournisseurs(c.env.DB, boutiqueId)
+  const kpis = await getKpisFournisseurs(c.get('db'), boutiqueId)
   return c.json({ success: true, data: kpis })
 })
 
@@ -51,7 +52,7 @@ fournisseurs.get('/fournisseurs/a-commander', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await getProduitsACommander(c.env.DB, boutiqueId)
+  const data = await getProduitsACommander(c.get('db'), boutiqueId)
   return c.json({ success: true, data, total: data.length })
 })
 
@@ -62,7 +63,7 @@ fournisseurs.get('/fournisseurs', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listFournisseurs(c.env.DB, boutiqueId, c.req.query())
+  const result = await listFournisseurs(c.get('db'), boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
@@ -86,7 +87,7 @@ fournisseurs.post('/fournisseurs', requireRole('admin', 'manager'), async (c) =>
 /** Détail d'un fournisseur */
 fournisseurs.get('/fournisseurs/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getFournisseur(c.env.DB, id)
+  const data = await getFournisseur(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Fournisseur introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -123,7 +124,7 @@ fournisseurs.get('/bons-commande', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listBonsCommande(c.env.DB, boutiqueId, c.req.query())
+  const result = await listBonsCommande(c.get('db'), boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
@@ -151,7 +152,7 @@ fournisseurs.post('/bons-commande', requireRole('admin', 'manager'), async (c) =
 /** Détail complet d'un bon de commande avec ses lignes */
 fournisseurs.get('/bons-commande/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getBonCommande(c.env.DB, id)
+  const data = await getBonCommande(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Bon de commande introuvable.' }, 404)
   return c.json({ success: true, data })
 })

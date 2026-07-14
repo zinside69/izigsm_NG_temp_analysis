@@ -25,6 +25,7 @@
  */
 
 import { parsePagination, auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,13 +75,13 @@ export interface LigneBonCommande {
  * Liste paginée des fournisseurs actifs d'une boutique.
  * Inclut le nombre de bons de commande associés et le nombre en attente de livraison.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @param query       Filtres : `search` (nom/email/contact), `page`, `limit`
  * @returns           `{ data: Fournisseur[], pagination }`
  */
 export async function listFournisseurs(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   query: Record<string, string> = {}
 ) {
@@ -97,11 +98,12 @@ export async function listFournisseurs(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const total = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM fournisseurs f ${where}`
-  ).bind(...bindings).first<{ cnt: number }>()
+  const total = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM fournisseurs f ${where}`,
+    bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT f.*,
            COUNT(bc.id)  as nb_commandes,
            SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente
@@ -111,10 +113,10 @@ export async function listFournisseurs(
     GROUP BY f.id
     ORDER BY f.nom ASC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   return {
-    data:       rows.results,
+    data:       rows,
     pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) }
   }
 }
@@ -122,17 +124,17 @@ export async function listFournisseurs(
 /**
  * Récupère un fournisseur par son identifiant.
  *
- * @param db  Binding D1 Cloudflare
+ * @param db  Port Database
  * @param id  Identifiant du fournisseur
  * @returns   `Fournisseur` ou `null` si introuvable / soft-deleted
  */
 export async function getFournisseur(
-  db: D1Database, id: number
+  db: Database, id: number
 ): Promise<Fournisseur | null> {
-  const row = await db.prepare(
-    `SELECT * FROM fournisseurs WHERE id = ? AND actif = 1`
-  ).bind(id).first()
-  return (row as Fournisseur) ?? null
+  return db.get<Fournisseur>(
+    `SELECT * FROM fournisseurs WHERE id = ? AND actif = 1`,
+    [id]
+  )
 }
 
 /**
@@ -231,13 +233,13 @@ export async function deleteFournisseur(
 /**
  * Liste paginée des bons de commande avec filtres et enrichissement fournisseur.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @param query       Filtres : `statut`, `fournisseur_id`, `statut_paiement`, `search`, `page`, `limit`
  * @returns           `{ data: BonCommande[], pagination }` enrichi avec nb_lignes et totaux articles
  */
 export async function listBonsCommande(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   query: Record<string, string> = {}
 ) {
@@ -257,14 +259,14 @@ export async function listBonsCommande(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const total = await db.prepare(`
+  const total = await db.get<{ cnt: number }>(`
     SELECT COUNT(*) as cnt
     FROM   bons_commande bc
     LEFT JOIN fournisseurs f ON f.id = bc.fournisseur_id
     ${where}
-  `).bind(...bindings).first<{ cnt: number }>()
+  `, bindings)
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT bc.*,
            f.nom      as fournisseur_nom,
            f.email    as fournisseur_email,
@@ -279,10 +281,10 @@ export async function listBonsCommande(
     GROUP BY bc.id
     ORDER BY bc.created_at DESC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   return {
-    data:       rows.results,
+    data:       rows,
     pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) }
   }
 }
@@ -291,31 +293,31 @@ export async function listBonsCommande(
  * Récupère un bon de commande complet avec ses lignes de détail.
  * Joint les infos du fournisseur et les stocks/CUMP des produits liés.
  *
- * @param db  Binding D1 Cloudflare
+ * @param db  Port Database
  * @param id  Identifiant du bon de commande
  * @returns   `{ bc: BonCommande, lignes: LigneBonCommande[] }` ou `null` si introuvable
  */
 export async function getBonCommande(
-  db: D1Database, id: number
+  db: Database, id: number
 ): Promise<{ bc: BonCommande; lignes: LigneBonCommande[] } | null> {
-  const bc = await db.prepare(`
+  const bc = await db.get<BonCommande>(`
     SELECT bc.*, f.nom as fournisseur_nom, f.email as fournisseur_email, f.telephone as fournisseur_telephone
     FROM   bons_commande bc
     LEFT JOIN fournisseurs f ON f.id = bc.fournisseur_id
     WHERE  bc.id = ?
-  `).bind(id).first()
+  `, [id])
 
   if (!bc) return null
 
-  const lignes = await db.prepare(`
+  const lignes = await db.all<LigneBonCommande>(`
     SELECT l.*, p.nom as produit_nom, p.stock_actuel, p.prix_achat_cump
     FROM   lignes_bon_commande l
     LEFT JOIN produits p ON p.id = l.produit_id
     WHERE  l.bon_commande_id = ?
     ORDER BY l.id ASC
-  `).bind(id).all()
+  `, [id])
 
-  return { bc: bc as BonCommande, lignes: lignes.results as LigneBonCommande[] }
+  return { bc, lignes }
 }
 
 /**
@@ -541,16 +543,16 @@ export async function receptionnerBonCommande(
  * Calcule les KPIs fournisseurs et achats pour le tableau de bord.
  * Exécute 2 requêtes en parallèle via `Promise.all`.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @returns           `{ nb_fournisseurs, nb_commandes_total, nb_en_attente,
  *                    montant_achats_ht, montant_impaye_ttc, nb_produits_a_commander }`
  */
 export async function getKpisFournisseurs(
-  db: D1Database, boutiqueId: number
+  db: Database, boutiqueId: number
 ) {
   const [kpis, aCommander] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT
         COUNT(DISTINCT f.id)                                              as nb_fournisseurs,
         COUNT(bc.id)                                                      as nb_commandes_total,
@@ -560,14 +562,14 @@ export async function getKpisFournisseurs(
       FROM fournisseurs f
       LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id
       WHERE f.boutique_id = ? AND f.actif = 1
-    `).bind(boutiqueId).first(),
+    `, [boutiqueId]),
 
     // Produits en stock bas = besoins potentiels à commander
-    db.prepare(`
+    db.get<{ nb_produits_a_commander: number }>(`
       SELECT COUNT(*) as nb_produits_a_commander
       FROM   produits
       WHERE  boutique_id = ? AND actif = 1 AND stock_actuel <= stock_minimum
-    `).bind(boutiqueId).first<{ nb_produits_a_commander: number }>()
+    `, [boutiqueId])
   ])
 
   return { ...kpis, nb_produits_a_commander: aCommander?.nb_produits_a_commander ?? 0 }
@@ -578,15 +580,15 @@ export async function getKpisFournisseurs(
  * Enrichit chaque produit avec son fournisseur principal (si renseigné).
  * Calcule la quantité suggérée à commander : `stock_minimum - stock_actuel + 1`.
  *
- * @param db          Binding D1 Cloudflare
+ * @param db          Port Database
  * @param boutiqueId  Identifiant de la boutique
  * @returns           Liste de produits en alerte `{ id, nom, stock_actuel, alerte: 'rupture'|'bas', quantite_suggere, ... }`
  *                    triée par stock croissant (ruptures en premier)
  */
 export async function getProduitsACommander(
-  db: D1Database, boutiqueId: number
+  db: Database, boutiqueId: number
 ) {
-  const rows = await db.prepare(`
+  return db.all<any>(`
     SELECT p.id, p.nom, p.sku, p.marque, p.stock_actuel, p.stock_minimum,
            p.prix_achat_ht, p.prix_achat_cump,
            f.id   as fournisseur_id,
@@ -598,7 +600,5 @@ export async function getProduitsACommander(
     LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.actif = 1
     WHERE  p.boutique_id = ? AND p.actif = 1 AND p.stock_actuel <= p.stock_minimum
     ORDER BY p.stock_actuel ASC, p.nom ASC
-  `).bind(boutiqueId).all()
-
-  return rows.results
+  `, [boutiqueId])
 }
