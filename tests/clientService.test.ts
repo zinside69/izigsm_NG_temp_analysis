@@ -18,10 +18,15 @@
  *   purgeClient           (5 tests)
  *
  * Total : 48 tests
+ *
+ * Migration Ports & Adapters (2026-07-14) : toutes les fonctions sauf purgeClient
+ * migrées vers le port Database (mockDatabase). purgeClient reste sur D1Database
+ * (mockD1) — dépend d'auditLog(), non porté.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listClients,
   getClientById,
@@ -75,19 +80,19 @@ const SQL_COUNT_TICKETS = `SELECT COUNT(*) as cnt FROM tickets WHERE client_id =
 
 // ─── SQL RGPD ─────────────────────────────────────────────────────────────────
 
-const SQL_RGPD_TICKETS = `SELECT id, numero, statut, description_panne, diagnostic, appareil_marque, appareil_modele, imei, prix_estime, prix_final, date_reception, date_promesse, created_at, updated_at, archived_at FROM tickets WHERE client_id = ? AND actif = 1 ORDER BY created_at DESC`
+const SQL_RGPD_TICKETS = `SELECT id, numero, statut, description_panne, diagnostic, appareil_marque, appareil_modele, prix_estime, prix_final, date_reception, date_promesse, created_at, updated_at, archived_at FROM tickets WHERE client_id = ? AND actif = 1 ORDER BY created_at DESC`
 
 const SQL_RGPD_FACTURES = `SELECT f.id, f.numero, f.statut, f.total_ht, f.total_tva, f.total_ttc, f.issued_at, f.created_at FROM factures f WHERE f.client_id = ? ORDER BY f.created_at DESC`
 
 const SQL_RGPD_RDV = `SELECT id, type_rdv AS type, statut, debut, fin, description, created_at FROM rendez_vous WHERE client_id = ? AND actif = 1 ORDER BY debut DESC`
 
-const SQL_RGPD_APPAREILS = `SELECT id, marque, modele, imei, numero_serie, couleur, notes, created_at FROM appareils_client WHERE client_id = ? ORDER BY created_at DESC`
+const SQL_RGPD_APPAREILS = `SELECT id, marque, modele, imei, numero_serie, couleur, notes, created_at FROM appareils WHERE client_id = ? ORDER BY created_at DESC`
 
 const SQL_PURGE_CHECK = `SELECT id, prenom, nom, email, actif FROM clients WHERE id = ?`
 
 const SQL_PURGE_UPDATE = `UPDATE clients SET prenom = 'Anonymisé', nom = ?, email = NULL, telephone = NULL, adresse = NULL, code_postal = NULL, ville = NULL, notes = NULL, actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
 
-const SQL_PURGE_APPAREILS = `UPDATE appareils_client SET imei = NULL, numero_serie = NULL, notes = NULL WHERE client_id = ?`
+const SQL_PURGE_APPAREILS = `UPDATE appareils SET imei = NULL, numero_serie = NULL, notes = NULL WHERE client_id = ?`
 
 const SQL_AUDIT = `INSERT INTO audit_logs (boutique_id, user_id, action, entite_type, entite_id, donnees_avant, donnees_apres, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -112,10 +117,10 @@ const APPAREIL_ROW = {
 // ─── listClients ──────────────────────────────────────────────────────────────
 
 describe('listClients', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne data + total + pagination par défaut', async () => {
@@ -199,10 +204,10 @@ describe('listClients', () => {
 // ─── getClientById ────────────────────────────────────────────────────────────
 
 describe('getClientById', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne client + appareils si trouvé', async () => {
@@ -248,10 +253,10 @@ describe('getClientById', () => {
 // ─── createClient ─────────────────────────────────────────────────────────────
 
 describe('createClient', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { id } après INSERT', async () => {
@@ -291,10 +296,10 @@ describe('createClient', () => {
 // ─── updateClient ─────────────────────────────────────────────────────────────
 
 describe('updateClient', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne true (mock run() changes=1 par défaut)', async () => {
@@ -326,10 +331,10 @@ describe('updateClient', () => {
 // ─── deleteClient ─────────────────────────────────────────────────────────────
 
 describe('deleteClient', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('soft delete : SQL SET actif = 0 envoyé avec le bon id', async () => {
@@ -357,10 +362,10 @@ describe('deleteClient', () => {
 // ─── addAppareil ──────────────────────────────────────────────────────────────
 
 describe('addAppareil', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { id } après INSERT', async () => {
@@ -399,10 +404,10 @@ describe('addAppareil', () => {
 // ─── getHistoriqueClient ──────────────────────────────────────────────────────
 
 describe('getHistoriqueClient', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   function setupHistorique(tickets: any[], factures: any[], rdv: any[]) {
@@ -472,10 +477,10 @@ describe('getHistoriqueClient', () => {
 // ─── importClients ────────────────────────────────────────────────────────────
 
 describe('importClients', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('insère 2 clients sans email : inserted=2, skipped=0', async () => {
@@ -557,10 +562,10 @@ describe('importClients', () => {
 // ─── getClientEmailPrenom ─────────────────────────────────────────────────────
 
 describe('getClientEmailPrenom', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { email, prenom } si client trouvé', async () => {
@@ -596,10 +601,10 @@ describe('getClientEmailPrenom', () => {
 // ─── countTicketsByClient ─────────────────────────────────────────────────────
 
 describe('countTicketsByClient', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne le nombre de tickets actifs', async () => {
@@ -622,9 +627,9 @@ describe('countTicketsByClient', () => {
 // ─── exportClientRgpd ────────────────────────────────────────────────────────
 
 describe('exportClientRgpd', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne null si le client est introuvable', async () => {
     db.__setResponse(SQL_GET_CLIENT, null)

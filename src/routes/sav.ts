@@ -33,10 +33,12 @@ import {
 import { validateSav, validateSavStatut, validateGarantie } from '../lib/validators'
 import { sendSavOuvert } from '../services/emailService'
 import { getClientEmailPrenom } from '../services/clientService'
+import type { Database } from '../ports/database'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
+type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
+type Variables = { db: Database }
 
-const sav = new Hono<{ Bindings: Bindings }>()
+const sav = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 // Toutes les routes SAV nécessitent une authentification
 sav.use('*', authMiddleware)
@@ -176,7 +178,7 @@ sav.post('/sav', async (c) => {
 
     // Hook Sprint 2.11 : email confirmation SAV ouvert
     try {
-      const clientRow = await getClientEmailPrenom(c.env.DB, dossier.client_id)
+      const clientRow = await getClientEmailPrenom(c.get('db'), dossier.client_id)
       if (clientRow?.email) {
         // waitUntil() obligatoire — voir routes/tickets.ts
         c.executionCtx.waitUntil(sendSavOuvert(c.env.DB, boutiqueId, {

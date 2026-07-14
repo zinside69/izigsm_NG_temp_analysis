@@ -1,11 +1,13 @@
-# iziGSM — État courant (MàJ : 2026-07-14, checkpoint 8)
+# iziGSM — État courant (MàJ : 2026-07-14, checkpoint 9)
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
 - Tout ce qui était opérationnel au checkpoint 4 (migration Cloudflare, auth, slug boutiques, chantier prise en charge, technicien_id, numérotation par boutique) — toujours en place, aucune régression.
 - Checkpoint 5 (7 services Ports & Adapters + `lib/timezone.ts` + 2 bugs NF525) commité et déployé (commit `5bcea99`).
-- Checkpoint 6 (`devisService.ts`, 8/20 services) commité et pushé (`f69e7a1`) — **pas encore déployé** au moment de cette mise à jour.
-- Checkpoint 7 (`authService.ts`, 9/20 services) commité et pushé (`f69e7a1`) — **pas encore déployé**.
-- **⚠ Le travail décrit ci-dessous (checkpoint 8, migration `stockService.ts`) n'est PAS encore commité ni déployé** — développé, testé (unitaire + local live complet), pas encore buildé/déployé sur Cloudflare Pages ni poussé sur `origin/main`.
+- Checkpoints 6/7/8 (`devisService.ts`, `authService.ts`, `stockService.ts`, 10/20 services) commités et pushés (`897ff1c`) — **pas encore déployés** au moment de cette mise à jour.
+- **⚠ Le travail décrit ci-dessous (checkpoint 9, migration `clientService.ts`) n'est PAS encore commité ni déployé** — développé, testé (unitaire + local live complet), pas encore buildé/déployé sur Cloudflare Pages ni poussé sur `origin/main`.
+
+## Chantier Ports & Adapters — 11/20 services migrés (session du 2026-07-14)
+- **clientService.ts** (2026-07-14) — 11/12 fonctions migrées (toutes sauf `purgeClient`, dépendante d'`auditLog`). Câblage `routes/clients.ts` (`dbPort`/`db` mixte), `routes/sav.ts` (nouveau `Variables.db`), `routes/tickets.ts` (`dbPort` ajouté à `POST /`). Tests scindés `mockDatabase`/`mockD1` (48/48 ✅). **2 bugs RGPD critiques découverts et corrigés en live** : `exportClientRgpd()`/`purgeClient()` cassés depuis toujours (table `appareils_client` inexistante + colonne `imei` inexistante sur `tickets`) — droit d'accès (Art. 15) et droit à l'effacement (Art. 17) RGPD n'avaient jamais fonctionné en production malgré 48 tests unitaires verts. Détail complet `bugs.md`. **Validé en local live** : CRUD client, appareils, historique CRM, import CSV, export RGPD, purge RGPD (+ idempotence), hooks email tickets/SAV — 11/12 fonctions couvertes, données de test nettoyées.
 
 ## Chantier Ports & Adapters — 10/20 services migrés (session du 2026-07-14)
 - **stockService.ts** (2026-07-14) — 6/10 fonctions migrées (`listProduits`, `getProduitById`, `enregistrerMouvement`, `listCategories`, `createCategorie`, `getKpisStock`). `createProduit`/`updateProduit`/`deleteProduit`/`importCatalogueCsv` restent sur `D1Database` (dépendent d'`auditLog`). `routes/stocks.ts` : helper `ctx()` étendu avec `dbPort` en plus de `db`. Tests scindés `mockDatabase`/`mockD1` (56/56 ✅). **Validé en local live** : les 10 fonctions couvertes (create/list catégorie, create/get/list produit, KPIs, mouvement stock, update/delete produit, import CSV), données de test nettoyées.

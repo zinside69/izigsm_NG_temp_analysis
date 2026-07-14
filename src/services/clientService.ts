@@ -20,6 +20,7 @@
  */
 
 import { auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,13 +90,13 @@ export interface ImportClientRow {
  * (autorisé dans ce contexte : lecture seule, COUNT uniquement, pas de JOIN cross-module
  * avec retour de données tickets — conforme P1 par analogie avec statsService).
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID boutique (isolation multi-tenant)
  * @param opts       - Options : search, limit, offset, page
  * @returns { data: ClientRow[], total: number, page, limit, pages }
  */
 export async function listClients(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   opts: ListClientsOpts = {}
 ) {
@@ -112,11 +113,12 @@ export async function listClients(
 
   const where = 'WHERE ' + whereParts.join(' AND ')
 
-  const countRow = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM clients c ${where}`
-  ).bind(...bindings).first<{ cnt: number }>()
+  const countRow = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM clients c ${where}`,
+    bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<ClientRow>(`
     SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.ville, c.created_at,
            (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets,
            (SELECT COALESCE(SUM(f.total_ttc), 0)
@@ -125,11 +127,11 @@ export async function listClients(
     ${where}
     ORDER  BY c.created_at DESC
     LIMIT  ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   const total = countRow?.cnt ?? 0
   return {
-    data: rows.results as ClientRow[],
+    data: rows,
     total,
     page,
     limit,
@@ -143,25 +145,26 @@ export async function listClients(
  * Retourne la fiche complète d'un client avec ses appareils.
  * Ne charge PAS les tickets ici — utiliser getHistoriqueClient() pour l'historique complet.
  *
- * @param db - Instance D1Database
+ * @param db - Port Database
  * @param id - ID du client
  * @returns Client avec appareils, ou null si introuvable / inactif
  */
-export async function getClientById(db: D1Database, id: number) {
-  const client = await db.prepare(`
+export async function getClientById(db: Database, id: number) {
+  const client = await db.get<ClientRow & { boutique_nom: string }>(`
     SELECT c.*, b.nom as boutique_nom
     FROM   clients c
     JOIN   boutiques b ON b.id = c.boutique_id
     WHERE  c.id = ? AND c.actif = 1
-  `).bind(id).first<ClientRow & { boutique_nom: string }>()
+  `, [id])
 
   if (!client) return null
 
-  const appareils = await db.prepare(
-    'SELECT * FROM appareils WHERE client_id = ? ORDER BY created_at DESC'
-  ).bind(id).all()
+  const appareils = await db.all<any>(
+    'SELECT * FROM appareils WHERE client_id = ? ORDER BY created_at DESC',
+    [id]
+  )
 
-  return { ...client, appareils: appareils.results }
+  return { ...client, appareils }
 }
 
 // ─── Création ─────────────────────────────────────────────────────────────────
@@ -169,24 +172,24 @@ export async function getClientById(db: D1Database, id: number) {
 /**
  * Crée un nouveau client pour une boutique.
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID boutique
  * @param data       - Données client (prenom + nom obligatoires)
  * @returns { id: number } ID du client créé
  */
 export async function createClient(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   data: CreateClientData
 ): Promise<{ id: number }> {
   const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = data
 
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO clients
       (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).bind(
+  `, [
     boutiqueId, prenom, nom,
     email       ?? null,
     telephone   ?? null,
@@ -195,7 +198,7 @@ export async function createClient(
     ville       ?? null,
     pays        ?? 'France',
     notes       ?? null
-  ).first<{ id: number }>()
+  ])
 
   return { id: result!.id }
 }
@@ -205,25 +208,25 @@ export async function createClient(
 /**
  * Met à jour les informations d'un client existant.
  *
- * @param db   - Instance D1Database
+ * @param db   - Port Database
  * @param id   - ID du client
  * @param data - Champs à mettre à jour
  * @returns true si la ligne a été modifiée
  */
 export async function updateClient(
-  db: D1Database,
+  db: Database,
   id: number,
   data: CreateClientData
 ): Promise<boolean> {
   const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = data
 
-  const res = await db.prepare(`
+  const res = await db.run(`
     UPDATE clients
     SET prenom=?, nom=?, email=?, telephone=?, adresse=?,
         code_postal=?, ville=?, pays=?, notes=?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND actif = 1
-  `).bind(
+  `, [
     prenom, nom,
     email       ?? null,
     telephone   ?? null,
@@ -233,9 +236,9 @@ export async function updateClient(
     pays        ?? 'France',
     notes       ?? null,
     id
-  ).run()
+  ])
 
-  return (res.meta?.changes ?? 0) > 0
+  return res.changes > 0
 }
 
 // ─── Soft delete ──────────────────────────────────────────────────────────────
@@ -243,16 +246,17 @@ export async function updateClient(
 /**
  * Désactive un client (soft delete — actif = 0).
  *
- * @param db - Instance D1Database
+ * @param db - Port Database
  * @param id - ID du client
  * @returns true si la ligne a été modifiée
  */
-export async function deleteClient(db: D1Database, id: number): Promise<boolean> {
-  const res = await db.prepare(
-    'UPDATE clients SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1'
-  ).bind(id).run()
+export async function deleteClient(db: Database, id: number): Promise<boolean> {
+  const res = await db.run(
+    'UPDATE clients SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1',
+    [id]
+  )
 
-  return (res.meta?.changes ?? 0) > 0
+  return res.changes > 0
 }
 
 // ─── Appareils ────────────────────────────────────────────────────────────────
@@ -260,30 +264,30 @@ export async function deleteClient(db: D1Database, id: number): Promise<boolean>
 /**
  * Ajoute un appareil à un client existant.
  *
- * @param db       - Instance D1Database
+ * @param db       - Port Database
  * @param clientId - ID du client propriétaire
  * @param data     - Données appareil (marque + modèle obligatoires)
  * @returns { id: number } ID de l'appareil créé
  */
 export async function addAppareil(
-  db: D1Database,
+  db: Database,
   clientId: number,
   data: AppareilData
 ): Promise<{ id: number }> {
   const { marque, modele, type, imei, numero_serie, couleur, notes } = data
 
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO appareils (client_id, marque, modele, type, imei, numero_serie, couleur, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).bind(
+  `, [
     clientId, marque, modele,
     type         ?? 'smartphone',
     imei         ?? null,
     numero_serie ?? null,
     couleur      ?? null,
     notes        ?? null
-  ).first<{ id: number }>()
+  ])
 
   return { id: result!.id }
 }
@@ -298,19 +302,19 @@ export async function addAppareil(
  * Il agrège 4 modules distincts en lecture seule, uniquement pour affichage.
  * Similaire à statsService — justifié par le rôle analytique CRM client.
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param id         - ID du client
  * @param boutiqueId - ID boutique (isolation multi-tenant)
  * @returns { tickets, factures, rachats, rendez_vous, kpis }
  */
 export async function getHistoriqueClient(
-  db: D1Database,
+  db: Database,
   id: number,
   boutiqueId: number
 ) {
   const [tickets, factures, rachats, rdv] = await Promise.all([
     // ── Tickets ──
-    db.prepare(`
+    db.all<any>(`
       SELECT t.id, t.numero, t.statut, t.description_panne,
              t.appareil_marque, t.appareil_modele, t.prix_final,
              t.created_at, t.updated_at
@@ -318,49 +322,49 @@ export async function getHistoriqueClient(
       WHERE  t.client_id = ? AND t.boutique_id = ? AND t.actif = 1
       ORDER  BY t.created_at DESC
       LIMIT  50
-    `).bind(id, boutiqueId).all(),
+    `, [id, boutiqueId]),
 
     // ── Factures ──  (pas de colonne actif sur factures)
-    db.prepare(`
+    db.all<any>(`
       SELECT f.id, f.numero, f.statut, f.total_ttc, f.issued_at, f.created_at
       FROM   factures f
       WHERE  f.client_id = ? AND f.boutique_id = ? AND f.statut != 'ANNULE'
       ORDER  BY f.created_at DESC
       LIMIT  50
-    `).bind(id, boutiqueId).all(),
+    `, [id, boutiqueId]),
 
     // ── Rachats ── (pas de client_id sur rachats — table livre de police vendeur)
     // On retourne un tableau vide : les rachats sont liés au vendeur (externe), pas au client CRM
-    Promise.resolve({ results: [] }),
+    Promise.resolve([] as any[]),
 
     // ── Rendez-vous ──
-    db.prepare(`
+    db.all<any>(`
       SELECT rv.id, rv.type_rdv as type, rv.statut, rv.debut, rv.fin,
              rv.description, rv.created_at
       FROM   rendez_vous rv
       WHERE  rv.client_id = ? AND rv.boutique_id = ? AND rv.actif = 1
       ORDER  BY rv.debut DESC
       LIMIT  20
-    `).bind(id, boutiqueId).all(),
+    `, [id, boutiqueId]),
   ])
 
   // ── KPIs synthèse client ──
   const kpis = {
-    nb_tickets:   tickets.results.length,
-    nb_factures:  factures.results.length,
-    nb_rachats:   rachats.results.length,
-    nb_rdv:       rdv.results.length,
-    ca_total:     (factures.results as any[]).reduce((s, f) => s + (f.total_ttc || 0), 0),
-    ticket_ouvert: (tickets.results as any[]).filter(
+    nb_tickets:   tickets.length,
+    nb_factures:  factures.length,
+    nb_rachats:   rachats.length,
+    nb_rdv:       rdv.length,
+    ca_total:     (factures as any[]).reduce((s, f) => s + (f.total_ttc || 0), 0),
+    ticket_ouvert: (tickets as any[]).filter(
       (t: any) => !['CLOTURE', 'LIVRE', 'ANNULE'].includes(t.statut)
     ).length,
   }
 
   return {
-    tickets:      tickets.results,
-    factures:     factures.results,
-    rachats:      rachats.results,
-    rendez_vous:  rdv.results,
+    tickets,
+    factures,
+    rachats,
+    rendez_vous: rdv,
     kpis,
   }
 }
@@ -372,13 +376,13 @@ export async function getHistoriqueClient(
  * Stratégie : INSERT OR IGNORE sur email (doublon silencieux).
  * Les lignes sans email sont toujours insérées.
  *
- * @param db         - Instance D1Database
+ * @param db         - Port Database
  * @param boutiqueId - ID boutique
  * @param rows       - Tableau de lignes parsées (min : prenom ou nom requis)
  * @returns { inserted: number, skipped: number, errors: string[] }
  */
 export async function importClients(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   rows: ImportClientRow[]
 ): Promise<{ inserted: number; skipped: number; errors: string[] }> {
@@ -399,20 +403,21 @@ export async function importClients(
     try {
       // Vérifier doublon email si fourni
       if (row.email) {
-        const exists = await db.prepare(
-          'SELECT id FROM clients WHERE email = ? AND boutique_id = ? AND actif = 1'
-        ).bind(row.email.trim(), boutiqueId).first()
+        const exists = await db.get(
+          'SELECT id FROM clients WHERE email = ? AND boutique_id = ? AND actif = 1',
+          [row.email.trim(), boutiqueId]
+        )
         if (exists) {
           skipped++
           continue
         }
       }
 
-      await db.prepare(`
+      await db.run(`
         INSERT INTO clients
           (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
+      `, [
         boutiqueId,
         prenom || '',
         nom    || prenom,
@@ -423,7 +428,7 @@ export async function importClients(
         row.ville       ? row.ville.trim()       : null,
         row.pays        ? row.pays.trim()        : 'France',
         row.notes       ? row.notes.trim()       : null
-      ).run()
+      ])
 
       inserted++
     } catch (err: any) {
@@ -442,34 +447,36 @@ export async function importClients(
  * Utilisé par les hooks email non-bloquants dans `routes/tickets.ts` et `routes/sav.ts`.
  * Plus léger que `getClientById()` — ne charge pas les appareils ni la boutique.
  *
- * @param db       - Instance D1Database
+ * @param db       - Port Database
  * @param clientId - ID du client
  * @returns        `{ email, prenom }` ou `null` si client introuvable
  */
 export async function getClientEmailPrenom(
-  db:       D1Database,
+  db:       Database,
   clientId: number
 ): Promise<{ email: string | null; prenom: string } | null> {
-  return db.prepare(
-    'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1'
-  ).bind(clientId).first<{ email: string | null; prenom: string }>()
+  return db.get<{ email: string | null; prenom: string }>(
+    'SELECT email, prenom FROM clients WHERE id = ? LIMIT 1',
+    [clientId]
+  )
 }
 
 /**
  * Compte le nombre de tickets actifs d'un client.
  * Utilisé par d'autres services (ticketService futur) sans cross-module SQL.
  *
- * @param db       - Instance D1Database
+ * @param db       - Port Database
  * @param clientId - ID du client
  * @returns Nombre de tickets actifs
  */
 export async function countTicketsByClient(
-  db: D1Database,
+  db: Database,
   clientId: number
 ): Promise<number> {
-  const row = await db.prepare(
-    'SELECT COUNT(*) as cnt FROM tickets WHERE client_id = ? AND actif = 1'
-  ).bind(clientId).first<{ cnt: number }>()
+  const row = await db.get<{ cnt: number }>(
+    'SELECT COUNT(*) as cnt FROM tickets WHERE client_id = ? AND actif = 1',
+    [clientId]
+  )
   return row?.cnt ?? 0
 }
 
@@ -480,48 +487,48 @@ export async function countTicketsByClient(
  * Retourne un JSON structuré : données personnelles + tickets + factures + RDV + appareils.
  * Les données sensibles (password_hash, etc.) ne sont jamais incluses.
  *
- * @param db       - Instance D1Database
+ * @param db       - Port Database
  * @param clientId - ID du client
  * @returns        Objet JSON complet ou null si client introuvable
  */
 export async function exportClientRgpd(
-  db:       D1Database,
+  db:       Database,
   clientId: number
 ): Promise<object | null> {
   const client = await getClientById(db, clientId)
   if (!client) return null
 
   const [tickets, factures, rdv, appareils] = await Promise.all([
-    db.prepare(`
+    db.all<any>(`
       SELECT id, numero, statut, description_panne, diagnostic,
-             appareil_marque, appareil_modele, imei, prix_estime, prix_final,
+             appareil_marque, appareil_modele, prix_estime, prix_final,
              date_reception, date_promesse, created_at, updated_at, archived_at
       FROM   tickets
       WHERE  client_id = ? AND actif = 1
       ORDER  BY created_at DESC
-    `).bind(clientId).all(),
+    `, [clientId]),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT f.id, f.numero, f.statut, f.total_ht, f.total_tva, f.total_ttc,
              f.issued_at, f.created_at
       FROM   factures f
       WHERE  f.client_id = ?
       ORDER  BY f.created_at DESC
-    `).bind(clientId).all(),
+    `, [clientId]),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT id, type_rdv AS type, statut, debut, fin, description, created_at
       FROM   rendez_vous
       WHERE  client_id = ? AND actif = 1
       ORDER  BY debut DESC
-    `).bind(clientId).all(),
+    `, [clientId]),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT id, marque, modele, imei, numero_serie, couleur, notes, created_at
-      FROM   appareils_client
+      FROM   appareils
       WHERE  client_id = ?
       ORDER  BY created_at DESC
-    `).bind(clientId).all(),
+    `, [clientId]),
   ])
 
   return {
@@ -540,10 +547,10 @@ export async function exportClientRgpd(
       notes:       client.notes,
       created_at:  client.created_at,
     },
-    tickets:     tickets.results   ?? [],
-    factures:    factures.results  ?? [],
-    rendez_vous: rdv.results       ?? [],
-    appareils:   appareils.results ?? [],
+    tickets:     tickets     ?? [],
+    factures:    factures    ?? [],
+    rendez_vous: rdv         ?? [],
+    appareils:   appareils   ?? [],
   }
 }
 
@@ -591,7 +598,7 @@ export async function purgeClient(
 
   // Anonymiser aussi les appareils liés (IMEI est une donnée personnelle)
   await db.prepare(`
-    UPDATE appareils_client SET
+    UPDATE appareils SET
       imei          = NULL,
       numero_serie  = NULL,
       notes         = NULL

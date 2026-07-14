@@ -175,7 +175,7 @@ tickets.get('/:id', async (c) => {
  * @returns { success, id, numero, tracking_token }
  */
 tickets.post('/', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
   const { client_id, appareil_id, appareil_marque, appareil_modele,
           description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
@@ -208,7 +208,7 @@ tickets.post('/', async (c) => {
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
   const frontendUrl  = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
-  const clientRow = await getClientEmailPrenom(db, client_id)
+  const clientRow = await getClientEmailPrenom(dbPort, client_id)
 
   if (clientRow?.email) {
     // waitUntil() obligatoire : sans lui, Cloudflare Workers tue l'exécution

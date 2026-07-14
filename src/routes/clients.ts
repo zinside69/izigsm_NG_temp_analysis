@@ -20,6 +20,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { parsePagination, validateEmail, auditLog }   from '../lib/db'
+import type { Database } from '../ports/database'
 import {
   listClients,
   getClientById,
@@ -34,7 +35,7 @@ import {
 } from '../services/clientService'
 
 type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 const clients = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 clients.use('*', authMiddleware)
@@ -43,14 +44,16 @@ clients.use('*', authMiddleware)
 
 /**
  * Extrait user + db depuis le contexte Hono.
+ * `db` (D1Database brut) reste pour `auditLog()` (non migré) ; `dbPort` (port Database)
+ * pour les fonctions clientService migrées.
  * boutiqueId est résolu séparément selon la source (query param ou body).
  * @param c - Contexte Hono
- * @returns { user, db, queryBoutiqueId }
+ * @returns { user, db, dbPort, queryBoutiqueId }
  */
 function ctx(c: any) {
   const user = c.get('user')
   const queryBoutiqueId = c.req.query('boutique_id') ?? undefined
-  return { user, db: c.env.DB as D1Database, queryBoutiqueId }
+  return { user, db: c.env.DB as D1Database, dbPort: c.get('db') as Database, queryBoutiqueId }
 }
 
 /**
@@ -75,14 +78,14 @@ function canAccessClient(user: any, client: any, boutiqueId: number | null): boo
  * @returns { success, data, pagination }
  */
 clients.get('/', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   const query = c.req.query()
   const { limit, offset, page } = parsePagination(query)
 
-  const result = await listClients(db, boutiqueId, {
+  const result = await listClients(dbPort, boutiqueId, {
     search: query.search ?? null,
     limit,
     offset,
@@ -104,11 +107,11 @@ clients.get('/', async (c) => {
  * @returns { success, data: { client + appareils } }
  */
 clients.get('/:id', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)
 
-  const client = await getClientById(db, id)
+  const client = await getClientById(dbPort, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, client, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
@@ -127,19 +130,19 @@ clients.get('/:id', async (c) => {
  * @returns { success, data: { tickets, factures, rachats, rendez_vous, kpis } }
  */
 clients.get('/:id/historique', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   const id = parseInt(c.req.param('id'), 10)
 
   // Vérification accès client
-  const client = await getClientById(db, id)
+  const client = await getClientById(dbPort, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, client, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const historique = await getHistoriqueClient(db, id, boutiqueId)
+  const historique = await getHistoriqueClient(dbPort, id, boutiqueId)
   return c.json({ success: true, data: historique })
 })
 
@@ -151,7 +154,7 @@ clients.get('/:id/historique', async (c) => {
  * @returns { success, id, message }
  */
 clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
   const { prenom, nom, email } = body
   // boutique_id peut venir du body (POST) ou du query param
@@ -163,7 +166,7 @@ clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
   if (email && !validateEmail(email))
     return c.json({ success: false, error: 'Email invalide.' }, 400)
 
-  const result = await createClient(db, boutiqueId, body)
+  const result = await createClient(dbPort, boutiqueId, body)
   await auditLog(db, {
     boutique_id: boutiqueId, user_id: user.sub,
     action: 'CREATE_CLIENT', entite_type: 'client', entite_id: result.id, apres: body,
@@ -183,7 +186,7 @@ clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
  * @returns { success, inserted, skipped, errors }
  */
 clients.post('/import-csv', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
   const rows = body.rows
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
@@ -194,7 +197,7 @@ clients.post('/import-csv', requireRole('admin', 'manager'), async (c) => {
   if (rows.length > 500)
     return c.json({ success: false, error: 'Import limité à 500 lignes par lot.' }, 400)
 
-  const result = await importClients(db, boutiqueId, rows)
+  const result = await importClients(dbPort, boutiqueId, rows)
 
   await auditLog(db, {
     boutique_id: boutiqueId, user_id: user.sub,
@@ -218,7 +221,7 @@ clients.post('/import-csv', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, message }
  */
 clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
@@ -229,12 +232,12 @@ clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => 
   if (email && !validateEmail(email))
     return c.json({ success: false, error: 'Email invalide.' }, 400)
 
-  const existing = await getClientById(db, id)
+  const existing = await getClientById(dbPort, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, existing, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  await updateClient(db, id, body)
+  await updateClient(dbPort, id, body)
   await auditLog(db, {
     boutique_id: existing.boutique_id, user_id: user.sub,
     action: 'UPDATE_CLIENT', entite_type: 'client', entite_id: id, apres: body,
@@ -251,16 +254,16 @@ clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => 
  * @returns { success, message }
  */
 clients.delete('/:id', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)
 
-  const existing = await getClientById(db, id)
+  const existing = await getClientById(dbPort, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, existing, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  await deleteClient(db, id)
+  await deleteClient(dbPort, id)
   await auditLog(db, {
     boutique_id: existing.boutique_id, user_id: user.sub,
     action: 'DELETE_CLIENT', entite_type: 'client', entite_id: id,
@@ -278,7 +281,7 @@ clients.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, id, message }
  */
 clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { db } = ctx(c)
+  const { dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
   const { marque, modele } = body
@@ -286,10 +289,10 @@ clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), as
   if (!marque || !modele)
     return c.json({ success: false, error: 'Marque et modèle obligatoires.' }, 400)
 
-  const client = await getClientById(db, id)
+  const client = await getClientById(dbPort, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
 
-  const result = await addAppareil(db, id, body)
+  const result = await addAppareil(dbPort, id, body)
   return c.json({ success: true, id: result.id, message: 'Appareil ajouté.' }, 201)
 })
 
@@ -305,16 +308,16 @@ clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), as
  * @returns JSON complet avec Content-Disposition attachment
  */
 clients.get('/:id/export-rgpd', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)
 
-  const existing = await getClientById(db, id)
+  const existing = await getClientById(dbPort, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, existing, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
-  const data = await exportClientRgpd(db, id)
+  const data = await exportClientRgpd(dbPort, id)
   if (!data) return c.json({ success: false, error: 'Client introuvable.' }, 404)
 
   const filename = `rgpd_client_${id}_${new Date().toISOString().slice(0, 10)}.json`
@@ -339,7 +342,7 @@ clients.get('/:id/export-rgpd', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, message }
  */
 clients.delete('/:id/purge', requireRole('admin'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)
 
@@ -353,7 +356,7 @@ clients.delete('/:id/purge', requireRole('admin'), async (c) => {
     }, 422)
   }
 
-  const existing = await getClientById(db, id)
+  const existing = await getClientById(dbPort, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)
   if (!canAccessClient(user, existing, boutiqueId))
     return c.json({ success: false, error: 'Accès interdit.' }, 403)

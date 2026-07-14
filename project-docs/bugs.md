@@ -1,5 +1,18 @@
 # iziGSM — Bugs connus
 
+## `exportClientRgpd()`/`purgeClient()` — RGPD (Art. 15 & 17) cassés depuis toujours — CORRIGÉ le 2026-07-14
+
+Découvert en validation live lors de la migration Ports & Adapters de `clientService.ts`. Deux bugs cumulés dans `clientService.ts`, chacun suffisant seul à faire planter l'export/la purge RGPD :
+
+1. **Table `appareils_client` inexistante** — `exportClientRgpd()` et `purgeClient()` référençaient une table `appareils_client` qui n'a jamais existé dans aucune migration (`grep` sur `migrations/*.sql` confirme : seule la table `appareils` existe, créée par `migrations/0003_clients_appareils.sql`, et c'est celle-là qu'utilisent `getClientById()`/`addAppareil()` partout ailleurs dans le même fichier). `GET /api/clients/:id/export-rgpd` → 500 `D1_ERROR: no such table: appareils_client` à 100% des appels. `DELETE /api/clients/:id/purge` anonymisait bien le client (1ère requête) puis **plantait avant l'anonymisation des appareils ET avant l'écriture dans `audit_logs`** (2ème requête invalide, jamais atteinte l'auditLog).
+2. **Colonne `imei` inexistante sur `tickets`** — la requête tickets d'`exportClientRgpd()` sélectionnait `imei` (le champ IMEI vit uniquement sur `appareils`, jamais sur `tickets` — confirmé par le schéma `migrations/0004_tickets.sql`), déclenchant un second 500 même après le fix #1 (`D1_ERROR: no such column: imei`).
+
+**Conséquence** : `GET /api/clients/:id/export-rgpd` (droit d'accès Art. 15) et `DELETE /api/clients/:id/purge` (droit à l'effacement Art. 17, anonymisation partielle silencieuse) **n'ont jamais fonctionné en production**, malgré une couverture de tests unitaires complète (48 tests, Sprint 2.41-D) — les mocks ne valident pas contre un schéma réel, donc aucun test n'a jamais pu détecter ces noms de table/colonne invalides.
+
+**Fix appliqué** : `appareils_client` → `appareils` (2 occurrences), suppression de la colonne `imei` de la requête tickets (le SELECT garde `archived_at`, qui lui existe bien — ajouté par `migrations/0029_tickets_archivage_rgpd.sql`). Tests mis à jour en conséquence (`SQL_RGPD_APPAREILS`, `SQL_PURGE_APPAREILS`, `SQL_RGPD_TICKETS`).
+
+**Validé en local live** (2026-07-14) : `GET /export-rgpd` → 200 avec les 4 tableaux (tickets/factures/rendez_vous/appareils) correctement peuplés ; `DELETE /purge` → 200, client anonymisé (`prenom: 'Anonymisé'`, `nom: 'RGPD-{id}'`), 2e appel → 404 (client déjà inaccessible, cohérent). Données de test nettoyées après coup.
+
 ## Vente POS d'un produit en stock — CASSÉE DEPUIS TOUJOURS + facture orpheline NF525 — CORRIGÉ le 2026-07-12
 
 Découvert en validation live lors de la migration Ports & Adapters de `caisseService.ts`. `createVente()` insérait dans `mouvements_stock` avec des colonnes **qui n'existent pas dans le schéma réel** :
