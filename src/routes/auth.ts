@@ -47,6 +47,7 @@ import {
 import { validateEmail, auditLog } from '../lib/db'
 import { authMiddleware } from '../lib/middleware'
 import { sendOtpInscription } from '../services/emailService'
+import type { Database } from '../ports/database'
 import {
   findUserByEmail,
   findUserByEmailFull,
@@ -64,7 +65,7 @@ import {
 } from '../services/authService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; RESEND_API_KEY?: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -139,13 +140,13 @@ auth.post('/register', async (c) => {
       return c.json({ success: false, error: 'Mot de passe minimum 8 caractères.' }, 400)
 
     // Vérifier si email déjà utilisé
-    const existing = await findUserByEmail(c.env.DB, email)
+    const existing = await findUserByEmail(c.get('db'), email)
     if (existing)
       return c.json({ success: false, error: 'Cet email est déjà utilisé.' }, 409)
 
     // Créer la boutique si workshopName fourni — détails SIRENE optionnels (autocomplete ou saisie manuelle)
     const boutiqueId = workshopName
-      ? await createBoutiqueWithSettings(c.env.DB, workshopName, { siret, tvaNumero, adresse, codePostal, ville, telephone })
+      ? await createBoutiqueWithSettings(c.get('db'), workshopName, { siret, tvaNumero, adresse, codePostal, ville, telephone })
       : null
 
     // Hasher le mot de passe (PBKDF2-SHA256, 100 000 itérations)
@@ -153,7 +154,7 @@ auth.post('/register', async (c) => {
 
     // Créer l'utilisateur (inactif jusqu'à vérification email)
     const userId = await createUser(
-      c.env.DB, email, passwordHash, prenom, nom,
+      c.get('db'), email, passwordHash, prenom, nom,
       telephone ?? null, boutiqueId
     )
     if (!userId) throw new Error('Erreur création utilisateur')
@@ -215,9 +216,9 @@ auth.post('/verify-otp', async (c) => {
       return c.json({ success: false, error: 'Code OTP invalide ou expiré.' }, 400)
 
     // Activer le compte
-    await activateUser(c.env.DB, email)
+    await activateUser(c.get('db'), email)
 
-    const user = await findUserByEmailAfterActivation(c.env.DB, email)
+    const user = await findUserByEmailAfterActivation(c.get('db'), email)
     if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
 
     const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
@@ -261,7 +262,7 @@ auth.post('/resend-otp', async (c) => {
 
     const genericResponse = { success: true, message: 'Si un compte existe pour cet email et n\'est pas encore vérifié, un nouveau code vient d\'être envoyé.' }
 
-    const user = await findUserByEmailFull(c.env.DB, email)
+    const user = await findUserByEmailFull(c.get('db'), email)
     if (!user || user.email_verifie) return c.json(genericResponse)
 
     const otp = generateOtp()
@@ -314,7 +315,7 @@ auth.post('/login', async (c) => {
     if (!email || !password)
       return c.json({ success: false, error: 'Email et mot de passe requis.' }, 400)
 
-    const user = await findUserByEmailFull(c.env.DB, email)
+    const user = await findUserByEmailFull(c.get('db'), email)
 
     // Message identique pour email inconnu et mot de passe incorrect (anti-énumération)
     if (!user)
@@ -380,7 +381,7 @@ auth.post('/refresh', async (c) => {
     // Rotation : révoquer l'ancien avant d'émettre le nouveau
     await revokeRefreshToken(c.env.KV, userId, refreshToken)
 
-    const user = await findUserById(c.env.DB, userId)
+    const user = await findUserById(c.get('db'), userId)
     if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
 
     const tokens = await generateTokenPair(user, c.env.JWT_SECRET)
@@ -434,7 +435,7 @@ auth.post('/logout', authMiddleware, async (c) => {
  */
 auth.get('/me', authMiddleware, async (c) => {
   const user = c.get('user')
-  const profile = await findUserWithProfile(c.env.DB, user.sub)
+  const profile = await findUserWithProfile(c.get('db'), user.sub)
   if (!profile) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
   return c.json({ success: true, user: profile })
 })
@@ -460,7 +461,7 @@ auth.post('/reset-password-request', async (c) => {
       return c.json({ success: false, error: 'Email invalide.' }, 400)
 
     // Anti-énumération : même réponse quelle que soit l'existence de l'email
-    const user = await findUserByEmail(c.env.DB, email)
+    const user = await findUserByEmail(c.get('db'), email)
 
     if (user) {
       // Générer token réinitialisation 32 octets → hex 64 chars
@@ -536,7 +537,7 @@ auth.post('/reset-password', async (c) => {
 
     // Nouveau hash PBKDF2
     const newHash = await hashPassword(password)
-    await updatePasswordHash(c.env.DB, stored.userId, newHash)
+    await updatePasswordHash(c.get('db'), stored.userId, newHash)
 
     // Révoquer le token (usage unique)
     await c.env.KV.delete(`reset:${email}`)
@@ -603,20 +604,20 @@ auth.post('/google', async (c) => {
     const nom      = googlePayload.family_name || ''
 
     // 1. Chercher par google_id
-    let user = await findUserByGoogleId(c.env.DB, googleId)
+    let user = await findUserByGoogleId(c.get('db'), googleId)
 
     if (!user) {
       // 2. Chercher par email — liaison d'un compte existant
-      const existing = await findUserByEmailFull(c.env.DB, email)
+      const existing = await findUserByEmailFull(c.get('db'), email)
       if (existing) {
-        await linkGoogleId(c.env.DB, existing.id, googleId)
-        user = await findUserById(c.env.DB, existing.id)
+        await linkGoogleId(c.get('db'), existing.id, googleId)
+        user = await findUserById(c.get('db'), existing.id)
       } else {
         // 3. Créer un nouveau compte Google
-        const newUserId = await createGoogleUser(c.env.DB, email, prenom, nom, googleId)
+        const newUserId = await createGoogleUser(c.get('db'), email, prenom, nom, googleId)
         if (!newUserId)
           return c.json({ success: false, error: 'Erreur création compte.' }, 500)
-        user = await findUserById(c.env.DB, newUserId)
+        user = await findUserById(c.get('db'), newUserId)
         await auditLog(c.env.DB, { user_id: newUserId, action: 'REGISTER_GOOGLE', entite_type: 'user', entite_id: newUserId })
       }
     }
@@ -679,16 +680,16 @@ auth.post('/complete-onboarding', authMiddleware, async (c) => {
     if (!workshopName || !workshopName.trim())
       return c.json({ success: false, error: 'Le nom de l\'atelier est requis.' }, 400)
 
-    const boutiqueId = await createBoutiqueWithSettings(c.env.DB, workshopName.trim(), { siret, tvaNumero, adresse, codePostal, ville })
+    const boutiqueId = await createBoutiqueWithSettings(c.get('db'), workshopName.trim(), { siret, tvaNumero, adresse, codePostal, ville })
     if (!boutiqueId)
       return c.json({ success: false, error: 'Erreur création boutique.' }, 500)
 
-    const linked = await attachBoutiqueToUser(c.env.DB, jwtUser.sub, boutiqueId)
+    const linked = await attachBoutiqueToUser(c.get('db'), jwtUser.sub, boutiqueId)
     if (!linked)
       return c.json({ success: false, error: 'Une boutique est déjà associée à ce compte.' }, 409)
 
     // L'ancien JWT porte encore boutique_id: null — régénérer avec l'état à jour
-    const user = await findUserById(c.env.DB, jwtUser.sub)
+    const user = await findUserById(c.get('db'), jwtUser.sub)
     if (!user) return c.json({ success: false, error: 'Utilisateur introuvable.' }, 404)
 
     const tokens = await generateTokenPair(user, c.env.JWT_SECRET)

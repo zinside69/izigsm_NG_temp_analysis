@@ -1,9 +1,13 @@
-# iziGSM — État courant (MàJ : 2026-07-13, checkpoint 6)
+# iziGSM — État courant (MàJ : 2026-07-14, checkpoint 7)
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
 - Tout ce qui était opérationnel au checkpoint 4 (migration Cloudflare, auth, slug boutiques, chantier prise en charge, technicien_id, numérotation par boutique) — toujours en place, aucune régression.
 - Checkpoint 5 (7 services Ports & Adapters + `lib/timezone.ts` + 2 bugs NF525) commité et déployé (commit `5bcea99`).
-- **⚠ Le travail décrit ci-dessous (checkpoint 6, migration `devisService.ts`) n'est PAS encore commité ni déployé** au moment de cette mise à jour — développé, testé (unitaire + local live), pas encore buildé/déployé sur Cloudflare Pages ni poussé sur `origin/main`.
+- Checkpoint 6 (`devisService.ts`, 8/20 services) commité (`0e6fa10`) — **pas encore déployé** au moment de cette mise à jour.
+- **⚠ Le travail décrit ci-dessous (checkpoint 7, migration `authService.ts`) n'est PAS encore commité ni déployé** — développé, testé (unitaire + local live complet), pas encore buildé/déployé sur Cloudflare Pages ni poussé sur `origin/main`.
+
+## Chantier Ports & Adapters — 9/20 services migrés (session du 2026-07-14)
+- **authService.ts** (2026-07-14) — 13/13 fonctions migrées **intégralement** (aucune dépendance `auditLog`/`nextNumero`/`batch`), 1er service sensible sécurité du chantier. `routes/auth.ts` câblé sur `c.get('db')` pour les 13 fonctions ; `auditLog`/`sendEmail` (non migrés) restent sur `c.env.DB`. Tests → `mockDatabase`, 25/25 ✅. **Validé en local live** : login, /me, refresh, register→verify-otp (avec/sans boutique), resend-otp, complete-onboarding (+ idempotence testée), reset-password-request→reset-password (mdp admin restauré après test), logout — 12/13 fonctions couvertes en conditions réelles (Google OAuth exclu, nécessite un vrai token externe). Détail complet dans `todo.md`.
 
 ## Chantier Ports & Adapters — 8/20 services migrés (session du 2026-07-13)
 Pattern établi : `src/ports/database.ts` (interface `Database`) + `src/adapters/cloudflare/d1Database.ts` (adaptateur D1). Ordre de migration complet dans `todo.md`. Fonctions dépendant d'`auditLog()`/`nextNumero()`/`enregistrerTransaction()`/`db.batch()` (encore sur `D1Database` brut) restent non migrées au sein de chaque service — migration partielle assumée, pas un blocage.

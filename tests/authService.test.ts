@@ -13,13 +13,13 @@
  *   - findUserByEmailAfterActivation() — payload JWT post-OTP
  *
  * Stratégie :
- *   Mock D1Database en mémoire (createMockD1) — aucune base SQLite réelle.
+ *   Mock Database (port) en mémoire (createMockDatabase) — aucune base SQLite réelle.
  *   Les SQL sont enregistrés via __setResponse() / __setResponseFn().
  *   On vérifie : valeurs retournées + SQL appelés (via __getCalls()).
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   findUserByEmail,
   findUserByEmailFull,
@@ -58,7 +58,7 @@ const FIXTURE_USER_PROFILE: UserProfile = {
 
 describe('findUserByEmail', () => {
   it('retourne { id } si l\'email existe en base', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('SELECT id FROM users WHERE email = ?', { id: 42 })
 
     const result = await findUserByEmail(db, 'alice@izigsm.fr')
@@ -67,7 +67,7 @@ describe('findUserByEmail', () => {
   })
 
   it('retourne null si l\'email n\'existe pas', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setNotFound('SELECT id FROM users WHERE email = ?')
 
     const result = await findUserByEmail(db, 'inconnu@test.fr')
@@ -76,7 +76,7 @@ describe('findUserByEmail', () => {
   })
 
   it('appelle bien le SQL avec l\'email en paramètre', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setNotFound('SELECT id FROM users WHERE email = ?')
 
     await findUserByEmail(db, 'test@test.fr')
@@ -92,7 +92,7 @@ describe('findUserByEmail', () => {
 
 describe('findUserByEmailFull', () => {
   it('retourne UserFull avec password_hash pour le login', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'SELECT u.id, u.email, u.password_hash, u.prenom, u.nom, u.boutique_id, u.actif, u.email_verifie, r.nom as role FROM users u JOIN roles r ON r.id = u.role_id WHERE u.email = ?',
       () => FIXTURE_USER_FULL
@@ -108,7 +108,7 @@ describe('findUserByEmailFull', () => {
   })
 
   it('retourne null pour un email inconnu', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponse enregistrée → null par défaut
 
     const result = await findUserByEmailFull(db, 'ghost@test.fr')
@@ -121,7 +121,7 @@ describe('findUserByEmailFull', () => {
 
 describe('findUserById', () => {
   it('retourne UserWithRole si l\'utilisateur est actif', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.actif = 1',
       () => FIXTURE_USER_WITH_ROLE
@@ -135,7 +135,7 @@ describe('findUserById', () => {
   })
 
   it('retourne null si l\'utilisateur est inactif ou introuvable', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponse → null par défaut (simule actif=0 ou id inconnu)
 
     const result = await findUserById(db, 999)
@@ -144,7 +144,7 @@ describe('findUserById', () => {
   })
 
   it('transmet l\'id en paramètre SQL', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await findUserById(db, 42)
 
@@ -157,7 +157,7 @@ describe('findUserById', () => {
 
 describe('findUserWithProfile', () => {
   it('retourne UserProfile enrichi avec boutique_nom et telephone', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.boutique_id, r.nom as role, b.nom as boutique_nom FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN boutiques b ON b.id = u.boutique_id WHERE u.id = ? AND u.actif = 1',
       () => FIXTURE_USER_PROFILE
@@ -170,7 +170,7 @@ describe('findUserWithProfile', () => {
   })
 
   it('retourne null si utilisateur désactivé (token zombie)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponse → null
 
     const result = await findUserWithProfile(db, 7)
@@ -179,7 +179,7 @@ describe('findUserWithProfile', () => {
   })
 
   it('boutique_nom peut être null (admin sans boutique)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.boutique_id, r.nom as role, b.nom as boutique_nom FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN boutiques b ON b.id = u.boutique_id WHERE u.id = ? AND u.actif = 1',
       () => ({ ...FIXTURE_USER_WITH_ROLE, telephone: null, boutique_nom: null, boutique_id: null })
@@ -196,7 +196,7 @@ describe('findUserWithProfile', () => {
 
 describe('createBoutiqueWithSettings', () => {
   it('retourne l\'id de la boutique créée', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     const id = await createBoutiqueWithSettings(db, 'Mon Atelier')
@@ -205,7 +205,7 @@ describe('createBoutiqueWithSettings', () => {
   })
 
   it('exécute INSERT boutiques PUIS INSERT boutique_settings en séquence', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     await createBoutiqueWithSettings(db, 'Mon Atelier')
@@ -218,7 +218,7 @@ describe('createBoutiqueWithSettings', () => {
   })
 
   it('génère le slug depuis le nom (accents normalisés, espaces → tirets)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     await createBoutiqueWithSettings(db, 'Réparation Éclair')
@@ -228,7 +228,7 @@ describe('createBoutiqueWithSettings', () => {
   })
 
   it('transmet les détails SIRENE optionnels (siret, adresse...) au INSERT', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 5 })
 
     await createBoutiqueWithSettings(db, 'Mon Atelier', {
@@ -242,7 +242,7 @@ describe('createBoutiqueWithSettings', () => {
   })
 
   it('retourne null si l\'INSERT boutique échoue (result.id absent)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', null)
 
     const id = await createBoutiqueWithSettings(db, 'Boutique Fantôme')
@@ -251,7 +251,7 @@ describe('createBoutiqueWithSettings', () => {
   })
 
   it('ne crée pas de settings si boutique_id est null', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponse('INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', null)
 
     await createBoutiqueWithSettings(db, 'Boutique Fantôme')
@@ -266,7 +266,7 @@ describe('createBoutiqueWithSettings', () => {
 
 describe('createUser', () => {
   it('retourne l\'id du nouvel utilisateur', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'INSERT INTO users (email, password_hash, prenom, nom, telephone, boutique_id, role_id, actif, email_verifie) VALUES (?, ?, ?, ?, ?, ?, 2, 0, 0) RETURNING id',
       () => ({ id: 10 })
@@ -278,7 +278,7 @@ describe('createUser', () => {
   })
 
   it('accepte telephone=null et boutique_id=null', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'INSERT INTO users (email, password_hash, prenom, nom, telephone, boutique_id, role_id, actif, email_verifie) VALUES (?, ?, ?, ?, ?, ?, 2, 0, 0) RETURNING id',
       () => ({ id: 11 })
@@ -292,7 +292,7 @@ describe('createUser', () => {
   })
 
   it('retourne null si l\'INSERT échoue', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     // Pas de réponse → first() retourne null
 
     const id = await createUser(db, 'fail@test.fr', 'hash', 'A', 'B', null, null)
@@ -301,7 +301,7 @@ describe('createUser', () => {
   })
 
   it('crée l\'utilisateur avec actif=0 et email_verifie=0 (SQL)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await createUser(db, 'x@x.fr', 'h', 'X', 'X', null, null)
 
@@ -315,7 +315,7 @@ describe('createUser', () => {
 
 describe('activateUser', () => {
   it('appelle UPDATE users avec le bon email', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     await activateUser(db, 'alice@izigsm.fr')
 
@@ -326,7 +326,7 @@ describe('activateUser', () => {
   })
 
   it('ne retourne rien (void)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     const result = await activateUser(db, 'x@x.fr')
 
@@ -338,7 +338,7 @@ describe('activateUser', () => {
 
 describe('findUserByEmailAfterActivation', () => {
   it('retourne UserWithRole (sans password_hash) après activation', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
     db.__setResponseFn(
       'SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role FROM users u JOIN roles r ON r.id = u.role_id WHERE u.email = ?',
       () => FIXTURE_USER_WITH_ROLE
@@ -354,7 +354,7 @@ describe('findUserByEmailAfterActivation', () => {
   })
 
   it('retourne null si introuvable (cas d\'erreur inattendu)', async () => {
-    const db = createMockD1()
+    const db = createMockDatabase()
 
     const result = await findUserByEmailAfterActivation(db, 'ghost@test.fr')
 

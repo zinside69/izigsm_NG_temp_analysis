@@ -30,6 +30,7 @@
  */
 
 import { slugify } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,17 +71,15 @@ export interface UserProfile extends UserWithRole {
  * Utilisé dans `POST /register` pour garantir l'unicité avant insertion.
  * Retourne uniquement l'`id` pour minimiser la lecture inutile.
  *
- * @param db     Instance D1Database (injectée depuis le contexte Hono)
+ * @param db     Port Database (injecté depuis le contexte Hono)
  * @param email  Adresse email à rechercher (sensible à la casse selon SQLite)
  * @returns      `{ id: number }` si l'email existe, `null` sinon
  */
 export async function findUserByEmail(
-  db: D1Database,
+  db: Database,
   email: string
 ): Promise<{ id: number } | null> {
-  return db.prepare('SELECT id FROM users WHERE email = ?')
-    .bind(email)
-    .first<{ id: number }>()
+  return db.get<{ id: number }>('SELECT id FROM users WHERE email = ?', [email])
 }
 
 // ─── findUserByEmailFull ──────────────────────────────────────────────────────
@@ -94,20 +93,20 @@ export async function findUserByEmail(
  * Sécurité : le `password_hash` ne doit JAMAIS être retourné dans une réponse HTTP.
  * Il est utilisé uniquement pour la vérification PBKDF2 locale.
  *
- * @param db     Instance D1Database
+ * @param db     Port Database
  * @param email  Adresse email de l'utilisateur
  * @returns      `UserFull` complet (avec hash), `null` si email introuvable
  */
 export async function findUserByEmailFull(
-  db: D1Database,
+  db: Database,
   email: string
 ): Promise<UserFull | null> {
-  return db.prepare(`
+  return db.get<UserFull>(`
     SELECT u.id, u.email, u.password_hash, u.prenom, u.nom,
            u.boutique_id, u.actif, u.email_verifie, r.nom as role
     FROM   users u JOIN roles r ON r.id = u.role_id
     WHERE  u.email = ?
-  `).bind(email).first<UserFull>()
+  `, [email])
 }
 
 // ─── findUserById ─────────────────────────────────────────────────────────────
@@ -119,19 +118,19 @@ export async function findUserByEmailFull(
  * La clause `AND actif = 1` garantit qu'un compte désactivé ne peut pas renouveler
  * son token même si le refresh token KV est encore valide.
  *
- * @param db      Instance D1Database
+ * @param db      Port Database
  * @param userId  Identifiant numérique de l'utilisateur (issu du payload JWT `sub`)
  * @returns       `UserWithRole` si l'utilisateur existe et est actif, `null` sinon
  */
 export async function findUserById(
-  db: D1Database,
+  db: Database,
   userId: number
 ): Promise<UserWithRole | null> {
-  return db.prepare(`
+  return db.get<UserWithRole>(`
     SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
     FROM   users u JOIN roles r ON r.id = u.role_id
     WHERE  u.id = ? AND u.actif = 1
-  `).bind(userId).first<UserWithRole>()
+  `, [userId])
 }
 
 // ─── findUserWithProfile ──────────────────────────────────────────────────────
@@ -144,22 +143,22 @@ export async function findUserById(
  * La `LEFT JOIN boutiques` permet aux utilisateurs sans boutique (admin global) de
  * se connecter normalement (`boutique_nom` sera `null`).
  *
- * @param db      Instance D1Database
+ * @param db      Port Database
  * @param userId  Identifiant numérique de l'utilisateur courant (issu du JWT `sub`)
  * @returns       `UserProfile` enrichi si actif, `null` si désactivé ou introuvable
  */
 export async function findUserWithProfile(
-  db: D1Database,
+  db: Database,
   userId: number
 ): Promise<UserProfile | null> {
-  return db.prepare(`
+  return db.get<UserProfile>(`
     SELECT u.id, u.email, u.prenom, u.nom, u.telephone, u.boutique_id,
            r.nom as role, b.nom as boutique_nom
     FROM   users u
     JOIN   roles r ON r.id = u.role_id
     LEFT JOIN boutiques b ON b.id = u.boutique_id
     WHERE  u.id = ? AND u.actif = 1
-  `).bind(userId).first<UserProfile>()
+  `, [userId])
 }
 
 // ─── createBoutiqueWithSettings ───────────────────────────────────────────────
@@ -200,21 +199,21 @@ export interface BoutiqueDetails {
  * En cas d'échec de l'étape 2, la boutique existe sans settings — acceptable
  * car les DEFAULT SQL permettent de fonctionner sans settings explicites.
  *
- * @param db            Instance D1Database
+ * @param db            Port Database
  * @param workshopName  Nom commercial de la boutique à créer
  * @param details       Champs optionnels (SIRET, adresse, TVA, téléphone)
  * @returns             L'identifiant numérique de la boutique créée, `null` si échec
  */
 export async function createBoutiqueWithSettings(
-  db:           D1Database,
+  db:           Database,
   workshopName: string,
   details?:     BoutiqueDetails
 ): Promise<number | null> {
-  const bResult = await db.prepare(`
+  const bResult = await db.get<{ id: number }>(`
     INSERT INTO boutiques (nom, slug, siret, tva_numero, adresse, code_postal, ville, telephone)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
-  `).bind(
+  `, [
     workshopName,
     slugify(workshopName),
     details?.siret      ?? null,
@@ -223,14 +222,12 @@ export async function createBoutiqueWithSettings(
     details?.codePostal ?? null,
     details?.ville      ?? null,
     details?.telephone  ?? null,
-  ).first<{ id: number }>()
+  ])
 
   const boutiqueId = bResult?.id ?? null
 
   if (boutiqueId) {
-    await db.prepare(
-      'INSERT INTO boutique_settings (boutique_id) VALUES (?)'
-    ).bind(boutiqueId).run()
+    await db.run('INSERT INTO boutique_settings (boutique_id) VALUES (?)', [boutiqueId])
   }
 
   return boutiqueId
@@ -248,21 +245,22 @@ export async function createBoutiqueWithSettings(
  * La condition `AND boutique_id IS NULL` rend l'opération idempotente et empêche
  * d'écraser une boutique déjà assignée (double-appel, onglet dupliqué, etc.).
  *
- * @param db          Instance D1Database
+ * @param db          Port Database
  * @param userId      Identifiant de l'utilisateur (JWT `sub`)
  * @param boutiqueId  Identifiant de la boutique à lier (créée juste avant via `createBoutiqueWithSettings`)
  * @returns           `true` si la ligne a été mise à jour, `false` si le user avait déjà une boutique
  */
 export async function attachBoutiqueToUser(
-  db:         D1Database,
+  db:         Database,
   userId:     number,
   boutiqueId: number
 ): Promise<boolean> {
-  const result = await db.prepare(
-    'UPDATE users SET boutique_id = ? WHERE id = ? AND boutique_id IS NULL'
-  ).bind(boutiqueId, userId).run()
+  const result = await db.run(
+    'UPDATE users SET boutique_id = ? WHERE id = ? AND boutique_id IS NULL',
+    [boutiqueId, userId]
+  )
 
-  return (result.meta.changes ?? 0) > 0
+  return result.changes > 0
 }
 
 // ─── createUser ───────────────────────────────────────────────────────────────
@@ -277,7 +275,7 @@ export async function attachBoutiqueToUser(
  * Le `password_hash` doit avoir été généré par `hashPassword()` (lib/auth.ts)
  * avant d'appeler cette fonction.
  *
- * @param db            Instance D1Database
+ * @param db            Port Database
  * @param email         Adresse email (unique, validée avant appel)
  * @param passwordHash  Hash PBKDF2-SHA256 (format : "iter:salt_hex:hash_hex")
  * @param prenom        Prénom de l'utilisateur
@@ -287,7 +285,7 @@ export async function attachBoutiqueToUser(
  * @returns             L'identifiant numérique du nouvel utilisateur, `null` si échec
  */
 export async function createUser(
-  db: D1Database,
+  db: Database,
   email: string,
   passwordHash: string,
   prenom: string,
@@ -295,11 +293,11 @@ export async function createUser(
   telephone: string | null,
   boutiqueId: number | null
 ): Promise<number | null> {
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO users (email, password_hash, prenom, nom, telephone, boutique_id, role_id, actif, email_verifie)
     VALUES (?, ?, ?, ?, ?, ?, 2, 0, 0)
     RETURNING id
-  `).bind(email, passwordHash, prenom, nom, telephone, boutiqueId).first<{ id: number }>()
+  `, [email, passwordHash, prenom, nom, telephone, boutiqueId])
 
   return result?.id ?? null
 }
@@ -312,17 +310,18 @@ export async function createUser(
  * Met à jour `actif = 1` et `email_verifie = 1` identifié par email.
  * Appelé immédiatement après `verifyOtp()` dans `POST /verify-otp`.
  *
- * @param db     Instance D1Database
+ * @param db     Port Database
  * @param email  Adresse email dont le compte doit être activé
  * @returns      Promesse résolue après l'UPDATE (pas de valeur de retour)
  */
 export async function activateUser(
-  db: D1Database,
+  db: Database,
   email: string
 ): Promise<void> {
-  await db.prepare(
-    'UPDATE users SET actif = 1, email_verifie = 1, updated_at = CURRENT_TIMESTAMP WHERE email = ?'
-  ).bind(email).run()
+  await db.run(
+    'UPDATE users SET actif = 1, email_verifie = 1, updated_at = CURRENT_TIMESTAMP WHERE email = ?',
+    [email]
+  )
 }
 
 // ─── updatePasswordHash ───────────────────────────────────────────────────────
@@ -331,18 +330,19 @@ export async function activateUser(
  * Met à jour le hash du mot de passe d'un utilisateur actif.
  * Appelé après validation du token de réinitialisation.
  *
- * @param db            Instance D1Database
+ * @param db            Port Database
  * @param userId        ID de l'utilisateur
  * @param passwordHash  Nouveau hash PBKDF2-SHA256
  */
 export async function updatePasswordHash(
-  db: D1Database,
+  db: Database,
   userId: number,
   passwordHash: string
 ): Promise<void> {
-  await db.prepare(
-    'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1'
-  ).bind(passwordHash, userId).run()
+  await db.run(
+    'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1',
+    [passwordHash, userId]
+  )
 }
 
 // ─── findUserByGoogleId ───────────────────────────────────────────────────────
@@ -350,19 +350,19 @@ export async function updatePasswordHash(
 /**
  * Recherche un utilisateur par son google_id (OAuth Google).
  *
- * @param db       Instance D1Database
+ * @param db       Port Database
  * @param googleId Identifiant Google (sub du JWT Google)
  * @returns        UserWithRole ou null si introuvable
  */
 export async function findUserByGoogleId(
-  db: D1Database,
+  db: Database,
   googleId: string
 ): Promise<UserWithRole | null> {
-  return db.prepare(`
+  return db.get<UserWithRole>(`
     SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
     FROM   users u JOIN roles r ON r.id = u.role_id
     WHERE  u.google_id = ? AND u.actif = 1
-  `).bind(googleId).first<UserWithRole>()
+  `, [googleId])
 }
 
 // ─── linkGoogleId ─────────────────────────────────────────────────────────────
@@ -370,18 +370,19 @@ export async function findUserByGoogleId(
 /**
  * Associe un google_id à un utilisateur existant (liaison compte existant).
  *
- * @param db       Instance D1Database
+ * @param db       Port Database
  * @param userId   ID de l'utilisateur
  * @param googleId Identifiant Google (sub du JWT Google)
  */
 export async function linkGoogleId(
-  db: D1Database,
+  db: Database,
   userId: number,
   googleId: string
 ): Promise<void> {
-  await db.prepare(
-    'UPDATE users SET google_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).bind(googleId, userId).run()
+  await db.run(
+    'UPDATE users SET google_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [googleId, userId]
+  )
 }
 
 // ─── createGoogleUser ─────────────────────────────────────────────────────────
@@ -391,7 +392,7 @@ export async function linkGoogleId(
  * `actif = 1` et `email_verifie = 1` car Google garantit l'email.
  * `password_hash = ''` — l'utilisateur ne peut pas se connecter par mot de passe.
  *
- * @param db       Instance D1Database
+ * @param db       Port Database
  * @param email    Email Google vérifié
  * @param prenom   Prénom issu du profil Google (given_name)
  * @param nom      Nom issu du profil Google (family_name)
@@ -399,17 +400,17 @@ export async function linkGoogleId(
  * @returns        ID du nouvel utilisateur, null si échec
  */
 export async function createGoogleUser(
-  db: D1Database,
+  db: Database,
   email: string,
   prenom: string,
   nom: string,
   googleId: string
 ): Promise<number | null> {
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO users (email, password_hash, prenom, nom, google_id, role_id, actif, email_verifie)
     VALUES (?, '', ?, ?, ?, 2, 1, 1)
     RETURNING id
-  `).bind(email, prenom, nom, googleId).first<{ id: number }>()
+  `, [email, prenom, nom, googleId])
 
   return result?.id ?? null
 }
@@ -424,17 +425,17 @@ export async function createGoogleUser(
  * Identique à `findUserByEmailFull` mais sans le `password_hash`
  * (non nécessaire ici — le hash n'est utilisé que pour la vérification login).
  *
- * @param db     Instance D1Database
+ * @param db     Port Database
  * @param email  Adresse email de l'utilisateur nouvellement activé
  * @returns      `UserWithRole` si trouvé, `null` sinon (cas d'erreur inattendu)
  */
 export async function findUserByEmailAfterActivation(
-  db: D1Database,
+  db: Database,
   email: string
 ): Promise<UserWithRole | null> {
-  return db.prepare(`
+  return db.get<UserWithRole>(`
     SELECT u.id, u.email, u.prenom, u.nom, u.boutique_id, r.nom as role
     FROM   users u JOIN roles r ON r.id = u.role_id
     WHERE  u.email = ?
-  `).bind(email).first<UserWithRole>()
+  `, [email])
 }
