@@ -23,9 +23,11 @@ import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
 // 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
-// par listFactures/getFacture/listAvoirs/getAvoir/getDevisPourNf525/updateFactureHash,
-// migrées (Ports & Adapters, 2026-07-12). ajouterPaiement/emettreFacture/createAvoir
-// restent sur c.env.DB (dépendent d'auditLog/enregistrerTransaction/nextNumero/batch, non migrés).
+// par listFactures/getFacture/listAvoirs/getAvoir/getDevisPourNf525/updateFactureHash
+// (Ports & Adapters, 2026-07-12) et par listDevis/getDevis/getStatsDevis/
+// expireDevisPerimes (Ports & Adapters, 2026-07-13). ajouterPaiement/emettreFacture/
+// createAvoir/createDevis/updateDevis/updateStatutDevis/convertirDevis restent sur
+// c.env.DB (dépendent d'auditLog/enregistrerTransaction/nextNumero/batch, non migrés).
 type Variables = { user: any; db: Database }
 
 const facturation = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -44,7 +46,7 @@ facturation.get('/devis', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listDevis(c.env.DB, boutiqueId, c.req.query())
+  const result = await listDevis(c.get('db'), boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
@@ -57,7 +59,7 @@ facturation.get('/devis/stats', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await getStatsDevis(c.env.DB, boutiqueId)
+  const data = await getStatsDevis(c.get('db'), boutiqueId)
   return c.json({ success: true, data })
 })
 
@@ -66,7 +68,7 @@ facturation.get('/devis/stats', async (c) => {
  * Expire les devis dont la date_validite est dépassée (cron-like, admin uniquement).
  */
 facturation.post('/devis/expire', requireRole('admin'), async (c) => {
-  const count = await expireDevisPerimes(c.env.DB)
+  const count = await expireDevisPerimes(c.get('db'))
   return c.json({ success: true, data: { expires: count }, message: `${count} devis expiré(s).` })
 })
 
@@ -99,7 +101,7 @@ facturation.post('/devis', async (c) => {
  */
 facturation.get('/devis/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getDevis(c.env.DB, id)
+  const data = await getDevis(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -150,7 +152,7 @@ facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
 
-  const data = await getDevis(c.env.DB, id)
+  const data = await getDevis(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
   if (!data.client_email) return c.json({ success: false, error: 'Le client n\'a pas d\'email renseigné.' }, 422)
 

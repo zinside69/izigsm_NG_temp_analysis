@@ -1,23 +1,25 @@
 /**
  * @file tests/devisService.test.ts
  * @description Tests unitaires — src/services/devisService.ts
- * Sprint 2.29
+ * Sprint 2.29 — mocks scindés mockDatabase/mockD1 lors de la migration
+ * Ports & Adapters (2026-07-13, voir docstrings du service).
  *
  * Couverture :
- *   - listDevis()           — pagination, filtres statut/client_id/search, exclut annule par défaut
- *   - getDevis()            — null si absent, retourne devis + lignes
- *   - createDevis()         — guard lignes vides, INSERT + public_token + auditLog, totaux calculés
- *   - updateDevis()         — guard introuvable, guard statut≠draft, COALESCE, upsertLignes si lignes
- *   - updateStatutDevis()   — machine à états (transitions valides/invalides), extras (envoye_le/repondu_le)
- *   - convertirDevis()      — guards (refuse/annule/déjà converti), INSERT facture, copie lignes, auditLog
- *   - getDevisByToken()     — null si token inconnu, retourne devis + lignes publiques
- *   - getStatsDevis()       — 8 champs + taux_conversion calculé
- *   - expireDevisPerimes()  — retourne meta.changes
- *   - saveSignatureDevis()  — tronquée à 1000 chars
+ *   - listDevis()           (migré → mockDatabase)   — pagination, filtres statut/client_id/search, exclut annule par défaut
+ *   - getDevis()            (migré → mockDatabase)   — null si absent, retourne devis + lignes
+ *   - createDevis()         (non migré → mockD1)     — guard lignes vides, INSERT + public_token + auditLog, totaux calculés
+ *   - updateDevis()         (non migré → mockD1)     — guard introuvable, guard statut≠draft, COALESCE, upsertLignes si lignes
+ *   - updateStatutDevis()   (non migré → mockD1)     — machine à états (transitions valides/invalides), extras (envoye_le/repondu_le)
+ *   - convertirDevis()      (non migré → mockD1)     — guards (refuse/annule/déjà converti), INSERT facture, copie lignes, auditLog
+ *   - getDevisByToken()     (migré → mockDatabase)   — null si token inconnu, retourne devis + lignes publiques
+ *   - getStatsDevis()       (migré → mockDatabase)   — 8 champs + taux_conversion calculé
+ *   - expireDevisPerimes()  (migré → mockDatabase)   — retourne changes
+ *   - saveSignatureDevis()  (migré → mockDatabase)   — tronquée à 1000 chars
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listDevis,
   getDevis,
@@ -298,10 +300,16 @@ function setupNextNumero(db: ReturnType<typeof createMockD1>, prefixDevis = 'DV'
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('devisService', () => {
-  let db: ReturnType<typeof createMockD1>
+  // db    : mock du port Database — listDevis/getDevis/getDevisByToken/getStatsDevis/
+  //         expireDevisPerimes/saveSignatureDevis (migrées, Ports & Adapters 2026-07-13)
+  // dbD1  : mock D1Database brut — createDevis/updateDevis/updateStatutDevis/convertirDevis
+  //         (non migrées, dépendent d'auditLog/nextNumero/upsertLignes-batch)
+  let db:   ReturnType<typeof createMockDatabase>
+  let dbD1: ReturnType<typeof createMockD1>
 
   beforeEach(() => {
-    db = createMockD1()
+    db   = createMockDatabase()
+    dbD1 = createMockD1()
   })
 
   // ─── listDevis ─────────────────────────────────────────────────────────────
@@ -501,19 +509,19 @@ describe('devisService', () => {
         boutique_id: 1, client_id: 3, lignes: [],
       }
 
-      await expect(createDevis(db as any, 1, 10, input))
+      await expect(createDevis(dbD1 as any, 1, 10, input))
         .rejects.toThrow('Le devis doit contenir au moins une ligne.')
     })
 
     it('crée un devis et retourne id + numero + public_token', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
 
       const input: CreateDevisInput = {
         boutique_id: 1, client_id: 3, lignes: [LIGNE_SIMPLE],
       }
 
-      const result = await createDevis(db as any, 1, 10, input)
+      const result = await createDevis(dbD1 as any, 1, 10, input)
 
       expect(result.id).toBe(42)
       expect(result.numero).toMatch(/^DEV-/)
@@ -521,10 +529,10 @@ describe('devisService', () => {
     })
 
     it('public_token est un hex de 32 caractères', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
 
-      const result = await createDevis(db as any, 1, 10, {
+      const result = await createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3, lignes: [LIGNE_SIMPLE],
       })
 
@@ -532,16 +540,16 @@ describe('devisService', () => {
     })
 
     it('calcule correctement les totaux HT/TVA/TTC', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
 
-      await createDevis(db as any, 1, 10, {
+      await createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3,
         // 1 × 80 HT, 20% → TTC = 96
         lignes: [LIGNE_SIMPLE],
       })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const insertCall = calls.find(c => c.sql === SQL_INSERT_DEVIS)
       expect(insertCall).toBeDefined()
       // total_ht (index 4), total_tva (5), total_ttc (6)
@@ -551,10 +559,10 @@ describe('devisService', () => {
     })
 
     it('calcule les totaux avec plusieurs lignes', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 43 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 43 })
 
-      await createDevis(db as any, 1, 10, {
+      await createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3,
         // Ligne 1 : 1 × 80 = 80 HT, TVA 16 → TTC 96
         // Ligne 2 : 2 × 25 = 50 HT, TVA 10 → TTC 60
@@ -562,7 +570,7 @@ describe('devisService', () => {
         lignes: [LIGNE_SIMPLE, LIGNE_CALCUL],
       })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const insertCall = calls.find(c => c.sql === SQL_INSERT_DEVIS)
       expect(insertCall!.params[4]).toBe(130.00) // total_ht
       expect(insertCall!.params[5]).toBe(26.00)  // total_tva
@@ -570,14 +578,14 @@ describe('devisService', () => {
     })
 
     it('appelle auditLog CREATE_DEVIS', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
 
-      await createDevis(db as any, 1, 10, {
+      await createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3, lignes: [LIGNE_SIMPLE],
       })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('CREATE_DEVIS')
@@ -586,23 +594,23 @@ describe('devisService', () => {
     })
 
     it('lance Error si INSERT retourne null (erreur DB)', async () => {
-      setupNextNumero(db)
-      db.__setNotFound(SQL_INSERT_DEVIS)
+      setupNextNumero(dbD1)
+      dbD1.__setNotFound(SQL_INSERT_DEVIS)
 
-      await expect(createDevis(db as any, 1, 10, {
+      await expect(createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3, lignes: [LIGNE_SIMPLE],
       })).rejects.toThrow('Erreur lors de la création du devis.')
     })
 
     it('passe ticket_id null par défaut', async () => {
-      setupNextNumero(db)
-      db.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
+      setupNextNumero(dbD1)
+      dbD1.__setResponse(SQL_INSERT_DEVIS, { id: 42 })
 
-      await createDevis(db as any, 1, 10, {
+      await createDevis(dbD1 as any, 1, 10, {
         boutique_id: 1, client_id: 3, lignes: [LIGNE_SIMPLE],
       })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const insertCall = calls.find(c => c.sql === SQL_INSERT_DEVIS)
       // ticket_id est index 3
       expect(insertCall!.params[3]).toBeNull()
@@ -613,57 +621,57 @@ describe('devisService', () => {
 
   describe('updateDevis()', () => {
     it('lance Error si devis introuvable', async () => {
-      db.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
+      dbD1.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
 
-      await expect(updateDevis(db as any, 999, 10, { notes: 'test' }))
+      await expect(updateDevis(dbD1 as any, 999, 10, { notes: 'test' }))
         .rejects.toThrow('Devis introuvable.')
     })
 
     it('lance Error si devis non en draft', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye' })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye' })
 
-      await expect(updateDevis(db as any, 10, 10, { notes: 'test' }))
+      await expect(updateDevis(dbD1 as any, 10, 10, { notes: 'test' }))
         .rejects.toThrow('Seuls les devis en brouillon peuvent être modifiés.')
     })
 
     it('met à jour un devis draft', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
 
-      await expect(updateDevis(db as any, 10, 10, { notes: 'Nouvelles conditions' }))
+      await expect(updateDevis(dbD1 as any, 10, 10, { notes: 'Nouvelles conditions' }))
         .resolves.toBeUndefined()
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_DEVIS)
       expect(updateCall).toBeDefined()
     })
 
     it('appelle upsertLignes si lignes fournies (DELETE + batch INSERT)', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
 
-      await updateDevis(db as any, 10, 10, { lignes: [LIGNE_SIMPLE] })
+      await updateDevis(dbD1 as any, 10, 10, { lignes: [LIGNE_SIMPLE] })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const deleteCall = calls.find(c => c.sql === SQL_DELETE_LIGNES)
       expect(deleteCall).toBeDefined()
       expect(deleteCall!.params).toEqual(['devis', 10])
     })
 
     it("n'appelle PAS upsertLignes si lignes non fournies", async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
 
-      await updateDevis(db as any, 10, 10, { notes: 'Juste les notes' })
+      await updateDevis(dbD1 as any, 10, 10, { notes: 'Juste les notes' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const deleteCall = calls.find(c => c.sql === SQL_DELETE_LIGNES)
       expect(deleteCall).toBeUndefined()
     })
 
     it('appelle auditLog UPDATE_DEVIS', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, DEVIS_ROW)
 
-      await updateDevis(db as any, 10, 10, { notes: 'test' })
+      await updateDevis(dbD1 as any, 10, 10, { notes: 'test' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('UPDATE_DEVIS')
@@ -674,102 +682,102 @@ describe('devisService', () => {
 
   describe('updateStatutDevis()', () => {
     it('lance Error si devis introuvable', async () => {
-      db.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
+      dbD1.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
 
-      await expect(updateStatutDevis(db as any, 999, 10, 'envoye'))
+      await expect(updateStatutDevis(dbD1 as any, 999, 10, 'envoye'))
         .rejects.toThrow('Devis introuvable.')
     })
 
     it('lance Error si transition invalide (draft → accepte)', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft' })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft' })
 
-      await expect(updateStatutDevis(db as any, 10, 10, 'accepte'))
+      await expect(updateStatutDevis(dbD1 as any, 10, 10, 'accepte'))
         .rejects.toThrow('Transition invalide : draft → accepte.')
     })
 
     it('lance Error si terminal → tout (accepte → refuse)', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'accepte' })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'accepte' })
 
-      await expect(updateStatutDevis(db as any, 10, 10, 'refuse'))
+      await expect(updateStatutDevis(dbD1 as any, 10, 10, 'refuse'))
         .rejects.toThrow('Transition invalide')
     })
 
     it('transition valide draft → envoye : retourne statuts avant/après', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
 
-      const result = await updateStatutDevis(db as any, 10, 10, 'envoye')
+      const result = await updateStatutDevis(dbD1 as any, 10, 10, 'envoye')
 
       expect(result.statut_avant).toBe('draft')
       expect(result.statut_apres).toBe('envoye')
     })
 
     it('transition draft → envoye : SET envoye_le = CURRENT_TIMESTAMP', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 10, 'envoye')
+      await updateStatutDevis(dbD1 as any, 10, 10, 'envoye')
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_STATUT_ENVOYE)
       expect(updateCall).toBeDefined()
       expect(updateCall!.params).toEqual(['envoye', 10])
     })
 
     it('transition draft → annule : pas de champ extra', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 10, 'annule')
+      await updateStatutDevis(dbD1 as any, 10, 10, 'annule')
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_STATUT_ANNULE)
       expect(updateCall).toBeDefined()
     })
 
     it('transition envoye → accepte : SET repondu_le = CURRENT_TIMESTAMP', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 10, 'accepte')
+      await updateStatutDevis(dbD1 as any, 10, 10, 'accepte')
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_STATUT_ACCEPTE)
       expect(updateCall).toBeDefined()
     })
 
     it('transition envoye → refuse : SET repondu_le = CURRENT_TIMESTAMP', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 10, 'refuse')
+      await updateStatutDevis(dbD1 as any, 10, 10, 'refuse')
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_STATUT_REFUSE)
       expect(updateCall).toBeDefined()
     })
 
     it('fromPublic=true → auditLog PUBLIC_STATUT_DEVIS', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 0, 'accepte', true)
+      await updateStatutDevis(dbD1 as any, 10, 0, 'accepte', true)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('PUBLIC_STATUT_DEVIS')
     })
 
     it('fromPublic=false → auditLog UPDATE_STATUT_DEVIS', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'draft', boutique_id: 1 })
 
-      await updateStatutDevis(db as any, 10, 10, 'envoye', false)
+      await updateStatutDevis(dbD1 as any, 10, 10, 'envoye', false)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('UPDATE_STATUT_DEVIS')
     })
 
     it('envoye → expire : transition valide', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1 })
 
-      const result = await updateStatutDevis(db as any, 10, 10, 'expire')
+      const result = await updateStatutDevis(dbD1 as any, 10, 10, 'expire')
 
       expect(result.statut_avant).toBe('envoye')
       expect(result.statut_apres).toBe('expire')
@@ -780,48 +788,48 @@ describe('devisService', () => {
 
   describe('convertirDevis()', () => {
     it('lance Error si devis introuvable', async () => {
-      db.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
+      dbD1.__setNotFound(SQL_SELECT_DEVIS_BY_ID)
 
-      await expect(convertirDevis(db as any, 999, 10))
+      await expect(convertirDevis(dbD1 as any, 999, 10))
         .rejects.toThrow('Devis introuvable.')
     })
 
     it('lance Error si devis refusé', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'refuse' })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'refuse' })
 
-      await expect(convertirDevis(db as any, 10, 10))
+      await expect(convertirDevis(dbD1 as any, 10, 10))
         .rejects.toThrow('Impossible de convertir un devis refusé.')
     })
 
     it('lance Error si devis annulé', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'annule' })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'annule' })
 
-      await expect(convertirDevis(db as any, 10, 10))
+      await expect(convertirDevis(dbD1 as any, 10, 10))
         .rejects.toThrow('Impossible de convertir un devis annulé.')
     })
 
     it('lance Error si déjà converti (facture_id présent)', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'accepte', facture_id: 5 })
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, { ...DEVIS_ROW, statut: 'accepte', facture_id: 5 })
 
-      await expect(convertirDevis(db as any, 10, 10))
+      await expect(convertirDevis(dbD1 as any, 10, 10))
         .rejects.toThrow('Ce devis a déjà été converti en facture.')
     })
 
     it('convertit le devis et retourne facture_id + facture_numero', async () => {
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, {
         ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null,
         client_id: 3, ticket_id: null,
       })
       // nextNumero pour facture
-      db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
         prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
         prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
       })
       const SQL_NEXT_FACTURE_COUNT = n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`)
-      db.__setResponse(SQL_NEXT_FACTURE_COUNT, { cnt: 0 })
-      db.__setResponse(SQL_INSERT_FACTURE, { id: 20 })
+      dbD1.__setResponse(SQL_NEXT_FACTURE_COUNT, { cnt: 0 })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 20 })
 
-      const result = await convertirDevis(db as any, 10, 10)
+      const result = await convertirDevis(dbD1 as any, 10, 10)
 
       expect(result.facture_id).toBe(20)
       expect(result.facture_numero).toMatch(/^FAC-/)
@@ -832,17 +840,17 @@ describe('devisService', () => {
         ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null,
         client_id: 3, ticket_id: null, total_ht: 80, total_tva: 16, total_ttc: 96,
       }
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
-      db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
         prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
         prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
       })
-      db.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 2 })
-      db.__setResponse(SQL_INSERT_FACTURE, { id: 21 })
+      dbD1.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 2 })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 21 })
 
-      await convertirDevis(db as any, 10, 10)
+      await convertirDevis(dbD1 as any, 10, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const insertFactCall = calls.find(c => c.sql === SQL_INSERT_FACTURE)
       expect(insertFactCall).toBeDefined()
       // boutique_id, numero, client_id, ticket_id, devis_id, total_ht, total_tva, total_ttc
@@ -854,17 +862,17 @@ describe('devisService', () => {
 
     it('copie les lignes devis → facture', async () => {
       const devisRow = { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null, client_id: 3, ticket_id: null }
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
-      db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
         prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
         prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
       })
-      db.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
-      db.__setResponse(SQL_INSERT_FACTURE, { id: 22 })
+      dbD1.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 22 })
 
-      await convertirDevis(db as any, 10, 10)
+      await convertirDevis(dbD1 as any, 10, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const copieCall = calls.find(c => c.sql === SQL_COPIE_LIGNES)
       expect(copieCall).toBeDefined()
       expect(copieCall!.params).toEqual([22, 10]) // facture_id, devis_id
@@ -872,17 +880,17 @@ describe('devisService', () => {
 
     it('UPDATE devis statut=accepte + facture_id', async () => {
       const devisRow = { ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null, client_id: 3, ticket_id: null }
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
-      db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
         prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
         prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
       })
-      db.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
-      db.__setResponse(SQL_INSERT_FACTURE, { id: 23 })
+      dbD1.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 23 })
 
-      await convertirDevis(db as any, 10, 10)
+      await convertirDevis(dbD1 as any, 10, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateDevisCall = calls.find(c => c.sql === SQL_UPDATE_DEVIS_CONVERT)
       expect(updateDevisCall).toBeDefined()
       expect(updateDevisCall!.params).toEqual([23, 10]) // facture_id, devis_id
@@ -890,17 +898,17 @@ describe('devisService', () => {
 
     it('appelle auditLog CONVERT_DEVIS_FACTURE', async () => {
       const devisRow = { ...DEVIS_ROW, statut: 'draft', boutique_id: 1, facture_id: null, client_id: 3, ticket_id: null }
-      db.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
-      db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, devisRow)
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
         prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
         prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
       })
-      db.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
-      db.__setResponse(SQL_INSERT_FACTURE, { id: 24 })
+      dbD1.__setResponse(n(`SELECT COUNT(*) as cnt FROM factures WHERE boutique_id = ?`), { cnt: 0 })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 24 })
 
-      await convertirDevis(db as any, 10, 10)
+      await convertirDevis(dbD1 as any, 10, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('CONVERT_DEVIS_FACTURE')

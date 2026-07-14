@@ -220,7 +220,7 @@ pub.get('/devis/:token', async (c) => {
     if (!token || token.length < 16)
       return c.json({ success: false, error: 'Token invalide.' }, 400)
 
-    const devis = await getDevisByToken(c.env.DB, token)
+    const devis = await getDevisByToken(c.get('db'), token)
     if (!devis)
       return c.json({ success: false, error: 'Devis introuvable ou lien invalide.' }, 404)
 
@@ -296,7 +296,7 @@ pub.post('/devis/:token/repondre', async (c) => {
     if (!action || !['accepte', 'refuse'].includes(action))
       return c.json({ success: false, error: 'action doit être "accepte" ou "refuse".' }, 400)
 
-    const devis = await getDevisByToken(c.env.DB, token)
+    const devis = await getDevisByToken(c.get('db'), token)
     if (!devis)
       return c.json({ success: false, error: 'Devis introuvable ou lien invalide.' }, 404)
 
@@ -308,7 +308,7 @@ pub.post('/devis/:token/repondre', async (c) => {
 
     // Enregistrer la signature si fournie
     if (signature && typeof signature === 'string' && signature.length > 0) {
-      await saveSignatureDevis(c.env.DB, devis.id, signature)
+      await saveSignatureDevis(c.get('db'), devis.id, signature)
     }
 
     const { statut_avant, statut_apres } = await updateStatutDevis(

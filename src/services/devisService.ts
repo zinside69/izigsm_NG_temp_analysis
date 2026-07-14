@@ -12,6 +12,7 @@
  */
 
 import { nextNumero, auditLog, parsePagination } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,12 +120,14 @@ async function upsertLignes(db: D1Database, devisId: number, lignes: LigneDevisI
 
 /**
  * Liste des devis d'une boutique avec filtres et pagination.
- * @param db        - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * fonction de lecture pure, pas d'appel `auditLog`/`nextNumero` à découpler.
+ * @param db        - Port Database
  * @param boutiqueId - ID de la boutique
  * @param opts      - Query params : page, limit, statut, client_id, search
  */
 export async function listDevis(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   opts:        Record<string, string | undefined> = {}
 ): Promise<{ data: any[]; pagination: any }> {
@@ -147,14 +150,14 @@ export async function listDevis(
   const where = conditions.join(' AND ')
 
   const [total, rows] = await Promise.all([
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt
       FROM   devis d
       LEFT   JOIN clients c ON c.id = d.client_id
       WHERE  ${where}
-    `).bind(...params).first<{ cnt: number }>(),
+    `, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT d.*,
              c.nom      AS client_nom,
              c.prenom   AS client_prenom,
@@ -165,11 +168,11 @@ export async function listDevis(
       WHERE  ${where}
       ORDER  BY d.created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows ?? [],
     pagination: {
       page, limit,
       total: total?.cnt ?? 0,
@@ -180,12 +183,14 @@ export async function listDevis(
 
 /**
  * Détail complet d'un devis (+ lignes).
- * @param db  - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * fonction de lecture pure, pas d'appel `auditLog`/`nextNumero` à découpler.
+ * @param db  - Port Database
  * @param id  - ID du devis
  */
-export async function getDevis(db: D1Database, id: number): Promise<any | null> {
+export async function getDevis(db: Database, id: number): Promise<any | null> {
   const [devis, lignes] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT d.*,
              c.nom       AS client_nom,
              c.prenom    AS client_prenom,
@@ -202,21 +207,24 @@ export async function getDevis(db: D1Database, id: number): Promise<any | null> 
       LEFT   JOIN clients   c ON c.id = d.client_id
       LEFT   JOIN boutiques b ON b.id = d.boutique_id
       WHERE  d.id = ?
-    `).bind(id).first<any>(),
+    `, [id]),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT * FROM lignes_document
       WHERE  document_type = 'devis' AND document_id = ?
       ORDER  BY ordre ASC
-    `).bind(id).all<any>(),
+    `, [id]),
   ])
 
   if (!devis) return null
-  return { ...devis, lignes: lignes.results ?? [] }
+  return { ...devis, lignes: lignes ?? [] }
 }
 
 /**
  * Crée un devis avec ses lignes. Génère numéro + public_token.
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) :
+ * dépend de `nextNumero()`, `upsertLignes()` (db.batch) et `auditLog()`, tous
+ * encore sur `D1Database` brut.
  * @param db         - Instance D1Database
  * @param boutiqueId - ID de la boutique
  * @param userId     - ID de l'utilisateur créateur
@@ -266,6 +274,9 @@ export async function createDevis(
 
 /**
  * Met à jour un devis (draft uniquement — les devis envoyés sont verrouillés).
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) :
+ * dépend de `upsertLignes()` (db.batch) et `auditLog()`, tous deux encore sur
+ * `D1Database` brut.
  * @param db     - Instance D1Database
  * @param id     - ID du devis
  * @param userId - ID de l'utilisateur
@@ -320,6 +331,8 @@ export async function updateDevis(
  *   expire   → (terminal)
  *   annule   → (terminal)
  *
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) :
+ * dépend d'`auditLog()`, qui prend encore un `D1Database` brut.
  * @param db       - Instance D1Database
  * @param id       - ID du devis
  * @param userId   - ID de l'utilisateur
@@ -369,6 +382,9 @@ export async function updateStatutDevis(
 
 /**
  * Convertit un devis accepté en facture (avec copie des lignes).
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) :
+ * dépend de `nextNumero()` et `auditLog()`, tous deux encore sur `D1Database`
+ * brut.
  * @param db     - Instance D1Database
  * @param id     - ID du devis
  * @param userId - ID de l'utilisateur
@@ -428,12 +444,14 @@ export async function convertirDevis(
 /**
  * Récupère un devis par son token public (sans authentification).
  * Retourne uniquement les données nécessaires pour la page d'acceptation client.
- * @param db    - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * fonction de lecture pure, pas d'appel `auditLog`/`nextNumero` à découpler.
+ * @param db    - Port Database
  * @param token - Token public du devis
  */
-export async function getDevisByToken(db: D1Database, token: string): Promise<any | null> {
+export async function getDevisByToken(db: Database, token: string): Promise<any | null> {
   const [devis, lignes] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT d.id, d.numero, d.statut, d.total_ht, d.total_tva, d.total_ttc,
              d.date_validite, d.envoye_le, d.repondu_le, d.notes, d.conditions,
              c.nom       AS client_nom,
@@ -448,29 +466,31 @@ export async function getDevisByToken(db: D1Database, token: string): Promise<an
       LEFT   JOIN clients   c ON c.id = d.client_id
       LEFT   JOIN boutiques b ON b.id = d.boutique_id
       WHERE  d.public_token = ?
-    `).bind(token).first<any>(),
+    `, [token]),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT ordre, description, quantite, prix_unitaire_ht, tva_taux, total_ht, total_ttc
       FROM   lignes_document
       WHERE  document_type = 'devis' AND document_id = (
         SELECT id FROM devis WHERE public_token = ?
       )
       ORDER  BY ordre ASC
-    `).bind(token).all<any>(),
+    `, [token]),
   ])
 
   if (!devis) return null
-  return { ...devis, lignes: lignes.results ?? [] }
+  return { ...devis, lignes: lignes ?? [] }
 }
 
 /**
  * Statistiques des devis d'une boutique.
- * @param db         - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * fonction de lecture pure, pas d'appel `auditLog`/`nextNumero` à découpler.
+ * @param db         - Port Database
  * @param boutiqueId - ID de la boutique
  */
-export async function getStatsDevis(db: D1Database, boutiqueId: number): Promise<StatsDevis> {
-  const rows = await db.prepare(`
+export async function getStatsDevis(db: Database, boutiqueId: number): Promise<StatsDevis> {
+  const rows = await db.get<any>(`
     SELECT
       COUNT(*)                                              AS total,
       SUM(CASE WHEN statut = 'draft'   THEN 1 ELSE 0 END) AS draft,
@@ -482,7 +502,7 @@ export async function getStatsDevis(db: D1Database, boutiqueId: number): Promise
       SUM(CASE WHEN statut = 'accepte' THEN total_ttc ELSE 0 END) AS montant_signe
     FROM devis
     WHERE boutique_id = ? AND statut != 'annule'
-  `).bind(boutiqueId).first<any>()
+  `, [boutiqueId])
 
   const envoyes  = rows?.envoyes  ?? 0
   const acceptes = rows?.acceptes ?? 0
@@ -504,34 +524,39 @@ export async function getStatsDevis(db: D1Database, boutiqueId: number): Promise
 /**
  * Expire automatiquement les devis dont la date_validite est dépassée.
  * À appeler en tâche de fond (Cron Trigger ou manuellement).
- * @param db - Instance D1Database
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * UPDATE simple sans RETURNING, pas d'appel `auditLog`/`nextNumero` à découpler.
+ * @param db - Port Database
  */
-export async function expireDevisPerimes(db: D1Database): Promise<number> {
-  const result = await db.prepare(`
+export async function expireDevisPerimes(db: Database): Promise<number> {
+  const result = await db.run(`
     UPDATE devis
     SET statut = 'expire', updated_at = CURRENT_TIMESTAMP
     WHERE statut = 'envoye'
       AND date_validite IS NOT NULL
       AND date_validite < date('now')
-  `).run()
+  `)
 
-  return result.meta?.changes ?? 0
+  return result.changes ?? 0
 }
 
 /**
  * Enregistre la signature client sur un devis (réponse publique).
  * Tronquée à 1000 caractères (protection contre abus).
+ * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) —
+ * UPDATE simple sans RETURNING, pas d'appel `auditLog`/`nextNumero` à découpler.
  *
- * @param db        - Instance D1Database
+ * @param db        - Port Database
  * @param devisId   - ID du devis
  * @param signature - Contenu de la signature (texte ou data URL SVG)
  */
 export async function saveSignatureDevis(
-  db:        D1Database,
+  db:        Database,
   devisId:   number,
   signature: string
 ): Promise<void> {
-  await db.prepare(
-    'UPDATE devis SET signature_client = ? WHERE id = ?'
-  ).bind(signature.slice(0, 1000), devisId).run()
+  await db.run(
+    'UPDATE devis SET signature_client = ? WHERE id = ?',
+    [signature.slice(0, 1000), devisId]
+  )
 }
