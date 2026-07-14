@@ -10,6 +10,7 @@
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import type { Database } from '../ports/database'
 import {
   listProduits,
   getProduitById,
@@ -26,7 +27,7 @@ import {
 } from '../services/stockService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 const stocks = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 stocks.use('*', authMiddleware)
@@ -35,13 +36,16 @@ stocks.use('*', authMiddleware)
 
 /**
  * Extrait les éléments récurrents du contexte Hono.
+ * `db` (D1Database brut) reste pour les fonctions non migrées (dépendantes d'`auditLog`) ;
+ * `dbPort` (port Database) pour les fonctions migrées.
  * @param c — Contexte Hono
- * @returns { user, db, queryBoutiqueId }
+ * @returns { user, db, dbPort, queryBoutiqueId }
  */
 function ctx(c: any) {
   return {
     user:            c.get('user'),
     db:              c.env.DB as D1Database,
+    dbPort:          c.get('db') as Database,
     queryBoutiqueId: c.req.query('boutique_id') ?? undefined,
   }
 }
@@ -53,11 +57,11 @@ function ctx(c: any) {
  * @returns { success, data: KpisStock }
  */
 stocks.get('/produits/kpis', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await getKpisStock(db, boutiqueId)
+  const data = await getKpisStock(dbPort, boutiqueId)
   return c.json({ success: true, data })
 })
 
@@ -68,12 +72,12 @@ stocks.get('/produits/kpis', async (c) => {
  * @returns { success, data, pagination }
  */
 stocks.get('/produits', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const query      = c.req.query()
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listProduits(db, boutiqueId, {
+  const result = await listProduits(dbPort, boutiqueId, {
     categorie_id: query.categorie_id ? parseInt(query.categorie_id, 10) : undefined,
     stock_bas:    query.stock_bas === 'true',
     search:       query.search    ?? undefined,
@@ -92,10 +96,10 @@ stocks.get('/produits', async (c) => {
  * @returns { success, data }
  */
 stocks.get('/produits/:id', async (c) => {
-  const { db } = ctx(c)
+  const { dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
 
-  const data = await getProduitById(db, id)
+  const data = await getProduitById(dbPort, id)
   if (!data) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
 
   return c.json({ success: true, data })
@@ -202,7 +206,7 @@ stocks.delete('/produits/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, stock_avant, stock_apres, message }
  */
 stocks.post('/produits/:id/mouvement', async (c) => {
-  const { user, db } = ctx(c)
+  const { user, dbPort } = ctx(c)
   const produitId = parseInt(c.req.param('id'), 10)
   const body      = await c.req.json()
 
@@ -210,7 +214,7 @@ stocks.post('/produits/:id/mouvement', async (c) => {
     return c.json({ success: false, error: 'type_mouvement et quantite obligatoires.' }, 400)
 
   try {
-    const result = await enregistrerMouvement(db, produitId, user.sub, body as MouvementData)
+    const result = await enregistrerMouvement(dbPort, produitId, user.sub, body as MouvementData)
     return c.json({ success: true, ...result, message: 'Stock mis à jour.' })
   } catch (err: any) {
     const status = err.message.includes('introuvable') ? 404 : 422
@@ -225,11 +229,11 @@ stocks.post('/produits/:id/mouvement', async (c) => {
  * @returns { success, data }
  */
 stocks.get('/categories', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await listCategories(db, boutiqueId)
+  const data = await listCategories(dbPort, boutiqueId)
   return c.json({ success: true, data })
 })
 
@@ -240,7 +244,7 @@ stocks.get('/categories', async (c) => {
  * @returns { success, id, message }
  */
 stocks.post('/categories', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
 
   if (!body.nom) return c.json({ success: false, error: 'Nom obligatoire.' }, 400)
@@ -248,7 +252,7 @@ stocks.post('/categories', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const created = await createCategorie(db, boutiqueId, { nom: body.nom, parent_id: body.parent_id })
+  const created = await createCategorie(dbPort, boutiqueId, { nom: body.nom, parent_id: body.parent_id })
   return c.json({ success: true, id: created.id, message: 'Catégorie créée.' }, 201)
 })
 

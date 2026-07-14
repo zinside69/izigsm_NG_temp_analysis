@@ -5,26 +5,32 @@
  * Sprint 2.41-C — +10 tests importCatalogueCsv (E07/E08)
  *
  * Couverture :
- *   - listProduits()          — pagination, filtres categorie_id/stock_bas/search, alerte_stock
- *   - getProduitById()        — null si absent, fiche + mouvements
- *   - createProduit()         — INSERT + mouvement initial si stock>0, pas de mouvement si stock=0, auditLog
- *   - updateProduit()         — Error si introuvable, UPDATE COALESCE, auditLog
- *   - deleteProduit()         — soft delete actif=0, auditLog
- *   - enregistrerMouvement()  — type invalide, quantite=0, produit introuvable,
+ *   - listProduits()          — pagination, filtres categorie_id/stock_bas/search, alerte_stock [Database]
+ *   - getProduitById()        — null si absent, fiche + mouvements [Database]
+ *   - createProduit()         — INSERT + mouvement initial si stock>0, pas de mouvement si stock=0, auditLog [D1Database]
+ *   - updateProduit()         — Error si introuvable, UPDATE COALESCE, auditLog [D1Database]
+ *   - deleteProduit()         — soft delete actif=0, auditLog [D1Database]
+ *   - enregistrerMouvement()  — type invalide, quantite=0, produit introuvable, [Database]
  *                               entree +delta, sortie -delta, ajustement=valeur absolue,
  *                               inventaire=valeur absolue, stock insuffisant, mouvQuantite delta effectif
- *   - listCategories()        — résultats avec nb_produits, ORDER racines first
- *   - createCategorie()       — id retourné, parent_id null par défaut
- *   - getKpisStock()          — 5 champs, fallback 0 si null
- *   - importCatalogueCsv()    — CSV vide, col nom absente, INSERT nouveau SKU,
+ *   - listCategories()        — résultats avec nb_produits, ORDER racines first [Database]
+ *   - createCategorie()       — id retourné, parent_id null par défaut [Database]
+ *   - getKpisStock()          — 5 champs, fallback 0 si null [Database]
+ *   - importCatalogueCsv()    — CSV vide, col nom absente, INSERT nouveau SKU, [D1Database]
  *                               UPDATE SKU existant, famille invalide → 'piece',
  *                               skip ligne sans nom, séparateur point-virgule,
  *                               mouvement entree si stock > 0, dédup SKU inconnu,
  *                               résultat { imported, updated, skipped, errors }
+ *
+ * Migration Ports & Adapters (2026-07-14) : listProduits/getProduitById/enregistrerMouvement/
+ * listCategories/createCategorie/getKpisStock migrées vers le port Database (mockDatabase).
+ * createProduit/updateProduit/deleteProduit/importCatalogueCsv restent sur D1Database (mockD1)
+ * — dépendent d'auditLog(), non porté.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listProduits,
   getProduitById,
@@ -263,10 +269,12 @@ const SQL_IMPORT_UPDATE_STOCK = n(
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('stockService', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db:   ReturnType<typeof createMockDatabase>
+  let dbD1: ReturnType<typeof createMockD1>
 
   beforeEach(() => {
-    db = createMockD1()
+    db   = createMockDatabase()
+    dbD1 = createMockD1()
   })
 
   // ─── listProduits ──────────────────────────────────────────────────────────
@@ -469,19 +477,19 @@ describe('stockService', () => {
 
   describe('createProduit()', () => {
     it('crée un produit et retourne son id', async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
 
-      const result = await createProduit(db as any, 1, 10, { nom: 'Nouveau Produit' })
+      const result = await createProduit(dbD1 as any, 1, 10, { nom: 'Nouveau Produit' })
 
       expect(result).toEqual({ id: 42 })
     })
 
     it('enregistre un mouvement stock initial si stock_actuel > 0', async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
 
-      await createProduit(db as any, 1, 10, { nom: 'Produit avec stock', stock_actuel: 15 })
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit avec stock', stock_actuel: 15 })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const mouvCall = calls.find(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)
       expect(mouvCall).toBeDefined()
       // params: produitId, boutiqueId, quantite, stock_actuel, userId
@@ -489,31 +497,31 @@ describe('stockService', () => {
     })
 
     it("n'enregistre PAS de mouvement si stock_actuel = 0", async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 43 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 43 })
 
-      await createProduit(db as any, 1, 10, { nom: 'Produit sans stock', stock_actuel: 0 })
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit sans stock', stock_actuel: 0 })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const mouvCall = calls.find(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)
       expect(mouvCall).toBeUndefined()
     })
 
     it("n'enregistre PAS de mouvement si stock_actuel omis (défaut 0)", async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 44 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 44 })
 
-      await createProduit(db as any, 1, 10, { nom: 'Produit défaut' })
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit défaut' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const mouvCall = calls.find(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)
       expect(mouvCall).toBeUndefined()
     })
 
     it('appelle auditLog CREATE_PRODUIT', async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 42 })
 
-      await createProduit(db as any, 1, 10, { nom: 'Produit Audit' })
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit Audit' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('CREATE_PRODUIT')
@@ -522,11 +530,11 @@ describe('stockService', () => {
     })
 
     it('utilise les valeurs par défaut : tva=20, stock_min=5', async () => {
-      db.__setResponse(SQL_INSERT_PRODUIT, { id: 45 })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 45 })
 
-      await createProduit(db as any, 1, 10, { nom: 'Produit défauts' })
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit défauts' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const insertCall = calls.find(c => c.sql === SQL_INSERT_PRODUIT)
       expect(insertCall).toBeDefined()
       // famille(5), prix_achat_ht(6), prix_vente_ht(7), tva_taux(8), stock_actuel(9), stock_minimum(10)
@@ -539,29 +547,29 @@ describe('stockService', () => {
 
   describe('updateProduit()', () => {
     it('lance une Error si produit introuvable', async () => {
-      db.__setNotFound(SQL_CHECK_PRODUIT_ACTIF)
+      dbD1.__setNotFound(SQL_CHECK_PRODUIT_ACTIF)
 
-      await expect(updateProduit(db as any, 999, 10, { nom: 'Test' }))
+      await expect(updateProduit(dbD1 as any, 999, 10, { nom: 'Test' }))
         .rejects.toThrow('Produit introuvable.')
     })
 
     it('met à jour un produit existant', async () => {
-      db.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
+      dbD1.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
 
-      await expect(updateProduit(db as any, 5, 10, { nom: 'Nouvel écran', prix_vente_ht: 95 }))
+      await expect(updateProduit(dbD1 as any, 5, 10, { nom: 'Nouvel écran', prix_vente_ht: 95 }))
         .resolves.toBeUndefined()
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_PRODUIT)
       expect(updateCall).toBeDefined()
     })
 
     it('appelle auditLog UPDATE_PRODUIT', async () => {
-      db.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
+      dbD1.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
 
-      await updateProduit(db as any, 5, 10, { nom: 'Nom modifié' })
+      await updateProduit(dbD1 as any, 5, 10, { nom: 'Nom modifié' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('UPDATE_PRODUIT')
@@ -570,11 +578,11 @@ describe('stockService', () => {
     })
 
     it('passe null pour les champs non fournis (COALESCE)', async () => {
-      db.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
+      dbD1.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
 
-      await updateProduit(db as any, 5, 10, { nom: 'Seulement le nom' })
+      await updateProduit(dbD1 as any, 5, 10, { nom: 'Seulement le nom' })
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_UPDATE_PRODUIT)
       expect(updateCall).toBeDefined()
       // sku null (index 1), marque null (index 2), etc.
@@ -588,18 +596,18 @@ describe('stockService', () => {
 
   describe('deleteProduit()', () => {
     it('soft-delete : actif = 0', async () => {
-      await deleteProduit(db as any, 5, 10)
+      await deleteProduit(dbD1 as any, 5, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const deleteCall = calls.find(c => c.sql === SQL_SOFT_DELETE)
       expect(deleteCall).toBeDefined()
       expect(deleteCall!.params).toEqual([5])
     })
 
     it('appelle auditLog DELETE_PRODUIT', async () => {
-      await deleteProduit(db as any, 5, 10)
+      await deleteProduit(dbD1 as any, 5, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const auditCall = calls.find(c => c.sql === SQL_AUDIT)
       expect(auditCall).toBeDefined()
       expect(auditCall!.params).toContain('DELETE_PRODUIT')
@@ -608,9 +616,9 @@ describe('stockService', () => {
     })
 
     it('ne fait PAS de guard avant le soft delete', async () => {
-      await deleteProduit(db as any, 999, 10)
+      await deleteProduit(dbD1 as any, 999, 10)
 
-      const calls = db.__getCalls()
+      const calls = dbD1.__getCalls()
       const guardCall = calls.find(c => c.sql === SQL_CHECK_PRODUIT_ACTIF)
       expect(guardCall).toBeUndefined()
     })

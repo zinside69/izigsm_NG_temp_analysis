@@ -20,6 +20,7 @@
  */
 
 import { parsePagination, auditLog } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,13 +122,13 @@ const TYPES_MOUVEMENT_VALIDES: TypeMouvement[] = ['entree', 'sortie', 'ajustemen
  * Liste les produits d'une boutique avec filtres, pagination et calcul de marge.
  * Ajoute l'indicateur alerte_stock : 'ok' | 'bas' | 'rupture'.
  *
- * @param db          — Instance D1Database
+ * @param db          — Port Database
  * @param boutiqueId  — ID boutique obligatoire
  * @param opts        — Filtres optionnels : categorie_id, stock_bas, search + pagination
  * @returns           — { data, pagination }
  */
 export async function listProduits(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   opts: ListProduitsOpts = {}
 ): Promise<{ data: any[]; pagination: { page: number; limit: number; total: number; pages: number } }> {
@@ -158,12 +159,12 @@ export async function listProduits(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const totRow = await db
-    .prepare(`SELECT COUNT(*) AS cnt FROM produits p ${where}`)
-    .bind(...bindings)
-    .first<{ cnt: number }>()
+  const totRow = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM produits p ${where}`,
+    bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT p.*,
            c.nom AS categorie_nom,
            ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
@@ -177,10 +178,10 @@ export async function listProduits(
     ${where}
     ORDER  BY p.nom ASC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   return {
-    data: rows.results ?? [],
+    data: rows ?? [],
     pagination: {
       page,
       limit,
@@ -193,37 +194,37 @@ export async function listProduits(
 /**
  * Retourne la fiche complète d'un produit avec ses 20 derniers mouvements de stock.
  *
- * @param db  — Instance D1Database
+ * @param db  — Port Database
  * @param id  — ID du produit
  * @returns   — ProduitRow enrichi avec mouvements, ou null si introuvable
  */
 export async function getProduitById(
-  db: D1Database,
+  db: Database,
   id: number
 ): Promise<any | null> {
-  const produit = await db.prepare(`
+  const produit = await db.get<any>(`
     SELECT p.*,
            c.nom AS categorie_nom,
            ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct
     FROM   produits p
     LEFT JOIN categories c ON c.id = p.categorie_id
     WHERE  p.id = ? AND p.actif = 1
-  `).bind(id).first()
+  `, [id])
 
   if (!produit) return null
 
-  const mouvements = await db.prepare(`
+  const mouvements = await db.all<any>(`
     SELECT m.*, u.prenom || ' ' || u.nom AS user_nom
     FROM   mouvements_stock m
     LEFT JOIN users u ON u.id = m.user_id
     WHERE  m.produit_id = ?
     ORDER  BY m.created_at DESC
     LIMIT  20
-  `).bind(id).all()
+  `, [id])
 
   return {
     ...produit,
-    mouvements: mouvements.results ?? [],
+    mouvements: mouvements ?? [],
   }
 }
 
@@ -387,7 +388,7 @@ export async function deleteProduit(
  *   - 'ajustement' : quantite = valeur absolue cible (correction inventaire)
  *   - 'inventaire' : identique à ajustement
  *
- * @param db        — Instance D1Database
+ * @param db        — Port Database
  * @param produitId — ID du produit concerné
  * @param userId    — ID utilisateur
  * @param m         — Données du mouvement (voir MouvementData)
@@ -395,7 +396,7 @@ export async function deleteProduit(
  * @throws          — Error si type invalide, stock insuffisant ou produit introuvable
  */
 export async function enregistrerMouvement(
-  db: D1Database,
+  db: Database,
   produitId: number,
   userId: number,
   m: MouvementData
@@ -407,10 +408,10 @@ export async function enregistrerMouvement(
     throw new Error('quantite doit être différente de 0.')
   }
 
-  const produit = await db
-    .prepare('SELECT id, stock_actuel, boutique_id FROM produits WHERE id = ? AND actif = 1')
-    .bind(produitId)
-    .first<{ id: number; stock_actuel: number; boutique_id: number }>()
+  const produit = await db.get<{ id: number; stock_actuel: number; boutique_id: number }>(
+    'SELECT id, stock_actuel, boutique_id FROM produits WHERE id = ? AND actif = 1',
+    [produitId]
+  )
   if (!produit) throw new Error('Produit introuvable.')
 
   const estAjustement = m.type_mouvement === 'ajustement' || m.type_mouvement === 'inventaire'
@@ -424,16 +425,16 @@ export async function enregistrerMouvement(
   // Quantité réelle pour l'historique (delta effectif sur ajustement)
   const mouvQuantite = estAjustement ? stockApres - produit.stock_actuel : delta
 
-  await db
-    .prepare('UPDATE produits SET stock_actuel = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .bind(stockApres, produitId)
-    .run()
+  await db.run(
+    'UPDATE produits SET stock_actuel = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [stockApres, produitId]
+  )
 
-  await db.prepare(`
+  await db.run(`
     INSERT INTO mouvements_stock
       (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, ticket_id, user_id, motif)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
+  `, [
     produitId,
     produit.boutique_id,
     m.type_mouvement,
@@ -443,7 +444,7 @@ export async function enregistrerMouvement(
     m.ticket_id ?? null,
     userId,
     m.motif     ?? null,
-  ).run()
+  ])
 
   return { stock_avant: produit.stock_actuel, stock_apres: stockApres }
 }
@@ -452,42 +453,43 @@ export async function enregistrerMouvement(
  * Liste les catégories d'une boutique avec le nombre de produits actifs par catégorie.
  * Ordre : racines (parent_id NULL) en premier, puis alphabétique.
  *
- * @param db          — Instance D1Database
+ * @param db          — Port Database
  * @param boutiqueId  — ID boutique
  * @returns           — Tableau de catégories avec nb_produits
  */
 export async function listCategories(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<any[]> {
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT c.*, COUNT(p.id) AS nb_produits
     FROM   categories c
     LEFT JOIN produits p ON p.categorie_id = c.id AND p.actif = 1
     WHERE  c.boutique_id = ? AND c.actif = 1
     GROUP  BY c.id
     ORDER  BY c.parent_id NULLS FIRST, c.nom
-  `).bind(boutiqueId).all()
+  `, [boutiqueId])
 
-  return rows.results ?? []
+  return rows ?? []
 }
 
 /**
  * Crée une nouvelle catégorie de produits.
  *
- * @param db          — Instance D1Database
+ * @param db          — Port Database
  * @param boutiqueId  — ID boutique
  * @param data        — { nom, parent_id? }
  * @returns           — { id }
  */
 export async function createCategorie(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   data: CreateCategorieData
 ): Promise<{ id: number }> {
-  const result = await db.prepare(
-    'INSERT INTO categories (boutique_id, nom, parent_id) VALUES (?, ?, ?) RETURNING id'
-  ).bind(boutiqueId, data.nom, data.parent_id ?? null).first<{ id: number }>()
+  const result = await db.get<{ id: number }>(
+    'INSERT INTO categories (boutique_id, nom, parent_id) VALUES (?, ?, ?) RETURNING id',
+    [boutiqueId, data.nom, data.parent_id ?? null]
+  )
 
   return { id: result!.id }
 }
@@ -652,15 +654,15 @@ export async function importCatalogueCsv(
 // ─── KPIs stock ───────────────────────────────────────────────────────────────
 
 /**
- * @param db          — Instance D1Database
+ * @param db          — Port Database
  * @param boutiqueId  — ID boutique
  * @returns           — { nb_produits, nb_ruptures, nb_alertes, valeur_stock_ht, valeur_stock_cump }
  */
 export async function getKpisStock(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<KpisStock> {
-  const row = await db.prepare(`
+  const row = await db.get<any>(`
     SELECT
       COUNT(*)                                                         AS nb_produits,
       SUM(CASE WHEN stock_actuel = 0 THEN 1 ELSE 0 END)               AS nb_ruptures,
@@ -670,7 +672,7 @@ export async function getKpisStock(
       ROUND(SUM(stock_actuel * prix_achat_cump), 2)                   AS valeur_stock_cump
     FROM produits
     WHERE boutique_id = ? AND actif = 1
-  `).bind(boutiqueId).first<any>()
+  `, [boutiqueId])
 
   return {
     nb_produits:       row?.nb_produits      ?? 0,
