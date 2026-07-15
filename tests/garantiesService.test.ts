@@ -18,6 +18,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   createGarantieFromTicket,
   createGarantie,
@@ -135,10 +136,10 @@ const SQL_KPI_TICKETS_TERMINES = `SELECT COUNT(*) as cnt FROM tickets WHERE bout
 // Tests de la matrice via le comportement de updateSavStatut (accessible indirectement)
 
 describe('TRANSITIONS_SAV (comportement via updateSavStatut)', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('ouvert → en_traitement : transition autorisée', async () => {
@@ -191,10 +192,10 @@ describe('TRANSITIONS_SAV (comportement via updateSavStatut)', () => {
 // ─── createGarantieFromTicket ─────────────────────────────────────────────────
 
 describe('createGarantieFromTicket()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('idempotence — retourne la garantie existante sans INSERT', async () => {
@@ -303,10 +304,10 @@ describe('createGarantieFromTicket()', () => {
 // ─── createGarantie ───────────────────────────────────────────────────────────
 
 describe('createGarantie()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('crée une garantie avec tous les champs fournis', async () => {
@@ -382,10 +383,10 @@ describe('createGarantie()', () => {
 // ─── getGarantie ──────────────────────────────────────────────────────────────
 
 describe('getGarantie()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne null si garantie absente', async () => {
@@ -427,10 +428,10 @@ describe('getGarantie()', () => {
 // ─── listGaranties ────────────────────────────────────────────────────────────
 
 describe('listGaranties()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT_GARANTIES, { cnt: 2 })
     db.__setListResponse(SQL_LIST_GARANTIES, [
       { ...GARANTIE_ENRICHIE, jours_restants: 88 },
@@ -515,10 +516,10 @@ describe('listGaranties()', () => {
 // ─── checkAndExpireGaranties ──────────────────────────────────────────────────
 
 describe('checkAndExpireGaranties()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne meta.changes (nombre de garanties expirées)', async () => {
@@ -677,10 +678,10 @@ describe('createSav()', () => {
 // ─── listSav ──────────────────────────────────────────────────────────────────
 
 describe('listSav()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT_SAV, { cnt: 2 })
     db.__setListResponse(SQL_LIST_SAV, [
       SAV_ROW,
@@ -751,10 +752,10 @@ describe('listSav()', () => {
 // ─── getSav ───────────────────────────────────────────────────────────────────
 
 describe('getSav()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne null si dossier SAV absent', async () => {
@@ -799,10 +800,10 @@ describe('getSav()', () => {
 // ─── updateSavStatut ──────────────────────────────────────────────────────────
 
 describe('updateSavStatut()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('lève Error si dossier SAV introuvable', async () => {
@@ -900,7 +901,7 @@ describe('updateSavStatut()', () => {
 // ─── getKpisSav ───────────────────────────────────────────────────────────────
 
 describe('getKpisSav()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   function setupKpis(overrides: Partial<{
     actives: number; expirees: number; consommees: number
@@ -920,7 +921,7 @@ describe('getKpisSav()', () => {
   }
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les 8 champs KPI attendus', async () => {
@@ -978,14 +979,16 @@ describe('getKpisSav()', () => {
     expect(result.taux_retour_pct).toBe(33.3)
   })
 
-  it('exécute 5 requêtes SQL en parallèle', async () => {
+  it('exécute 4 requêtes SQL en parallèle', async () => {
     setupKpis()
 
     await getKpisSav(db, 1)
 
     const calls = db.__getCalls()
-    // Doit avoir au moins 5 appels SQL
-    expect(calls.length).toBeGreaterThanOrEqual(5)
+    // garanties (répartition), garanties (expirant 7j), sav (répartition), sav (résolus mois)
+    // — la 5ème requête (total tickets termine/livre) migrée le 2026-07-15 était lue mais jamais
+    // utilisée dans le retour de la fonction (dead code), retirée à la migration Ports & Adapters
+    expect(calls.length).toBeGreaterThanOrEqual(4)
   })
 
   it('retourne 0 par défaut si SQL retourne null', async () => {

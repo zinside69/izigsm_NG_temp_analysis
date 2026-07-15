@@ -26,6 +26,7 @@
  */
 
 import { nextNumero, parsePagination } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types internes ────────────────────────────────────────────────────────────
 
@@ -94,44 +95,44 @@ const TRANSITIONS_SAV: Record<string, string[]> = {
  * @throws            Error si l'insertion échoue
  */
 export async function createGarantieFromTicket(
-  db:        D1Database,
+  db:        Database,
   ticketId:  number,
   boutiqueId: number
 ): Promise<GarantieRow> {
   // Vérifie si une garantie active existe déjà
-  const existing = await db.prepare(`
+  const existing = await db.get<GarantieRow>(`
     SELECT * FROM garanties WHERE ticket_id = ? AND actif = 1 LIMIT 1
-  `).bind(ticketId).first<GarantieRow>()
+  `, [ticketId])
   if (existing) return existing
 
   // Lire durée depuis settings
-  const settings = await db.prepare(`
+  const settings = await db.get<{ garantie_defaut_jours: number }>(`
     SELECT garantie_defaut_jours FROM boutique_settings WHERE boutique_id = ?
-  `).bind(boutiqueId).first<{ garantie_defaut_jours: number }>()
+  `, [boutiqueId])
   const garantieJours = settings?.garantie_defaut_jours ?? 90
 
   // Lire infos du ticket (client, appareil, diagnostic)
-  const ticket = await db.prepare(`
-    SELECT client_id, appareil_marque, appareil_modele, diagnostic
-    FROM tickets WHERE id = ? LIMIT 1
-  `).bind(ticketId).first<{
+  const ticket = await db.get<{
     client_id: number | null
     appareil_marque: string | null
     appareil_modele: string | null
     diagnostic: string | null
-  }>()
+  }>(`
+    SELECT client_id, appareil_marque, appareil_modele, diagnostic
+    FROM tickets WHERE id = ? LIMIT 1
+  `, [ticketId])
 
   // Calcul date_fin côté JS (évite le bug datetime binding D1 avec paramètre dynamique)
   const dateFin = new Date(Date.now() + garantieJours * 24 * 60 * 60 * 1000).toISOString()
 
-  const result = await db.prepare(`
+  const result = await db.get<GarantieRow>(`
     INSERT INTO garanties
       (boutique_id, ticket_id, client_id, appareil_marque, appareil_modele,
        description_reparation, date_debut, date_fin, garantie_jours, statut)
     VALUES (?, ?, ?, ?, ?, ?,
             CURRENT_TIMESTAMP, ?, ?, 'active')
     RETURNING *
-  `).bind(
+  `, [
     boutiqueId,
     ticketId,
     ticket?.client_id    ?? null,
@@ -140,7 +141,7 @@ export async function createGarantieFromTicket(
     ticket?.diagnostic   ?? null,
     dateFin,
     garantieJours
-  ).first<GarantieRow>()
+  ])
 
   if (!result) throw new Error('Échec création garantie.')
   return result
@@ -159,7 +160,7 @@ export async function createGarantieFromTicket(
  * @throws            Error si l'insertion échoue
  */
 export async function createGarantie(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   data: {
     ticket_id?:             number
@@ -178,14 +179,14 @@ export async function createGarantie(
   // Calcul date_fin côté JS (corrige le bug FK — datetime binding D1 avec paramètre dynamique)
   const dateFin = new Date(Date.now() + garantieJours * 24 * 60 * 60 * 1000).toISOString()
 
-  const result = await db.prepare(`
+  const result = await db.get<GarantieRow>(`
     INSERT INTO garanties
       (boutique_id, ticket_id, client_id, appareil_marque, appareil_modele,
        description_reparation, date_debut, date_fin, garantie_jours, statut)
     VALUES (?, ?, ?, ?, ?, ?,
             CURRENT_TIMESTAMP, ?, ?, 'active')
     RETURNING *
-  `).bind(
+  `, [
     boutiqueId,
     ticketId,
     data.client_id              ?? null,
@@ -194,7 +195,7 @@ export async function createGarantie(
     data.description_reparation ?? null,
     dateFin,
     garantieJours
-  ).first<GarantieRow>()
+  ])
 
   if (!result) throw new Error('Échec création garantie.')
   return result
@@ -210,14 +211,16 @@ export async function createGarantie(
  * @returns           Garantie enrichie (client + ticket) ou `null` si absente
  */
 export async function getGarantie(
-  db:         D1Database,
+  db:         Database,
   id:         number,
   boutiqueId: number
 ): Promise<(GarantieRow & {
   client_nom?: string; client_prenom?: string; client_telephone?: string
   ticket_numero?: string
 }) | null> {
-  return db.prepare(`
+  return db.get<GarantieRow & {
+    client_nom?: string; client_prenom?: string; client_telephone?: string; ticket_numero?: string
+  }>(`
     SELECT g.*,
            c.nom    AS client_nom,
            c.prenom AS client_prenom,
@@ -227,9 +230,7 @@ export async function getGarantie(
     LEFT   JOIN clients c ON c.id = g.client_id
     LEFT   JOIN tickets t ON t.id = g.ticket_id
     WHERE  g.id = ? AND g.boutique_id = ? AND g.actif = 1
-  `).bind(id, boutiqueId).first<GarantieRow & {
-    client_nom?: string; client_prenom?: string; client_telephone?: string; ticket_numero?: string
-  }>()
+  `, [id, boutiqueId])
 }
 
 /**
@@ -251,7 +252,7 @@ export async function getGarantie(
  * @returns           `{ data: GarantieRow[], pagination }`
  */
 export async function listGaranties(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   query:      Record<string, string>
 ): Promise<{ data: any[]; pagination: any }> {
@@ -285,14 +286,14 @@ export async function listGaranties(
   const where = conditions.join(' AND ')
 
   const [total, rows] = await Promise.all([
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt
       FROM   garanties g
       LEFT   JOIN clients c ON c.id = g.client_id
       WHERE  ${where}
-    `).bind(...params).first<{ cnt: number }>(),
+    `, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT g.*,
              c.nom    AS client_nom,
              c.prenom AS client_prenom,
@@ -305,11 +306,11 @@ export async function listGaranties(
       WHERE  ${where}
       ORDER  BY g.date_fin ASC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows,
     pagination: {
       page,
       limit,
@@ -328,19 +329,19 @@ export async function listGaranties(
  * @returns           Nombre de garanties passées au statut `expiree`
  */
 export async function checkAndExpireGaranties(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<number> {
-  const result = await db.prepare(`
+  const result = await db.run(`
     UPDATE garanties
     SET    statut = 'expiree', updated_at = CURRENT_TIMESTAMP
     WHERE  boutique_id = ?
       AND  statut = 'active'
       AND  date_fin < datetime('now')
       AND  actif = 1
-  `).bind(boutiqueId).run()
+  `, [boutiqueId])
 
-  return result.meta.changes ?? 0
+  return result.changes ?? 0
 }
 
 // ─── Dossiers SAV ─────────────────────────────────────────────────────────────
@@ -467,7 +468,7 @@ export async function createSav(
  * @returns           `{ data: SavRow[], pagination }`
  */
 export async function listSav(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   query:      Record<string, string>
 ): Promise<{ data: any[]; pagination: any }> {
@@ -496,14 +497,14 @@ export async function listSav(
   const where = conditions.join(' AND ')
 
   const [total, rows] = await Promise.all([
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt
       FROM   sav_dossiers s
       LEFT   JOIN clients c ON c.id = s.client_id
       WHERE  ${where}
-    `).bind(...params).first<{ cnt: number }>(),
+    `, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT s.*,
              c.nom         AS client_nom,
              c.prenom      AS client_prenom,
@@ -520,11 +521,11 @@ export async function listSav(
       WHERE  ${where}
       ORDER  BY s.date_ouverture DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data: rows.results ?? [],
+    data: rows,
     pagination: {
       page,
       limit,
@@ -549,11 +550,11 @@ export async function listSav(
  * @returns           Dossier SAV enrichi ou `null` si introuvable
  */
 export async function getSav(
-  db:         D1Database,
+  db:         Database,
   id:         number,
   boutiqueId: number
 ): Promise<any | null> {
-  return db.prepare(`
+  return db.get(`
     SELECT s.*,
            c.nom         AS client_nom,
            c.prenom      AS client_prenom,
@@ -575,7 +576,7 @@ export async function getSav(
     LEFT   JOIN tickets   ts     ON ts.id     = s.ticket_sav_id
     LEFT   JOIN garanties g      ON g.id      = s.garantie_id
     WHERE  s.id = ? AND s.boutique_id = ? AND s.actif = 1
-  `).bind(id, boutiqueId).first<any>()
+  `, [id, boutiqueId])
 }
 
 /**
@@ -601,15 +602,15 @@ export async function getSav(
  * @throws            Error si transition interdite ou dossier introuvable
  */
 export async function updateSavStatut(
-  db:         D1Database,
+  db:         Database,
   id:         number,
   boutiqueId: number,
   statut:     string,
   resolution?: string
 ): Promise<SavRow> {
-  const sav = await db.prepare(`
+  const sav = await db.get<SavRow>(`
     SELECT * FROM sav_dossiers WHERE id = ? AND boutique_id = ? AND actif = 1
-  `).bind(id, boutiqueId).first<SavRow>()
+  `, [id, boutiqueId])
 
   if (!sav) throw new Error('Dossier SAV introuvable.')
 
@@ -619,7 +620,7 @@ export async function updateSavStatut(
 
   const estFermant = ['resolu', 'refuse', 'clos'].includes(statut)
 
-  const updated = await db.prepare(`
+  const updated = await db.get<SavRow>(`
     UPDATE sav_dossiers
     SET    statut      = ?,
            resolution  = COALESCE(?, resolution),
@@ -627,18 +628,18 @@ export async function updateSavStatut(
            updated_at  = CURRENT_TIMESTAMP
     WHERE  id = ? AND boutique_id = ?
     RETURNING *
-  `).bind(statut, resolution ?? null, statut, id, boutiqueId).first<SavRow>()
+  `, [statut, resolution ?? null, statut, id, boutiqueId])
 
   if (!updated) throw new Error('Mise à jour SAV échouée.')
 
   // Clore automatiquement le ticket SAV si le dossier se ferme
   if (estFermant && sav.ticket_sav_id) {
     const ticketStatut = statut === 'resolu' ? 'termine' : 'annule'
-    await db.prepare(`
+    await db.run(`
       UPDATE tickets
       SET statut = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND statut NOT IN ('livre','annule')
-    `).bind(ticketStatut, sav.ticket_sav_id).run()
+    `, [ticketStatut, sav.ticket_sav_id])
   }
 
   return updated
@@ -656,7 +657,7 @@ export async function updateSavStatut(
  *                    — `taux_retour_pct` : % garanties consommées / total garanties
  */
 export async function getKpisSav(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<{
   garanties_actives:   number
@@ -673,39 +674,33 @@ export async function getKpisSav(
     expiresSoon,
     statsSav,
     resolusM,
-    totalTermines,
   ] = await Promise.all([
-    db.prepare(`
+    db.get<{ actives: number; expirees: number; consommees: number }>(`
       SELECT
         SUM(CASE WHEN statut='active'    THEN 1 ELSE 0 END) AS actives,
         SUM(CASE WHEN statut='expiree'   THEN 1 ELSE 0 END) AS expirees,
         SUM(CASE WHEN statut='consommee' THEN 1 ELSE 0 END) AS consommees
       FROM garanties WHERE boutique_id = ? AND actif = 1
-    `).bind(boutiqueId).first<{ actives: number; expirees: number; consommees: number }>(),
+    `, [boutiqueId]),
 
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt FROM garanties
       WHERE boutique_id = ? AND statut = 'active' AND actif = 1
         AND date_fin BETWEEN datetime('now') AND datetime('now', '+7 days')
-    `).bind(boutiqueId).first<{ cnt: number }>(),
+    `, [boutiqueId]),
 
-    db.prepare(`
+    db.get<{ ouverts: number; en_traitement: number }>(`
       SELECT
         SUM(CASE WHEN statut='ouvert'        THEN 1 ELSE 0 END) AS ouverts,
         SUM(CASE WHEN statut='en_traitement' THEN 1 ELSE 0 END) AS en_traitement
       FROM sav_dossiers WHERE boutique_id = ? AND actif = 1
-    `).bind(boutiqueId).first<{ ouverts: number; en_traitement: number }>(),
+    `, [boutiqueId]),
 
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt FROM sav_dossiers
       WHERE boutique_id = ? AND statut IN ('resolu','clos') AND actif = 1
         AND strftime('%Y-%m', date_cloture) = strftime('%Y-%m', 'now')
-    `).bind(boutiqueId).first<{ cnt: number }>(),
-
-    db.prepare(`
-      SELECT COUNT(*) as cnt FROM tickets
-      WHERE boutique_id = ? AND statut IN ('termine','livre') AND actif = 1
-    `).bind(boutiqueId).first<{ cnt: number }>(),
+    `, [boutiqueId]),
   ])
 
   const totalG  = (statsGaranties?.actives ?? 0) + (statsGaranties?.expirees ?? 0) + (statsGaranties?.consommees ?? 0)

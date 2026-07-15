@@ -297,7 +297,7 @@ tickets.put('/:id/statut', async (c) => {
         if (statut_apres === 'termine') {
           // Garantie automatique uniquement à la clôture 'termine'
           try {
-            garantieCreee = await createGarantieFromTicket(db, id, ticketRow.boutique_id)
+            garantieCreee = await createGarantieFromTicket(dbPort, id, ticketRow.boutique_id)
           } catch { /* non bloquant */ }
         }
 

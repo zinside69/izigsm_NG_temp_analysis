@@ -63,7 +63,7 @@ sav.get('/garanties', async (c) => {
     const { boutiqueId } = ctx(c)
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
     const query  = Object.fromEntries(new URL(c.req.url).searchParams)
-    const result = await listGaranties(c.env.DB, boutiqueId, query)
+    const result = await listGaranties(c.get('db'), boutiqueId, query)
     return c.json({ success: true, ...result })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -84,8 +84,8 @@ sav.post('/garanties', async (c) => {
     if (err)   return c.json({ success: false, error: err }, 422)
 
     const garantie = body.ticket_id
-      ? await createGarantieFromTicket(c.env.DB, Number(body.ticket_id), boutiqueId)
-      : await createGarantie(c.env.DB, boutiqueId, body)
+      ? await createGarantieFromTicket(c.get('db'), Number(body.ticket_id), boutiqueId)
+      : await createGarantie(c.get('db'), boutiqueId, body)
 
     return c.json({ success: true, data: garantie, message: 'Garantie créée.' }, 201)
   } catch (e: any) {
@@ -101,7 +101,7 @@ sav.post('/garanties/expire', async (c) => {
   try {
     const { boutiqueId } = ctx(c)
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
-    const count = await checkAndExpireGaranties(c.env.DB, boutiqueId)
+    const count = await checkAndExpireGaranties(c.get('db'), boutiqueId)
     return c.json({ success: true, data: { expired: count }, message: `${count} garantie(s) expirée(s).` })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -118,7 +118,7 @@ sav.get('/garanties/:id', async (c) => {
     const id = Number(c.req.param('id'))
     if (isNaN(id)) return c.json({ success: false, error: 'ID invalide.' }, 400)
 
-    const garantie = await getGarantie(c.env.DB, id, boutiqueId)
+    const garantie = await getGarantie(c.get('db'), id, boutiqueId)
     if (!garantie)  return c.json({ success: false, error: 'Garantie introuvable.' }, 404)
     return c.json({ success: true, data: garantie })
   } catch (e: any) {
@@ -138,7 +138,7 @@ sav.get('/sav/kpis', async (c) => {
   try {
     const { boutiqueId } = ctx(c)
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
-    const kpis = await getKpisSav(c.env.DB, boutiqueId)
+    const kpis = await getKpisSav(c.get('db'), boutiqueId)
     return c.json({ success: true, data: kpis })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -154,7 +154,7 @@ sav.get('/sav', async (c) => {
     const { boutiqueId } = ctx(c)
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
     const query  = Object.fromEntries(new URL(c.req.url).searchParams)
-    const result = await listSav(c.env.DB, boutiqueId, query)
+    const result = await listSav(c.get('db'), boutiqueId, query)
     return c.json({ success: true, ...result })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -208,7 +208,7 @@ sav.get('/sav/:id', async (c) => {
     const id = Number(c.req.param('id'))
     if (isNaN(id)) return c.json({ success: false, error: 'ID invalide.' }, 400)
 
-    const dossier = await getSav(c.env.DB, id, boutiqueId)
+    const dossier = await getSav(c.get('db'), id, boutiqueId)
     if (!dossier)  return c.json({ success: false, error: 'Dossier SAV introuvable.' }, 404)
     return c.json({ success: true, data: dossier })
   } catch (e: any) {
@@ -231,7 +231,7 @@ sav.put('/sav/:id/statut', async (c) => {
     const err  = validateSavStatut(body)
     if (err)   return c.json({ success: false, error: err }, 422)
 
-    const updated = await updateSavStatut(c.env.DB, id, boutiqueId, body.statut, body.resolution)
+    const updated = await updateSavStatut(c.get('db'), id, boutiqueId, body.statut, body.resolution)
     return c.json({ success: true, data: updated, message: `Statut SAV → ${body.statut}.` })
   } catch (e: any) {
     const status = e.message.includes('Transition') || e.message.includes('introuvable') ? 422 : 500
