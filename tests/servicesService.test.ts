@@ -2,46 +2,33 @@
  * @file tests/servicesService.test.ts
  * @description Tests unitaires — src/services/servicesService.ts
  * Sprint 2.39 — Référentiel global marques/modèles (sans boutique_id)
+ * Migration Ports & Adapters (2026-07-15, checkpoint 11, service #13) :
+ *   fonctions de lecture pure → port Database (mockDatabase), fonctions
+ *   dépendant d'auditLog() → restent sur D1Database brut (mockD1).
  *
  * Couverture :
- *   Catégories existantes (smoke tests) :
- *     - listCategories()    — retourne données avec nb_services
- *     - createCategorie()   — id retourné, auditLog
- *     - deleteCategorie()   — désactive catégorie + services
+ *   Lecture (port Database — mockDatabase) :
+ *     - listCategories(), listServices(), getService(), getCatalogueArbre()
+ *     - listMarques(), listModeles(), getServicesByModele(), getModeleWithServices()
  *
- *   Nouvelles fonctions Sprint 2.38 :
- *     - listMarques()             — retourne marques avec nb_modeles
- *     - createMarque()            — INSERT + auditLog, retourne id
- *     - updateMarque()            — UPDATE COALESCE + auditLog
- *     - deleteMarque()            — soft delete cascade modèles + auditLog
- *     - listModeles()             — filtres marque_id / search / type
- *     - createModele()            — INSERT + auditLog, retourne id
- *     - updateModele()            — UPDATE + auditLog
- *     - deleteModele()            — soft delete + auditLog
- *     - getServicesByModele()     — JOIN service_modeles + prix override COALESCE
- *     - linkServiceModele()       — INSERT ON CONFLICT + auditLog
- *     - unlinkServiceModele()     — UPDATE actif=0 + auditLog
- *     - getModeleWithServices()   — modele null si introuvable, services array
+ *   Écriture (D1Database brut — mockD1, dépend d'auditLog) :
+ *     - createCategorie(), updateCategorie(), deleteCategorie()
+ *     - createService(), updateService(), deleteService()
+ *     - createMarque(), updateMarque(), deleteMarque()
+ *     - createModele(), updateModele(), deleteModele()
+ *     - linkServiceModele(), unlinkServiceModele()
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
-  listCategories,
-  createCategorie,
-  deleteCategorie,
-  listMarques,
-  createMarque,
-  updateMarque,
-  deleteMarque,
-  listModeles,
-  createModele,
-  updateModele,
-  deleteModele,
-  getServicesByModele,
-  linkServiceModele,
-  unlinkServiceModele,
-  getModeleWithServices,
+  listCategories, createCategorie, updateCategorie, deleteCategorie,
+  listServices, getService, createService, updateService, deleteService,
+  getCatalogueArbre,
+  listMarques, createMarque, updateMarque, deleteMarque,
+  listModeles, createModele, updateModele, deleteModele,
+  getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices,
 } from '../src/services/servicesService'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -55,6 +42,7 @@ const SERVICE_SUGGESTION = {
   categorie_nom: 'Réparations', categorie_couleur: '#6366f1'
 }
 const CAT_ROW = { id: 2, boutique_id: 1, parent_id: null, nom: 'Téléphones', description: null, couleur: '#6366f1', ordre: 0, actif: 1, nb_services: 5 }
+const SERVICE_ROW = { id: 5, boutique_id: 1, categorie_id: 2, nom: 'Remplacement écran iPhone 14', description: null, prix_ht: 80, tva_taux: 20, prix_ttc: 96, duree_minutes: 60, reference: 'SVC-001', garantie_jours: 90, actif: 1, categorie_nom: 'Téléphones', categorie_couleur: '#6366f1' }
 
 // ─── SQL constants ────────────────────────────────────────────────────────────
 
@@ -72,15 +60,25 @@ const SQL_MODELE_WITH_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_a
 
 const SQL_LIST_CATEGORIES = `SELECT c.*, COUNT(s.id) as nb_services FROM categories_services c LEFT JOIN services s ON s.categorie_id = c.id AND s.actif = 1 WHERE c.boutique_id = ? AND c.actif = 1 GROUP BY c.id ORDER BY c.parent_id NULLS FIRST, c.ordre ASC, c.nom ASC`
 
+const SQL_COUNT_SERVICES = `SELECT COUNT(*) as cnt FROM services s WHERE s.boutique_id = ? AND s.actif = 1`
+
+const SQL_LIST_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY c.ordre ASC, c.nom ASC, s.nom ASC LIMIT ? OFFSET ?`
+
+const SQL_GET_SERVICE = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.id = ? AND s.actif = 1`
+
+const SQL_ARBRE_CATEGORIES = `SELECT * FROM categories_services WHERE boutique_id = ? AND actif = 1 ORDER BY parent_id NULLS FIRST, ordre ASC, nom ASC`
+
+const SQL_ARBRE_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.nom ASC`
+
 // ══════════════════════════════════════════════════════════════════════════════
-// listCategories() — smoke test
+// listCategories() — port Database
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('listCategories()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les catégories avec nb_services', async () => {
@@ -99,7 +97,7 @@ describe('listCategories()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// createCategorie()
+// createCategorie() / updateCategorie() / deleteCategorie() — D1Database brut
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('createCategorie()', () => {
@@ -117,9 +115,23 @@ describe('createCategorie()', () => {
   })
 })
 
-// ══════════════════════════════════════════════════════════════════════════════
-// deleteCategorie()
-// ══════════════════════════════════════════════════════════════════════════════
+describe('updateCategorie()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => {
+    db = createMockD1()
+    db.__setResponse('UPDATE categories_services SET nom = COALESCE(?, nom), parent_id = ?, description = COALESCE(?, description), couleur = COALESCE(?, couleur), ordre = COALESCE(?, ordre), updated_at = CURRENT_TIMESTAMP WHERE id = ?', null)
+    db.__setResponse('INSERT INTO audit_logs', null)
+  })
+
+  it('appelle UPDATE sans erreur', async () => {
+    await expect(updateCategorie(db, 2, { nom: 'Nouveau nom' }, 42)).resolves.toBeUndefined()
+  })
+
+  it('permet de nullifier parent_id explicitement (déplacer vers la racine)', async () => {
+    await expect(updateCategorie(db, 2, { parent_id: null }, 42)).resolves.toBeUndefined()
+  })
+})
 
 describe('deleteCategorie()', () => {
   let db: ReturnType<typeof createMockD1>
@@ -137,14 +149,163 @@ describe('deleteCategorie()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// listMarques()
+// listServices() / getService() — port Database
 // ══════════════════════════════════════════════════════════════════════════════
 
-describe('listMarques()', () => {
+describe('listServices()', () => {
+  let db: ReturnType<typeof createMockDatabase>
+
+  beforeEach(() => {
+    db = createMockDatabase()
+  })
+
+  it('retourne les services paginés avec pagination', async () => {
+    db.__setResponse(SQL_COUNT_SERVICES, { cnt: 1 })
+    db.__setListResponse(SQL_LIST_SERVICES, [SERVICE_ROW])
+    const res = await listServices(db, 1, {})
+    expect(res.data).toHaveLength(1)
+    expect(res.pagination.total).toBe(1)
+  })
+
+  it('retourne pagination vide si aucun service', async () => {
+    db.__setResponse(SQL_COUNT_SERVICES, { cnt: 0 })
+    db.__setListResponse(SQL_LIST_SERVICES, [])
+    const res = await listServices(db, 1, {})
+    expect(res.data).toEqual([])
+    expect(res.pagination.total).toBe(0)
+  })
+})
+
+describe('getService()', () => {
+  let db: ReturnType<typeof createMockDatabase>
+
+  beforeEach(() => {
+    db = createMockDatabase()
+  })
+
+  it('retourne le service avec prix_ttc et catégorie', async () => {
+    db.__setResponse(SQL_GET_SERVICE, SERVICE_ROW)
+    const res = await getService(db, 5)
+    expect(res?.nom).toBe('Remplacement écran iPhone 14')
+    expect(res?.prix_ttc).toBe(96)
+  })
+
+  it('retourne null si introuvable', async () => {
+    db.__setNotFound(SQL_GET_SERVICE)
+    const res = await getService(db, 999)
+    expect(res).toBeNull()
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// createService() / updateService() / deleteService() — D1Database brut
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('createService()', () => {
   let db: ReturnType<typeof createMockD1>
 
   beforeEach(() => {
     db = createMockD1()
+    db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
+    db.__setResponse('INSERT INTO audit_logs', null)
+  })
+
+  it('retourne l\'id du service créé', async () => {
+    const id = await createService(db, { boutique_id: 1, nom: 'Remplacement batterie', prix_ht: 40 }, 42)
+    expect(id).toBe(9)
+  })
+})
+
+describe('updateService()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => {
+    db = createMockD1()
+    db.__setResponse(
+      `UPDATE services SET
+      categorie_id    = COALESCE(?, categorie_id),
+      nom             = COALESCE(?, nom),
+      description     = COALESCE(?, description),
+      prix_ht         = COALESCE(?, prix_ht),
+      tva_taux        = COALESCE(?, tva_taux),
+      duree_minutes   = COALESCE(?, duree_minutes),
+      reference       = COALESCE(?, reference),
+      garantie_jours  = COALESCE(?, garantie_jours),
+      updated_at      = CURRENT_TIMESTAMP
+    WHERE id = ?`, null)
+    db.__setResponse('INSERT INTO audit_logs', null)
+  })
+
+  it('appelle UPDATE sans erreur', async () => {
+    await expect(updateService(db, 5, { prix_ht: 90 }, 42)).resolves.toBeUndefined()
+  })
+})
+
+describe('deleteService()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => {
+    db = createMockD1()
+    db.__setResponse('UPDATE services SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', null)
+    db.__setResponse('INSERT INTO audit_logs', null)
+  })
+
+  it('soft delete sans erreur', async () => {
+    await expect(deleteService(db, 5, 42)).resolves.toBeUndefined()
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// getCatalogueArbre() — port Database
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('getCatalogueArbre()', () => {
+  let db: ReturnType<typeof createMockDatabase>
+
+  beforeEach(() => {
+    db = createMockDatabase()
+  })
+
+  it('construit un arbre catégorie parente → sous-catégorie → services', async () => {
+    const parent  = { id: 1, boutique_id: 1, parent_id: null, nom: 'Téléphones', actif: 1 }
+    const enfant  = { id: 2, boutique_id: 1, parent_id: 1, nom: 'Apple', actif: 1 }
+    const svc     = { id: 5, boutique_id: 1, categorie_id: 2, nom: 'Écran', prix_ttc: 96 }
+    db.__setListResponse(SQL_ARBRE_CATEGORIES, [parent, enfant])
+    db.__setListResponse(SQL_ARBRE_SERVICES, [svc])
+
+    const arbre = await getCatalogueArbre(db, 1) as any[]
+    expect(arbre).toHaveLength(1)
+    expect(arbre[0].nom).toBe('Téléphones')
+    expect(arbre[0].enfants).toHaveLength(1)
+    expect(arbre[0].enfants[0].services).toHaveLength(1)
+    expect(arbre[0].enfants[0].services[0].nom).toBe('Écran')
+  })
+
+  it('retourne tableau vide si aucune catégorie', async () => {
+    db.__setListResponse(SQL_ARBRE_CATEGORIES, [])
+    db.__setListResponse(SQL_ARBRE_SERVICES, [])
+    const arbre = await getCatalogueArbre(db, 1)
+    expect(arbre).toEqual([])
+  })
+
+  it('ignore les catégories orphelines (parent inexistant)', async () => {
+    const orpheline = { id: 3, boutique_id: 1, parent_id: 999, nom: 'Orpheline', actif: 1 }
+    db.__setListResponse(SQL_ARBRE_CATEGORIES, [orpheline])
+    db.__setListResponse(SQL_ARBRE_SERVICES, [])
+    const arbre = await getCatalogueArbre(db, 1)
+    expect(arbre).toEqual([])
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// listMarques() — port Database
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('listMarques()', () => {
+  let db: ReturnType<typeof createMockDatabase>
+
+  beforeEach(() => {
+    db = createMockDatabase()
   })
 
   it('retourne les marques avec nb_modeles', async () => {
@@ -163,7 +324,7 @@ describe('listMarques()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// createMarque()
+// createMarque() / updateMarque() / deleteMarque() — D1Database brut
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('createMarque()', () => {
@@ -187,10 +348,6 @@ describe('createMarque()', () => {
   })
 })
 
-// ══════════════════════════════════════════════════════════════════════════════
-// updateMarque()
-// ══════════════════════════════════════════════════════════════════════════════
-
 describe('updateMarque()', () => {
   let db: ReturnType<typeof createMockD1>
 
@@ -204,10 +361,6 @@ describe('updateMarque()', () => {
     await expect(updateMarque(db, 1, { nom: 'Apple Inc.' }, 42)).resolves.toBeUndefined()
   })
 })
-
-// ══════════════════════════════════════════════════════════════════════════════
-// deleteMarque()
-// ══════════════════════════════════════════════════════════════════════════════
 
 describe('deleteMarque()', () => {
   let db: ReturnType<typeof createMockD1>
@@ -225,14 +378,14 @@ describe('deleteMarque()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// listModeles()
+// listModeles() — port Database
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('listModeles()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('sans filtre — retourne tous les modèles avec marque_nom', async () => {
@@ -264,7 +417,7 @@ describe('listModeles()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// createModele()
+// createModele() / updateModele() / deleteModele() — D1Database brut
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('createModele()', () => {
@@ -287,10 +440,6 @@ describe('createModele()', () => {
   })
 })
 
-// ══════════════════════════════════════════════════════════════════════════════
-// updateModele()
-// ══════════════════════════════════════════════════════════════════════════════
-
 describe('updateModele()', () => {
   let db: ReturnType<typeof createMockD1>
 
@@ -304,10 +453,6 @@ describe('updateModele()', () => {
     await expect(updateModele(db, 10, { nom: 'iPhone 14 Pro Max', annee: 2022 }, 42)).resolves.toBeUndefined()
   })
 })
-
-// ══════════════════════════════════════════════════════════════════════════════
-// deleteModele()
-// ══════════════════════════════════════════════════════════════════════════════
 
 describe('deleteModele()', () => {
   let db: ReturnType<typeof createMockD1>
@@ -324,14 +469,14 @@ describe('deleteModele()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// getServicesByModele()
+// getServicesByModele() — port Database
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('getServicesByModele()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les services suggérés avec prix_ttc_effectif', async () => {
@@ -350,7 +495,7 @@ describe('getServicesByModele()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// linkServiceModele()
+// linkServiceModele() / unlinkServiceModele() — D1Database brut
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('linkServiceModele()', () => {
@@ -371,10 +516,6 @@ describe('linkServiceModele()', () => {
   })
 })
 
-// ══════════════════════════════════════════════════════════════════════════════
-// unlinkServiceModele()
-// ══════════════════════════════════════════════════════════════════════════════
-
 describe('unlinkServiceModele()', () => {
   let db: ReturnType<typeof createMockD1>
 
@@ -390,14 +531,14 @@ describe('unlinkServiceModele()', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-// getModeleWithServices()
+// getModeleWithServices() — port Database
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('getModeleWithServices()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne modele + services combinés', async () => {
@@ -410,7 +551,7 @@ describe('getModeleWithServices()', () => {
   })
 
   it('retourne modele null si introuvable', async () => {
-    db.__setResponse(SQL_MODELE_WITH_MARQUE, null)
+    db.__setNotFound(SQL_MODELE_WITH_MARQUE)
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
     const res = await getModeleWithServices(db, 999)
     expect(res.modele).toBeNull()

@@ -1,4 +1,8 @@
-# iziGSM — État courant (MàJ : 2026-07-14, checkpoint 10)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 11)
+
+## Chantier Ports & Adapters — 13/20 services migrés (session du 2026-07-15)
+- **servicesService.ts** (2026-07-15) — 8/22 fonctions migrées (toutes lecture pure : `listCategories`, `listServices`, `getService`, `getCatalogueArbre`, `listMarques`, `listModeles`, `getServicesByModele`, `getModeleWithServices`). Les 14 fonctions d'écriture (create/update/delete catégories/services/marques/modeles + link/unlink) restent sur `D1Database` — chacune appelle `auditLog()` directement. `routes/services.ts` : `Variables.db` ajouté. Tests scindés `mockDatabase`/`mockD1` (38/38 ✅, 7 nouveaux tests écrits pour des fonctions jusque-là non couvertes). **Bug préexistant corrigé** (Sprint 2.38, sans lien) : `GET /services/marques`/`GET /services/modeles` inaccessibles depuis toujours (collision de route avec `/services/:id`) — détail `bugs.md`. **Validé en local live** : 12/14 étapes du cycle catégorie→service→catalogue→marque→modèle→liaison ✅ (liaison INSERT bloquée par un artefact CLI wrangler local déjà connu, sans lien avec le code).
+
 
 ## Ce qui fonctionne en production (`https://repairdesk.fr`)
 - Tout ce qui était opérationnel au checkpoint 4 (migration Cloudflare, auth, slug boutiques, chantier prise en charge, technicien_id, numérotation par boutique) — toujours en place, aucune régression.

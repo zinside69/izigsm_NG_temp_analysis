@@ -62,8 +62,10 @@ import {
   getLastSyncStatus, getCatalogStats,
 } from '../services/phoneCatalogService'
 
+import type { Database } from '../ports/database'
+
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 const services = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 services.use('*', authMiddleware)
@@ -99,7 +101,7 @@ services.get('/services/catalogue', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const arbre = await getCatalogueArbre(c.env.DB, boutiqueId)
+  const arbre = await getCatalogueArbre(c.get('db'), boutiqueId)
   return c.json({ success: true, data: arbre })
 })
 
@@ -123,7 +125,7 @@ services.get('/services/categories', async (c) => {
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const data = await listCategories(c.env.DB, boutiqueId)
+  const data = await listCategories(c.get('db'), boutiqueId)
   return c.json({ success: true, data })
 })
 
@@ -226,8 +228,34 @@ services.get('/services', async (c) => {
   const boutiqueId = getBoutiqueId(user, query.boutique_id)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listServices(c.env.DB, boutiqueId, query)
+  const result = await listServices(c.get('db'), boutiqueId, query)
   return c.json({ success: true, ...result })
+})
+
+/**
+ * GET /api/services/marques — Liste des marques actives globales avec nb_modeles
+ * GET /api/services/modeles — Liste des modèles (filtrables par marque_id, search, type, limit)
+ *
+ * Déclarées AVANT /services/:id pour éviter la collision de route Hono
+ * (même nombre de segments — /services/marques et /services/modeles seraient
+ * sinon capturées par /services/:id avec id="marques"/"modeles", jamais atteintes).
+ * Bug préexistant depuis Sprint 2.38, découvert en validation live de la migration
+ * Ports & Adapters — même classe que /rachats/export dans routes/rachats.ts.
+ */
+services.get('/services/marques', async (c) => {
+  const data = await listMarques(c.get('db'))
+  return c.json({ success: true, data })
+})
+
+services.get('/services/modeles', async (c) => {
+  const query = c.req.query()
+  const data  = await listModeles(c.get('db'), {
+    marque_id: query.marque_id ? parseInt(query.marque_id, 10) : undefined,
+    search:    query.search,
+    type:      query.type,
+    limit:     query.limit ? parseInt(query.limit, 10) : undefined,
+  })
+  return c.json({ success: true, data })
 })
 
 /**
@@ -240,7 +268,7 @@ services.get('/services', async (c) => {
  */
 services.get('/services/:id', async (c) => {
   const id      = parseInt(c.req.param('id'), 10)
-  const service = await getService(c.env.DB, id)
+  const service = await getService(c.get('db'), id)
   if (!service) return c.json({ success: false, error: 'Service introuvable.' }, 404)
   return c.json({ success: true, data: service })
 })
@@ -302,7 +330,7 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
   if (error) return c.json({ success: false, error }, 400)
 
   // Vérification existence avant tentative de mise à jour
-  const existing = await getService(c.env.DB, id)
+  const existing = await getService(c.get('db'), id)
   if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
 
   await updateService(c.env.DB, id, body, user.sub)
@@ -324,7 +352,7 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
 
   // Vérification existence avant soft delete
-  const existing = await getService(c.env.DB, id)
+  const existing = await getService(c.get('db'), id)
   if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
 
   await deleteService(c.env.DB, id, user.sub)
@@ -406,12 +434,6 @@ services.post('/services/catalog/sync-selected', requireRole('admin'), async (c)
 // MARQUES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** GET /api/services/marques — Liste des marques actives globales avec nb_modeles */
-services.get('/services/marques', async (c) => {
-  const data = await listMarques(c.env.DB)
-  return c.json({ success: true, data })
-})
-
 /** POST /api/services/marques — Créer une marque manuellement */
 services.post('/services/marques', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
@@ -450,18 +472,6 @@ services.delete('/services/marques/:id', requireRole('admin', 'manager'), async 
 // ══════════════════════════════════════════════════════════════════════════════
 // MODÈLES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
-
-/** GET /api/services/modeles — Liste des modèles (filtrables par marque_id, search, type, limit) */
-services.get('/services/modeles', async (c) => {
-  const query = c.req.query()
-  const data  = await listModeles(c.env.DB, {
-    marque_id: query.marque_id ? parseInt(query.marque_id, 10) : undefined,
-    search:    query.search,
-    type:      query.type,
-    limit:     query.limit ? parseInt(query.limit, 10) : undefined,
-  })
-  return c.json({ success: true, data })
-})
 
 /** POST /api/services/modeles — Créer un modèle manuellement */
 services.post('/services/modeles', requireRole('admin', 'manager'), async (c) => {
@@ -507,7 +517,7 @@ services.delete('/services/modeles/:id', requireRole('admin', 'manager'), async 
  */
 services.get('/services/modeles/:id/services', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
-  const data = await getModeleWithServices(c.env.DB, id)
+  const data = await getModeleWithServices(c.get('db'), id)
   if (!data.modele) return c.json({ success: false, error: 'Modèle introuvable.' }, 404)
   return c.json({ success: true, data })
 })

@@ -1,5 +1,17 @@
 # iziGSM — Bugs connus
 
+## `GET /api/services/marques` et `GET /api/services/modeles` → 404 "Service introuvable" — CORRIGÉ le 2026-07-15
+
+Découvert en validation live lors de la migration Ports & Adapters de `servicesService.ts` (checkpoint 11, service #13). `routes/services.ts` déclarait `services.get('/services/:id', ...)` **avant** `services.get('/services/marques', ...)` et `services.get('/services/modeles', ...)` — même nombre de segments de route, Hono capturait toute requête `GET /api/services/marques` ou `GET /api/services/modeles` avec la route `:id` (id="marques"/"modeles" → `parseInt(...)` = `NaN` → service introuvable). **Ces deux endpoints étaient inaccessibles depuis leur création (Sprint 2.38, commit `04e02f0`)**, sans lien avec la migration en cours (confirmé pré-existant via `git stash`/`git log` sur `routes/services.ts`). Même classe de bug que `/rachats/export` (corrigé le 2026-07-12) et `/kanban` dans `tickets.ts`.
+
+**Fix appliqué** : les deux routes `GET /services/marques` et `GET /services/modeles` déplacées avant `GET /services/:id`, même pattern déjà utilisé ailleurs dans le projet.
+
+**Validé en local live** : `GET /api/services/marques` et `GET /api/services/modeles` → 200 avec données (avant fix : 404 systématique). Les routes `POST`/`PUT`/`DELETE` sur `/marques`/`/modeles` n'étaient pas affectées (méthodes distinctes, pas de collision).
+
+## `linkServiceModele()` — `INSERT ... ON CONFLICT ... DO UPDATE` échoue en local avec `no such table: main.modeles_appareils_old`
+
+Constaté le 2026-07-15 en validation live de `servicesService.ts`. Même artefact CLI wrangler local que documenté le 2026-07-12 pour `boutiqueService.ts` (`DELETE` bloqué par une table fantôme `modeles_appareils_old`, résidu d'une précédente opération `ALTER TABLE` sur l'émulateur D1 local) — erreur d'environnement local, pas un problème de schéma réel ni un bug introduit par cette migration (`linkServiceModele`/`unlinkServiceModele` restent sur `D1Database` brut, code non modifié). `unlinkServiceModele()` et `getModeleWithServices()` (migrée) fonctionnent normalement. Non bloquant, sans impact production (jamais observé hors de l'émulateur local).
+
 ## `exportClientRgpd()`/`purgeClient()` — RGPD (Art. 15 & 17) cassés depuis toujours — CORRIGÉ le 2026-07-14
 
 Découvert en validation live lors de la migration Ports & Adapters de `clientService.ts`. Deux bugs cumulés dans `clientService.ts`, chacun suffisant seul à faire planter l'export/la purge RGPD :

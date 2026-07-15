@@ -29,6 +29,7 @@
  */
 
 import { parsePagination, auditLog, calculTva } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,9 +71,9 @@ export interface Service {
  * @returns           Liste plate de `CategorieService` avec `nb_services`
  */
 export async function listCategories(
-  db: D1Database, boutiqueId: number
+  db: Database, boutiqueId: number
 ): Promise<CategorieService[]> {
-  const rows = await db.prepare(`
+  return db.all<CategorieService>(`
     SELECT c.*,
            COUNT(s.id) as nb_services
     FROM   categories_services c
@@ -80,8 +81,7 @@ export async function listCategories(
     WHERE  c.boutique_id = ? AND c.actif = 1
     GROUP  BY c.id
     ORDER  BY c.parent_id NULLS FIRST, c.ordre ASC, c.nom ASC
-  `).bind(boutiqueId).all()
-  return rows.results as CategorieService[]
+  `, [boutiqueId])
 }
 
 /**
@@ -182,7 +182,7 @@ export async function deleteCategorie(
  * @returns           `{ data: Service[], pagination }` enrichi avec `categorie_nom`, `categorie_couleur`
  */
 export async function listServices(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   query: Record<string, string>
 ) {
@@ -203,11 +203,11 @@ export async function listServices(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const total = await db.prepare(
-    `SELECT COUNT(*) as cnt FROM services s ${where}`
-  ).bind(...bindings).first<{ cnt: number }>()
+  const total = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM services s ${where}`, bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all(`
     SELECT s.*,
            ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc,
            c.nom   as categorie_nom,
@@ -217,10 +217,10 @@ export async function listServices(
     ${where}
     ORDER  BY c.ordre ASC, c.nom ASC, s.nom ASC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   return {
-    data:       rows.results,
+    data:       rows,
     pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) }
   }
 }
@@ -234,9 +234,9 @@ export async function listServices(
  * @returns   `Service` enrichi ou `null` si introuvable / soft-deleted
  */
 export async function getService(
-  db: D1Database, id: number
+  db: Database, id: number
 ): Promise<Service | null> {
-  const row = await db.prepare(`
+  return db.get<Service>(`
     SELECT s.*,
            ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc,
            c.nom    as categorie_nom,
@@ -244,8 +244,7 @@ export async function getService(
     FROM   services s
     LEFT JOIN categories_services c ON c.id = s.categorie_id
     WHERE  s.id = ? AND s.actif = 1
-  `).bind(id).first()
-  return (row as Service) ?? null
+  `, [id])
 }
 
 /**
@@ -369,24 +368,21 @@ export async function deleteService(
  * @returns           Arbre hiérarchique des catégories et services
  */
 export async function getCatalogueArbre(
-  db: D1Database, boutiqueId: number
+  db: Database, boutiqueId: number
 ): Promise<object[]> {
-  const [categories, services] = await Promise.all([
-    db.prepare(`
+  const [cats, svcs] = await Promise.all([
+    db.all<any>(`
       SELECT * FROM categories_services
       WHERE boutique_id = ? AND actif = 1
       ORDER BY parent_id NULLS FIRST, ordre ASC, nom ASC
-    `).bind(boutiqueId).all(),
-    db.prepare(`
+    `, [boutiqueId]),
+    db.all<any>(`
       SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc
       FROM   services s
       WHERE  s.boutique_id = ? AND s.actif = 1
       ORDER  BY s.nom ASC
-    `).bind(boutiqueId).all()
+    `, [boutiqueId])
   ])
-
-  const cats = categories.results as any[]
-  const svcs = services.results as any[]
 
   // Construire arbre : parents → enfants → services
   const racines = cats.filter(c => !c.parent_id).map(parent => ({
@@ -435,9 +431,9 @@ export interface ModeleAppareil {
  * Référentiel global Sprint 2.39 — plus de boutique_id.
  */
 export async function listMarques(
-  db: D1Database
+  db: Database
 ): Promise<MarqueAppareil[]> {
-  const rows = await db.prepare(`
+  return db.all<MarqueAppareil>(`
     SELECT m.*,
            COUNT(mo.id) AS nb_modeles
     FROM   marques_appareils m
@@ -445,8 +441,7 @@ export async function listMarques(
     WHERE  m.actif = 1
     GROUP  BY m.id
     ORDER  BY m.ordre ASC, m.nom ASC
-  `).all()
-  return rows.results as MarqueAppareil[]
+  `)
 }
 
 /**
@@ -512,7 +507,7 @@ export async function deleteMarque(
  * Référentiel global Sprint 2.39 — plus de boutique_id.
  */
 export async function listModeles(
-  db: D1Database,
+  db: Database,
   query: { marque_id?: number; search?: string; type?: string; limit?: number } = {}
 ): Promise<ModeleAppareil[]> {
   const conditions = ['mo.actif = 1']
@@ -534,7 +529,7 @@ export async function listModeles(
 
   const limitClause = query.limit ? `LIMIT ${parseInt(String(query.limit), 10)}` : 'LIMIT 500'
 
-  const rows = await db.prepare(`
+  return db.all<ModeleAppareil>(`
     SELECT mo.*,
            ma.nom AS marque_nom
     FROM   modeles_appareils mo
@@ -542,9 +537,7 @@ export async function listModeles(
     WHERE  ${conditions.join(' AND ')}
     ORDER  BY ma.nom ASC, mo.nom ASC
     ${limitClause}
-  `).bind(...bindings).all()
-
-  return rows.results as ModeleAppareil[]
+  `, bindings)
 }
 
 /**
@@ -611,9 +604,9 @@ export async function deleteModele(
  * `prix_ht_effectif` = prix override si défini, sinon prix catalogue.
  */
 export async function getServicesByModele(
-  db: D1Database, modeleId: number
+  db: Database, modeleId: number
 ): Promise<object[]> {
-  const rows = await db.prepare(`
+  return db.all<any>(`
     SELECT s.id,
            s.nom,
            s.description,
@@ -631,8 +624,7 @@ export async function getServicesByModele(
     LEFT JOIN categories_services c ON c.id = s.categorie_id
     WHERE  sm.modele_id = ? AND sm.actif = 1
     ORDER  BY c.nom ASC, s.nom ASC
-  `).bind(modeleId).all()
-  return rows.results
+  `, [modeleId])
 }
 
 /**
@@ -676,16 +668,16 @@ export async function unlinkServiceModele(
  * Utile pour afficher la liste des services configurés dans l'UI.
  */
 export async function getModeleWithServices(
-  db: D1Database, modeleId: number
+  db: Database, modeleId: number
 ): Promise<{ modele: ModeleAppareil | null; services: object[] }> {
   const [modeleRow, services] = await Promise.all([
-    db.prepare(`
+    db.get<ModeleAppareil>(`
       SELECT mo.*, ma.nom AS marque_nom
       FROM   modeles_appareils mo
       JOIN   marques_appareils ma ON ma.id = mo.marque_id
       WHERE  mo.id = ? AND mo.actif = 1
-    `).bind(modeleId).first(),
+    `, [modeleId]),
     getServicesByModele(db, modeleId)
   ])
-  return { modele: modeleRow as ModeleAppareil ?? null, services }
+  return { modele: modeleRow ?? null, services }
 }
