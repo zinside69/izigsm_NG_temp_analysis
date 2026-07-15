@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
   buildSidebar('tickets');
   loadTickets();   // remplace renderTickets() direct
   initSignature();
+  initSchemaGrid();
   populateClients();
   populateTechniciens();
 });
@@ -192,7 +193,7 @@ async function editTicket(id) {
   document.getElementById('t-new-client').value = ticket.clientName || '';
   document.getElementById('t-phone').value = ticket.phone || '';
   document.getElementById('t-email').value = ticket.email || '';
-  document.getElementById('t-device-type').value = ticket.deviceType || 'iPhone';
+  document.getElementById('t-device-type').value = ticket.deviceType || '';
   document.getElementById('t-device-model').value = ticket.deviceModel || '';
   document.getElementById('t-imei').value = ticket.imei || '';
   document.getElementById('t-priority').value = ticket.priority || 'Moyenne';
@@ -332,7 +333,7 @@ function renderEtatSecuriteDetail(t) {
     <div style="margin-top:16px;">
       <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Codes de sécurité</div>
       <div style="background:#fff9ec;border:1px solid #ffe0a1;border-radius:10px;padding:12px;font-size:0.88rem;color:#7a5a1a;">
-        ${t.code_deverrouillage ? `Déverrouillage : <strong>${esc(t.code_deverrouillage)}</strong>` : ''}
+        ${t.code_deverrouillage ? `Déverrouillage : <strong>${esc(formatCodeDeverrouillage(t.code_deverrouillage))}</strong>` : ''}
         ${t.code_deverrouillage && t.code_sim ? '<br>' : ''}
         ${t.code_sim ? `Code SIM : <strong>${esc(t.code_sim)}</strong>` : ''}
       </div>
@@ -622,6 +623,7 @@ async function saveTicket() {
   const clientName = document.getElementById('t-new-client').value.trim() || 'Client inconnu';
   const description = document.getElementById('t-description').value.trim();
   if (!description) { showFlash('La description est requise.', 'error'); return; }
+  if (!document.getElementById('t-device-type').value.trim()) { showFlash('L\'appareil (marque) est requis.', 'error'); return; }
 
   const boutiqueId = getBoutiqueId();
 
@@ -693,7 +695,7 @@ async function saveTicket() {
     prix_estime:       parseFloat(document.getElementById('t-price').value) || 0,
     boutique_id:       boutiqueId,
     etat_appareil:       etatAppareil,
-    code_deverrouillage: document.getElementById('t-code-deverrouillage').value.trim() || null,
+    code_deverrouillage: getCodeDeverrouillageValue(),
     code_sim:            document.getElementById('t-code-sim').value.trim() || null,
     signature_client:    signatureClient,
     signature_date:      signatureDate,
@@ -750,7 +752,7 @@ async function saveTicket() {
 }
 
 function clearTicketForm() {
-  ['t-client','t-new-client','t-phone','t-email','t-device-model','t-imei','t-price','t-description','t-notes'].forEach(id => {
+  ['t-client','t-new-client','t-phone','t-email','t-device-type','t-device-type-id','t-device-model','t-imei','t-price','t-description','t-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -770,6 +772,8 @@ function clearEtatSecuriteFields() {
   if (autre) autre.value = '';
   if (pin)   pin.value = '';
   if (sim)   sim.value = '';
+  clearSchema();
+  setDeverrouillageMode('pin');
 }
 
 /** Peuple l'onglet État & Sécurité depuis la fiche détail (absent du cache liste). */
@@ -779,7 +783,17 @@ function populateEtatSecurite(t) {
   try { etat = t.etat_appareil ? JSON.parse(t.etat_appareil) : {}; } catch {}
   document.querySelectorAll('.t-etat-item').forEach(cb => cb.checked = (etat.items || []).includes(cb.value));
   document.getElementById('t-etat-autre').value = etat.autre || '';
-  document.getElementById('t-code-deverrouillage').value = t.code_deverrouillage || '';
+  const codeDeverrouillage = t.code_deverrouillage || '';
+  if (codeDeverrouillage.startsWith(SCHEMA_PREFIX)) {
+    _schemaPath = codeDeverrouillage.slice(SCHEMA_PREFIX.length).split('-').map(Number).filter(Boolean);
+    renderSchemaGrid();
+    setDeverrouillageMode('schema');
+    document.getElementById('t-code-deverrouillage').value = '';
+  } else {
+    clearSchema();
+    setDeverrouillageMode('pin');
+    document.getElementById('t-code-deverrouillage').value = codeDeverrouillage;
+  }
   document.getElementById('t-code-sim').value = t.code_sim || '';
 }
 
@@ -1347,7 +1361,7 @@ async function onModeleInput(val) {
   _modeleTimer = setTimeout(async () => {
     if (!_modelesCache) {
       const res = await apiGet('/api/services/modeles?limit=500');
-      _modelesCache = res.data || [];
+      _modelesCache = res.data?.data || [];
     }
     const lv = val.toLowerCase();
     const matches = _modelesCache.filter(m =>
@@ -1356,16 +1370,28 @@ async function onModeleInput(val) {
 
     if (!matches.length) { box.style.display = 'none'; return; }
 
+    // data-* + délégation d'événement (pas de onclick inline construit par interpolation
+    // de m.nom) : m.nom peut venir de l'API externe phone-specs-api ou d'une création
+    // manuelle admin — un onclick="...('${m.nom}')" casserait l'attribut avec un simple
+    // guillemet double et permettrait une injection HTML (voir bugs.md).
     box.innerHTML = matches.map(m => `
-      <div onclick="selectModeleFromSuggestion(${m.id}, '${m.nom.replace(/'/g,"\\'")} — ${m.marque_nom || ''}')"
+      <div class="modele-suggestion-item" data-id="${escapeHtml(String(m.id))}" data-nom="${escapeHtml(m.nom)}" data-marque="${escapeHtml(m.marque_nom || '')}"
            style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;"
            onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
         <span style="font-weight:600;">${escapeHtml(m.nom)}</span>
         <span style="color:#94a3b8;"> — ${escapeHtml(m.marque_nom || '')}</span>
-        ${m.type ? `<span style="font-size:11px;color:#6366f1;margin-left:6px;">${m.type}</span>` : ''}
+        ${m.type ? `<span style="font-size:11px;color:#6366f1;margin-left:6px;">${escapeHtml(m.type)}</span>` : ''}
       </div>
     `).join('');
     box.style.display = 'block';
+    if (!box.dataset.wired) {
+      box.dataset.wired = '1';
+      box.addEventListener('click', e => {
+        const item = e.target.closest('.modele-suggestion-item');
+        if (!item) return;
+        selectModeleFromSuggestion(item.dataset.id, `${item.dataset.nom} — ${item.dataset.marque}`);
+      });
+    }
   }, 300);
 }
 
@@ -1418,12 +1444,184 @@ document.addEventListener('click', e => {
 
 /** Petite fonction escapeHtml locale (évite conflit si app.js définit escHtml) */
 function escapeHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ─── Autocomplete Marque (champ Appareil) ──────────────────────────────────
+// Même pattern que l'autocomplete Modèle ci-dessus : cache local, filtre
+// client-side dès 2 caractères, debounce 300ms. /api/services/marques
+// renvoie {success, data: MarqueAppareil[]} — la donnée est bien dans .data.data
+// (voir bug corrigé dans onModeleInput pour la même API).
+let _marquesCache = null;
+let _marqueTimer  = null;
+
+/** Déclenché à chaque frappe dans le champ Appareil (marque) */
+async function onMarqueInput(val) {
+  clearTimeout(_marqueTimer);
+  const box = document.getElementById('marque-suggestions');
+
+  if (!val || val.length < 2) {
+    box.style.display = 'none';
+    return;
+  }
+
+  _marqueTimer = setTimeout(async () => {
+    if (!_marquesCache) {
+      const res = await apiGet('/api/services/marques');
+      _marquesCache = res.data?.data || [];
+    }
+    const lv = val.toLowerCase();
+    const matches = _marquesCache.filter(m => m.nom.toLowerCase().includes(lv)).slice(0, 10);
+
+    if (!matches.length) { box.style.display = 'none'; return; }
+
+    // data-* + délégation (même raison que onModeleInput ci-dessus : m.nom non fiable
+    // à 100%, pas d'onclick inline construit par interpolation de chaîne).
+    box.innerHTML = matches.map(m => `
+      <div class="marque-suggestion-item" data-id="${escapeHtml(String(m.id))}" data-nom="${escapeHtml(m.nom)}"
+           style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;"
+           onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+        <span style="font-weight:600;">${escapeHtml(m.nom)}</span>
+      </div>
+    `).join('');
+    box.style.display = 'block';
+    if (!box.dataset.wired) {
+      box.dataset.wired = '1';
+      box.addEventListener('click', e => {
+        const item = e.target.closest('.marque-suggestion-item');
+        if (!item) return;
+        selectMarqueFromSuggestion(item.dataset.id, item.dataset.nom);
+      });
+    }
+  }, 300);
+}
+
+/** Remplit le champ Appareil depuis une suggestion cliquée */
+function selectMarqueFromSuggestion(marqueId, nom) {
+  document.getElementById('t-device-type').value    = nom;
+  document.getElementById('t-device-type-id').value = marqueId;
+  document.getElementById('marque-suggestions').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  const box = document.getElementById('marque-suggestions');
+  const inp = document.getElementById('t-device-type');
+  if (box && inp && !inp.contains(e.target) && !box.contains(e.target)) {
+    box.style.display = 'none';
+  }
+});
+
+// ─── Schéma de déverrouillage (grille 9 points) ────────────────────────────
+// Alternative au code PIN pour le champ code_deverrouillage (ticketService.ts) —
+// même colonne texte, aucune migration nécessaire : le schéma est sérialisé en
+// chaîne "SCHEMA:1-5-9-7-3" (index des points dans l'ordre du tracé, numérotés
+// 1→9 comme un écran Android, gauche-droite puis haut-bas).
+const SCHEMA_PREFIX = 'SCHEMA:';
+let _schemaPath = [];
+
+/** Affichage lisible du champ code_deverrouillage dans la fiche détail (PIN tel quel, schéma en flèche). */
+function formatCodeDeverrouillage(code) {
+  if (!code || !code.startsWith(SCHEMA_PREFIX)) return code;
+  return 'Schéma ' + code.slice(SCHEMA_PREFIX.length).split('-').join(' → ');
+}
+
+/** Construit les 9 points de la grille schéma (appelé une fois au chargement de la page) */
+function initSchemaGrid() {
+  const dotsEl = document.getElementById('schema-dots');
+  if (!dotsEl) return;
+  dotsEl.innerHTML = '';
+  for (let i = 1; i <= 9; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'schema-dot';
+    dot.dataset.idx = i;
+    dot.style.cssText = 'width:58px;height:58px;border-radius:50%;border:2px solid #cbd5e1;'
+      + 'display:flex;align-items:center;justify-content:center;cursor:pointer;'
+      + 'font-size:13px;font-weight:700;color:#94a3b8;background:#fff;user-select:none;';
+    dot.addEventListener('click', () => onSchemaDotClick(i));
+    dotsEl.appendChild(dot);
+  }
+}
+
+/** Ajoute un point au tracé en cours (ignoré si déjà utilisé) */
+function onSchemaDotClick(idx) {
+  if (_schemaPath.includes(idx)) return; // pas de repassage sur un point déjà utilisé
+  _schemaPath.push(idx);
+  renderSchemaGrid();
+}
+
+/** Centre pixel (x,y) d'un point 1-9 dans la grille 186x186 (58px + 15px gap). */
+function schemaDotCenter(idx) {
+  const col = (idx - 1) % 3;
+  const row = Math.floor((idx - 1) / 3);
+  return { x: col * 73 + 29, y: row * 73 + 29 };
+}
+
+/** Redessine les points (numéros d'ordre) + la polyline SVG depuis _schemaPath */
+function renderSchemaGrid() {
+  document.querySelectorAll('#schema-dots .schema-dot').forEach(dot => {
+    const idx   = parseInt(dot.dataset.idx, 10);
+    const order = _schemaPath.indexOf(idx);
+    if (order === -1) {
+      dot.textContent = '';
+      dot.style.background   = '#fff';
+      dot.style.borderColor  = '#cbd5e1';
+    } else {
+      dot.textContent = String(order + 1);
+      dot.style.background   = '#6366f1';
+      dot.style.borderColor  = '#6366f1';
+      dot.style.color        = '#fff';
+    }
+  });
+  const poly = document.getElementById('schema-polyline');
+  if (poly) poly.setAttribute('points', _schemaPath.map(i => {
+    const c = schemaDotCenter(i);
+    return `${c.x},${c.y}`;
+  }).join(' '));
+  document.getElementById('t-schema-path').value = _schemaPath.join('-');
+}
+
+/** Réinitialise le tracé du schéma (bouton Effacer + reset formulaire) */
+function clearSchema() {
+  _schemaPath = [];
+  renderSchemaGrid();
+}
+
+/** Bascule l'affichage entre saisie PIN (texte libre) et schéma (grille). */
+function setDeverrouillageMode(mode) {
+  const pinInput  = document.getElementById('t-code-deverrouillage');
+  const gridWrap  = document.getElementById('schema-grid-wrap');
+  const actions   = document.getElementById('schema-actions');
+  const btnPin    = document.getElementById('btn-mode-pin');
+  const btnSchema = document.getElementById('btn-mode-schema');
+  const isSchema  = mode === 'schema';
+
+  pinInput.style.display = isSchema ? 'none' : '';
+  gridWrap.style.display = isSchema ? 'block' : 'none';
+  actions.style.display  = isSchema ? 'block' : 'none';
+  btnPin.classList.toggle('btn-primary', !isSchema);
+  btnPin.classList.toggle('btn-secondary', isSchema);
+  btnSchema.classList.toggle('btn-primary', isSchema);
+  btnSchema.classList.toggle('btn-secondary', !isSchema);
+  document.getElementById('t-schema-path').dataset.mode = mode;
+}
+
+/** Valeur à envoyer pour code_deverrouillage selon le mode actif (appelé par saveTicket). */
+function getCodeDeverrouillageValue() {
+  const mode = document.getElementById('t-schema-path')?.dataset.mode || 'pin';
+  if (mode === 'schema') {
+    return _schemaPath.length >= 4 ? SCHEMA_PREFIX + _schemaPath.join('-') : null;
+  }
+  return document.getElementById('t-code-deverrouillage').value.trim() || null;
 }
 
 window.onModeleInput                  = onModeleInput;
 window.selectModeleFromSuggestion     = selectModeleFromSuggestion;
 window.loadServicesSuggestionsForModele = loadServicesSuggestionsForModele;
+window.onMarqueInput                  = onMarqueInput;
+window.selectMarqueFromSuggestion     = selectMarqueFromSuggestion;
+window.setDeverrouillageMode          = setDeverrouillageMode;
+window.clearSchema                    = clearSchema;
 
 // ── Helper : showToast (si pas défini globalement dans app.js) ─────────────────
 function showToast(msg, type = 'info') {

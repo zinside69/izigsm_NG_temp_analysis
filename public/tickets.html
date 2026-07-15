@@ -189,15 +189,12 @@
             </div>
             <div class="form-field">
               <label>Appareil *</label>
-              <select id="t-device-type">
-                <option value="iPhone">iPhone</option>
-                <option value="Samsung">Samsung</option>
-                <option value="Huawei">Huawei</option>
-                <option value="Xiaomi">Xiaomi</option>
-                <option value="iPad">iPad</option>
-                <option value="Ordinateur">Ordinateur</option>
-                <option value="Autre">Autre</option>
-              </select>
+              <div style="position:relative;">
+                <input type="text" id="t-device-type" placeholder="Ex : Apple, Samsung..."
+                  autocomplete="off" oninput="onMarqueInput(this.value)" onfocus="onMarqueInput(this.value)">
+                <input type="hidden" id="t-device-type-id">
+                <div id="marque-suggestions" style="display:none;position:absolute;z-index:999;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:200px;overflow-y:auto;"></div>
+              </div>
             </div>
             <div class="form-field">
               <label>Modèle</label>
@@ -272,8 +269,22 @@
           <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Visibles uniquement par votre équipe — jamais imprimés sur le bon de dépôt.</p>
           <div class="form-grid">
             <div class="form-field">
-              <label>Code PIN / schéma de déverrouillage</label>
-              <input type="text" id="t-code-deverrouillage" placeholder="Ex : 1234 ou schéma décrit">
+              <label>Déverrouillage écran</label>
+              <div style="display:flex;gap:6px;margin-bottom:8px;">
+                <button type="button" id="btn-mode-pin" class="btn btn-secondary btn-sm" onclick="setDeverrouillageMode('pin')" style="flex:1;">Code PIN</button>
+                <button type="button" id="btn-mode-schema" class="btn btn-secondary btn-sm" onclick="setDeverrouillageMode('schema')" style="flex:1;">Schéma</button>
+              </div>
+              <input type="text" id="t-code-deverrouillage" placeholder="Ex : 1234">
+              <div id="schema-grid-wrap" style="display:none;position:relative;width:186px;margin-top:8px;">
+                <svg id="schema-lines" width="186" height="186" style="position:absolute;top:0;left:0;pointer-events:none;">
+                  <polyline id="schema-polyline" points="" style="fill:none;stroke:#6366f1;stroke-width:3;"></polyline>
+                </svg>
+                <div id="schema-dots" style="position:relative;display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,58px);gap:15px;"></div>
+              </div>
+              <div id="schema-actions" style="display:none;margin-top:6px;">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="clearSchema()">🗑 Effacer le schéma</button>
+              </div>
+              <input type="hidden" id="t-schema-path" value="">
             </div>
             <div class="form-field">
               <label>Code PIN carte SIM</label>
