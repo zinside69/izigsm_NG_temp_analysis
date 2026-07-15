@@ -1,5 +1,21 @@
 # iziGSM — Bugs connus
 
+## `exportCsvCa()` et `getRapportComptable()` — colonne `mode_paiement` inexistante sur `factures` — CORRIGÉ le 2026-07-15
+
+Découvert en validation live lors de la migration Ports & Adapters de `statsService.ts` (checkpoint 18, service #20, dernier du chantier). `mode_paiement` ne vit **pas** sur `factures` (jamais existé dans aucune migration, confirmé par `grep` sur `migrations/*.sql`) mais sur `paiements` (`facture_id` NOT NULL, relation 1:N — une facture peut être réglée en plusieurs fois avec des modes différents). Deux endpoits cassés **depuis toujours** :
+- `GET /api/stats/export/csv?type=ca` → 500 `D1_ERROR: no such column: f.mode_paiement`
+- `GET /api/stats/rapport-comptable` → 500 `D1_ERROR: no such column: mode_paiement` (ventilation par mode de paiement)
+
+**Fix appliqué** :
+- `exportCsvCa()` : sous-requête corrélée `COALESCE((SELECT GROUP_CONCAT(DISTINCT p.mode_paiement) FROM paiements p WHERE p.facture_id = f.id), '')` — une facture réglée en plusieurs modes affiche les deux, séparés par une virgule.
+- `getRapportComptable()` (ventilation par mode) : requête restructurée avec `JOIN paiements p ON p.facture_id = f.id`, `GROUP BY p.mode_paiement`, `SUM(p.montant)` (montant réellement encaissé par mode) au lieu de `SUM(f.total_ttc)` (qui aurait compté en double une facture à modes mixtes) et `COUNT(DISTINCT f.id)` (une facture à modes mixtes compte dans chaque groupe concerné — comportement correct, contrairement à l'ancienne requête qui ne s'exécutait jamais).
+
+**Validé en local live** : `GET /api/stats/export/csv?type=ca` → 200 CSV (avant fix : 500 systématique) ; `GET /api/stats/rapport-comptable` → 200 avec `par_mode_paiement: []` (avant fix : 500 systématique).
+
+## `getRapportComptable()` — période par défaut décalée d'un mois près de minuit UTC — CORRIGÉ le 2026-07-15
+
+Le test `statsService.test.ts` "fonctionne sans dates (valeurs par défaut — 1er du mois courant)" échouait de façon intermittente sur machine non-UTC (documenté depuis le 2026-07-09, voir entrée "Tests sensibles au fuseau horaire local" ci-dessous) : `from` par défaut était calculé via `new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10)`, un mélange getters locaux (`getFullYear`/`getMonth`, fuseau machine) + `toISOString()` (UTC) — au même titre que le bug `computeFin()` d'`agendaService.ts`. **Corrigé** en migrant `getKpisDashboard`/`getCaMensuel`/`exportCsvTickets`/`exportCsvCa`/`exportCsvTechniciens`/`getRapportComptable` vers `todayParis()`/`currentMonthParis()` (`lib/timezone.ts`) — toutes les bornes "aujourd'hui"/"ce mois-ci" sont maintenant calculées en heure française puis liées en paramètre SQL, plus jamais déléguées à `DATE('now')`/`strftime(...,'now')` (UTC serveur D1) ni à `new Date()` local. **Le test précédemment documenté comme pré-existant non-bloquant passe désormais** (confirmé : 791/793 après ce fix, contre 3 échecs documentés avant).
+
 ## `POST /api/auth/reset-password-request` — email de réinitialisation jamais envoyé (arité `sendEmail()` incorrecte)
 
 Découvert le 2026-07-15 en migrant `emailService.ts` vers le port `Database` (`tsc` signale `Expected 1 arguments, but got 5` sur `routes/auth.ts:481`, erreur pré-existante confirmée via `git stash`, sans lien avec la migration). `routes/auth.ts` importe dynamiquement `sendEmail` puis l'appelle en 5 arguments positionnels (`sendEmail(c.env.DB, user.id, email, 'autre', { subject, htmlBody })`) alors que la vraie signature attend **un seul objet** `SendEmailParams` (`{ db, boutiqueId, to, sujet, html, type, ... }`, champs `sujet`/`html` pas `subject`/`htmlBody`). L'appel est entouré d'un `try/catch` non bloquant (`catch (_) {}`) — l'exception est donc silencieusement avalée, **aucun email de réinitialisation de mot de passe n'est jamais réellement envoyé**, sans erreur visible côté utilisateur ni logs.

@@ -17,6 +17,7 @@
 import { Hono }        from 'hono'
 import { authMiddleware, requireRole } from '../lib/middleware'
 import { getBoutiqueId }              from '../lib/middleware'
+import type { Database } from '../ports/database'
 import {
   getKpisDashboard,
   getCaMensuel,
@@ -30,9 +31,10 @@ import {
   getRapportComptable,
 } from '../services/statsService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+type Variables = { db: Database }
 
-const stats = new Hono<{ Bindings: Bindings }>()
+const stats = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 stats.use('*', authMiddleware)
 
@@ -49,7 +51,7 @@ stats.use('*', authMiddleware)
 function ctx(c: any) {
   const user       = c.get('user')
   const boutiqueId = getBoutiqueId(user, new URL(c.req.url).searchParams.get('boutique_id') ?? undefined)
-  return { user, boutiqueId, db: c.env.DB as D1Database }
+  return { user, boutiqueId, db: c.get('db') as Database }
 }
 
 // ─── GET /api/stats — KPIs dashboard ─────────────────────────────────────────

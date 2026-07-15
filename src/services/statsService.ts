@@ -2,6 +2,13 @@
  * statsService.ts — Model layer pour statistiques & KPIs dashboard
  * Sprint 2.13 — Extraction depuis index.tsx (violation archi résolue)
  *
+ * Fuseau horaire : toutes les bornes "aujourd'hui"/"ce mois-ci" sont calculées
+ * via lib/timezone.ts (todayParis/currentMonthParis) et liées en paramètre SQL
+ * plutôt que déléguées à DATE('now')/strftime(...,'now') — le serveur SQLite
+ * (D1) tourne en UTC, qui diverge du jour calendaire français une partie de la
+ * journée (voir bugs.md, même pattern déjà corrigé sur personnelService.ts /
+ * caisseService.ts).
+ *
  * ⚠️  EXCEPTION ARCHITECTURE — Principe 1 (Modularité)
  * Ce service est le seul autorisé à agréger plusieurs modules métier
  * (tickets, factures, produits, rachats, rendez_vous, users, clients).
@@ -19,6 +26,28 @@
  *   getRapportTechnicien(db, boutiqueId)       — Tickets par technicien
  */
 
+import { todayParis, currentMonthParis } from '../lib/timezone'
+import type { Database } from '../ports/database'
+
+// ─── Helpers dates (arithmétique UTC pure sur une date Paris — voir agendaService.ts) ──
+
+/**
+ * Ajoute (ou retranche) N jours à une date "YYYY-MM-DD", en arithmétique UTC pure
+ * (indépendante du fuseau de la machine d'exécution).
+ */
+function addDaysParis(dateParis: string, days: number): string {
+  const d = new Date(`${dateParis}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Ajoute (ou retranche) N mois à une date "YYYY-MM-DD", en arithmétique UTC pure. */
+function addMonthsParis(dateParis: string, months: number): string {
+  const d = new Date(`${dateParis}T00:00:00Z`)
+  d.setUTCMonth(d.getUTCMonth() + months)
+  return d.toISOString().slice(0, 10)
+}
+
 // ─── KPIs dashboard ───────────────────────────────────────────────────────────
 
 /**
@@ -31,7 +60,12 @@
  *          stock_bas, employes_en_poste, devis_en_attente, garanties_expirent,
  *          factures_en_retard, rachats_mois, rdv_today
  */
-export async function getKpisDashboard(db: D1Database, boutiqueId: number) {
+export async function getKpisDashboard(db: Database, boutiqueId: number) {
+  const today         = todayParis()
+  const currentMonth  = currentMonthParis()
+  const previousMonth = addMonthsParis(today, -1).slice(0, 7)
+  const in30Days       = addDaysParis(today, 30)
+
   const [
     clients,
     tickets_en_cours,
@@ -46,70 +80,70 @@ export async function getKpisDashboard(db: D1Database, boutiqueId: number) {
     rachats_mois,
     rdv_today,
   ] = await Promise.all([
-    db.prepare(
-      'SELECT COUNT(*) as cnt FROM clients WHERE boutique_id=? AND actif=1'
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>(
+      'SELECT COUNT(*) as cnt FROM clients WHERE boutique_id=? AND actif=1', [boutiqueId]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM tickets
-       WHERE boutique_id=? AND statut NOT IN ('livre','annule')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND statut NOT IN ('livre','annule')`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM tickets
-       WHERE boutique_id=? AND DATE(created_at)=DATE('now')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND DATE(created_at)=?`, [boutiqueId, today]
+    ),
 
-    db.prepare(
+    db.get<{ ca: number }>(
       `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
        WHERE boutique_id=? AND statut='payee'
-       AND strftime('%Y-%m',date_emission)=strftime('%Y-%m','now')`
-    ).bind(boutiqueId).first<{ ca: number }>(),
+       AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, currentMonth]
+    ),
 
-    db.prepare(
+    db.get<{ ca: number }>(
       `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
        WHERE boutique_id=? AND statut='payee'
-       AND strftime('%Y-%m',date_emission)=strftime('%Y-%m',date('now','-1 month'))`
-    ).bind(boutiqueId).first<{ ca: number }>(),
+       AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, previousMonth]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM produits
-       WHERE boutique_id=? AND stock_actuel<=stock_minimum AND actif=1`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND stock_actuel<=stock_minimum AND actif=1`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM employes
-       WHERE boutique_id=? AND statut_pointage='en_poste' AND actif=1`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND statut_pointage='en_poste' AND actif=1`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM factures
-       WHERE boutique_id=? AND statut IN ('brouillon','emise')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND statut IN ('brouillon','emise')`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM garanties
        WHERE boutique_id=? AND statut='active'
-       AND date_fin <= date('now','+30 days') AND date_fin >= date('now')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       AND date_fin <= ? AND date_fin >= ?`, [boutiqueId, in30Days, today]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM factures
        WHERE boutique_id=? AND statut='emise'
-       AND date_echeance < date('now')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       AND date_echeance < ?`, [boutiqueId, today]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM rachats
        WHERE boutique_id=?
-       AND strftime('%Y-%m',created_at)=strftime('%Y-%m','now')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       AND strftime('%Y-%m',created_at)=?`, [boutiqueId, currentMonth]
+    ),
 
-    db.prepare(
+    db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM rendez_vous
-       WHERE boutique_id=? AND DATE(debut)=DATE('now')
-       AND statut NOT IN ('annule','no_show')`
-    ).bind(boutiqueId).first<{ cnt: number }>(),
+       WHERE boutique_id=? AND DATE(debut)=?
+       AND statut NOT IN ('annule','no_show')`, [boutiqueId, today]
+    ),
   ])
 
   const caMoisVal  = ca_mois?.ca  ?? 0
@@ -146,8 +180,11 @@ export async function getKpisDashboard(db: D1Database, boutiqueId: number) {
  * @returns { mois: Array<{mois, label, ca_ttc, ca_ht, nb_factures}>,
  *            total_12_mois: number, moyenne_mensuelle: number }
  */
-export async function getCaMensuel(db: D1Database, boutiqueId: number) {
-  const rows = await db.prepare(
+export async function getCaMensuel(db: Database, boutiqueId: number) {
+  const today = todayParis()
+  const startWindow = addMonthsParis(today, -11).slice(0, 7) + '-01'
+
+  const rows = await db.all<{ mois: string; ca_ttc: number; ca_ht: number; nb_factures: number }>(
     `SELECT
        strftime('%Y-%m', date_emission) as mois,
        COALESCE(SUM(total_ttc),0)       as ca_ttc,
@@ -155,21 +192,20 @@ export async function getCaMensuel(db: D1Database, boutiqueId: number) {
        COUNT(*)                          as nb_factures
      FROM factures
      WHERE boutique_id=? AND statut='payee'
-       AND date_emission >= date('now','-11 months','start of month')
+       AND date_emission >= ?
      GROUP BY mois
-     ORDER BY mois ASC`
-  ).bind(boutiqueId).all<{ mois: string; ca_ttc: number; ca_ht: number; nb_factures: number }>()
+     ORDER BY mois ASC`, [boutiqueId, startWindow]
+  )
 
   // Compléter les mois manquants avec 0 pour un graphique continu
   const result: Array<{ mois: string; label: string; ca_ttc: number; ca_ht: number; nb_factures: number }> = []
-  const now = new Date()
+  const moisLabels = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
 
   for (let i = 11; i >= 0; i--) {
-    const d    = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const key  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const moisLabels = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
-    const label = `${moisLabels[d.getMonth()]} ${d.getFullYear()}`
-    const found = rows.results.find(r => r.mois === key)
+    const key       = addMonthsParis(today, -i).slice(0, 7)              // "YYYY-MM"
+    const moisIndex = Number(key.slice(5, 7)) - 1
+    const label     = `${moisLabels[moisIndex]} ${key.slice(0, 4)}`
+    const found     = rows.find(r => r.mois === key)
     result.push({
       mois:         key,
       label,
@@ -195,13 +231,13 @@ export async function getCaMensuel(db: D1Database, boutiqueId: number) {
  * @param boutiqueId - ID de la boutique courante (multi-tenant)
  * @returns Tableau de 9 statuts : { key, label, color, cnt }
  */
-export async function getTicketsParStatut(db: D1Database, boutiqueId: number) {
-  const rows = await db.prepare(
+export async function getTicketsParStatut(db: Database, boutiqueId: number) {
+  const rows = await db.all<{ statut: string; cnt: number }>(
     `SELECT statut, COUNT(*) as cnt
      FROM tickets
      WHERE boutique_id=?
-     GROUP BY statut`
-  ).bind(boutiqueId).all<{ statut: string; cnt: number }>()
+     GROUP BY statut`, [boutiqueId]
+  )
 
   const statuts = [
     { key: 'recu',           label: 'Reçu',            color: '#6366f1' },
@@ -217,7 +253,7 @@ export async function getTicketsParStatut(db: D1Database, boutiqueId: number) {
 
   return statuts.map(s => ({
     ...s,
-    cnt: rows.results.find(r => r.statut === s.key)?.cnt ?? 0,
+    cnt: rows.find(r => r.statut === s.key)?.cnt ?? 0,
   }))
 }
 
@@ -233,8 +269,14 @@ export async function getTicketsParStatut(db: D1Database, boutiqueId: number) {
  * @returns Tableau de produits : { nom, reference, prix_vente_ttc, cump,
  *          nb_ventes, qte_vendue, ca_total, marge_brute, marge_pct }
  */
-export async function getTopProduits(db: D1Database, boutiqueId: number, limit = 10) {
-  const rows = await db.prepare(
+export async function getTopProduits(db: Database, boutiqueId: number, limit = 10) {
+  const depuis = addDaysParis(todayParis(), -30)
+
+  const rows = await db.all<{
+    nom: string; reference: string; prix_vente_ttc: number;
+    cump: number; nb_ventes: number; qte_vendue: number;
+    ca_total: number; marge_brute: number
+  }>(
     `SELECT
        p.nom,
        p.sku            as reference,
@@ -248,17 +290,13 @@ export async function getTopProduits(db: D1Database, boutiqueId: number, limit =
      JOIN produits p ON p.id = ld.produit_id
      JOIN factures f ON f.id = ld.document_id AND ld.document_type='facture'
      WHERE f.boutique_id=? AND f.statut='payee'
-       AND f.date_emission >= date('now','-30 days')
+       AND f.date_emission >= ?
      GROUP BY p.id
      ORDER BY ca_total DESC
-     LIMIT ?`
-  ).bind(boutiqueId, limit).all<{
-    nom: string; reference: string; prix_vente_ttc: number;
-    cump: number; nb_ventes: number; qte_vendue: number;
-    ca_total: number; marge_brute: number
-  }>()
+     LIMIT ?`, [boutiqueId, depuis, limit]
+  )
 
-  return rows.results.map(r => ({
+  return rows.map(r => ({
     ...r,
     marge_pct: r.ca_total > 0
       ? Math.round((r.marge_brute / r.ca_total) * 100)
@@ -278,53 +316,53 @@ export async function getTopProduits(db: D1Database, boutiqueId: number, limit =
  * @param limit      - Nombre maximum d'items retournés après tri (défaut : 15)
  * @returns Tableau d'activités triées par date DESC, tronqué à `limit`
  */
-export async function getActiviteRecente(db: D1Database, boutiqueId: number, limit = 15) {
+export async function getActiviteRecente(db: Database, boutiqueId: number, limit = 15) {
   const [tickets, factures, rachats, rdv] = await Promise.all([
-    db.prepare(
+    db.all<any>(
       `SELECT 'ticket' as type, t.numero as ref,
               c.nom || ' ' || c.prenom as label,
               t.statut as detail, t.created_at as date
        FROM tickets t
        LEFT JOIN clients c ON c.id = t.client_id
        WHERE t.boutique_id=?
-       ORDER BY t.created_at DESC LIMIT 8`
-    ).bind(boutiqueId).all<any>(),
+       ORDER BY t.created_at DESC LIMIT 8`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.all<any>(
       `SELECT 'facture' as type, f.numero as ref,
               c.nom || ' ' || c.prenom as label,
               f.statut as detail, f.created_at as date
        FROM factures f
        LEFT JOIN clients c ON c.id = f.client_id
        WHERE f.boutique_id=?
-       ORDER BY f.created_at DESC LIMIT 6`
-    ).bind(boutiqueId).all<any>(),
+       ORDER BY f.created_at DESC LIMIT 6`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.all<any>(
       `SELECT 'rachat' as type, r.numero as ref,
               r.vendeur_prenom || ' ' || r.vendeur_nom as label,
               r.statut as detail, r.created_at as date
        FROM rachats r
        WHERE r.boutique_id=?
-       ORDER BY r.created_at DESC LIMIT 4`
-    ).bind(boutiqueId).all<any>(),
+       ORDER BY r.created_at DESC LIMIT 4`, [boutiqueId]
+    ),
 
-    db.prepare(
+    db.all<any>(
       `SELECT 'rdv' as type, 'RDV' as ref,
               c.nom || ' ' || c.prenom as label,
               rv.statut as detail, rv.created_at as date
        FROM rendez_vous rv
        LEFT JOIN clients c ON c.id = rv.client_id
        WHERE rv.boutique_id=?
-       ORDER BY rv.created_at DESC LIMIT 4`
-    ).bind(boutiqueId).all<any>(),
+       ORDER BY rv.created_at DESC LIMIT 4`, [boutiqueId]
+    ),
   ])
 
   const all = [
-    ...tickets.results,
-    ...factures.results,
-    ...rachats.results,
-    ...rdv.results,
+    ...tickets,
+    ...factures,
+    ...rachats,
+    ...rdv,
   ]
   all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   return all.slice(0, limit)
@@ -361,15 +399,14 @@ function toCSV(rows: Record<string, any>[], headers: { key: string; label: strin
  * @returns Contenu CSV UTF-8 BOM
  */
 export async function exportCsvTickets(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   from?:      string,
   to?:        string
 ): Promise<string> {
-  const dateFrom = from ?? "date('now','-30 days')"
-  const dateTo   = to   ?? "date('now')"
+  const today = todayParis()
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT
       t.numero,
       t.statut,
@@ -393,13 +430,13 @@ export async function exportCsvTickets(
       AND DATE(t.created_at) BETWEEN ? AND ?
     ORDER BY t.created_at DESC
     LIMIT 5000
-  `).bind(
+  `, [
     boutiqueId,
-    from ?? new Date(Date.now() - 30*86400000).toISOString().slice(0,10),
-    to   ?? new Date().toISOString().slice(0,10)
-  ).all<any>()
+    from ?? addDaysParis(today, -30),
+    to   ?? today
+  ])
 
-  return toCSV(rows.results ?? [], [
+  return toCSV(rows ?? [], [
     { key: 'numero',            label: 'N° Ticket'          },
     { key: 'statut',            label: 'Statut'             },
     { key: 'appareil_marque',   label: 'Marque'             },
@@ -429,12 +466,14 @@ export async function exportCsvTickets(
  * @returns Contenu CSV UTF-8 BOM
  */
 export async function exportCsvCa(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   from?:      string,
   to?:        string
 ): Promise<string> {
-  const rows = await db.prepare(`
+  const today = todayParis()
+
+  const rows = await db.all<any>(`
     SELECT
       f.numero,
       c.nom  || ' ' || c.prenom  AS client,
@@ -444,7 +483,10 @@ export async function exportCsvCa(
       ROUND(f.total_ht,   2)     AS total_ht,
       ROUND(f.total_tva,  2)     AS total_tva,
       ROUND(f.total_ttc,  2)     AS total_ttc,
-      f.mode_paiement,
+      COALESCE((
+        SELECT GROUP_CONCAT(DISTINCT p.mode_paiement)
+        FROM paiements p WHERE p.facture_id = f.id
+      ), '')                     AS mode_paiement,
       f.statut,
       COALESCE(f.notes, '')      AS notes
     FROM factures f
@@ -454,13 +496,13 @@ export async function exportCsvCa(
       AND DATE(f.date_emission) BETWEEN ? AND ?
     ORDER BY f.date_emission DESC
     LIMIT 5000
-  `).bind(
+  `, [
     boutiqueId,
-    from ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10),
-    to   ?? new Date().toISOString().slice(0,10)
-  ).all<any>()
+    from ?? (today.slice(0, 7) + '-01'),
+    to   ?? today
+  ])
 
-  return toCSV(rows.results ?? [], [
+  return toCSV(rows ?? [], [
     { key: 'numero',        label: 'N° Facture'       },
     { key: 'client',        label: 'Client'           },
     { key: 'client_email',  label: 'Email'            },
@@ -486,12 +528,14 @@ export async function exportCsvCa(
  * @returns Contenu CSV UTF-8 BOM
  */
 export async function exportCsvTechniciens(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   from?:      string,
   to?:        string
 ): Promise<string> {
-  const rows = await db.prepare(`
+  const today = todayParis()
+
+  const rows = await db.all<any>(`
     SELECT
       u.prenom || ' ' || u.nom AS technicien,
       r.nom                    AS role,
@@ -513,14 +557,14 @@ export async function exportCsvTechniciens(
       AND r.nom IN ('admin','gerant','technicien')
     GROUP BY u.id
     ORDER BY total_tickets DESC
-  `).bind(
+  `, [
     boutiqueId,
-    from ?? new Date(Date.now() - 30*86400000).toISOString().slice(0,10),
-    to   ?? new Date().toISOString().slice(0,10),
+    from ?? addDaysParis(today, -30),
+    to   ?? today,
     boutiqueId
-  ).all<any>()
+  ])
 
-  return toCSV(rows.results ?? [], [
+  return toCSV(rows ?? [], [
     { key: 'technicien',       label: 'Technicien'          },
     { key: 'role',             label: 'Rôle'                },
     { key: 'total_tickets',    label: 'Total tickets'       },
@@ -542,17 +586,18 @@ export async function exportCsvTechniciens(
  * @returns { periode, totaux, par_tva, par_mode_paiement, nb_factures }
  */
 export async function getRapportComptable(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   from?:      string,
   to?:        string
 ) {
-  const dateFrom = from ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10)
-  const dateTo   = to   ?? new Date().toISOString().slice(0,10)
+  const today    = todayParis()
+  const dateFrom = from ?? (today.slice(0, 7) + '-01')
+  const dateTo   = to   ?? today
 
   const [totaux, parTva, parMode] = await Promise.all([
     // Totaux globaux
-    db.prepare(`
+    db.get<any>(`
       SELECT
         COUNT(*)                   AS nb_factures,
         ROUND(SUM(total_ht),  2)   AS total_ht,
@@ -561,10 +606,10 @@ export async function getRapportComptable(
       FROM factures
       WHERE boutique_id = ? AND statut = 'payee'
         AND DATE(date_emission) BETWEEN ? AND ?
-    `).bind(boutiqueId, dateFrom, dateTo).first<any>(),
+    `, [boutiqueId, dateFrom, dateTo]),
 
     // Ventilation par taux de TVA (depuis lignes_document)
-    db.prepare(`
+    db.all<any>(`
       SELECT
         ROUND(ld.tva_taux, 2)     AS taux_tva,
         ROUND(SUM(ld.total_ht),  2) AS base_ht,
@@ -576,20 +621,24 @@ export async function getRapportComptable(
         AND DATE(f.date_emission) BETWEEN ? AND ?
       GROUP BY ROUND(ld.tva_taux, 2)
       ORDER BY taux_tva ASC
-    `).bind(boutiqueId, dateFrom, dateTo).all<any>(),
+    `, [boutiqueId, dateFrom, dateTo]),
 
-    // Ventilation par mode de paiement
-    db.prepare(`
+    // Ventilation par mode de paiement — mode_paiement vit sur paiements (1:N par
+    // facture), pas sur factures : on agrège les montants réellement encaissés par
+    // mode plutôt que le total_ttc de la facture (qui peut être réglé en plusieurs
+    // modes différents).
+    db.all<any>(`
       SELECT
-        COALESCE(mode_paiement, 'non renseigné') AS mode,
-        COUNT(*)                                  AS nb,
-        ROUND(SUM(total_ttc), 2)                  AS total_ttc
-      FROM factures
-      WHERE boutique_id = ? AND statut = 'payee'
-        AND DATE(date_emission) BETWEEN ? AND ?
-      GROUP BY mode_paiement
+        COALESCE(p.mode_paiement, 'non renseigné') AS mode,
+        COUNT(DISTINCT f.id)                        AS nb,
+        ROUND(SUM(p.montant), 2)                    AS total_ttc
+      FROM factures f
+      JOIN paiements p ON p.facture_id = f.id
+      WHERE f.boutique_id = ? AND f.statut = 'payee'
+        AND DATE(f.date_emission) BETWEEN ? AND ?
+      GROUP BY p.mode_paiement
       ORDER BY total_ttc DESC
-    `).bind(boutiqueId, dateFrom, dateTo).all<any>(),
+    `, [boutiqueId, dateFrom, dateTo]),
   ])
 
   return {
@@ -598,8 +647,8 @@ export async function getRapportComptable(
     total_ht:           totaux?.total_ht         ?? 0,
     total_tva:          totaux?.total_tva        ?? 0,
     total_ttc:          totaux?.total_ttc        ?? 0,
-    par_tva:            parTva.results            ?? [],
-    par_mode_paiement:  parMode.results           ?? [],
+    par_tva:            parTva            ?? [],
+    par_mode_paiement:  parMode           ?? [],
   }
 }
 
@@ -616,8 +665,11 @@ export async function getRapportComptable(
  * @returns Tableau trié par total_tickets DESC :
  *          { id, technicien, total_tickets, termines, en_cours, delai_moyen_jours }
  */
-export async function getRapportTechnicien(db: D1Database, boutiqueId: number) {
-  const rows = await db.prepare(
+export async function getRapportTechnicien(db: Database, boutiqueId: number) {
+  return db.all<{
+    id: number; technicien: string; total_tickets: number;
+    termines: number; en_cours: number; delai_moyen_jours: number | null
+  }>(
     `SELECT
        u.id,
        u.prenom || ' ' || u.nom as technicien,
@@ -634,11 +686,6 @@ export async function getRapportTechnicien(db: D1Database, boutiqueId: number) {
      LEFT JOIN tickets t ON t.technicien_id=u.id AND t.boutique_id=?
      WHERE u.boutique_id=? AND u.actif=1 AND r.nom IN ('admin','gerant','technicien')
      GROUP BY u.id
-     ORDER BY total_tickets DESC`
-  ).bind(boutiqueId, boutiqueId).all<{
-    id: number; technicien: string; total_tickets: number;
-    termines: number; en_cours: number; delai_moyen_jours: number | null
-  }>()
-
-  return rows.results
+     ORDER BY total_tickets DESC`, [boutiqueId, boutiqueId]
+  )
 }

@@ -1,4 +1,10 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 17)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 18)
+
+## Chantier Ports & Adapters — TERMINÉ — 20/20 services migrés (session du 2026-07-15)
+
+Dernier service migré : **statsService.ts** (2026-07-15) — 10/10 fonctions intégralement. `lib/timezone.ts` appliqué systématiquement (`todayParis`/`currentMonthParis` + helpers locaux `addDaysParis`/`addMonthsParis`). Tests étendus 15→33. **3 bugs préexistants corrigés** : `exportCsvCa()`/`getRapportComptable()` cassés depuis toujours (colonne `mode_paiement` inexistante sur `factures`, vit sur `paiements`) ; le test "1er du mois courant" documenté pré-existant non-bloquant depuis le 2026-07-09 est réparé. **Validé en local live** : 10/10 endpoints ✅.
+
+**Chantier Ports & Adapters complet** : les 20 services métier passent par le port `Database` (au moins partiellement — chaque fonction dépendant d'`auditLog()`/`nextNumero()`/`enregistrerTransaction()`/`db.batch()` reste sur `D1Database` brut par choix architectural assumé, voir `docs/superpowers/specs/2026-07-12-architecture-ports-adapters-design.md`). Prochaine étape (hors scope immédiat) : adaptateur Postgres + bascule VPS, si engagée.
 
 ## Chantier Ports & Adapters — 19/20 services migrés (session du 2026-07-15)
 - **agendaService.ts** (2026-07-15) — 12/12 fonctions migrées intégralement. `lib/timezone.ts` appliqué (`todayParis()` dans `getKpisAgenda`, `getWeekStart`/`getWeekEnd` refaits en arithmétique UTC pure). Câblage `routes/agenda.ts` + `index.tsx` (route iCal publique). Tests (73/75 ✅, 2 échecs confirmés pré-existants, bug `computeFin()` sans impact prod, documenté dans `bugs.md`). **Validé en local live** : CRUD RDV complet, KPIs, vue calendrier, token iCal — 9/9 ✅.
