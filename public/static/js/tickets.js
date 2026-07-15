@@ -1312,9 +1312,9 @@ function openLightbox(imgUrl) {
   const lb  = document.getElementById('photo-lightbox');
   const img = document.getElementById('lightbox-img');
   if (!lb || !img) return;
-  img.src = imgUrl;
   lb.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  loadAuthenticatedImage(imgUrl, img);
 }
 function closeLightbox() {
   const lb = document.getElementById('photo-lightbox');
