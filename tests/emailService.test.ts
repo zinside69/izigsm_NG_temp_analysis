@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   getEmailConfig,
   sendEmail,
@@ -51,9 +51,9 @@ const SQL_LOG_INSERT = `INSERT INTO email_logs (boutique_id, destinataire, sujet
 // ─── getEmailConfig ───────────────────────────────────────────────────────────
 
 describe('getEmailConfig()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne la config complète quand boutique_settings existe', async () => {
     db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)
@@ -110,10 +110,10 @@ describe('getEmailConfig()', () => {
 // ─── sendEmail — mode simulé ──────────────────────────────────────────────────
 
 describe('sendEmail() — mode simulé (sans clé API)', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setNotFound(SQL_DEDUP)                    // pas de dédup
     db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE) // clé absente
   })
@@ -149,10 +149,10 @@ describe('sendEmail() — mode simulé (sans clé API)', () => {
 // ─── sendEmail — notif désactivée ─────────────────────────────────────────────
 
 describe('sendEmail() — notif désactivée', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setNotFound(SQL_DEDUP)
     db.__setResponse(SQL_CONFIG, {
       ...SETTINGS_ACTIF,
@@ -200,10 +200,10 @@ describe('sendEmail() — notif désactivée', () => {
 // ─── sendEmail — déduplication ────────────────────────────────────────────────
 
 describe('sendEmail() — déduplication 5 minutes', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)
   })
 
@@ -243,14 +243,14 @@ describe('sendEmail() — déduplication 5 minutes', () => {
 // ─── getEmailStats ────────────────────────────────────────────────────────────
 
 describe('getEmailStats()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   // Trois requêtes en Promise.all dans getEmailStats
   const SQL_TOTAL    = `SELECT COUNT(*) as cnt FROM email_logs WHERE boutique_id = ? AND statut='envoye'`
   const SQL_MOIS     = `SELECT SUM(CASE WHEN statut='envoye' THEN 1 ELSE 0 END) AS envoyes, SUM(CASE WHEN statut='erreur' THEN 1 ELSE 0 END) AS erreurs, SUM(CASE WHEN statut='simule' THEN 1 ELSE 0 END) AS simules FROM email_logs WHERE boutique_id = ? AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`
   const SQL_PAR_TYPE = `SELECT type, COUNT(*) as cnt FROM email_logs WHERE boutique_id = ? AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now') GROUP BY type`
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne les KPIs correctement', async () => {
     db.__setResponse(SQL_TOTAL, { cnt: 120 })
@@ -299,7 +299,7 @@ describe('getEmailStats()', () => {
 // ─── listEmailLogs ────────────────────────────────────────────────────────────
 
 describe('listEmailLogs()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const LOG_ROW = {
     id: 1, boutique_id: 1,
@@ -314,7 +314,7 @@ describe('listEmailLogs()', () => {
   const SQL_COUNT = `SELECT COUNT(*) as cnt FROM email_logs WHERE boutique_id = ?`
   const SQL_LIST  = `SELECT id, destinataire, sujet, type, entite_type, entite_id, statut, erreur, created_at FROM email_logs WHERE boutique_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne rows + total', async () => {
     db.__setResponse(SQL_COUNT, { cnt: 3 })
@@ -337,7 +337,7 @@ describe('listEmailLogs()', () => {
 // ─── sendRelanceDevis ─────────────────────────────────────────────────────────
 
 describe('sendRelanceDevis()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const DEVIS_RELANCE = {
     id:            42,
@@ -352,7 +352,7 @@ describe('sendRelanceDevis()', () => {
   const SQL_BOUTIQUE  = `SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1`
   const SQL_DEDUP_DEV = `SELECT id FROM email_logs WHERE boutique_id = ? AND entite_type = ? AND entite_id = ? AND type = ? AND statut IN ('envoye','simule') AND created_at > datetime('now', '-5 minutes') LIMIT 1`
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('envoie un email de relance devis en mode simulé (pas de clé API)', async () => {
     // config sans clé API
@@ -411,11 +411,11 @@ describe('sendRelanceDevis()', () => {
 // ─── processRelancesDevis ─────────────────────────────────────────────────────
 
 describe('processRelancesDevis()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL_SETTINGS_RELANCE = `SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?`
   // SQL normalisé (espaces collapsés) — doit matcher normalizeSQL() du mockD1
-  const SQL_DEVIS_ELIGIBLES  = `SELECT d.id, d.numero, d.montant_ttc, d.date_validite, d.public_token, c.email AS client_email, c.prenom AS client_prenom FROM devis d JOIN clients c ON c.id = d.client_id WHERE d.boutique_id = ? AND d.statut = 'envoye' AND d.envoye_le < datetime('now', ? || ' days') AND (d.date_validite IS NULL OR d.date_validite > datetime('now')) AND c.email IS NOT NULL AND d.id NOT IN ( SELECT entite_id FROM email_logs WHERE boutique_id = ? AND type = 'relance_devis' AND entite_type = 'devis' AND created_at > datetime('now', ? || ' days') ) LIMIT 30`
+  const SQL_DEVIS_ELIGIBLES  = `SELECT d.id, d.numero, d.total_ttc AS montant_ttc, d.date_validite, d.public_token, c.email AS client_email, c.prenom AS client_prenom FROM devis d JOIN clients c ON c.id = d.client_id WHERE d.boutique_id = ? AND d.statut = 'envoye' AND d.envoye_le < datetime('now', ? || ' days') AND (d.date_validite IS NULL OR d.date_validite > datetime('now')) AND c.email IS NOT NULL AND d.id NOT IN ( SELECT entite_id FROM email_logs WHERE boutique_id = ? AND type = 'relance_devis' AND entite_type = 'devis' AND created_at > datetime('now', ? || ' days') ) LIMIT 30`
   // Note: __getCalls() enregistre le SQL normalisé — on inspecte via includes sur bindings
 
   const DEVIS_ROW = {
@@ -425,7 +425,7 @@ describe('processRelancesDevis()', () => {
     client_email: 'client@example.com', client_prenom: 'Marie',
   }
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne 0 si aucun devis éligible', async () => {
     db.__setResponse(SQL_SETTINGS_RELANCE, { delai_relance_jours: 3 })

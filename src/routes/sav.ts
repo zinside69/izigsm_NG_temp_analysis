@@ -181,7 +181,7 @@ sav.post('/sav', async (c) => {
       const clientRow = await getClientEmailPrenom(c.get('db'), dossier.client_id)
       if (clientRow?.email) {
         // waitUntil() obligatoire — voir routes/tickets.ts
-        c.executionCtx.waitUntil(sendSavOuvert(c.env.DB, boutiqueId, {
+        c.executionCtx.waitUntil(sendSavOuvert(c.get('db'), boutiqueId, {
           id:            dossier.id,
           numero:        dossier.numero,
           client_email:  clientRow.email,

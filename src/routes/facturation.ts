@@ -172,7 +172,7 @@ facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c
   // Envoi email non bloquant — waitUntil() obligatoire, voir routes/tickets.ts
   // (sinon Cloudflare Workers tue l'exécution avant l'envoi réel, bug silencieux)
   c.executionCtx.waitUntil(sendEmail({
-    db:         c.env.DB,
+    db:         c.get('db'),
     boutiqueId: data.boutique_id,
     to:         data.client_email,
     sujet:      `Devis ${data.numero} — ${data.boutique_nom}`,

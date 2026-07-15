@@ -22,6 +22,8 @@
  * Sprint 2.11 — MOD-11 Notifications email
  */
 
+import type { Database } from '../ports/database'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type EmailType = 'ticket_cree' | 'ticket_termine' | 'ticket_livre' | 'sav_ouvert' | 'relance' | 'relance_devis' | 'autre'
@@ -37,7 +39,7 @@ export interface EmailConfig {
 }
 
 export interface SendEmailParams {
-  db:             D1Database
+  db:             Database
   boutiqueId:     number
   to:             string
   sujet:          string
@@ -70,11 +72,11 @@ export interface SendEmailParams {
  * @returns               Configuration complète avec clé API, expéditeur et flags notifications
  */
 export async function getEmailConfig(
-  db:             D1Database,
+  db:             Database,
   boutiqueId:     number,
   apiKeyFallback?: string
 ): Promise<EmailConfig> {
-  const s = await db.prepare(`
+  const s = await db.get<any>(`
     SELECT email_provider, email_api_key, email_from,
            email_notif_ticket_cree, email_notif_ticket_termine,
            email_notif_sav_ouvert,  email_notif_relance,
@@ -82,7 +84,7 @@ export async function getEmailConfig(
     FROM   boutique_settings bs
     JOIN   boutiques b ON b.id = bs.boutique_id
     WHERE  bs.boutique_id = ?
-  `).bind(boutiqueId).first<any>()
+  `, [boutiqueId])
 
   const nom       = s?.boutique_nom   ?? 'iziGSM'
   const email     = s?.boutique_email ?? 'noreply@izigsm.fr'
@@ -119,13 +121,13 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
 
   // Déduplication : même email dans les 5 dernières minutes ?
   if (entiteId && entiteType) {
-    const recent = await db.prepare(`
+    const recent = await db.get(`
       SELECT id FROM email_logs
       WHERE boutique_id = ? AND entite_type = ? AND entite_id = ? AND type = ?
         AND statut IN ('envoye','simule')
         AND created_at > datetime('now', '-5 minutes')
       LIMIT 1
-    `).bind(boutiqueId, entiteType, entiteId, type).first()
+    `, [boutiqueId, entiteType, entiteId, type])
     if (recent) return { success: true, simulated: false }  // déjà envoyé récemment
   }
 
@@ -192,7 +194,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
 }
 
 async function logEmail(
-  db:  D1Database,
+  db:  Database,
   p:   {
     boutiqueId:   number
     destinataire: string
@@ -205,15 +207,15 @@ async function logEmail(
     providerId?:  string
   }
 ): Promise<void> {
-  await db.prepare(`
+  await db.run(`
     INSERT INTO email_logs
       (boutique_id, destinataire, sujet, type, entite_type, entite_id, statut, erreur, provider_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
+  `, [
     p.boutiqueId, p.destinataire, p.sujet, p.type,
     p.entiteType ?? null, p.entiteId  ?? null,
     p.statut, p.erreur ?? null, p.providerId ?? null
-  ).run()
+  ])
 }
 
 // ─── Templates email ──────────────────────────────────────────────────────────
@@ -340,7 +342,7 @@ export async function sendOtpInscription(
  * @returns              void
  */
 export async function sendTicketCree(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   ticket: {
     id:              number
@@ -357,9 +359,9 @@ export async function sendTicketCree(
 ): Promise<void> {
   if (!ticket.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string }>()
+  const boutique = await db.get<{ nom: string }>(
+    'SELECT nom FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom ?? 'iziGSM'
 
   const lienSuivi = ticket.tracking_token
@@ -405,7 +407,7 @@ export async function sendTicketCree(
  * @returns           void
  */
 export async function sendTicketTermine(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   ticket: {
     id:              number
@@ -424,9 +426,9 @@ export async function sendTicketTermine(
 ): Promise<void> {
   if (!ticket.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const boutique = await db.get<{ nom: string; telephone: string | null }>(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom ?? 'iziGSM'
   const tel  = boutique?.telephone ?? ''
 
@@ -479,7 +481,7 @@ export async function sendTicketTermine(
  * @returns           void
  */
 export async function sendTicketLivre(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   ticket: {
     id:              number
@@ -497,9 +499,9 @@ export async function sendTicketLivre(
 ): Promise<void> {
   if (!ticket.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const boutique = await db.get<{ nom: string; telephone: string | null }>(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom ?? 'iziGSM'
   const tel  = boutique?.telephone ?? ''
 
@@ -544,7 +546,7 @@ export async function sendTicketLivre(
  * @returns           void
  */
 export async function sendSavOuvert(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   dossier: {
     id:            number
@@ -559,9 +561,9 @@ export async function sendSavOuvert(
 ): Promise<void> {
   if (!dossier.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const boutique = await db.get<{ nom: string; telephone: string | null }>(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom ?? 'iziGSM'
   const tel  = boutique?.telephone ?? ''
 
@@ -601,7 +603,7 @@ export async function sendSavOuvert(
  * @returns           void
  */
 export async function sendRelance(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   ticket: {
     id:              number
@@ -616,9 +618,9 @@ export async function sendRelance(
 ): Promise<void> {
   if (!ticket.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const boutique = await db.get<{ nom: string; telephone: string | null }>(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom ?? 'iziGSM'
   const tel  = boutique?.telephone ?? ''
 
@@ -672,18 +674,18 @@ export async function sendRelance(
  * @returns           Nombre de relances envoyées
  */
 export async function processRelances(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   frontendUrl: string,
   apiKeyFallback?: string
 ): Promise<number> {
-  const settings = await db.prepare(`
+  const settings = await db.get<{ delai_relance_jours: number }>(`
     SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?
-  `).bind(boutiqueId).first<{ delai_relance_jours: number }>()
+  `, [boutiqueId])
   const delai = settings?.delai_relance_jours ?? 3
 
   // Tickets en attente depuis plus de N jours, sans relance récente
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT t.id, t.numero, t.statut, t.appareil_marque, t.appareil_modele,
            c.email AS client_email, c.prenom AS client_prenom
     FROM   tickets t
@@ -699,10 +701,10 @@ export async function processRelances(
           AND  created_at > datetime('now', ? || ' days')
       )
     LIMIT 50
-  `).bind(boutiqueId, `-${delai}`, boutiqueId, `-${delai}`).all<any>()
+  `, [boutiqueId, `-${delai}`, boutiqueId, `-${delai}`])
 
   let count = 0
-  for (const ticket of rows.results ?? []) {
+  for (const ticket of rows) {
     await sendRelance(db, boutiqueId, ticket, apiKeyFallback)
     count++
   }
@@ -722,7 +724,7 @@ export async function processRelances(
  * @param frontendUrl URL de base du frontend (pour lien public)
  */
 export async function sendRelanceDevis(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   devis: {
     id:            number
@@ -738,9 +740,9 @@ export async function sendRelanceDevis(
 ): Promise<void> {
   if (!devis.client_email) return
 
-  const boutique = await db.prepare(
-    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1'
-  ).bind(boutiqueId).first<{ nom: string; telephone: string | null }>()
+  const boutique = await db.get<{ nom: string; telephone: string | null }>(
+    'SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', [boutiqueId]
+  )
   const nomB = boutique?.nom  ?? 'iziGSM'
   const tel  = boutique?.telephone ?? ''
 
@@ -802,18 +804,18 @@ export async function sendRelanceDevis(
  * @returns           Nombre de relances envoyées
  */
 export async function processRelancesDevis(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   frontendUrl: string,
   apiKeyFallback?: string
 ): Promise<number> {
-  const settings = await db.prepare(`
+  const settings = await db.get<{ delai_relance_jours: number }>(`
     SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?
-  `).bind(boutiqueId).first<{ delai_relance_jours: number }>()
+  `, [boutiqueId])
   const delai = settings?.delai_relance_jours ?? 3
 
-  const rows = await db.prepare(`
-    SELECT d.id, d.numero, d.montant_ttc, d.date_validite, d.public_token,
+  const rows = await db.all<any>(`
+    SELECT d.id, d.numero, d.total_ttc AS montant_ttc, d.date_validite, d.public_token,
            c.email  AS client_email,
            c.prenom AS client_prenom
     FROM   devis d
@@ -829,10 +831,10 @@ export async function processRelancesDevis(
           AND  created_at > datetime('now', ? || ' days')
       )
     LIMIT 30
-  `).bind(boutiqueId, `-${delai}`, boutiqueId, `-${delai}`).all<any>()
+  `, [boutiqueId, `-${delai}`, boutiqueId, `-${delai}`])
 
   let count = 0
-  for (const devis of rows.results ?? []) {
+  for (const devis of rows) {
     await sendRelanceDevis(db, boutiqueId, devis, frontendUrl, apiKeyFallback)
     count++
   }
@@ -851,7 +853,7 @@ export async function processRelancesDevis(
  *                    — `par_type` : nombre d'emails par type sur le mois courant
  */
 export async function getEmailStats(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<{
   envoyes_total:  number
@@ -861,9 +863,8 @@ export async function getEmailStats(
   par_type:       Record<string, number>
 }> {
   const [total, mois, parType] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) as cnt FROM email_logs WHERE boutique_id = ? AND statut='envoye'`)
-      .bind(boutiqueId).first<{ cnt: number }>(),
-    db.prepare(`
+    db.get<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM email_logs WHERE boutique_id = ? AND statut='envoye'`, [boutiqueId]),
+    db.get<{ envoyes: number; erreurs: number; simules: number }>(`
       SELECT
         SUM(CASE WHEN statut='envoye'  THEN 1 ELSE 0 END) AS envoyes,
         SUM(CASE WHEN statut='erreur'  THEN 1 ELSE 0 END) AS erreurs,
@@ -871,18 +872,18 @@ export async function getEmailStats(
       FROM email_logs
       WHERE boutique_id = ?
         AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
-    `).bind(boutiqueId).first<{ envoyes: number; erreurs: number; simules: number }>(),
-    db.prepare(`
+    `, [boutiqueId]),
+    db.all<{ type: string; cnt: number }>(`
       SELECT type, COUNT(*) as cnt
       FROM   email_logs
       WHERE  boutique_id = ?
         AND  strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
       GROUP  BY type
-    `).bind(boutiqueId).all<{ type: string; cnt: number }>(),
+    `, [boutiqueId]),
   ])
 
   const byType: Record<string, number> = {}
-  for (const r of parType.results ?? []) byType[r.type] = r.cnt
+  for (const r of parType) byType[r.type] = r.cnt
 
   return {
     envoyes_total: total?.cnt        ?? 0,
@@ -899,13 +900,13 @@ export async function getEmailStats(
  * Retourne le journal paginé des emails d'une boutique.
  * Supporte les filtres `type` et `statut` en clause WHERE dynamique.
  *
- * @param db         - Instance D1Database
+ * @param db         - Instance Database (port)
  * @param boutiqueId - ID de la boutique
  * @param opts       - Pagination + filtres facultatifs
  * @returns          `{ rows, total }` — rows = entrées de logs, total = count sans LIMIT
  */
 export async function listEmailLogs(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   opts: {
     page?:   number
@@ -924,20 +925,19 @@ export async function listEmailLogs(
   const where = conditions.join(' AND ')
 
   const [countRow, rows] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) as cnt FROM email_logs WHERE ${where}`)
-      .bind(...params).first<{ cnt: number }>(),
-    db.prepare(`
+    db.get<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM email_logs WHERE ${where}`, params),
+    db.all<any>(`
       SELECT id, destinataire, sujet, type, entite_type, entite_id,
              statut, erreur, created_at
       FROM   email_logs
       WHERE  ${where}
       ORDER  BY created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    rows:  rows.results ?? [],
+    rows,
     total: countRow?.cnt ?? 0,
   }
 }
@@ -946,15 +946,14 @@ export async function listEmailLogs(
  * Retourne le nom d'une boutique par son ID.
  * Utilisé par le handler `POST /api/notifications/test` pour personnaliser l'email.
  *
- * @param db         - Instance D1Database
+ * @param db         - Instance Database (port)
  * @param boutiqueId - ID de la boutique
  * @returns          Nom de la boutique ou `null`
  */
 export async function getBoutiqueNomById(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number
 ): Promise<string | null> {
-  const row = await db.prepare('SELECT nom FROM boutiques WHERE id = ?')
-    .bind(boutiqueId).first<{ nom: string }>()
+  const row = await db.get<{ nom: string }>('SELECT nom FROM boutiques WHERE id = ?', [boutiqueId])
   return row?.nom ?? null
 }

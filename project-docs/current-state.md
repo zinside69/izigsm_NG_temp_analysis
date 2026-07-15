@@ -1,4 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 14)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 15)
+
+## Chantier Ports & Adapters — 17/20 services migrés (session du 2026-07-15)
+- **emailService.ts** (2026-07-15) — 13/13 fonctions migrées intégralement (`sendOtpInscription` exclue, aucun accès D1). Câblage `tickets.ts`/`sav.ts`/`notifications.ts`/`facturation.ts`. Tests convertis en bloc vers `mockDatabase` (24/24 ✅). **2 bugs préexistants découverts** : `sendEmail()` mal appelée dans `routes/auth.ts` (reset password jamais envoyé, non corrigé — décision de conception requise) ; `processRelancesDevis()` référençait une colonne inexistante `montant_ttc` (corrigé → `total_ttc`). **Validé en local live** : 8/8 endpoints/hooks ✅.
 
 ## Chantier Ports & Adapters — 16/20 services migrés (session du 2026-07-15)
 - **phoneCatalogService.ts** (2026-07-15) — 5/5 fonctions migrées intégralement, aucune dépendance `auditLog`/`nextNumero`. **0 test existant avant** (seul service sans couverture) → `tests/phoneCatalogService.test.ts` créé (11 tests, `fetch` mocké). **Validé en local live** : sync-brands (126), sync-modeles fairphone (5/5), sync-selected cat (22/22), stats cohérentes.

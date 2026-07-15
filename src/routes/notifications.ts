@@ -17,6 +17,7 @@
 import { Hono }              from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
 import { parsePagination }   from '../lib/db'
+import type { Database } from '../ports/database'
 import {
   sendEmail,
   getEmailStats,
@@ -27,8 +28,9 @@ import {
   getEmailConfig,
 } from '../services/emailService'
 
-type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
-const notifications = new Hono<{ Bindings: Bindings }>()
+type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
+type Variables = { db: Database }
+const notifications = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 notifications.use('*', authMiddleware)
 
@@ -49,8 +51,8 @@ notifications.get('/notifications/stats', async (c) => {
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
 
     const [stats, config] = await Promise.all([
-      getEmailStats(c.env.DB, boutiqueId),
-      getEmailConfig(c.env.DB, boutiqueId),
+      getEmailStats(c.get('db'), boutiqueId),
+      getEmailConfig(c.get('db'), boutiqueId),
     ])
 
     return c.json({
@@ -91,7 +93,7 @@ notifications.get('/notifications/logs', async (c) => {
     const type   = query.get('type')   ?? null
     const statut = query.get('statut') ?? null
 
-    const { rows, total } = await listEmailLogs(c.env.DB, boutiqueId, { page, limit, offset, type, statut })
+    const { rows, total } = await listEmailLogs(c.get('db'), boutiqueId, { page, limit, offset, type, statut })
 
     return c.json({
       success: true,
@@ -122,7 +124,7 @@ notifications.post('/notifications/test', requireRole('admin', 'manager'), async
     const body = await c.req.json()
     if (!body.to?.trim()) return c.json({ success: false, error: 'Adresse email destinataire obligatoire.' }, 422)
 
-    const nomB = (await getBoutiqueNomById(c.env.DB, boutiqueId)) ?? 'iziGSM'
+    const nomB = (await getBoutiqueNomById(c.get('db'), boutiqueId)) ?? 'iziGSM'
 
     const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;">
       <h2>✅ Configuration email opérationnelle</h2>
@@ -132,7 +134,7 @@ notifications.post('/notifications/test', requireRole('admin', 'manager'), async
     </body></html>`
 
     const result = await sendEmail({
-      db:         c.env.DB,
+      db:         c.get('db'),
       boutiqueId,
       to:         body.to,
       sujet:      `[Test] Configuration email iziGSM — ${nomB}`,
@@ -167,7 +169,7 @@ notifications.post('/notifications/relances', requireRole('admin', 'manager'), a
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
 
     const frontendUrl = c.env.FRONTEND_URL ?? 'http://localhost:3000'
-    const count       = await processRelances(c.env.DB, boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
+    const count       = await processRelances(c.get('db'), boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
 
     return c.json({
       success: true,
@@ -193,7 +195,7 @@ notifications.post('/notifications/relances-devis', requireRole('admin', 'manage
     if (!boutiqueId) return c.json({ success: false, error: 'boutique_id manquant.' }, 400)
 
     const frontendUrl = c.env.FRONTEND_URL ?? 'http://localhost:3000'
-    const count       = await processRelancesDevis(c.env.DB, boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
+    const count       = await processRelancesDevis(c.get('db'), boutiqueId, frontendUrl, c.env.RESEND_API_KEY)
 
     return c.json({
       success: true,

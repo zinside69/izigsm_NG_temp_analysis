@@ -216,7 +216,7 @@ tickets.post('/', async (c) => {
     // n'ait eu le temps d'aboutir — l'email ne partait jamais (bug silencieux
     // découvert le 2026-07-10 : email_logs vide depuis la création de la base).
     c.executionCtx.waitUntil(
-      sendTicketCree(db, boutiqueId, {
+      sendTicketCree(dbPort, boutiqueId, {
         id:              created.id,
         numero:          created.numero,
         tracking_token:  created.tracking_token,
@@ -309,9 +309,9 @@ tickets.put('/:id/statut', async (c) => {
           if (tFull?.client_email) {
             // waitUntil() obligatoire — voir commentaire équivalent sur sendTicketCree ci-dessus
             if (statut_apres === 'termine') {
-              c.executionCtx.waitUntil(sendTicketTermine(db, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
+              c.executionCtx.waitUntil(sendTicketTermine(dbPort, ticketRow.boutique_id, tFull, garantieCreee, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
             } else {
-              c.executionCtx.waitUntil(sendTicketLivre(db, ticketRow.boutique_id, tFull, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
+              c.executionCtx.waitUntil(sendTicketLivre(dbPort, ticketRow.boutique_id, tFull, frontendUrl, c.env.RESEND_API_KEY).catch(() => {}))
             }
           }
         } catch { /* non bloquant */ }
