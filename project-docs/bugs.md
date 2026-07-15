@@ -124,8 +124,8 @@ Constaté le 2026-07-10 par l'utilisateur juste après l'attachement de `repaird
 ## `/robots.txt` renvoie 500 en prod Genspark
 Constaté le 2026-07-09 : `curl https://.../robots.txt` → `Internal Server Error` (au lieu du contenu statique attendu). Le fichier existe bien dans `public/robots.txt` en local. Cause non investiguée — possiblement lié au retard de déploiement ci-dessus, ou à un conflit de route Hono. À vérifier une fois sur Cloudflare direct ; si le bug persiste, investiguer `src/index.tsx` pour un handler qui intercepterait `/robots.txt`.
 
-## `phoneCatalogService.ts` non testé
-Commits `5dec0de`/`eddd3af` (8 juillet 2026) ont ajouté ~1500 lignes (fallback dataset statique 24 marques/6866 modèles + logique retry 429) sans suite de tests. `tests/phoneCatalogService.test.ts` n'existe pas — seul service métier sans couverture Vitest sur les 18 services du projet.
+## `phoneCatalogService.ts` non testé — CORRIGÉ le 2026-07-15
+Commits `5dec0de`/`eddd3af` (8 juillet 2026) avaient ajouté ~1500 lignes (fallback dataset statique 24 marques/6866 modèles + logique retry 429) sans suite de tests. `tests/phoneCatalogService.test.ts` créé lors de la migration Ports & Adapters du service (checkpoint 14, 11 tests, `fetch` mocké en échec systématique pour forcer le chemin de repli statique déterministe).
 
 ## RGPD — limitation de conservation non implémentée (Art. 5.1.e)
 Connu et documenté dans `docs/TODO.md` : `checkAndPurgeExpiredClients()` / `checkAndPurgeExpiredTickets()` pas encore développés. Purge sur demande (Art.17) fonctionne, mais pas de purge automatique après expiration des durées légales.

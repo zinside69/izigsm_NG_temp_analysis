@@ -1,4 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 13)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 14)
+
+## Chantier Ports & Adapters — 16/20 services migrés (session du 2026-07-15)
+- **phoneCatalogService.ts** (2026-07-15) — 5/5 fonctions migrées intégralement, aucune dépendance `auditLog`/`nextNumero`. **0 test existant avant** (seul service sans couverture) → `tests/phoneCatalogService.test.ts` créé (11 tests, `fetch` mocké). **Validé en local live** : sync-brands (126), sync-modeles fairphone (5/5), sync-selected cat (22/22), stats cohérentes.
 
 ## Chantier Ports & Adapters — 15/20 services migrés (session du 2026-07-15)
 - **reconditionnementService.ts** (2026-07-15) — 12/13 fonctions migrées (tout sauf `createOrdre`, dépendant de `nextNumero()`). Aucun `auditLog()` dans ce fichier. `routes/reconditionnement.ts` : `Variables.db`/`dbPort` ajoutés de zéro (2 routers). Tests scindés (50/50 ✅). **Validé en local live** : cycle ordre complet (création→en_cours→terminer avec produit occasion créé) + cycle bon d'achat (créer→lister→vérifier→annuler), 10/11 ✅ (consommation bloquée par FK factures vide en local, attendu).

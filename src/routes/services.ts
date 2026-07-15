@@ -368,7 +368,7 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
  * Stats globales du référentiel (nb marques, modèles, dernière sync).
  */
 services.get('/services/catalog/stats', async (c) => {
-  const stats = await getCatalogStats(c.env.DB)
+  const stats = await getCatalogStats(c.get('db'))
   return c.json({ success: true, data: stats })
 })
 
@@ -378,7 +378,7 @@ services.get('/services/catalog/stats', async (c) => {
  * Admin uniquement.
  */
 services.get('/services/catalog/sync-status', requireRole('admin'), async (c) => {
-  const data = await getLastSyncStatus(c.env.DB)
+  const data = await getLastSyncStatus(c.get('db'))
   return c.json({ success: true, data })
 })
 
@@ -389,7 +389,7 @@ services.get('/services/catalog/sync-status', requireRole('admin'), async (c) =>
  * Admin uniquement.
  */
 services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) => {
-  const result = await syncBrands(c.env.DB)
+  const result = await syncBrands(c.get('db'))
   return c.json({ success: true, data: result, message: `${result.inserted} marques ajoutées, ${result.skipped} existantes.` })
 })
 
@@ -403,7 +403,7 @@ services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) =
  */
 services.post('/services/catalog/sync-modeles/:slug', requireRole('admin'), async (c) => {
   const slug   = c.req.param('slug')
-  const result = await syncModelesByBrand(c.env.DB, slug)
+  const result = await syncModelesByBrand(c.get('db'), slug)
 
   if (result.status === 'error') {
     return c.json({ success: false, error: result.error, data: result }, 422)
@@ -426,7 +426,7 @@ services.post('/services/catalog/sync-selected', requireRole('admin'), async (c)
   if (!Array.isArray(body.slugs) || body.slugs.length === 0) {
     return c.json({ success: false, error: 'slugs[] requis.' }, 400)
   }
-  const result = await syncSelectedBrands(c.env.DB, body.slugs)
+  const result = await syncSelectedBrands(c.get('db'), body.slugs)
   return c.json({ success: true, data: result })
 })
 

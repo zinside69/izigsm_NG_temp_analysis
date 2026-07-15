@@ -18,6 +18,8 @@
  * Sprint 2.39 — MOD-15 catalogue complet
  */
 
+import type { Database } from '../ports/database'
+
 const API_BASE = 'https://phone-specs-api.vercel.app'
 
 // ─── Dataset statique embarqué (fallback si API rate-limitée) ────────────────
@@ -1379,7 +1381,7 @@ async function apiFetch(url: string): Promise<any> {
  *
  * @returns SyncBrandsResult — nb insérées, ignorées, total, liste brute
  */
-export async function syncBrands(db: D1Database): Promise<SyncBrandsResult> {
+export async function syncBrands(db: Database): Promise<SyncBrandsResult> {
   let brands: ApiBrand[]
   let fromStatic = false
 
@@ -1408,18 +1410,18 @@ export async function syncBrands(db: D1Database): Promise<SyncBrandsResult> {
 
   for (const b of brands) {
     // INSERT si slug inconnu
-    const res = await db.prepare(`
+    const res = await db.run(`
       INSERT OR IGNORE INTO marques_appareils (nom, brand_slug, device_count, source, synced_at)
       VALUES (?, ?, ?, 'api', CURRENT_TIMESTAMP)
-    `).bind(b.brand_name.trim(), b.brand_slug, b.device_count).run()
+    `, [b.brand_name.trim(), b.brand_slug, b.device_count])
 
-    if (res.meta.changes === 0) {
+    if (res.changes === 0) {
       // Déjà existante — mise à jour device_count si source API
-      await db.prepare(`
+      await db.run(`
         UPDATE marques_appareils
         SET device_count = ?, synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE brand_slug = ? AND source = 'api'
-      `).bind(b.device_count, b.brand_slug).run()
+      `, [b.device_count, b.brand_slug])
       skipped++
     } else {
       inserted++
@@ -1446,14 +1448,14 @@ export async function syncBrands(db: D1Database): Promise<SyncBrandsResult> {
  * @param logId     optionnel — id du log existant à mettre à jour
  */
 export async function syncModelesByBrand(
-  db: D1Database,
+  db: Database,
   brandSlug: string,
   logId?: number
 ): Promise<SyncModelesResult> {
   // Récupérer l'id de la marque en base
-  const marque = await db.prepare(`
+  const marque = await db.get<{ id: number; nom: string }>(`
     SELECT id, nom FROM marques_appareils WHERE brand_slug = ? AND actif = 1
-  `).bind(brandSlug).first<{ id: number; nom: string }>()
+  `, [brandSlug])
 
   if (!marque) {
     return { brand_slug: brandSlug, brand_nom: '', modeles_added: 0, modeles_total: 0, pages_fetched: 0, status: 'error', error: `Marque introuvable en base pour slug: ${brandSlug}` }
@@ -1462,11 +1464,11 @@ export async function syncModelesByBrand(
   // Log démarrage
   const logRow = logId
     ? { id: logId }
-    : await db.prepare(`
+    : await db.get<{ id: number }>(`
         INSERT INTO phone_catalog_sync_log (brand_slug, brand_nom, status)
         VALUES (?, ?, 'pending')
         RETURNING id
-      `).bind(brandSlug, marque.nom).first<{ id: number }>()
+      `, [brandSlug, marque.nom])
 
   try {
     let allPhones: ApiPhone[] = []
@@ -1548,32 +1550,32 @@ export async function syncModelesByBrand(
     // INSERT en batch D1 (une requête par modèle — D1 ne supporte pas les INSERT multi-lignes via bind)
     let modeles_added = 0
     for (const phone of uniq) {
-      const res = await db.prepare(`
+      const res = await db.run(`
         INSERT OR IGNORE INTO modeles_appareils (marque_id, nom, phone_slug, type, image_url, source)
         VALUES (?, ?, ?, ?, ?, 'api')
-      `).bind(
+      `, [
         marque.id,
         phone.phone_name.trim(),
         phone.slug,
         guessType(phone.phone_name),
         phone.image ?? null
-      ).run()
-      if (res.meta.changes > 0) modeles_added++
+      ])
+      if (res.changes > 0) modeles_added++
     }
 
     // Mettre à jour synced_at sur la marque
-    await db.prepare(`
+    await db.run(`
       UPDATE marques_appareils SET synced_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).bind(marque.id).run()
+    `, [marque.id])
 
     // Mettre à jour le log
     if (logRow?.id) {
-      await db.prepare(`
+      await db.run(`
         UPDATE phone_catalog_sync_log
         SET status = 'success', modeles_added = ?, modeles_total = ?, finished_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).bind(modeles_added, uniq.length, logRow.id).run()
+      `, [modeles_added, uniq.length, logRow.id])
     }
 
     return {
@@ -1587,11 +1589,11 @@ export async function syncModelesByBrand(
 
   } catch (err: any) {
     if (logRow?.id) {
-      await db.prepare(`
+      await db.run(`
         UPDATE phone_catalog_sync_log
         SET status = 'error', error_msg = ?, finished_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).bind(err.message ?? 'Erreur inconnue', logRow.id).run()
+      `, [err.message ?? 'Erreur inconnue', logRow.id])
     }
     return {
       brand_slug:    brandSlug,
@@ -1622,7 +1624,7 @@ export async function syncModelesByBrand(
  * @param brandSlugs  liste de slugs à synchroniser (subset, pas toutes les 126)
  */
 export async function syncSelectedBrands(
-  db: D1Database,
+  db: Database,
   brandSlugs: string[]
 ): Promise<SyncAllResult> {
   let brands_synced  = 0
@@ -1652,8 +1654,8 @@ export async function syncSelectedBrands(
  * Retourne le statut de la dernière synchronisation par marque.
  * Utilisé par l'UI pour afficher l'état du référentiel.
  */
-export async function getLastSyncStatus(db: D1Database): Promise<object[]> {
-  const rows = await db.prepare(`
+export async function getLastSyncStatus(db: Database): Promise<object[]> {
+  return db.all<object>(`
     SELECT
       m.id, m.nom, m.brand_slug, m.device_count, m.source, m.synced_at,
       COUNT(mo.id) AS modeles_en_base,
@@ -1670,14 +1672,13 @@ export async function getLastSyncStatus(db: D1Database): Promise<object[]> {
     WHERE m.actif = 1
     GROUP BY m.id
     ORDER BY m.nom ASC
-  `).all()
-  return rows.results
+  `)
 }
 
 /**
  * Retourne les stats globales du catalogue.
  */
-export async function getCatalogStats(db: D1Database): Promise<{
+export async function getCatalogStats(db: Database): Promise<{
   total_marques: number
   total_modeles: number
   marques_api:   number
@@ -1685,7 +1686,7 @@ export async function getCatalogStats(db: D1Database): Promise<{
   last_sync:     string | null
 }> {
   const [stats, lastSync] = await Promise.all([
-    db.prepare(`
+    db.get<any>(`
       SELECT
         COUNT(DISTINCT m.id)                                   AS total_marques,
         COUNT(mo.id)                                           AS total_modeles,
@@ -1694,10 +1695,10 @@ export async function getCatalogStats(db: D1Database): Promise<{
       FROM marques_appareils m
       LEFT JOIN modeles_appareils mo ON mo.marque_id = m.id AND mo.actif = 1
       WHERE m.actif = 1
-    `).first<any>(),
-    db.prepare(`
+    `),
+    db.get<{ last_sync: string | null }>(`
       SELECT MAX(started_at) AS last_sync FROM phone_catalog_sync_log WHERE status = 'success'
-    `).first<{ last_sync: string | null }>(),
+    `),
   ])
 
   return {
