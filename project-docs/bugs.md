@@ -1,5 +1,17 @@
 # iziGSM — Bugs connus
 
+## Autocomplete Modèle (prise en charge) ne renvoyait jamais aucune suggestion — CORRIGÉ le 2026-07-15
+
+`onModeleInput()` (`tickets.js`) faisait `_modelesCache = res.data || []` — mais `apiGet()` renvoie `{ok, status, data}` où `data` est déjà le corps JSON complet de la route (`{success, data: [...]}`), donc `res.data` est un **objet** `{success:true, data:[...]}`, pas un tableau. `_modelesCache.filter is not a function` en console à chaque frappe, silencieusement avalé par l'absence de gestion d'erreur visible — aucune suggestion n'apparaissait jamais, depuis l'introduction de l'autocomplete (Sprint 2.38). Convention correcte confirmée ailleurs dans le même fichier (`res.data?.data || []`, utilisée à 8 autres endroits). **Fix** : `res.data?.data || []`.
+
+## Faille XSS — suggestions marque/modèle (onclick interpolé dans innerHTML) — CORRIGÉE le 2026-07-15
+
+En ajoutant l'autocomplete Marque (miroir du pattern Modèle existant), revue de sécurité automatique a détecté que **les deux** listes de suggestions construisaient `onclick="selectXFromSuggestion(${id}, '${nom}')"` par interpolation de chaîne dans du `innerHTML` — un nom de marque/modèle contenant un guillemet double (source externe non garantie à 100% : `phone-specs-api.vercel.app`, ou création manuelle par un admin/manager via `POST /api/services/marques`) aurait cassé l'attribut `onclick="..."` et permis d'injecter du HTML/JS arbitraire, visible par tout utilisateur tapant dans le champ. `escapeHtml()` local n'échappait que `&`/`<`/`>`, pas `"`/`'` — insuffisant en contexte attribut (même classe de faille que le fix `signature_client` du 2026-07-11, `bugs.md` historique). **Fix** : `data-id`/`data-nom` + `addEventListener` délégué sur le conteneur des suggestions (pas d'attribut construit par interpolation), `escapeHtml()` étendu pour encoder aussi `"` et `'`.
+
+## `listClients()` ne renvoyait jamais adresse/code_postal/siret/tva_intracom — CORRIGÉ le 2026-07-15
+
+Découvert en testant le nouvel autocomplete adresse sur la fiche client : le SELECT de `listClients()` (`clientService.ts`) n'a **jamais** inclus `c.adresse`/`c.code_postal` (même avant l'ajout de `type_client`/`raison_sociale`/`siret`/`tva_intracom` ce jour) — seul `c.ville` était sélectionné. Conséquence : `editClient()` (qui lit le cache `_clients` alimenté par `listClients()`, sans re-fetch dédié contrairement à d'autres écrans) affichait systématiquement les placeholders HTML au lieu des vraies valeurs saisies pour ces champs, à chaque réouverture d'un client existant en édition — silencieux, aucune erreur, juste une perte apparente de données à l'écran (les données réelles n'étaient jamais perdues en base, seulement non affichées). **Fix** : SELECT étendu (`adresse`, `code_postal`, `pays`, `siret`, `tva_intracom` ajoutés en plus de `type_client`/`raison_sociale` déjà nécessaires pour la nouvelle fonctionnalité).
+
 ## Optimisation photos : URL présignée courte durée au lieu de fetch+blob — 2026-07-15
 
 Suite au fix vignettes/lightbox (entrée suivante), amélioration inspirée d'un pattern trouvé dans `izigsm_NG/izigsm_app` (architecture microservices abandonnée, cf. `decisions.md` 2026-07-12) : `services/reparation-service` exposait un endpoint `GET /:id/url` retournant une URL directe/présignée plutôt que le binaire — évite le problème `<img src>` sans passer par un `fetch()`+blob côté client.

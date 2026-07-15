@@ -397,6 +397,71 @@ document.addEventListener('click', e => {
   }
 });
 
+// ─── Recherche entreprise par SIRET (API Recherche d'entreprises — data.gouv.fr) ─
+// Même principe que l'autocomplete adresse : fetch() direct, API publique sans clé,
+// remplace l'ancienne API Sirene INSEE qui demandait une authentification.
+// Ne pré-remplit que les champs vides (jamais d'écrasement d'une saisie manuelle).
+const SIRET_API_BASE = 'https://recherche-entreprises.api.gouv.fr/search';
+let _siretTimer = null;
+
+/** Déclenché à chaque frappe dans le champ SIRET — recherche dès 14 chiffres valides */
+function onSiretInput(val) {
+  clearTimeout(_siretTimer);
+  const digits = (val || '').replace(/\s/g, '');
+  if (!/^\d{14}$/.test(digits)) return;
+
+  _siretTimer = setTimeout(() => lookupSiret(digits), 400);
+}
+
+/** Interroge l'API Recherche d'entreprises et pré-remplit les champs société vides */
+async function lookupSiret(siret) {
+  let result;
+  try {
+    const res  = await fetch(`${SIRET_API_BASE}?q=${siret}`);
+    const json = await res.json();
+    result = json.results && json.results[0];
+  } catch {
+    return; // Pas de connexion / API indisponible : saisie manuelle reste possible
+  }
+
+  if (!result) { showFlash('Établissement introuvable pour ce SIRET.', 'error'); return; }
+
+  // L'établissement exact recherché (peut être un établissement secondaire,
+  // distinct du siège social renvoyé au niveau de l'entreprise).
+  const etab = (result.matching_etablissements && result.matching_etablissements[0]) || result.siege;
+  const codePostal = etab?.code_postal || '';
+  const ville       = etab?.libelle_commune || '';
+  // adresse brute type "20 AVENUE DE SEGUR 75007 PARIS" — on retire le suffixe CP+ville
+  const idx    = etab?.adresse && codePostal ? etab.adresse.indexOf(codePostal) : -1;
+  const adresse = idx > -1 ? etab.adresse.slice(0, idx).trim() : (etab?.adresse || '');
+
+  _fillIfEmpty('c-raison-sociale', result.nom_raison_sociale || result.nom_complet || '');
+  _fillIfEmpty('c-adresse',        adresse);
+  _fillIfEmpty('c-code-postal',    codePostal);
+  _fillIfEmpty('c-ville',          ville);
+  _fillIfEmpty('c-tva-intracom',   computeTvaFromSiren(result.siren));
+
+  if (result.etat_administratif === 'F') {
+    showFlash('⚠️ Établissement fermé selon les registres officiels.', 'error');
+  } else {
+    showFlash('Fiche entreprise trouvée et pré-remplie.', 'success');
+  }
+}
+
+/** Remplit un champ uniquement s'il est vide — ne jamais écraser une saisie manuelle */
+function _fillIfEmpty(id, value) {
+  if (!value) return;
+  const el = document.getElementById(id);
+  if (el && !el.value.trim()) el.value = value;
+}
+
+/** Numéro de TVA intracommunautaire FR — formule standard (clé = (12 + 3×(SIREN mod 97)) mod 97) */
+function computeTvaFromSiren(siren) {
+  if (!/^\d{9}$/.test(siren || '')) return '';
+  const cle = (12 + 3 * (Number(siren) % 97)) % 97;
+  return `FR${String(cle).padStart(2, '0')}${siren}`;
+}
+
 // ─── Historique CRM ───────────────────────────────────────────────────────────
 
 /**

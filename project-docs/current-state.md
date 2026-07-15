@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-15, fix photos ticket — jeton signé)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 22 — autocomplete prise en charge + fiche client société/SIRET)
+
+## Checkpoint 22 — reprise via conversation en cours (pas `/init recover`), 2026-07-15
+
+Trois lots de travail dans cette session, sur `izigsm/webapp/` :
+
+**A. Bug + feature prise en charge (déployé, commits `c30984e`/`03e384d`)** : autocomplete Modèle réparé (bug d'extraction `res.data` vs `res.data.data`), champ Marque converti en autocomplete (126 marques réelles, remplace un `<select>` figé à 7 options), grille schéma de déverrouillage 9 points ajoutée (stockée dans la colonne texte existante, pas de migration). Faille XSS trouvée et corrigée dans les deux autocompletes (onclick interpolé → `data-*`/listener délégué).
+
+**B. Fiche client type société (déployé, commit `f3938c5`, migration `0035` en prod)** : toggle particulier/professionnel, champs raison sociale/SIRET/TVA intracom, autocomplete adresse via l'API gouvernementale BAN. Bug corrigé au passage : `listClients()` ne renvoyait jamais adresse/code_postal/siret/tva_intracom (édition perdait ces champs). Sidebar : Clients remonté sous Tableau de bord.
+
+**C. Recherche entreprise par SIRET (commité, PAS déployé, PAS pushé)** : `recherche-entreprises.api.gouv.fr`, auto à 14 chiffres, pré-remplit raison sociale/adresse/TVA (calculée depuis le SIREN) sans jamais écraser une saisie manuelle. **L'utilisateur pousse lui-même depuis son terminal et déploiera plus tard** — ne pas pousser ni déployer ce lot sans confirmation explicite dans une future session.
+
+Détail complet des 3 lots dans `todo.md` (§ Checkpoint 22). Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`, sans rapport).
 
 ## Fix photos ticket — jeton signé courte durée — 2026-07-15
 

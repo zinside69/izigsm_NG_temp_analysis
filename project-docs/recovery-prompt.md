@@ -1,3 +1,41 @@
+# Recovery Prompt — iziGSM — 2026-07-15 (checkpoint 22)
+
+## Vue d'ensemble
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Chantier Ports & Adapters terminé et déployé depuis le checkpoint 21. Ce checkpoint (22) couvre 3 lots distincts sur l'écran Prise en charge et la fiche Client.
+
+## Ce qui a été fait ce checkpoint
+
+**A. Prise en charge — autocomplete + schéma (déployé, commits `c30984e`/`03e384d`)**
+- Bug corrigé : autocomplete Modèle ne renvoyait jamais rien (`res.data` vs `res.data.data`)
+- Champ Marque : `<select>` 7 options → autocomplete sur 126 marques réelles
+- Grille schéma déverrouillage 9 points (État & Sécurité) — stockée dans `code_deverrouillage` existant, pas de migration
+- Faille XSS corrigée (onclick interpolé dans les 2 autocompletes → `data-*`/listener délégué)
+- `sw.js` v2.52→v2.53
+
+**B. Fiche client type société (déployé, commit `f3938c5`, migration `0035` en prod)**
+- Toggle particulier/professionnel + raison sociale/SIRET/TVA (migration additive, aucune perte de données)
+- Autocomplete adresse via API BAN gouvernementale (`api-adresse.data.gouv.fr`, sans clé)
+- Bug corrigé : `listClients()` ne renvoyait jamais adresse/code_postal (édition perdait ces champs)
+- Sidebar : Clients remonté sous Tableau de bord
+- `sw.js` v2.53→v2.54
+
+**C. Recherche entreprise par SIRET — commité, PAS déployé, PAS pushé**
+- `recherche-entreprises.api.gouv.fr` (remplace l'ancienne API Sirene INSEE à clé), auto-déclenché à 14 chiffres
+- Pré-remplit raison sociale/adresse/TVA (calculée depuis SIREN) sans écraser une saisie manuelle
+- Validé en local avec un SIRET réel (DINUM). **L'utilisateur pousse lui-même depuis son terminal ("je ferai le push sur le terminal") et déploiera plus tard ("on déploiera plus tard")** — ne pas pousser ni déployer ce commit sans qu'il le redemande explicitement.
+
+Détail complet dans `todo.md` § Checkpoint 22 et `bugs.md` (3 bugs documentés ce jour).
+
+## État git à la fin de ce checkpoint
+Le lot C (recherche SIRET + mise à jour de ces 4 fichiers project-docs) est **commité localement, pas pushé** — geste volontaire de l'utilisateur. Les lots A et B sont déjà sur `origin/main` et déployés en prod. Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`).
+
+## Prochaines étapes recommandées
+1. L'utilisateur pousse le commit du lot C depuis son terminal quand il le souhaite
+2. Déploiement du lot C (build + `wrangler pages deploy`) à faire plus tard, sur demande explicite — pas de migration DB requise pour ce lot (pur frontend)
+3. Reste ouvert : bug isolation photos (`getBoutiqueId(c)`), reset password jamais envoyé, `boutique_creneaux` vide — voir `bugs.md`
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-15 (checkpoint 21)
 
 ## Vue d'ensemble

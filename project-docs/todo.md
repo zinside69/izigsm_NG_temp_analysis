@@ -1,5 +1,37 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## Checkpoint 22 (2026-07-15, suite session) — Prise en charge : autocomplete + schéma ; Fiche client : type société + SIRET
+
+### A. Prise en charge — autocomplete marque/modèle + grille schéma (commits `c30984e`, `03e384d`, déployés)
+- [x] Bug corrigé : `onModeleInput()` (`tickets.js`) lisait `res.data` au lieu de `res.data?.data` — l'autocomplete Modèle ne renvoyait jamais aucune suggestion depuis toujours (route `/api/services/modeles` fonctionnait, seule l'extraction JS était fausse)
+- [x] Champ Appareil (marque) : `<select>` figé à 7 options → autocomplete texte sur les 126 marques réelles (`onMarqueInput()`, même pattern debounce 300ms / 2 caractères min que Modèle)
+- [x] Nouveau : grille schéma de déverrouillage 9 points dans État & Sécurité — toggle PIN/Schéma, points cliquables + tracé SVG, stocké dans la colonne texte existante `code_deverrouillage` (préfixe `SCHEMA:1-5-9-...`, **aucune migration nécessaire**), round-trip édition vérifié, affichage lisible en fiche détail (`formatCodeDeverrouillage()`)
+- [x] **Faille XSS trouvée et corrigée** (revue de sécurité automatique déclenchée sur le code du jour) : suggestions marque/modèle construisaient un `onclick="...('${nom}')"` par interpolation de chaîne dans `innerHTML` — un nom externe (API phone-specs, ou marque créée par un admin) contenant un guillemet double aurait cassé l'attribut et permis une injection HTML. Remplacé par `data-*` + `addEventListener` délégué (même pattern que le fix XSS `signature_client` du 2026-07-11) ; `escapeHtml()` encode désormais aussi `"`/`'`.
+- [x] `sw.js` `CACHE_VERSION` `v2.52`→`v2.53`
+- [x] Tests 791/793 (2 échecs pré-existants `computeFin()`, sans rapport), `tsc --noEmit` sans nouvelle erreur
+- [x] Déployé en prod, validé en local (`wrangler pages dev`) avant déploiement — toggle, sélection marque/modèle, tracé schéma, sauvegarde, réédition round-trip
+
+### B. Fiche client — type particulier/professionnel + adresse (commit `f3938c5`, déployé, migration `0035` appliquée en prod)
+- [x] Migration `0035_clients_type_societe.sql` : colonnes `type_client` (défaut `particulier`), `raison_sociale`, `siret`, `tva_intracom` sur `clients`
+- [x] Modal client (`clients.html`/`clients.js`) : toggle Particulier/Professionnel, champs société conditionnels (raison sociale obligatoire si Pro, SIRET validé 14 chiffres côté client ET serveur — `validateClientTypeSociete()` dans `routes/clients.ts`)
+- [x] Autocomplete adresse/code postal/ville via `api-adresse.data.gouv.fr` (BAN, gratuite sans clé) — `fetch()` direct hors `ApiService` pour ne jamais transmettre le JWT iziGSM à ce tiers
+- [x] **Bug corrigé** : `listClients()` ne renvoyait jamais `adresse`/`code_postal`/`siret`/`tva_intracom` dans son SELECT — rouvrir un client en édition affichait les placeholders au lieu des vraies valeurs saisies (préexistant, révélé en testant cette fonctionnalité). Détail dans `bugs.md`.
+- [x] `purgeClient()` RGPD (Art. 17) étendu : anonymise aussi `raison_sociale`/`siret`/`tva_intracom`
+- [x] Sidebar (`app.js`) : "Clients" remonté de la section Gestion vers la section Principale, juste sous Tableau de bord
+- [x] Badge "🏢 Pro" + raison sociale affichés dans la liste clients (`clients.js`)
+- [x] `sw.js` `CACHE_VERSION` `v2.53`→`v2.54`
+- [x] Tests `clientService.test.ts` mis à jour (mocks SQL désynchronisés par les nouvelles colonnes — 6 tests réparés), 791/793 global
+- [x] Déployé en prod, validé en local puis en direct (création client Pro, édition round-trip, sélection dans le menu déroulant CLIENT d'une nouvelle prise en charge)
+
+### C. Recherche entreprise par SIRET — **commité mais PAS déployé, PAS pushé** (l'utilisateur pousse lui-même depuis le terminal)
+Décisions validées avec l'utilisateur (AskUserQuestion) : API `recherche-entreprises.api.gouv.fr` (gratuite sans clé, remplace l'ancienne API Sirene INSEE qui demandait une clé — un MCP data.gouv.fr n'est pas utilisable par le navigateur d'un utilisateur final en prod, seulement par moi en dev) ; déclenchement auto dès 14 chiffres valides ; pré-remplissage raison sociale + adresse complète + TVA intracom calculée depuis le SIREN.
+- [x] `onSiretInput()`/`lookupSiret()` (`clients.js`) — recherche auto à 14 chiffres, utilise `matching_etablissements[0]` (pas `siege`, qui pointerait sur le siège social si le SIRET saisi est un établissement secondaire)
+- [x] `computeTvaFromSiren()` — formule standard clé = (12 + 3×(SIREN mod 97)) mod 97, vérifiée sur un cas réel (SIREN 130025265 → `FR07130025265`)
+- [x] `_fillIfEmpty()` — ne remplit jamais un champ déjà saisi manuellement (vérifié en test : raison sociale tapée à la main conservée, adresse/CP/ville/TVA remplis car vides)
+- [x] Validé en local (`wrangler pages dev`) avec un SIRET réel (DINUM, `13002526500013`) — raison sociale, adresse, code postal, ville, TVA tous corrects
+- [x] Tests 791/793 (aucun changement backend, pur frontend)
+- [x] **Commité** (message `feat(clients): recherche entreprise par SIRET...`) — **pas pushé** (l'utilisateur le fait depuis son terminal), **pas déployé** ("on déploiera plus tard")
+
 ## Analyse comparative monatelier.net — couverture complète (2026-07-11 v3)
 
 - [x] **FAIT** — Les 19 pages du centre d'aide `monatelier.net/aide/*` lues intégralement (v2 n'en couvrait que 9, via les liens précédent/suivant qui ratent 10 pages non reliées linéairement — sitemap complet retrouvé via le menu latéral). `docs/ANALYSE_COMPARATIVE_MONATELIER.md` v3.
