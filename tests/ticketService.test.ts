@@ -19,6 +19,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   TRANSITIONS_TICKET,
   STATUT_LABELS,
@@ -29,6 +30,7 @@ import {
   updateTicket,
   updateStatutTicket,
   deleteTicket,
+  checkAndArchiveTickets,
   getTicketBoutiqueId,
   getTicketAvecClient,
   type StatutTicket,
@@ -130,13 +132,13 @@ describe('STATUT_LABELS', () => {
 // ─── listTickets ──────────────────────────────────────────────────────────────
 
 describe('listTickets()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL_COUNT = 'SELECT COUNT(*) AS cnt FROM tickets t WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL'
   const SQL_LIST  = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT, { cnt: 2 })
     db.__setListResponse(SQL_LIST, [TICKET_WITH_CLIENT, { ...TICKET_WITH_CLIENT, id: 43 }])
   })
@@ -169,12 +171,12 @@ describe('listTickets()', () => {
 // ─── getKanban ────────────────────────────────────────────────────────────────
 
 describe('getKanban()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL_KANBAN = `SELECT t.id, t.numero, t.statut, t.priorite, t.appareil_marque, t.appareil_modele, t.description_panne, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.date_commande_pieces, t.date_reception_pieces, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom, CAST((julianday('now') - julianday(t.date_reception)) AS INTEGER) AS jours_anciennete FROM tickets t LEFT JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND (t.statut NOT IN ('livre','annule') OR (t.statut IN ('livre','annule') AND t.updated_at >= datetime('now', '-7 days'))) ORDER BY CASE t.priorite WHEN 'urgente' THEN 1 WHEN 'haute' THEN 2 WHEN 'normale' THEN 3 ELSE 4 END, t.date_reception ASC`
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne toujours 10 colonnes même sans tickets', async () => {
@@ -244,19 +246,29 @@ describe('getKanban()', () => {
     const res = await getKanban(db, 1)
     expect(res.stats.urgents).toBe(1)
   })
+
+  it('stats.en_retard compte les tickets non terminaux avec date_promesse dépassée (format SQLite sans fuseau)', async () => {
+    const hier = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ')
+    db.__setListResponse(SQL_KANBAN, [
+      { ...KANBAN_TICKET, statut: 'recu', date_promesse: hier },
+      { ...KANBAN_TICKET, id: 43, statut: 'livre', date_promesse: hier }, // terminal, exclu
+    ])
+    const res = await getKanban(db, 1)
+    expect(res.stats.en_retard).toBe(1)
+  })
 })
 
 // ─── getTicketById ────────────────────────────────────────────────────────────
 
 describe('getTicketById()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL_TICKET = `SELECT t.*, c.prenom || ' ' || c.nom AS client_nom, c.email AS client_email, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.id = ? AND t.actif = 1`
   const SQL_HISTO  = `SELECT h.*, u.prenom || ' ' || u.nom AS user_nom FROM tickets_statuts_historique h JOIN users u ON u.id = h.user_id WHERE h.ticket_id = ? ORDER BY h.created_at ASC`
   const SQL_PHOTOS = 'SELECT * FROM tickets_photos WHERE ticket_id = ? ORDER BY created_at'
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne ticket avec historique et photos', async () => {
@@ -510,11 +522,11 @@ describe('deleteTicket()', () => {
 // ─── getTicketBoutiqueId ──────────────────────────────────────────────────────
 
 describe('getTicketBoutiqueId()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL = 'SELECT boutique_id FROM tickets WHERE id = ?'
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne l\'objet { boutique_id }', async () => {
     db.__setResponse(SQL, { boutique_id: 3 })
@@ -533,11 +545,11 @@ describe('getTicketBoutiqueId()', () => {
 // ─── getTicketAvecClient ──────────────────────────────────────────────────────
 
 describe('getTicketAvecClient()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   const SQL = `SELECT t.numero, t.tracking_token, t.prix_final, t.diagnostic, t.appareil_marque, t.appareil_modele, c.email AS client_email, c.prenom AS client_prenom FROM tickets t JOIN clients c ON c.id = t.client_id WHERE t.id = ? LIMIT 1`
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockDatabase() })
 
   it('retourne les données avec email client', async () => {
     const slim = {
@@ -555,5 +567,32 @@ describe('getTicketAvecClient()', () => {
     db.__setNotFound(SQL)
     const res = await getTicketAvecClient(db, 999)
     expect(res).toBeNull()
+  })
+})
+
+// ─── checkAndArchiveTickets ───────────────────────────────────────────────────
+
+describe('checkAndArchiveTickets()', () => {
+  let db: ReturnType<typeof createMockDatabase>
+
+  const SQL_SCOPED = `UPDATE tickets SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE boutique_id = ? AND actif = 1 AND archived_at IS NULL AND statut IN ('livre', 'annule') AND updated_at <= datetime('now', '-' || ? || ' days')`
+  const SQL_ALL    = `UPDATE tickets SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE actif = 1 AND archived_at IS NULL AND statut IN ('livre', 'annule') AND updated_at <= datetime('now', '-' || ? || ' days')`
+
+  beforeEach(() => { db = createMockDatabase() })
+
+  it('scope par boutique_id quand boutiqueId > 0, avec ? paramétré (pas d\'interpolation SQL)', async () => {
+    db.__setResponseFn(SQL_SCOPED, () => ({ id: null }))
+    const count = await checkAndArchiveTickets(db, 3, 90)
+    const call = db.__getCalls().find(c => c.sql === SQL_SCOPED)
+    expect(call).toBeDefined()
+    expect(call?.params).toEqual([3, 90])
+    expect(count).toBe(1)
+  })
+
+  it('sans filtre boutique quand boutiqueId = 0 (toutes boutiques)', async () => {
+    await checkAndArchiveTickets(db, 0, 90)
+    const call = db.__getCalls().find(c => c.sql === SQL_ALL)
+    expect(call).toBeDefined()
+    expect(call?.params).toEqual([90])
   })
 })

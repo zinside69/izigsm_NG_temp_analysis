@@ -79,11 +79,11 @@ function ctx(c: any) {
  * @returns { success, colonnes, stats }
  */
 tickets.get('/kanban', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await getKanban(db, boutiqueId)
+  const result = await getKanban(dbPort, boutiqueId)
   return c.json({ success: true, ...result })
 })
 
@@ -95,7 +95,7 @@ tickets.get('/kanban', async (c) => {
  * @returns { success, data, pagination }
  */
 tickets.get('/', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const query      = c.req.query()
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -103,10 +103,10 @@ tickets.get('/', async (c) => {
   // Sprint 2.37 : batch auto-archivage probabiliste (1% des requêtes)
   // waitUntil() obligatoire — voir commentaire sur sendTicketCree plus bas dans ce fichier
   if (Math.random() < 0.01) {
-    c.executionCtx.waitUntil(checkAndArchiveTickets(db, boutiqueId, 90).catch(() => {}))
+    c.executionCtx.waitUntil(checkAndArchiveTickets(dbPort, boutiqueId, 90).catch(() => {}))
   }
 
-  const result = await listTickets(db, boutiqueId, {
+  const result = await listTickets(dbPort, boutiqueId, {
     statut:     query.statut     ?? undefined,
     technicien: query.technicien ? parseInt(query.technicien, 10) : undefined,
     client_id:  query.client_id  ? parseInt(query.client_id,  10) : undefined,
@@ -156,10 +156,10 @@ tickets.post('/:id/archiver', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, data }
  */
 tickets.get('/:id', async (c) => {
-  const { db } = ctx(c)
+  const { dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
 
-  const data = await getTicketById(db, id)
+  const data = await getTicketById(dbPort, id)
   if (!data) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
   return c.json({ success: true, data })
@@ -278,7 +278,7 @@ tickets.put('/:id', async (c) => {
  * @returns { success, message, statut, garantie? }
  */
 tickets.put('/:id/statut', async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
   const { statut, commentaire } = body
@@ -291,7 +291,7 @@ tickets.put('/:id/statut', async (c) => {
     // ── Hooks à la clôture (statut 'termine' ou 'livre') — non bloquants ────
     let garantieCreee: any = null
     if (statut_apres === 'termine' || statut_apres === 'livre') {
-      const ticketRow = await getTicketBoutiqueId(db, id)
+      const ticketRow = await getTicketBoutiqueId(dbPort, id)
 
       if (ticketRow) {
         if (statut_apres === 'termine') {
@@ -304,7 +304,7 @@ tickets.put('/:id/statut', async (c) => {
         // Email notification (termine ou livre)
         try {
           const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
-          const tFull = await getTicketAvecClient(db, id)
+          const tFull = await getTicketAvecClient(dbPort, id)
 
           if (tFull?.client_email) {
             // waitUntil() obligatoire — voir commentaire équivalent sur sendTicketCree ci-dessus

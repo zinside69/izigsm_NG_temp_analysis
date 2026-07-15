@@ -25,6 +25,8 @@
  */
 
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
+import { parseUtcTimestamp } from '../lib/timezone'
+import type { Database } from '../ports/database'
 
 /**
  * Vérifie que le technicien assigné appartient bien à la boutique du ticket —
@@ -212,7 +214,7 @@ function couleurAnciennete(joursAnciennete: number): 'green' | 'orange' | 'red' 
  * @returns           — { data, pagination }
  */
 export async function listTickets(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   opts: ListTicketsOpts = {}
 ): Promise<{ data: any[]; pagination: { page: number; limit: number; total: number; pages: number } }> {
@@ -251,12 +253,11 @@ export async function listTickets(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const totRow = await db
-    .prepare(`SELECT COUNT(*) AS cnt FROM tickets t ${where}`)
-    .bind(...bindings)
-    .first<{ cnt: number }>()
+  const totRow = await db.get<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM tickets t ${where}`, bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne,
            t.appareil_marque, t.appareil_modele,
            t.prix_estime, t.prix_final, t.date_reception, t.date_promesse,
@@ -270,10 +271,10 @@ export async function listTickets(
     ${where}
     ORDER  BY t.created_at DESC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all()
+  `, [...bindings, limit, offset])
 
   return {
-    data: rows.results ?? [],
+    data: rows,
     pagination: {
       page,
       limit,
@@ -293,10 +294,10 @@ export async function listTickets(
  * @returns           — { colonnes: ColonneKanban[], stats }
  */
 export async function getKanban(
-  db: D1Database,
+  db: Database,
   boutiqueId: number
 ): Promise<{ colonnes: any[]; stats: { total_actifs: number; urgents: number; en_retard: number } }> {
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT t.id, t.numero, t.statut, t.priorite,
            t.appareil_marque, t.appareil_modele, t.description_panne,
            t.prix_estime, t.prix_final,
@@ -316,7 +317,7 @@ export async function getKanban(
     ORDER  BY
       CASE t.priorite WHEN 'urgente' THEN 1 WHEN 'haute' THEN 2 WHEN 'normale' THEN 3 ELSE 4 END,
       t.date_reception ASC
-  `).bind(boutiqueId).all<any>()
+  `, [boutiqueId])
 
   // Initialiser toutes les colonnes dans l'ordre du Kanban
   const colonnesMap: Record<string, any> = {}
@@ -330,7 +331,7 @@ export async function getKanban(
 
   // Répartir les tickets dans leur colonne + enrichir
   const maintenant = new Date()
-  for (const t of rows.results ?? []) {
+  for (const t of rows) {
     const statut = t.statut as StatutTicket
     const enrichi = {
       ...t,
@@ -342,13 +343,15 @@ export async function getKanban(
     }
   }
 
-  const tous = rows.results ?? []
+  // date_promesse est un horodatage SQLite ("YYYY-MM-DD HH:MM:SS", sans suffixe
+  // de fuseau) — parseUtcTimestamp() évite qu'il soit interprété en heure locale
+  // du runtime (voir lib/timezone.ts, bug déjà corrigé sur personnelService.ts).
   const stats = {
-    total_actifs: tous.filter((t: any) => !['livre', 'annule'].includes(t.statut)).length,
-    urgents:      tous.filter((t: any) => t.priorite === 'urgente').length,
-    en_retard:    tous.filter((t: any) =>
+    total_actifs: rows.filter((t: any) => !['livre', 'annule'].includes(t.statut)).length,
+    urgents:      rows.filter((t: any) => t.priorite === 'urgente').length,
+    en_retard:    rows.filter((t: any) =>
       t.date_promesse &&
-      new Date(t.date_promesse) < maintenant &&
+      parseUtcTimestamp(t.date_promesse) < maintenant &&
       !['livre', 'annule', 'termine'].includes(t.statut)
     ).length,
   }
@@ -364,10 +367,10 @@ export async function getKanban(
  * @returns   — TicketRow enrichi, ou null si introuvable
  */
 export async function getTicketById(
-  db: D1Database,
+  db: Database,
   id: number
 ): Promise<any | null> {
-  const ticket = await db.prepare(`
+  const ticket = await db.get<any>(`
     SELECT t.*,
            c.prenom || ' ' || c.nom   AS client_nom,
            c.email                    AS client_email,
@@ -377,27 +380,27 @@ export async function getTicketById(
     JOIN   clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.technicien_id
     WHERE  t.id = ? AND t.actif = 1
-  `).bind(id).first()
+  `, [id])
 
   if (!ticket) return null
 
   const [historique, photos] = await Promise.all([
-    db.prepare(`
+    db.all<any>(`
       SELECT h.*, u.prenom || ' ' || u.nom AS user_nom
       FROM   tickets_statuts_historique h
       JOIN   users u ON u.id = h.user_id
       WHERE  h.ticket_id = ?
       ORDER  BY h.created_at ASC
-    `).bind(id).all(),
-    db.prepare(`
+    `, [id]),
+    db.all<any>(`
       SELECT * FROM tickets_photos WHERE ticket_id = ? ORDER BY created_at
-    `).bind(id).all(),
+    `, [id]),
   ])
 
   return {
     ...ticket,
-    historique: historique.results ?? [],
-    photos:     photos.results     ?? [],
+    historique,
+    photos,
   }
 }
 
@@ -650,13 +653,10 @@ export async function deleteTicket(
  * @returns  `{ boutique_id }` ou `null` si ticket introuvable
  */
 export async function getTicketBoutiqueId(
-  db: D1Database,
+  db: Database,
   id: number
 ): Promise<{ boutique_id: number } | null> {
-  return db
-    .prepare('SELECT boutique_id FROM tickets WHERE id = ?')
-    .bind(id)
-    .first<{ boutique_id: number }>()
+  return db.get<{ boutique_id: number }>('SELECT boutique_id FROM tickets WHERE id = ?', [id])
 }
 
 /**
@@ -718,15 +718,14 @@ export async function archiveTicket(
  * @returns          — Nombre de tickets archivés
  */
 export async function checkAndArchiveTickets(
-  db:         D1Database,
+  db:         Database,
   boutiqueId: number,
   days:       number = 90
 ): Promise<number> {
-  const conditions = boutiqueId > 0
-    ? `boutique_id = ${boutiqueId} AND`
-    : ''
+  const conditions = boutiqueId > 0 ? 'boutique_id = ? AND' : ''
+  const bindings   = boutiqueId > 0 ? [boutiqueId, days] : [days]
 
-  const result = await db.prepare(`
+  const result = await db.run(`
     UPDATE tickets
     SET    archived_at = CURRENT_TIMESTAMP,
            updated_at  = CURRENT_TIMESTAMP
@@ -735,13 +734,13 @@ export async function checkAndArchiveTickets(
       AND  archived_at IS NULL
       AND  statut      IN ('livre', 'annule')
       AND  updated_at <= datetime('now', '-' || ? || ' days')
-  `).bind(days).run()
+  `, bindings)
 
-  return (result.meta.changes as number) ?? 0
+  return result.changes ?? 0
 }
 
 export async function getTicketAvecClient(
-  db: D1Database,
+  db: Database,
   id: number
 ): Promise<{
   numero:         string
@@ -753,11 +752,11 @@ export async function getTicketAvecClient(
   client_email:   string | null
   client_prenom:  string
 } | null> {
-  return db.prepare(`
+  return db.get(`
     SELECT t.numero, t.tracking_token, t.prix_final, t.diagnostic,
            t.appareil_marque, t.appareil_modele,
            c.email AS client_email, c.prenom AS client_prenom
     FROM tickets t JOIN clients c ON c.id = t.client_id
     WHERE t.id = ? LIMIT 1
-  `).bind(id).first()
+  `, [id])
 }
