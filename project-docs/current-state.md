@@ -1,4 +1,12 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 18)
+# iziGSM — État courant (MàJ : 2026-07-15, fix auth frontend post-déploiement)
+
+## Fix auth frontend — 2026-07-15 (signalé par test utilisateur `telnet@bbox.fr`)
+
+3 bugs auth frontend corrigés et déployés (détail complet `bugs.md`) : `uploadPhoto()`/`archiverTicket()` (`tickets.js`) envoyaient un token toujours vide → 401 "Token manquant." systématique sur ajout photo/archivage ; `tryRefreshToken()` (`app.js`) envoyait un corps de requête et lisait une réponse au mauvais format (snake_case au lieu du camelCase réel de l'API) → le refresh JWT n'a jamais fonctionné, déconnexion silencieuse après 1h. `sw.js` `CACHE_VERSION` bumpée à `v2.48` pour forcer l'invalidation du cache App Shell chez les utilisateurs déjà connectés. Validé en prod (login + appels API directs), propagation confirmée sur `repairdesk.fr`.
+
+## Déploiement production — 2026-07-15 (post checkpoint 20)
+
+Les 15 checkpoints en attente depuis le checkpoint 5 (6→20, chantier Ports & Adapters complet) ont été **déployés en production** sur `repairdesk.fr` (`npm run build` → `wrangler pages deploy dist --project-name izigsm`). Suite de tests avant déploiement : 791/793 (2 échecs fuseau horaire connus, sans impact prod). Vérifié après déploiement : `GET https://repairdesk.fr/api/health` → 200, `version: 2.45.0`. Plus de décalage entre `origin/main` et la production.
 
 ## Chantier Ports & Adapters — TERMINÉ — 20/20 services migrés (session du 2026-07-15)
 

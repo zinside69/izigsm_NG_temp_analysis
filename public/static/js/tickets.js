@@ -964,8 +964,7 @@ async function archiverTicket() {
   if (!confirm(`Archiver le ticket #${id} ?\n\nIl sera déplacé dans l'archive et n'apparaîtra plus dans la liste principale.`)) return;
 
   try {
-    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
-    const token   = session.accessToken || session.access_token || '';
+    const token = getToken();
     const res = await fetch(`/api/tickets/${id}/archiver`, {
       method:  'POST',
       headers: token ? { 'Authorization': `Bearer ${token}` } : {},
@@ -1189,8 +1188,7 @@ async function uploadPhoto(ticketId, blob, nom, type) {
     formData.append('photo', blob, nom);
     formData.append('type', type);
 
-    const session = JSON.parse(localStorage.getItem('izigsm_session') || '{}');
-    const token   = session.accessToken || session.access_token || '';
+    const token = getToken();
 
     if (progressBar) progressBar.style.width = '60%';
 

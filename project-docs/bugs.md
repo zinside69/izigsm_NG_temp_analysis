@@ -1,5 +1,24 @@
 # iziGSM — Bugs connus
 
+## Auth frontend cassée à 3 endroits (`Token manquant.` sur photo/archivage + refresh JWT jamais fonctionnel) — CORRIGÉ le 2026-07-15
+
+Découvert en test utilisateur post-déploiement (checkpoint 20 en prod) : compte `telnet@bbox.fr` signalait "pas accès à la liste des modèles de smartphones" + "impossible d'ajouter une photo" + message `tokens manquants`.
+
+Investigation (login direct + appels API avec token valide, `POST /api/auth/login` → `GET /api/services/modeles`/`POST /api/tickets/:id/photos`) : le **backend fonctionne correctement** (200/201 confirmés). Trois bugs cumulés côté frontend (`public/static/js/`), tous liés à une confusion de format entre le token stocké et le format réel renvoyé par l'API :
+
+1. **`tickets.js` `uploadPhoto()`** — lisait `session.accessToken || session.access_token` depuis l'objet `izigsm_session` (localStorage), qui ne contient **jamais** de champ token (seulement `name`/`email`/`role`/`boutique_id`/`company` — le JWT est stocké séparément sous la clé `izigsm_token`). Résultat : `token` toujours `''`, aucun header `Authorization` envoyé, 401 `"Token manquant."` — **toute tentative d'ajout de photo échouait à 100%**.
+2. **`tickets.js` `archiverTicket()`** — même bug exact (copié-collé probable), même conséquence sur l'archivage manuel de ticket.
+3. **`app.js` `tryRefreshToken()`** — cassé de deux façons cumulées : (a) le corps de la requête envoyait `{ refresh_token, user_id: session.id }` (snake_case) alors que `POST /api/auth/refresh` attend `{ userId, refreshToken }` (camelCase, `routes/auth.ts:373`) — **et** `session.id` était de toute façon `undefined` (`storeSession()` ne stockait jamais l'id utilisateur dans l'objet session) ; (b) la lecture de la réponse cherchait `data.access_token`/`data.refresh_token` (snake_case) alors que le backend renvoie systématiquement `accessToken`/`refreshToken` (camelCase, vérifié sur `login`/`register`/`refresh`/OAuth). **Conséquence : le refresh token n'a jamais fonctionné depuis toujours** — dès qu'un JWT expire (`expiresIn: 3600`, soit 1h), l'utilisateur est silencieusement déconnecté et redirigé vers `/login` (perte de toute saisie en cours), sans qu'aucun refresh ne soit réellement tenté avec succès. Root cause la plus probable de "liste des modèles inaccessible" côté utilisateur : session expirée au moment du test, refresh raté, redirection non remarquée dans le flux modal.
+
+**Fix appliqué** :
+- `tickets.js` : `uploadPhoto()`/`archiverTicket()` utilisent désormais `getToken()` (helper global `app.js`, lit correctement `izigsm_token`)
+- `app.js` : `storeSession()` stocke désormais `id: user.id` dans l'objet session ; `tryRefreshToken()` envoie `{ refreshToken, userId }` et lit `data.accessToken`/`data.refreshToken`
+- `sw.js` : `CACHE_VERSION` bumpée `v2.47`→`v2.48` (dette connue : le Service Worker précache l'App Shell en Cache First, sans bump le fix ne serait jamais vu par un navigateur ayant déjà installé le SW — voir entrée dédiée plus bas dans ce fichier)
+
+**Validé en prod (comptes réels, token obtenu via `/api/auth/login`)** : `GET /api/services/modeles?limit=500` → 200 (500 résultats sur 12294 en base) ; `POST /api/tickets/:id/photos` → 201 (photo de test créée puis supprimée après coup, `DELETE /api/tickets/1/photos/2` → 200). Fix déployé (`wrangler pages deploy`), propagation `repairdesk.fr` confirmée (`sw.js` sert bien `v2.48`, `app.js`/`tickets.js` ne contiennent plus l'ancien pattern cassé).
+
+**Non testé en conditions réelles** : le flux de refresh silencieux lui-même (nécessiterait d'attendre 1h avec une session active) — la correction du format de requête/réponse est néanmoins non ambiguë au vu du contrat API documenté (`routes/auth.ts`).
+
 ## `exportCsvCa()` et `getRapportComptable()` — colonne `mode_paiement` inexistante sur `factures` — CORRIGÉ le 2026-07-15
 
 Découvert en validation live lors de la migration Ports & Adapters de `statsService.ts` (checkpoint 18, service #20, dernier du chantier). `mode_paiement` ne vit **pas** sur `factures` (jamais existé dans aucune migration, confirmé par `grep` sur `migrations/*.sql`) mais sur `paiements` (`facture_id` NOT NULL, relation 1:N — une facture peut être réglée en plusieurs fois avec des modes différents). Deux endpoits cassés **depuis toujours** :

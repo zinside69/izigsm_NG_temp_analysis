@@ -378,6 +378,7 @@ function getToken() {
  */
 function storeSession(token, refreshToken, user, remember = true) {
   const session = {
+    id:           user.id,
     name:         `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
     email:        user.email,
     role:         user.role,
@@ -461,20 +462,20 @@ async function tryRefreshToken() {
     const res = await fetch('/api/auth/refresh', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ refresh_token: refresh, user_id: session.id }),
+      body:    JSON.stringify({ refreshToken: refresh, userId: session.id }),
     });
     if (!res.ok) return false;
 
     const data = await res.json();
-    if (!data.success || !data.access_token) return false;
+    if (!data.success || !data.accessToken) return false;
 
     // Mettre à jour le token
     if (localStorage.getItem('izigsm_token')) {
-      localStorage.setItem('izigsm_token', data.access_token);
-      if (data.refresh_token) localStorage.setItem('izigsm_refresh_token', data.refresh_token);
+      localStorage.setItem('izigsm_token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('izigsm_refresh_token', data.refreshToken);
     } else {
-      sessionStorage.setItem('izigsm_token', data.access_token);
-      if (data.refresh_token) sessionStorage.setItem('izigsm_refresh_token', data.refresh_token);
+      sessionStorage.setItem('izigsm_token', data.accessToken);
+      if (data.refreshToken) sessionStorage.setItem('izigsm_refresh_token', data.refreshToken);
     }
     return true;
   } catch {
