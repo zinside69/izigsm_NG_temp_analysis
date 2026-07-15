@@ -21,6 +21,8 @@ import caisseRoutes        from './routes/caisse'
 import statsRoutes                from './routes/stats'
 import { reconditionnementRoutes, bonsAchatRoutes } from './routes/reconditionnement'
 import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
+import { getPhotoById } from './services/photosService'
+import { verifyPhotoToken } from './lib/photoToken'
 import { createD1KV, d1KvCleanup } from './lib/d1kv'
 import { D1DatabaseAdapter } from './adapters/cloudflare/d1Database'
 import type { Database } from './ports/database'
@@ -121,6 +123,36 @@ app.get('/api/calendar/:filename', async (c) => {
         'Content-Disposition': 'inline; filename="agenda-izigsm.ics"',
         'Cache-Control':       'no-cache, no-store',
       }
+    })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
+// ─── Route photo publique (SANS auth — token dédié, voir lib/photoToken.ts) ──
+// Consomme les jetons émis par GET /api/tickets/:id/photos/:photoId/url —
+// nécessaire car une balise <img src> ne peut jamais porter de header Authorization.
+app.get('/api/photo-view/:token', async (c) => {
+  try {
+    const token   = c.req.param('token')
+    const payload = await verifyPhotoToken(token, c.env.JWT_SECRET)
+    if (!payload) return c.json({ success: false, error: 'Lien invalide ou expiré.' }, 401)
+
+    const r2 = c.env.PHOTOS
+    if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
+
+    const meta = await getPhotoById(c.get('db'), payload.photoId)
+    if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
+
+    const obj = await r2.get(meta.r2_key)
+    if (!obj) return c.json({ success: false, error: 'Fichier introuvable dans le stockage.' }, 404)
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type':        meta.mime_type,
+        'Cache-Control':       'private, max-age=300',
+        'Content-Disposition': `inline; filename="${meta.nom_fichier}"`,
+      },
     })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)

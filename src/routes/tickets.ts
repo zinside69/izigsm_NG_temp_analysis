@@ -31,6 +31,7 @@ import {
   type StatutTicket,
 } from '../services/ticketService'
 import { getClientEmailPrenom } from '../services/clientService'
+import { signPhotoToken } from '../lib/photoToken'
 import { createGarantieFromTicket } from '../services/garantiesService'
 import { sendTicketCree, sendTicketTermine, sendTicketLivre } from '../services/emailService'
 import {
@@ -473,6 +474,39 @@ tickets.get('/:id/photos/:photoId/view', async (c) => {
         'Content-Disposition': `inline; filename="${meta.nom_fichier}"`,
       },
     })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500)
+  }
+})
+
+// ── GET /api/tickets/:id/photos/:photoId/url ──────────────────────────────────
+/**
+ * Retourne une URL d'accès directe et courte durée (5 min) à une photo, utilisable
+ * telle quelle dans `<img src>` — contourne la limitation des balises `<img>` qui
+ * ne peuvent jamais porter de header `Authorization` (voir lib/photoToken.ts).
+ * @param id      — ID du ticket
+ * @param photoId — ID de la photo
+ * @returns { success, url, expires_in }
+ */
+tickets.get('/:id/photos/:photoId/url', async (c) => {
+  const { user, dbPort } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+  const photoId  = parseInt(c.req.param('photoId'), 10)
+
+  try {
+    const ticket = await getTicketForPhoto(dbPort, ticketId)
+    if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+
+    const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
+    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
+      return c.json({ success: false, error: 'Accès refusé.' }, 403)
+    }
+
+    const meta = await getPhotoById(dbPort, photoId)
+    if (!meta || meta.ticket_id !== ticketId) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
+
+    const token = await signPhotoToken(photoId, boutiqueId, c.env.JWT_SECRET)
+    return c.json({ success: true, url: `/api/photo-view/${token}`, expires_in: 300 })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500)
   }

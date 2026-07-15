@@ -1121,32 +1121,30 @@ function buildPhotoThumb(ticketId, photo) {
   div.className = 'photo-thumb';
   div.dataset.photoId = photo.id;
 
-  const imgUrl = `/api/tickets/${ticketId}/photos/${photo.id}/view`;
-
   div.innerHTML = `
     <img alt="${esc(photo.nom_fichier)}" loading="lazy">
     <button class="photo-thumb-del" onclick="deletePhotoConfirm(event, ${ticketId}, ${photo.id})" title="Supprimer">✕</button>
     <div class="photo-thumb-label">${esc(photo.nom_fichier)}</div>
   `;
   const imgEl = div.querySelector('img');
-  loadAuthenticatedImage(imgUrl, imgEl);
-  imgEl.addEventListener('click', () => openLightbox(imgUrl));
+  loadAuthenticatedImage(ticketId, photo.id, imgEl);
+  imgEl.addEventListener('click', () => openLightbox(ticketId, photo.id));
   return div;
 }
 
 /**
- * loadAuthenticatedImage — charge une image protégée par JWT (route /view,
- * derrière authMiddleware) via fetch() + Authorization, puis l'affiche via une
- * blob URL. Une balise <img src="..."> classique ne peut porter aucun header
- * Authorization — c'est pour ça que les vignettes/la lightbox n'ont jamais
- * fonctionné (401 systématique, silencieux côté <img>).
+ * loadAuthenticatedImage — affiche une photo protégée par JWT dans une balise
+ * <img>, qui ne peut jamais porter de header Authorization. Récupère d'abord
+ * une URL courte durée (5 min) via GET /photos/:photoId/url (JSON, authentifié
+ * normalement), puis l'affecte directement à img.src — le token est encodé
+ * dans l'URL elle-même (voir src/lib/photoToken.ts côté backend), pas de
+ * fetch()/blob intermédiaire nécessaire.
  */
-async function loadAuthenticatedImage(url, imgEl) {
+async function loadAuthenticatedImage(ticketId, photoId, imgEl) {
   try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
-    imgEl.src = URL.createObjectURL(blob);
+    const r = await apiGet(`/api/tickets/${ticketId}/photos/${photoId}/url`);
+    if (!r.ok || !r.data?.url) throw new Error(r.error || 'URL indisponible');
+    imgEl.src = r.data.url;
   } catch (err) {
     imgEl.src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23f3f4f6%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>📷</text></svg>';
   }
@@ -1308,13 +1306,13 @@ async function deletePhotoConfirm(e, ticketId, photoId) {
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
-function openLightbox(imgUrl) {
+function openLightbox(ticketId, photoId) {
   const lb  = document.getElementById('photo-lightbox');
   const img = document.getElementById('lightbox-img');
   if (!lb || !img) return;
   lb.style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  loadAuthenticatedImage(imgUrl, img);
+  loadAuthenticatedImage(ticketId, photoId, img);
 }
 function closeLightbox() {
   const lb = document.getElementById('photo-lightbox');
