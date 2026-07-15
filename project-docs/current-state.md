@@ -1,4 +1,8 @@
-# iziGSM — État courant (MàJ : 2026-07-15, fix auth frontend post-déploiement)
+# iziGSM — État courant (MàJ : 2026-07-15, 3 fixes frontend ticket post-déploiement)
+
+## Fix 3 bugs frontend ticket — 2026-07-15 (signalé par test utilisateur `telnet@bbox.fr`)
+
+Détail complet `bugs.md`. Résumé : (1) impression fiche ticket cassée depuis Sprint 2.13 (`_triggerPrint` jamais chargé sur `tickets.html`, centralisé dans `app.js`) ; (2) changement de statut ticket jamais fonctionnel depuis le workflow granulaire 10-statuts (boutons legacy 4-statuts remplacés par génération dynamique depuis `TRANSITIONS_TICKET`) ; (3) création de ticket silencieusement écrite en localStorage seul (jamais en base) si le premier `GET /api/tickets` de la session avait raté — `saveTicket()` tente désormais toujours l'API réelle en premier. `sw.js` bumpé `v2.48`→`v2.49`. Déployé et vérifié en prod (fichiers statiques confirmés à jour), non testé en navigateur réel.
 
 ## Fix auth frontend — 2026-07-15 (signalé par test utilisateur `telnet@bbox.fr`)
 

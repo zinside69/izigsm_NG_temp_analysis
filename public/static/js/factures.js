@@ -1148,43 +1148,7 @@ function _buildFactureHTML(d) {
     </div>`;
 }
 
-/**
- * Injecte le HTML dans le DOM, masque le layout app, déclenche window.print(),
- * puis nettoie le DOM après impression.
- * Fonction partageable avec printTicket via même pattern.
- *
- * @param {string} html - HTML complet du document à imprimer (contient #print-root)
- * @returns {void}
- */
-function _triggerPrint(html) {
-  // Supprimer un éventuel print-root résiduel
-  document.getElementById('print-root')?.remove();
-  document.getElementById('_print_style_override')?.remove();
-
-  // Injecter le document à imprimer
-  const wrapper = document.createElement('div');
-  wrapper.innerHTML = html;
-  document.body.appendChild(wrapper.firstElementChild);
-
-  // Masquer le layout app pendant l'impression uniquement
-  const style = document.createElement('style');
-  style.id    = '_print_style_override';
-  style.media = 'print';
-  style.textContent = `
-    body > .app-layout { display: none !important; }
-    #print-root { display: block !important; }
-  `;
-  document.head.appendChild(style);
-
-  // Déclencher après rendu CSS (200ms) puis nettoyer après fermeture dialogue (500ms)
-  setTimeout(() => {
-    window.print();
-    setTimeout(() => {
-      document.getElementById('print-root')?.remove();
-      document.getElementById('_print_style_override')?.remove();
-    }, 500);
-  }, 200);
-}
+// _triggerPrint() est centralisé dans app.js (Principe P2), chargé avant factures.js.
 
 // ─── Gestion des lignes ───────────────────────────────────────────────────────
 function addFactureLine() {

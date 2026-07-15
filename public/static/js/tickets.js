@@ -13,6 +13,33 @@ let ticketsUseApi    = true;
 // attend l'enum PrioriteTicket en minuscules — voir saveTicket().
 const PRIORITE_MAP = { Basse: 'basse', Moyenne: 'normale', Haute: 'haute' };
 
+// Miroir de StatutTicket/TRANSITIONS_TICKET/STATUT_LABELS (src/services/ticketService.ts)
+// — le bouton "Changer le statut" doit envoyer l'enum réel, pas un libellé legacy.
+const STATUT_LABELS = {
+  recu:           'Reçu',
+  en_diagnostic:  'En diagnostic',
+  attente_accord: 'Attente accord',
+  a_commander:    'À commander',
+  commande:       'Commandé',
+  pieces_recues:  'Pièces reçues',
+  en_reparation:  'En réparation',
+  termine:        'Terminé',
+  livre:          'Livré',
+  annule:         'Annulé',
+};
+const TRANSITIONS_TICKET = {
+  recu:           ['en_diagnostic', 'attente_accord', 'en_reparation', 'annule'],
+  en_diagnostic:  ['attente_accord', 'a_commander', 'en_reparation', 'annule'],
+  attente_accord: ['a_commander', 'en_reparation', 'annule'],
+  a_commander:    ['commande', 'en_reparation', 'annule'],
+  commande:       ['pieces_recues', 'annule'],
+  pieces_recues:  ['en_reparation', 'annule'],
+  en_reparation:  ['termine', 'annule'],
+  termine:        ['livre'],
+  livre:          [],
+  annule:         [],
+};
+
 document.addEventListener('DOMContentLoaded', function() {
   buildSidebar('tickets');
   loadTickets();   // remplace renderTickets() direct
@@ -232,8 +259,9 @@ function viewTicket(id) {
     <div style="margin-top:16px;">
       <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Changer le statut</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${['Nouveau','En cours','Terminé','Annulé'].map(s => `
-          <button class="btn btn-sm ${ticket.status===s?'btn-primary':'btn-ghost'}" onclick="changeStatus(${ticket.id},'${s}')">${s}</button>
+        <span class="btn btn-sm btn-primary" style="pointer-events:none;">${esc(STATUT_LABELS[ticket.statut] || ticket.statut)}</span>
+        ${(TRANSITIONS_TICKET[ticket.statut] || []).map(s => `
+          <button class="btn btn-sm btn-ghost" onclick="changeStatus(${ticket.id},'${s}')">${STATUT_LABELS[s] || s}</button>
         `).join('')}
       </div>
     </div>
@@ -312,7 +340,7 @@ function renderEtatSecuriteDetail(t) {
 // ─── Impression fiche ticket (Sprint 2.13) ────────────────────────────────────
 // ─── Impression / PDF fiche ticket (Sprint 2.13) ─────────────────────────────
 // Principe P4 : fonction principale déléguant à 3 sous-fonctions spécialisées.
-// _triggerPrint() est défini dans factures.js (chargé avant tickets.js).
+// _triggerPrint() est centralisé dans app.js (Principe P2), chargé avant tickets.js.
 // _money() et _fmtDateTime() proviennent de app.js (Principe P2 — centralisation).
 
 /**
@@ -678,26 +706,34 @@ async function saveTicket() {
     attachments: attachmentFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
   };
 
+  // Toujours tenter l'API réelle en premier, quel que soit l'état de `ticketsUseApi`
+  // (ce flag n'est fiable qu'au moment du dernier `loadTickets()` — un raté transitoire
+  // au chargement de page ne doit pas condamner silencieusement toute la session au
+  // localStorage : le dossier semblerait créé côté utilisateur mais ne serait jamais
+  // en base, et disparaîtrait à la reconnexion. Le fallback localStorage ne doit
+  // s'appliquer qu'en cas de vraie panne réseau — pas quand l'API répond une erreur.
   try {
-    if (ticketsUseApi) {
-      let result;
-      if (currentTicketId) {
-        result = await apiPut('/api/tickets/' + currentTicketId, ticket);
-      } else {
-        result = await apiPost('/api/tickets', ticket);
-      }
-      if (!result.ok) throw new Error(result.error || 'Erreur API');
-      showFlash(currentTicketId ? 'Prise en charge mise à jour' : 'Prise en charge créée');
-    } else {
+    let result;
+    try {
+      result = currentTicketId
+        ? await apiPut('/api/tickets/' + currentTicketId, ticket)
+        : await apiPost('/api/tickets', ticket);
+    } catch (networkErr) {
       if (currentTicketId) {
         updateInDB('tickets', currentTicketId, ticket);
-        showFlash('Prise en charge mise à jour');
       } else {
         ticket.createdAt = new Date().toISOString();
         addToDB('tickets', ticket);
-        showFlash('Prise en charge créée');
       }
+      ticketsUseApi = false;
+      showFlash('Réseau indisponible — prise en charge enregistrée hors ligne, à resynchroniser.', 'error');
+      closeModal('modal-ticket');
+      await loadTickets();
+      return;
     }
+    if (!result.ok) throw new Error(result.error || 'Erreur API');
+    ticketsUseApi = true;
+    showFlash(currentTicketId ? 'Prise en charge mise à jour' : 'Prise en charge créée');
     closeModal('modal-ticket');
     await loadTickets();
   } catch (err) {
