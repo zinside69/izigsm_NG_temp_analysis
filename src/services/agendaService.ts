@@ -18,6 +18,8 @@
  */
 
 import { parsePagination } from '../lib/db'
+import { todayParis } from '../lib/timezone'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,7 +101,7 @@ function computeFin(debut: string, dureeMinutes: number): string {
  * @returns           `{ data: RendezVous[], total, page, limit }`
  */
 export async function listRendezVous(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   query: Record<string, string> = {}
 ) {
@@ -142,14 +144,14 @@ export async function listRendezVous(
   const { limit, offset, page } = parsePagination(query)
 
   // Deux requêtes parallèles : count total + page courante
-  const total = await db.prepare(
+  const total = await db.get<{ cnt: number }>(
     `SELECT COUNT(*) as cnt
      FROM rendez_vous r
      LEFT JOIN clients c ON c.id = r.client_id
-     ${where}`
-  ).bind(...bindings).first<{ cnt: number }>()
+     ${where}`, bindings
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT
       r.*,
       c.nom        AS client_nom,
@@ -164,10 +166,10 @@ export async function listRendezVous(
     ${where}
     ORDER BY r.debut ASC
     LIMIT ? OFFSET ?
-  `).bind(...bindings, limit, offset).all<any>()
+  `, [...bindings, limit, offset])
 
   return {
-    data:  rows.results ?? [],
+    data:  rows,
     total: total?.cnt ?? 0,
     page,
     limit,
@@ -183,8 +185,8 @@ export async function listRendezVous(
  * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
  * @returns           RDV enrichi (client, tech, ticket) ou `null` si introuvable / soft-deleted
  */
-export async function getRendezVous(db: D1Database, id: number, boutiqueId: number) {
-  return db.prepare(`
+export async function getRendezVous(db: Database, id: number, boutiqueId: number) {
+  return db.get<any>(`
     SELECT
       r.*,
       c.nom        AS client_nom,
@@ -200,7 +202,7 @@ export async function getRendezVous(db: D1Database, id: number, boutiqueId: numb
     LEFT JOIN users   u ON u.id = r.user_id
     LEFT JOIN tickets t ON t.id = r.ticket_id
     WHERE r.id = ? AND r.boutique_id = ? AND r.actif = 1
-  `).bind(id, boutiqueId).first<any>()
+  `, [id, boutiqueId])
 }
 
 /**
@@ -221,7 +223,7 @@ export async function getRendezVous(db: D1Database, id: number, boutiqueId: numb
  * @throws            Error si l'insertion échoue
  */
 export async function createRendezVous(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   body: any,
   userId: number
@@ -233,7 +235,7 @@ export async function createRendezVous(
   // Token unique pour l'intégration iCal / rappel email
   const token  = generateToken()
 
-  const result = await db.prepare(`
+  const result = await db.get<{ id: number }>(`
     INSERT INTO rendez_vous
       (boutique_id, client_id, ticket_id, user_id,
        titre, description, debut, fin, duree_minutes,
@@ -242,7 +244,7 @@ export async function createRendezVous(
        rappel_minutes, ical_token, couleur, notes)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     RETURNING id
-  `).bind(
+  `, [
     boutiqueId,
     body.client_id    ? Number(body.client_id)    : null,
     body.ticket_id    ? Number(body.ticket_id)    : null,
@@ -260,7 +262,7 @@ export async function createRendezVous(
     token,
     body.couleur      || '#3B82F6',
     body.notes        || null
-  ).first<{ id: number }>()
+  ])
 
   if (!result?.id) throw new Error('Erreur création RDV.')
   return { id: result.id }
@@ -277,15 +279,15 @@ export async function createRendezVous(
  * @throws            Error si le RDV est introuvable ou soft-deleted
  */
 export async function updateRendezVous(
-  db: D1Database,
+  db: Database,
   id: number,
   boutiqueId: number,
   body: any
 ): Promise<void> {
   // Lire l'état actuel pour les fallbacks (champs non modifiés)
-  const rdv = await db.prepare(
-    'SELECT * FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1'
-  ).bind(id, boutiqueId).first<RendezVous>()
+  const rdv = await db.get<RendezVous>(
+    'SELECT * FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1', [id, boutiqueId]
+  )
 
   if (!rdv) throw new Error('RDV introuvable.')
 
@@ -294,7 +296,7 @@ export async function updateRendezVous(
   const debut = body.debut || rdv.debut
   const fin   = body.fin   || computeFin(debut, duree)
 
-  await db.prepare(`
+  await db.run(`
     UPDATE rendez_vous
     SET
       client_id        = ?,
@@ -314,7 +316,7 @@ export async function updateRendezVous(
       notes            = ?,
       updated_at       = CURRENT_TIMESTAMP
     WHERE id = ? AND boutique_id = ?
-  `).bind(
+  `, [
     body.client_id    != null ? Number(body.client_id)    : rdv.client_id,
     body.ticket_id    != null ? Number(body.ticket_id)    : rdv.ticket_id,
     body.user_id      != null ? Number(body.user_id)      : rdv.user_id,
@@ -332,7 +334,7 @@ export async function updateRendezVous(
     body.notes                ?? rdv.notes,
     id,
     boutiqueId
-  ).run()
+  ])
 }
 
 /**
@@ -351,14 +353,14 @@ export async function updateRendezVous(
  * @throws              Error si transition interdite ou RDV introuvable
  */
 export async function updateStatutRdv(
-  db: D1Database,
+  db: Database,
   id: number,
   boutiqueId: number,
   nouveauStatut: string
 ): Promise<void> {
-  const rdv = await db.prepare(
-    'SELECT statut FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1'
-  ).bind(id, boutiqueId).first<{ statut: string }>()
+  const rdv = await db.get<{ statut: string }>(
+    'SELECT statut FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1', [id, boutiqueId]
+  )
 
   if (!rdv) throw new Error('RDV introuvable.')
 
@@ -377,11 +379,11 @@ export async function updateStatutRdv(
     throw new Error(`Transition interdite : ${rdv.statut} → ${nouveauStatut}. Autorisées : ${allowed.join(', ') || 'aucune'}`)
   }
 
-  await db.prepare(`
+  await db.run(`
     UPDATE rendez_vous
     SET statut = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND boutique_id = ?
-  `).bind(nouveauStatut, id, boutiqueId).run()
+  `, [nouveauStatut, id, boutiqueId])
 }
 
 /**
@@ -393,15 +395,15 @@ export async function updateStatutRdv(
  * @param boutiqueId  Identifiant de la boutique
  * @throws            Error si le RDV est introuvable ou déjà supprimé
  */
-export async function deleteRendezVous(db: D1Database, id: number, boutiqueId: number): Promise<void> {
-  const rdv = await db.prepare(
-    'SELECT id FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1'
-  ).bind(id, boutiqueId).first()
+export async function deleteRendezVous(db: Database, id: number, boutiqueId: number): Promise<void> {
+  const rdv = await db.get(
+    'SELECT id FROM rendez_vous WHERE id = ? AND boutique_id = ? AND actif = 1', [id, boutiqueId]
+  )
   if (!rdv) throw new Error('RDV introuvable.')
 
-  await db.prepare(
-    'UPDATE rendez_vous SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).bind(id).run()
+  await db.run(
+    'UPDATE rendez_vous SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]
+  )
 }
 
 // ─── Vue agenda (plage de dates) ─────────────────────────────────────────────
@@ -418,7 +420,7 @@ export async function deleteRendezVous(db: D1Database, id: number, boutiqueId: n
  * @returns           Dictionnaire `{ "YYYY-MM-DD": RendezVous[] }` trié par heure
  */
 export async function getAgendaView(
-  db: D1Database,
+  db: Database,
   boutiqueId: number,
   dateDebut: string,
   dateFin: string,
@@ -440,7 +442,7 @@ export async function getAgendaView(
 
   const where = 'WHERE ' + conditions.join(' AND ')
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT
       r.*,
       c.nom       AS client_nom,
@@ -453,11 +455,11 @@ export async function getAgendaView(
     LEFT JOIN users   u ON u.id = r.user_id
     ${where}
     ORDER BY r.debut ASC
-  `).bind(...bindings).all<any>()
+  `, bindings)
 
   // Regroupement par date YYYY-MM-DD (première partie du datetime)
   const grouped: Record<string, any[]> = {}
-  for (const rdv of rows.results ?? []) {
+  for (const rdv of rows) {
     const dateKey = rdv.debut.slice(0, 10)
     if (!grouped[dateKey]) grouped[dateKey] = []
     grouped[dateKey].push(rdv)
@@ -477,28 +479,26 @@ export async function getAgendaView(
  * @returns           `{ total_rdv, rdv_auj, rdv_semaine, en_attente, taux_honore }`
  *                    - `taux_honore` : % de RDV passés au statut DONE sur le total non-annulé
  */
-export async function getKpisAgenda(db: D1Database, boutiqueId: number) {
-  const today     = new Date().toISOString().slice(0, 10)
-  const weekStart = getWeekStart(new Date())
-  const weekEnd   = getWeekEnd(new Date())
+export async function getKpisAgenda(db: Database, boutiqueId: number) {
+  // todayParis() : "debut" est saisi en heure locale France (formulaire RDV, jamais converti
+  // en UTC) — comparer contre une date UTC (ancien new Date().toISOString()) désynchronisait
+  // le jour calendaire près de minuit, même en production (Workers tourne en UTC).
+  const today     = todayParis()
+  const weekStart = getWeekStart(today)
+  const weekEnd   = getWeekEnd(today)
 
   // 5 requêtes parallèles pour performance maximale
   const [total, aujourdhui, semaine, en_attente, taux_done] = await Promise.all([
     // Total RDV non-annulés (dénominateur du taux honoré)
-    db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut!='CANCELLED'")
-      .bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut!='CANCELLED'", [boutiqueId]),
     // RDV du jour calendaire
-    db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND DATE(debut)=? AND statut!='CANCELLED'")
-      .bind(boutiqueId, today).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND DATE(debut)=? AND statut!='CANCELLED'", [boutiqueId, today]),
     // RDV de la semaine courante (lundi–dimanche)
-    db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND debut>=? AND debut<=? AND statut!='CANCELLED'")
-      .bind(boutiqueId, weekStart, weekEnd).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND debut>=? AND debut<=? AND statut!='CANCELLED'", [boutiqueId, weekStart, weekEnd]),
     // RDV en attente de confirmation ou planifiés
-    db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut IN ('PENDING','SCHEDULED')")
-      .bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut IN ('PENDING','SCHEDULED')", [boutiqueId]),
     // RDV effectivement honorés (DONE) — numérateur du taux
-    db.prepare("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut='DONE'")
-      .bind(boutiqueId).first<{ cnt: number }>(),
+    db.get<{ cnt: number }>("SELECT COUNT(*) as cnt FROM rendez_vous WHERE boutique_id=? AND actif=1 AND statut='DONE'", [boutiqueId]),
   ])
 
   const totalDone = total?.cnt ?? 0
@@ -525,18 +525,18 @@ export async function getKpisAgenda(db: D1Database, boutiqueId: number) {
  * @param boutiqueId  Identifiant de la boutique
  * @returns           Token hex (32 caractères)
  */
-export async function getOrCreateIcalToken(db: D1Database, boutiqueId: number): Promise<string> {
-  const existing = await db.prepare(
-    'SELECT token FROM boutique_ical_tokens WHERE boutique_id = ?'
-  ).bind(boutiqueId).first<{ token: string }>()
+export async function getOrCreateIcalToken(db: Database, boutiqueId: number): Promise<string> {
+  const existing = await db.get<{ token: string }>(
+    'SELECT token FROM boutique_ical_tokens WHERE boutique_id = ?', [boutiqueId]
+  )
 
   if (existing?.token) return existing.token
 
   // Créer un nouveau token permanent pour cette boutique
   const token = generateToken()
-  await db.prepare(
-    'INSERT INTO boutique_ical_tokens (boutique_id, token) VALUES (?, ?)'
-  ).bind(boutiqueId, token).run()
+  await db.run(
+    'INSERT INTO boutique_ical_tokens (boutique_id, token) VALUES (?, ?)', [boutiqueId, token]
+  )
   return token
 }
 
@@ -553,12 +553,12 @@ export async function getOrCreateIcalToken(db: D1Database, boutiqueId: number): 
  * @param boutiqueId  Identifiant de la boutique
  * @returns           Chaîne iCal complète (Content-Type: text/calendar)
  */
-export async function generateIcal(db: D1Database, boutiqueId: number): Promise<string> {
-  const boutique = await db.prepare(
-    'SELECT nom FROM boutiques WHERE id = ?'
-  ).bind(boutiqueId).first<{ nom: string }>()
+export async function generateIcal(db: Database, boutiqueId: number): Promise<string> {
+  const boutique = await db.get<{ nom: string }>(
+    'SELECT nom FROM boutiques WHERE id = ?', [boutiqueId]
+  )
 
-  const rows = await db.prepare(`
+  const rows = await db.all<any>(`
     SELECT r.*, c.nom AS client_nom, c.prenom AS client_prenom
     FROM rendez_vous r
     LEFT JOIN clients c ON c.id = r.client_id
@@ -567,7 +567,7 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
       AND r.debut >= datetime('now', '-30 days')
     ORDER BY r.debut ASC
     LIMIT 500
-  `).bind(boutiqueId).all<any>()
+  `, [boutiqueId])
 
   // En-tête du calendrier iCal (RFC 5545 §3.4)
   const lines: string[] = [
@@ -581,7 +581,7 @@ export async function generateIcal(db: D1Database, boutiqueId: number): Promise<
   ]
 
   // Génération d'un VEVENT par rendez-vous
-  for (const rdv of rows.results ?? []) {
+  for (const rdv of rows) {
     const dtStart = toIcalDate(rdv.debut)
     const dtEnd   = toIcalDate(rdv.fin)
     const summary = escIcal(rdv.titre)
@@ -644,30 +644,33 @@ function escIcal(s: string): string {
 }
 
 /**
- * Retourne la date/heure du lundi de la semaine courante (ISO local).
- * Utilisé par getKpisAgenda() pour délimiter la semaine calendaire.
+ * Retourne la date/heure du lundi de la semaine courante.
+ * Utilisé par getKpisAgenda() pour délimiter la semaine calendaire française.
  *
- * @param d  Date de référence
- * @returns  "YYYY-MM-DD 00:00:00" du lundi de la semaine
+ * Prend une date "YYYY-MM-DD" (calendrier Paris, voir todayParis()) et calcule
+ * en arithmétique UTC pure (getUTCDay/setUTCDate) — indépendant du fuseau horaire
+ * de la machine qui exécute le code (contrairement à l'ancienne version basée sur
+ * `new Date().getDay()`, ambiguë en dev local hors UTC).
+ *
+ * @param dateParis  Date de référence "YYYY-MM-DD" (heure Paris)
+ * @returns          "YYYY-MM-DD 00:00:00" du lundi de la semaine
  */
-function getWeekStart(d: Date): string {
-  const day = d.getDay() || 7  // getDay() retourne 0 pour dimanche → normalise à 7
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - day + 1)
-  monday.setHours(0, 0, 0, 0)
-  return monday.toISOString().replace('T', ' ').slice(0, 19)
+function getWeekStart(dateParis: string): string {
+  const d = new Date(`${dateParis}T00:00:00Z`)
+  const day = d.getUTCDay() || 7  // getUTCDay() retourne 0 pour dimanche → normalise à 7
+  d.setUTCDate(d.getUTCDate() - day + 1)
+  return d.toISOString().slice(0, 10) + ' 00:00:00'
 }
 
 /**
- * Retourne la date/heure du dimanche de la semaine courante (ISO local).
+ * Retourne la date/heure du dimanche de la semaine courante (voir getWeekStart()).
  *
- * @param d  Date de référence
- * @returns  "YYYY-MM-DD 23:59:59" du dimanche de la semaine
+ * @param dateParis  Date de référence "YYYY-MM-DD" (heure Paris)
+ * @returns          "YYYY-MM-DD 23:59:59" du dimanche de la semaine
  */
-function getWeekEnd(d: Date): string {
-  const day = d.getDay() || 7
-  const sunday = new Date(d)
-  sunday.setDate(d.getDate() - day + 7)
-  sunday.setHours(23, 59, 59, 0)
-  return sunday.toISOString().replace('T', ' ').slice(0, 19)
+function getWeekEnd(dateParis: string): string {
+  const d = new Date(`${dateParis}T00:00:00Z`)
+  const day = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() - day + 7)
+  return d.toISOString().slice(0, 10) + ' 23:59:59'
 }

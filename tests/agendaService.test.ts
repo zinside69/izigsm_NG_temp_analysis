@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   STATUTS_RDV,
   TYPES_RDV,
@@ -134,10 +134,10 @@ describe('TYPES_RDV', () => {
 // ─── listRendezVous ───────────────────────────────────────────────────────────
 
 describe('listRendezVous()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_COUNT_RDV, { cnt: 2 })
     db.__setListResponse(SQL_LIST_RDV, [RDV_ENRICHI, { ...RDV_ENRICHI, id: 2 }])
   })
@@ -235,10 +235,10 @@ describe('listRendezVous()', () => {
 // ─── getRendezVous ────────────────────────────────────────────────────────────
 
 describe('getRendezVous()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne null si RDV absent', async () => {
@@ -282,10 +282,10 @@ describe('getRendezVous()', () => {
 // ─── createRendezVous ─────────────────────────────────────────────────────────
 
 describe('createRendezVous()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_INSERT_RDV, { id: 42 })
   })
 
@@ -412,10 +412,10 @@ describe('createRendezVous()', () => {
 // ─── updateRendezVous ─────────────────────────────────────────────────────────
 
 describe('updateRendezVous()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('lève Error si RDV introuvable', async () => {
@@ -474,10 +474,10 @@ describe('updateRendezVous()', () => {
 // ─── updateStatutRdv ──────────────────────────────────────────────────────────
 
 describe('updateStatutRdv()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('lève Error si RDV introuvable', async () => {
@@ -586,10 +586,10 @@ describe('updateStatutRdv()', () => {
 // ─── deleteRendezVous ─────────────────────────────────────────────────────────
 
 describe('deleteRendezVous()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('lève Error si RDV absent', async () => {
@@ -624,10 +624,10 @@ describe('deleteRendezVous()', () => {
 // ─── getAgendaView ────────────────────────────────────────────────────────────
 
 describe('getAgendaView()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne un objet vide si aucun RDV', async () => {
@@ -699,7 +699,7 @@ describe('getAgendaView()', () => {
 // ─── getKpisAgenda ────────────────────────────────────────────────────────────
 
 describe('getKpisAgenda()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   function setupKpis(overrides: Partial<{
     total: number; auj: number; semaine: number; en_attente: number; done: number
@@ -713,7 +713,7 @@ describe('getKpisAgenda()', () => {
   }
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne les 5 champs KPI attendus', async () => {
@@ -797,10 +797,10 @@ describe('getKpisAgenda()', () => {
 // ─── getOrCreateIcalToken ─────────────────────────────────────────────────────
 
 describe('getOrCreateIcalToken()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne le token existant si présent', async () => {
@@ -852,10 +852,10 @@ describe('getOrCreateIcalToken()', () => {
 // ─── generateIcal ─────────────────────────────────────────────────────────────
 
 describe('generateIcal()', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
     db.__setResponse(SQL_BOUTIQUE_NOM, { nom: 'iziGSM Paris' })
   })
 

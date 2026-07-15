@@ -1,4 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 16)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 17)
+
+## Chantier Ports & Adapters — 19/20 services migrés (session du 2026-07-15)
+- **agendaService.ts** (2026-07-15) — 12/12 fonctions migrées intégralement. `lib/timezone.ts` appliqué (`todayParis()` dans `getKpisAgenda`, `getWeekStart`/`getWeekEnd` refaits en arithmétique UTC pure). Câblage `routes/agenda.ts` + `index.tsx` (route iCal publique). Tests (73/75 ✅, 2 échecs confirmés pré-existants, bug `computeFin()` sans impact prod, documenté dans `bugs.md`). **Validé en local live** : CRUD RDV complet, KPIs, vue calendrier, token iCal — 9/9 ✅.
 
 ## Chantier Ports & Adapters — 18/20 services migrés (session du 2026-07-15)
 - **garantiesService.ts** (2026-07-15) — 9/10 fonctions migrées (`createSav` reste D1, dépend de `nextNumero` ×2). Fuseau horaire vérifié sans correction nécessaire (UTC↔UTC). Tests (65/65 ✅). **Validé en local live** : cycle complet ticket terminé→garantie→SAV→consommation→clôture→expiration, 10/10 ✅.

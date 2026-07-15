@@ -114,7 +114,7 @@ app.get('/api/calendar/:filename', async (c) => {
 
     if (!bt) return c.json({ success: false, error: 'Token iCal invalide.' }, 404)
 
-    const ics = await generateIcal(c.env.DB, bt.boutique_id)
+    const ics = await generateIcal(c.get('db'), bt.boutique_id)
     return new Response(ics, {
       headers: {
         'Content-Type':        'text/calendar; charset=utf-8',

@@ -34,6 +34,7 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../lib/middleware'
 import { validateRendezVous } from '../lib/validators'
+import type { Database } from '../ports/database'
 import {
   listRendezVous,
   getRendezVous,
@@ -49,7 +50,7 @@ import {
 } from '../services/agendaService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 const agenda = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -71,7 +72,7 @@ agenda.get('/agenda/kpis', authMiddleware, async (c) => {
   try {
     const { boutique_id } = c.req.query()
     if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    const data = await getKpisAgenda(c.env.DB, Number(boutique_id))
+    const data = await getKpisAgenda(c.get('db'), Number(boutique_id))
     return c.json({ success: true, data })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -111,7 +112,7 @@ agenda.get('/agenda/view', authMiddleware, async (c) => {
     const fin   = date_fin   || sunday.toISOString().replace('T', ' ').slice(0, 19)
 
     const data = await getAgendaView(
-      c.env.DB,
+      c.get('db'),
       Number(boutique_id),
       debut,
       fin,
@@ -141,7 +142,7 @@ agenda.get('/agenda/ical-token', authMiddleware, async (c) => {
   try {
     const { boutique_id } = c.req.query()
     if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    const token = await getOrCreateIcalToken(c.env.DB, Number(boutique_id))
+    const token = await getOrCreateIcalToken(c.get('db'), Number(boutique_id))
     const url   = `/api/calendar/${token}.ics`
     return c.json({ success: true, token, url })
   } catch (e: any) {
@@ -171,7 +172,7 @@ agenda.get('/agenda', authMiddleware, async (c) => {
   try {
     const query = c.req.query()
     if (!query.boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    const result = await listRendezVous(c.env.DB, Number(query.boutique_id), query)
+    const result = await listRendezVous(c.get('db'), Number(query.boutique_id), query)
     return c.json({ success: true, ...result })
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -211,7 +212,7 @@ agenda.post('/agenda', authMiddleware, async (c) => {
     if (err) return c.json({ success: false, error: err }, 400)
 
     const user = c.get('user')
-    const { id } = await createRendezVous(c.env.DB, Number(body.boutique_id), body, user.sub)
+    const { id } = await createRendezVous(c.get('db'), Number(body.boutique_id), body, user.sub)
     return c.json({ success: true, id, message: 'Rendez-vous créé.' }, 201)
   } catch (e: any) {
     return c.json({ success: false, error: e.message }, 500)
@@ -235,7 +236,7 @@ agenda.get('/agenda/:id', authMiddleware, async (c) => {
   try {
     const { boutique_id } = c.req.query()
     if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    const rdv = await getRendezVous(c.env.DB, Number(c.req.param('id')), Number(boutique_id))
+    const rdv = await getRendezVous(c.get('db'), Number(c.req.param('id')), Number(boutique_id))
     if (!rdv) return c.json({ success: false, error: 'RDV introuvable.' }, 404)
     return c.json({ success: true, data: rdv })
   } catch (e: any) {
@@ -265,7 +266,7 @@ agenda.put('/agenda/:id', authMiddleware, async (c) => {
     const err = validateRendezVous(body)
     if (err) return c.json({ success: false, error: err }, 400)
 
-    await updateRendezVous(c.env.DB, Number(c.req.param('id')), Number(body.boutique_id), body)
+    await updateRendezVous(c.get('db'), Number(c.req.param('id')), Number(body.boutique_id), body)
     return c.json({ success: true, message: 'RDV mis à jour.' })
   } catch (e: any) {
     // Détection 404 vs 400 par message d'erreur du service
@@ -308,7 +309,7 @@ agenda.patch('/agenda/:id/statut', authMiddleware, async (c) => {
     if (!(STATUTS_RDV as readonly string[]).includes(body.statut))
       return c.json({ success: false, error: `statut invalide. Valeurs : ${STATUTS_RDV.join(', ')}` }, 400)
 
-    await updateStatutRdv(c.env.DB, Number(c.req.param('id')), Number(body.boutique_id), body.statut)
+    await updateStatutRdv(c.get('db'), Number(c.req.param('id')), Number(body.boutique_id), body.statut)
     return c.json({ success: true, message: `Statut mis à jour : ${body.statut}.` })
   } catch (e: any) {
     const status = e.message.includes('introuvable') ? 404 : 400
@@ -334,7 +335,7 @@ agenda.delete('/agenda/:id', authMiddleware, async (c) => {
   try {
     const { boutique_id } = c.req.query()
     if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    await deleteRendezVous(c.env.DB, Number(c.req.param('id')), Number(boutique_id))
+    await deleteRendezVous(c.get('db'), Number(c.req.param('id')), Number(boutique_id))
     return c.json({ success: true, message: 'RDV supprimé.' })
   } catch (e: any) {
     const status = e.message.includes('introuvable') ? 404 : 500
