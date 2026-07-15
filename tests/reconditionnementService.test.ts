@@ -22,6 +22,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
+import { createMockDatabase } from './helpers/mockDatabase'
 import {
   listOrdres,
   getOrdre,
@@ -83,10 +84,10 @@ function setupNextNumero(db: any) {
 // ─── listOrdres ───────────────────────────────────────────────────────────────
 
 describe('listOrdres', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { data, pagination } par défaut', async () => {
@@ -135,10 +136,10 @@ describe('listOrdres', () => {
 // ─── getOrdre ─────────────────────────────────────────────────────────────────
 
 describe('getOrdre', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne l\'ordre enrichi si trouvé', async () => {
@@ -231,10 +232,10 @@ describe('createOrdre', () => {
 // ─── updateOrdre ──────────────────────────────────────────────────────────────
 
 describe('updateOrdre', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_GET_STATUT = `SELECT statut FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1`
@@ -269,10 +270,10 @@ describe('updateOrdre', () => {
 // ─── updateStatutOrdre ────────────────────────────────────────────────────────
 
 describe('updateStatutOrdre', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_GET_ORDRE = `SELECT * FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1`
@@ -317,10 +318,10 @@ describe('updateStatutOrdre', () => {
 // ─── terminerOrdre ────────────────────────────────────────────────────────────
 
 describe('terminerOrdre', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_GET_ORDRE_TERMINER = `SELECT * FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1`
@@ -380,10 +381,10 @@ describe('terminerOrdre', () => {
 // ─── getKpisReconditionnement ─────────────────────────────────────────────────
 
 describe('getKpisReconditionnement', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_KPIS = `SELECT COUNT(*) AS nb_total, SUM(CASE WHEN statut = 'en_cours' THEN 1 ELSE 0 END) AS nb_en_cours, SUM(CASE WHEN statut = 'termine' THEN 1 ELSE 0 END) AS nb_termines, SUM(CASE WHEN statut = 'abandonne' THEN 1 ELSE 0 END) AS nb_abandonnes, COALESCE(SUM(cout_revient), 0) AS cout_revient_total, COALESCE(SUM(CASE WHEN statut = 'termine' THEN prix_revente_ht ELSE 0 END), 0) AS ca_estime_total FROM ordres_reconditionnement WHERE boutique_id = ? AND actif = 1`
@@ -428,10 +429,10 @@ describe('getKpisReconditionnement', () => {
 // ─── listBonsAchat ────────────────────────────────────────────────────────────
 
 describe('listBonsAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne { data, pagination }', async () => {
@@ -468,10 +469,10 @@ describe('listBonsAchat', () => {
 // ─── getBonAchat ──────────────────────────────────────────────────────────────
 
 describe('getBonAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('retourne le bon enrichi si trouvé', async () => {
@@ -497,10 +498,10 @@ describe('getBonAchat', () => {
 // ─── createBonAchat ───────────────────────────────────────────────────────────
 
 describe('createBonAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   it('lève Error si montant <= 0', async () => {
@@ -545,10 +546,10 @@ describe('createBonAchat', () => {
 // ─── verifierBonAchat ─────────────────────────────────────────────────────────
 
 describe('verifierBonAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_VERIFY = `SELECT b.*, c.nom AS client_nom, c.prenom AS client_prenom, (b.montant - b.montant_utilise) AS montant_restant FROM bons_achat b LEFT JOIN clients c ON c.id = b.client_id WHERE b.code = ? AND b.boutique_id = ? AND b.actif = 1`
@@ -604,10 +605,10 @@ describe('verifierBonAchat', () => {
 // ─── consommerBonAchat ────────────────────────────────────────────────────────
 
 describe('consommerBonAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_VERIFY = `SELECT b.*, c.nom AS client_nom, c.prenom AS client_prenom, (b.montant - b.montant_utilise) AS montant_restant FROM bons_achat b LEFT JOIN clients c ON c.id = b.client_id WHERE b.code = ? AND b.boutique_id = ? AND b.actif = 1`
@@ -652,10 +653,10 @@ describe('consommerBonAchat', () => {
 // ─── annulerBonAchat ──────────────────────────────────────────────────────────
 
 describe('annulerBonAchat', () => {
-  let db: ReturnType<typeof createMockD1>
+  let db: ReturnType<typeof createMockDatabase>
 
   beforeEach(() => {
-    db = createMockD1()
+    db = createMockDatabase()
   })
 
   const SQL_GET_BON_STATUS = `SELECT statut, montant_utilise FROM bons_achat WHERE id = ? AND boutique_id = ? AND actif = 1`

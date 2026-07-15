@@ -30,6 +30,7 @@
 
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import type { Database } from '../ports/database'
 import {
   listOrdres, getOrdre, createOrdre, updateOrdre,
   updateStatutOrdre, terminerOrdre, getKpisReconditionnement,
@@ -40,7 +41,7 @@ import {
 // ─── Types Hono ───────────────────────────────────────────────────────────────
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
-type Variables = { user: any }
+type Variables = { user: any; db: Database }
 
 // ─── Initialisation des routers ───────────────────────────────────────────────
 // Deux routers séparés pour éviter les collisions entre /:id et /bons-achat/*
@@ -68,6 +69,7 @@ function ctx(c: any) {
   return {
     user:            c.get('user'),
     db:              c.env.DB as D1Database,
+    dbPort:          c.get('db') as Database,
     queryBoutiqueId: c.req.query('boutique_id') ?? undefined,
   }
 }
@@ -80,29 +82,29 @@ function ctx(c: any) {
 // Déclaré AVANT /:id pour éviter que "kpis" soit capturé comme un paramètre id.
 /** KPIs du module reconditionnement pour le dashboard */
 reconditionnement.get('/kpis', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const kpis = await getKpisReconditionnement(db, boutiqueId)
+  const kpis = await getKpisReconditionnement(dbPort, boutiqueId)
   return c.json({ success: true, data: kpis })
 })
 
 // ── GET /api/reconditionnement ────────────────────────────────────────────────
 /** Liste paginée des ordres (filtres : statut, grade, search) */
 reconditionnement.get('/', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listOrdres(db, boutiqueId, c.req.query())
+  const result = await listOrdres(dbPort, boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
 // ── POST /api/reconditionnement ───────────────────────────────────────────────
 /** Créer un nouvel ordre (rachat_id optionnel — pré-remplit l'appareil) */
 reconditionnement.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
@@ -119,12 +121,12 @@ reconditionnement.post('/', requireRole('admin', 'manager', 'technicien'), async
 // ── GET /api/reconditionnement/:id ────────────────────────────────────────────
 /** Détail d'un ordre avec rachat source et produit créé */
 reconditionnement.get('/:id', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id         = Number(c.req.param('id'))
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const ordre = await getOrdre(db, id, boutiqueId)
+  const ordre = await getOrdre(dbPort, id, boutiqueId)
   if (!ordre) return c.json({ success: false, error: 'Ordre introuvable.' }, 404)
 
   return c.json({ success: true, data: ordre })
@@ -133,7 +135,7 @@ reconditionnement.get('/:id', async (c) => {
 // ── PUT /api/reconditionnement/:id ────────────────────────────────────────────
 /** Modifier les informations d'un ordre (statuts brouillon ou en_cours uniquement) */
 reconditionnement.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = Number(c.req.param('id'))
   const body = await c.req.json()
 
@@ -141,7 +143,7 @@ reconditionnement.put('/:id', requireRole('admin', 'manager', 'technicien'), asy
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   try {
-    const ok = await updateOrdre(db, id, boutiqueId, body)
+    const ok = await updateOrdre(dbPort, id, boutiqueId, body)
     if (!ok) return c.json({ success: false, error: 'Ordre introuvable ou non modifié.' }, 404)
     return c.json({ success: true, message: 'Ordre mis à jour.' })
   } catch (err: any) {
@@ -152,7 +154,7 @@ reconditionnement.put('/:id', requireRole('admin', 'manager', 'technicien'), asy
 // ── PATCH /api/reconditionnement/:id/statut ───────────────────────────────────
 /** Changer le statut d'un ordre (transitions : brouillon→en_cours, en_cours→abandonne…) */
 reconditionnement.patch('/:id/statut', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = Number(c.req.param('id'))
   const body = await c.req.json()
 
@@ -163,7 +165,7 @@ reconditionnement.patch('/:id/statut', requireRole('admin', 'manager', 'technici
   if (!statut) return c.json({ success: false, error: 'Champ statut requis.' }, 400)
 
   try {
-    const updated = await updateStatutOrdre(db, id, boutiqueId, statut)
+    const updated = await updateStatutOrdre(dbPort, id, boutiqueId, statut)
     return c.json({ success: true, data: updated })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 400)
@@ -173,7 +175,7 @@ reconditionnement.patch('/:id/statut', requireRole('admin', 'manager', 'technici
 // ── POST /api/reconditionnement/:id/terminer ──────────────────────────────────
 /** Clôturer un ordre : valide la transition, crée/MAJ le produit en stock */
 reconditionnement.post('/:id/terminer', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = Number(c.req.param('id'))
   const body = await c.req.json()
 
@@ -190,7 +192,7 @@ reconditionnement.post('/:id/terminer', requireRole('admin', 'manager'), async (
   }
 
   try {
-    const ordre = await terminerOrdre(db, id, boutiqueId, {
+    const ordre = await terminerOrdre(dbPort, id, boutiqueId, {
       prix_revente_ht,
       grade,
       description_travaux,
@@ -214,7 +216,7 @@ reconditionnement.post('/:id/terminer', requireRole('admin', 'manager'), async (
 // Déclaré AVANT /:id — le segment "verifier" doit prendre priorité sur le paramètre.
 /** Vérifie un code bon d'achat avant encaissement (sans le consommer) */
 bonsAchat.post('/verifier', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
@@ -223,25 +225,25 @@ bonsAchat.post('/verifier', async (c) => {
   const { code } = body
   if (!code) return c.json({ success: false, error: 'Champ code requis.' }, 400)
 
-  const result = await verifierBonAchat(db, code, boutiqueId)
+  const result = await verifierBonAchat(dbPort, code, boutiqueId)
   return c.json({ success: true, data: result })
 })
 
 // ── GET /api/bons-achat ───────────────────────────────────────────────────────
 /** Liste paginée des bons d'achat (filtres : statut, client_id, search) */
 bonsAchat.get('/', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const result = await listBonsAchat(db, boutiqueId, c.req.query())
+  const result = await listBonsAchat(dbPort, boutiqueId, c.req.query())
   return c.json({ success: true, ...result })
 })
 
 // ── POST /api/bons-achat ──────────────────────────────────────────────────────
 /** Émettre un nouveau bon d'achat (admin et manager uniquement) */
 bonsAchat.post('/', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
@@ -252,7 +254,7 @@ bonsAchat.post('/', requireRole('admin', 'manager'), async (c) => {
   }
 
   try {
-    const bon = await createBonAchat(db, boutiqueId, body)
+    const bon = await createBonAchat(dbPort, boutiqueId, body)
     return c.json({ success: true, data: bon }, 201)
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 400)
@@ -262,12 +264,12 @@ bonsAchat.post('/', requireRole('admin', 'manager'), async (c) => {
 // ── GET /api/bons-achat/:id ───────────────────────────────────────────────────
 /** Détail d'un bon d'achat avec client + facture d'utilisation */
 bonsAchat.get('/:id', async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id         = Number(c.req.param('id'))
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const bon = await getBonAchat(db, id, boutiqueId)
+  const bon = await getBonAchat(dbPort, id, boutiqueId)
   if (!bon) return c.json({ success: false, error: 'Bon d\'achat introuvable.' }, 404)
 
   return c.json({ success: true, data: bon })
@@ -276,7 +278,7 @@ bonsAchat.get('/:id', async (c) => {
 // ── POST /api/bons-achat/:id/consommer ────────────────────────────────────────
 /** Encaisser un bon d'achat sur une facture (consommation totale ou partielle) */
 bonsAchat.post('/:id/consommer', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = Number(c.req.param('id'))
   const body = await c.req.json()
 
@@ -291,7 +293,7 @@ bonsAchat.post('/:id/consommer', requireRole('admin', 'manager', 'technicien'), 
   }
 
   try {
-    const bon = await consommerBonAchat(db, code, boutiqueId, facture_id, montant_utilise)
+    const bon = await consommerBonAchat(dbPort, code, boutiqueId, facture_id, montant_utilise)
     return c.json({
       success: true,
       data:    bon,
@@ -305,7 +307,7 @@ bonsAchat.post('/:id/consommer', requireRole('admin', 'manager', 'technicien'), 
 // ── POST /api/bons-achat/:id/annuler ─────────────────────────────────────────
 /** Annuler un bon non encore consommé */
 bonsAchat.post('/:id/annuler', requireRole('admin', 'manager'), async (c) => {
-  const { user, db, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const id   = Number(c.req.param('id'))
   const body = await c.req.json().catch(() => ({}))
 
@@ -313,7 +315,7 @@ bonsAchat.post('/:id/annuler', requireRole('admin', 'manager'), async (c) => {
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
   try {
-    await annulerBonAchat(db, id, boutiqueId)
+    await annulerBonAchat(dbPort, id, boutiqueId)
     return c.json({ success: true, message: 'Bon d\'achat annulé.' })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 400)

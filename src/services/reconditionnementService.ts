@@ -34,6 +34,7 @@
  */
 
 import { nextNumero, parsePagination } from '../lib/db'
+import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,12 +151,10 @@ function genererCodeBon(): string {
  * @returns Code unique disponible
  * @throws Error si aucun code disponible après 5 tentatives (quasi-impossible)
  */
-async function genererCodeUnique(db: D1Database, boutiqueId: number): Promise<string> {
+async function genererCodeUnique(db: Database): Promise<string> {
   for (let tentative = 0; tentative < 5; tentative++) {
     const code = genererCodeBon()
-    const existant = await db.prepare(
-      'SELECT id FROM bons_achat WHERE code = ?'
-    ).bind(code).first()
+    const existant = await db.get('SELECT id FROM bons_achat WHERE code = ?', [code])
     if (!existant) return code
   }
   throw new Error('Impossible de générer un code bon unique après 5 tentatives.')
@@ -173,7 +172,7 @@ async function genererCodeUnique(db: D1Database, boutiqueId: number): Promise<st
  * @returns { data, pagination }
  */
 export async function listOrdres(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   query:       Record<string, string>
 ): Promise<{ data: any[]; pagination: any }> {
@@ -203,13 +202,13 @@ export async function listOrdres(
   const where = conditions.join(' AND ')
 
   const [total, rows] = await Promise.all([
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt
       FROM   ordres_reconditionnement o
       WHERE  ${where}
-    `).bind(...params).first<{ cnt: number }>(),
+    `, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT o.*,
              r.numero          AS rachat_numero,
              r.prix_rachat     AS rachat_prix,
@@ -222,11 +221,11 @@ export async function listOrdres(
       WHERE  ${where}
       ORDER  BY o.created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data:       rows.results ?? [],
+    data:       rows,
     pagination: {
       page,
       limit,
@@ -247,11 +246,11 @@ export async function listOrdres(
  * @returns Ordre enrichi ou null si introuvable
  */
 export async function getOrdre(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number
 ): Promise<any | null> {
-  return db.prepare(`
+  return db.get(`
     SELECT o.*,
            r.numero                AS rachat_numero,
            r.marque                AS rachat_marque,
@@ -269,7 +268,7 @@ export async function getOrdre(
     LEFT   JOIN rachats  r ON r.id = o.rachat_id
     LEFT   JOIN produits p ON p.id = o.produit_id
     WHERE  o.id = ? AND o.boutique_id = ? AND o.actif = 1
-  `).bind(id, boutiqueId).first<any>()
+  `, [id, boutiqueId])
 }
 
 // ─── Ordres de reconditionnement — création ───────────────────────────────────
@@ -363,21 +362,21 @@ export async function createOrdre(
  * @returns true si la mise à jour a réussi
  */
 export async function updateOrdre(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number,
   data:        Partial<CreateOrdreData>
 ): Promise<boolean> {
   // Vérifier que l'ordre est modifiable
-  const ordre = await db.prepare(`
+  const ordre = await db.get<{ statut: StatutOrdre }>(`
     SELECT statut FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1
-  `).bind(id, boutiqueId).first<{ statut: StatutOrdre }>()
+  `, [id, boutiqueId])
 
   if (!ordre) throw new Error('Ordre introuvable.')
   if (ordre.statut === 'termine')   throw new Error('Un ordre terminé ne peut pas être modifié.')
   if (ordre.statut === 'abandonne') throw new Error('Un ordre abandonné ne peut pas être modifié.')
 
-  const res = await db.prepare(`
+  const res = await db.run(`
     UPDATE ordres_reconditionnement SET
       appareil_marque    = COALESCE(?, appareil_marque),
       appareil_modele    = COALESCE(?, appareil_modele),
@@ -392,7 +391,7 @@ export async function updateOrdre(
       grade              = COALESCE(?, grade),
       updated_at         = CURRENT_TIMESTAMP
     WHERE id = ? AND boutique_id = ?
-  `).bind(
+  `, [
     data.appareil_marque    ?? null,
     data.appareil_modele    ?? null,
     data.imei               ?? null,
@@ -405,9 +404,9 @@ export async function updateOrdre(
     data.description_travaux ?? null,
     data.grade              ?? null,
     id, boutiqueId
-  ).run()
+  ])
 
-  return (res.meta?.changes ?? 0) > 0
+  return res.changes > 0
 }
 
 // ─── Ordres de reconditionnement — machine à états ────────────────────────────
@@ -429,14 +428,14 @@ export async function updateOrdre(
  * @returns OrdreRow mis à jour
  */
 export async function updateStatutOrdre(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number,
   statut:      StatutOrdre
 ): Promise<OrdreRow> {
-  const ordre = await db.prepare(`
+  const ordre = await db.get<OrdreRow>(`
     SELECT * FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1
-  `).bind(id, boutiqueId).first<OrdreRow>()
+  `, [id, boutiqueId])
 
   if (!ordre) throw new Error('Ordre de reconditionnement introuvable.')
 
@@ -452,7 +451,7 @@ export async function updateStatutOrdre(
   const dateDebutClause = statut === 'en_cours'   ? ', date_debut = CURRENT_TIMESTAMP' : ''
   const dateFinClause   = statut === 'abandonne'  ? ', date_fin   = CURRENT_TIMESTAMP' : ''
 
-  const updated = await db.prepare(`
+  const updated = await db.get<OrdreRow>(`
     UPDATE ordres_reconditionnement
     SET    statut     = ?,
            updated_at = CURRENT_TIMESTAMP
@@ -460,7 +459,7 @@ export async function updateStatutOrdre(
            ${dateFinClause}
     WHERE  id = ? AND boutique_id = ?
     RETURNING *
-  `).bind(statut, id, boutiqueId).first<OrdreRow>()
+  `, [statut, id, boutiqueId])
 
   if (!updated) throw new Error('Mise à jour statut échouée.')
   return updated
@@ -484,7 +483,7 @@ export async function updateStatutOrdre(
  * @returns OrdreRow terminé avec produit_id renseigné
  */
 export async function terminerOrdre(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number,
   data: {
@@ -494,9 +493,9 @@ export async function terminerOrdre(
     produit_id_existant?: number   // si on alimente un produit déjà en catalogue
   }
 ): Promise<OrdreRow> {
-  const ordre = await db.prepare(`
+  const ordre = await db.get<OrdreRow>(`
     SELECT * FROM ordres_reconditionnement WHERE id = ? AND boutique_id = ? AND actif = 1
-  `).bind(id, boutiqueId).first<OrdreRow>()
+  `, [id, boutiqueId])
 
   if (!ordre) throw new Error('Ordre introuvable.')
   if (ordre.statut !== 'en_cours') {
@@ -507,12 +506,12 @@ export async function terminerOrdre(
 
   if (produitId) {
     // ── Cas 1 : produit existant → incrémenter le stock de 1 ──
-    await db.prepare(`
+    await db.run(`
       UPDATE produits
       SET    stock_actuel = stock_actuel + 1,
              updated_at   = CURRENT_TIMESTAMP
       WHERE  id = ? AND boutique_id = ?
-    `).bind(produitId, boutiqueId).run()
+    `, [produitId, boutiqueId])
   } else {
     // ── Cas 2 : nouveau produit occasion → créer dans le catalogue ──
     const nomProduit = [
@@ -525,13 +524,13 @@ export async function terminerOrdre(
 
     const sku = `OCC-${ordre.numero}`
 
-    const produitResult = await db.prepare(`
+    const produitResult = await db.get<{ id: number }>(`
       INSERT INTO produits
         (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht,
          tva_taux, stock_actuel, stock_minimum, actif)
       VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1)
       RETURNING id
-    `).bind(
+    `, [
       boutiqueId,
       nomProduit || 'Appareil occasion',
       sku,
@@ -539,14 +538,14 @@ export async function terminerOrdre(
       data.description_travaux ?? ordre.description_travaux ?? null,
       ordre.cout_revient,          // prix d'achat = coût de revient
       data.prix_revente_ht
-    ).first<{ id: number }>()
+    ])
 
     if (!produitResult) throw new Error('Échec création produit occasion.')
     produitId = produitResult.id
   }
 
   // Mettre à jour l'ordre : statut termine + lien produit + date_fin
-  const updated = await db.prepare(`
+  const updated = await db.get<OrdreRow>(`
     UPDATE ordres_reconditionnement SET
       statut              = 'termine',
       produit_id          = ?,
@@ -557,13 +556,13 @@ export async function terminerOrdre(
       updated_at          = CURRENT_TIMESTAMP
     WHERE id = ? AND boutique_id = ?
     RETURNING *
-  `).bind(
+  `, [
     produitId,
     data.prix_revente_ht,
     data.grade,
     data.description_travaux ?? null,
     id, boutiqueId
-  ).first<OrdreRow>()
+  ])
 
   if (!updated) throw new Error('Clôture ordre échouée.')
   return updated
@@ -579,7 +578,7 @@ export async function terminerOrdre(
  * @returns KPIs agrégés (compteurs + CA reconditionnement)
  */
 export async function getKpisReconditionnement(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number
 ): Promise<{
   nb_total:          number
@@ -590,7 +589,10 @@ export async function getKpisReconditionnement(
   ca_estime_total:   number
   marge_estimee:     number
 }> {
-  const row = await db.prepare(`
+  const row = await db.get<{
+    nb_total: number; nb_en_cours: number; nb_termines: number
+    nb_abandonnes: number; cout_revient_total: number; ca_estime_total: number
+  }>(`
     SELECT
       COUNT(*)                                              AS nb_total,
       SUM(CASE WHEN statut = 'en_cours'   THEN 1 ELSE 0 END) AS nb_en_cours,
@@ -601,10 +603,7 @@ export async function getKpisReconditionnement(
                    THEN prix_revente_ht ELSE 0 END), 0)    AS ca_estime_total
     FROM ordres_reconditionnement
     WHERE boutique_id = ? AND actif = 1
-  `).bind(boutiqueId).first<{
-    nb_total: number; nb_en_cours: number; nb_termines: number
-    nb_abandonnes: number; cout_revient_total: number; ca_estime_total: number
-  }>()
+  `, [boutiqueId])
 
   const coutTotal = row?.cout_revient_total ?? 0
   const caTotal   = row?.ca_estime_total   ?? 0
@@ -632,7 +631,7 @@ export async function getKpisReconditionnement(
  * @returns { data, pagination }
  */
 export async function listBonsAchat(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   query:       Record<string, string>
 ): Promise<{ data: any[]; pagination: any }> {
@@ -661,14 +660,14 @@ export async function listBonsAchat(
   const where = conditions.join(' AND ')
 
   const [total, rows] = await Promise.all([
-    db.prepare(`
+    db.get<{ cnt: number }>(`
       SELECT COUNT(*) as cnt
       FROM   bons_achat b
       LEFT   JOIN clients c ON c.id = b.client_id
       WHERE  ${where}
-    `).bind(...params).first<{ cnt: number }>(),
+    `, params),
 
-    db.prepare(`
+    db.all<any>(`
       SELECT b.*,
              c.nom       AS client_nom,
              c.prenom    AS client_prenom,
@@ -679,11 +678,11 @@ export async function listBonsAchat(
       WHERE  ${where}
       ORDER  BY b.created_at DESC
       LIMIT  ? OFFSET ?
-    `).bind(...params, limit, offset).all<any>(),
+    `, [...params, limit, offset]),
   ])
 
   return {
-    data:       rows.results ?? [],
+    data:       rows,
     pagination: {
       page,
       limit,
@@ -704,11 +703,11 @@ export async function listBonsAchat(
  * @returns BonAchat enrichi ou null
  */
 export async function getBonAchat(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number
 ): Promise<any | null> {
-  return db.prepare(`
+  return db.get(`
     SELECT b.*,
            c.nom          AS client_nom,
            c.prenom       AS client_prenom,
@@ -720,7 +719,7 @@ export async function getBonAchat(
     LEFT   JOIN clients  c ON c.id = b.client_id
     LEFT   JOIN factures f ON f.id = b.utilise_facture_id
     WHERE  b.id = ? AND b.boutique_id = ? AND b.actif = 1
-  `).bind(id, boutiqueId).first<any>()
+  `, [id, boutiqueId])
 }
 
 // ─── Bons d'achat — création ──────────────────────────────────────────────────
@@ -735,21 +734,21 @@ export async function getBonAchat(
  * @returns BonAchatRow créé
  */
 export async function createBonAchat(
-  db:          D1Database,
+  db:          Database,
   boutiqueId:  number,
   data:        CreateBonAchatData
 ): Promise<BonAchatRow> {
   if (data.montant <= 0) throw new Error('Le montant du bon doit être positif.')
 
-  const code = await genererCodeUnique(db, boutiqueId)
+  const code = await genererCodeUnique(db)
 
-  const result = await db.prepare(`
+  const result = await db.get<BonAchatRow>(`
     INSERT INTO bons_achat
       (boutique_id, client_id, source_type, source_id,
        code, montant, date_expiration, motif)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).bind(
+  `, [
     boutiqueId,
     data.client_id       ?? null,
     data.source_type     ?? 'manuel',
@@ -758,7 +757,7 @@ export async function createBonAchat(
     data.montant,
     data.date_expiration ?? null,
     data.motif           ?? null
-  ).first<BonAchatRow>()
+  ])
 
   if (!result) throw new Error('Échec création bon d\'achat.')
   return result
@@ -780,11 +779,11 @@ export async function createBonAchat(
  * @returns { valide, bon?, raison? }
  */
 export async function verifierBonAchat(
-  db:          D1Database,
+  db:          Database,
   code:        string,
   boutiqueId:  number
 ): Promise<{ valide: boolean; bon?: any; raison?: string }> {
-  const bon = await db.prepare(`
+  const bon = await db.get<any>(`
     SELECT b.*,
            c.nom       AS client_nom,
            c.prenom    AS client_prenom,
@@ -792,7 +791,7 @@ export async function verifierBonAchat(
     FROM   bons_achat b
     LEFT   JOIN clients c ON c.id = b.client_id
     WHERE  b.code = ? AND b.boutique_id = ? AND b.actif = 1
-  `).bind(code.toUpperCase(), boutiqueId).first<any>()
+  `, [code.toUpperCase(), boutiqueId])
 
   if (!bon)                          return { valide: false, raison: 'Code inconnu.' }
   if (bon.statut === 'utilise')      return { valide: false, raison: 'Bon déjà entièrement utilisé.', bon }
@@ -805,10 +804,10 @@ export async function verifierBonAchat(
     const expiration = new Date(bon.date_expiration)
     if (expiration < new Date()) {
       // Mettre à jour le statut en DB de manière opportuniste
-      await db.prepare(`
+      await db.run(`
         UPDATE bons_achat SET statut = 'expire', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).bind(bon.id).run()
+      `, [bon.id])
       return { valide: false, raison: `Bon expiré le ${bon.date_expiration}.`, bon }
     }
   }
@@ -831,7 +830,7 @@ export async function verifierBonAchat(
  * @returns BonAchatRow mis à jour
  */
 export async function consommerBonAchat(
-  db:             D1Database,
+  db:             Database,
   code:           string,
   boutiqueId:     number,
   factureId:      number,
@@ -853,7 +852,7 @@ export async function consommerBonAchat(
   const nouveauStatut: StatutBonAchat =
     nouveauMontantUtilise >= bon.montant ? 'utilise' : 'actif'
 
-  const updated = await db.prepare(`
+  const updated = await db.get<BonAchatRow>(`
     UPDATE bons_achat SET
       montant_utilise    = ?,
       statut             = ?,
@@ -862,13 +861,13 @@ export async function consommerBonAchat(
       updated_at         = CURRENT_TIMESTAMP
     WHERE code = ? AND boutique_id = ?
     RETURNING *
-  `).bind(
+  `, [
     nouveauMontantUtilise,
     nouveauStatut,
     factureId,
     code.toUpperCase(),
     boutiqueId
-  ).first<BonAchatRow>()
+  ])
 
   if (!updated) throw new Error('Consommation bon d\'achat échouée.')
   return updated
@@ -886,25 +885,25 @@ export async function consommerBonAchat(
  * @returns true si le bon a bien été annulé
  */
 export async function annulerBonAchat(
-  db:          D1Database,
+  db:          Database,
   id:          number,
   boutiqueId:  number
 ): Promise<boolean> {
-  const bon = await db.prepare(`
+  const bon = await db.get<{ statut: StatutBonAchat; montant_utilise: number }>(`
     SELECT statut, montant_utilise FROM bons_achat WHERE id = ? AND boutique_id = ? AND actif = 1
-  `).bind(id, boutiqueId).first<{ statut: StatutBonAchat; montant_utilise: number }>()
+  `, [id, boutiqueId])
 
   if (!bon) throw new Error('Bon d\'achat introuvable.')
   if (bon.statut === 'utilise')  throw new Error('Impossible d\'annuler un bon déjà utilisé.')
   if (bon.statut === 'annule')   throw new Error('Ce bon est déjà annulé.')
   if (bon.montant_utilise > 0)   throw new Error('Impossible d\'annuler un bon partiellement consommé.')
 
-  const res = await db.prepare(`
+  const res = await db.run(`
     UPDATE bons_achat
     SET    statut     = 'annule',
            updated_at = CURRENT_TIMESTAMP
     WHERE  id = ? AND boutique_id = ?
-  `).bind(id, boutiqueId).run()
+  `, [id, boutiqueId])
 
-  return (res.meta?.changes ?? 0) > 0
+  return res.changes > 0
 }

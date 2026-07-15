@@ -1,4 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 12)
+# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 13)
+
+## Chantier Ports & Adapters — 15/20 services migrés (session du 2026-07-15)
+- **reconditionnementService.ts** (2026-07-15) — 12/13 fonctions migrées (tout sauf `createOrdre`, dépendant de `nextNumero()`). Aucun `auditLog()` dans ce fichier. `routes/reconditionnement.ts` : `Variables.db`/`dbPort` ajoutés de zéro (2 routers). Tests scindés (50/50 ✅). **Validé en local live** : cycle ordre complet (création→en_cours→terminer avec produit occasion créé) + cycle bon d'achat (créer→lister→vérifier→annuler), 10/11 ✅ (consommation bloquée par FK factures vide en local, attendu).
 
 ## Chantier Ports & Adapters — 14/20 services migrés (session du 2026-07-15)
 - **ticketService.ts** (2026-07-15) — 6/11 fonctions migrées (`listTickets`, `getKanban`, `getTicketById`, `getTicketBoutiqueId`, `getTicketAvecClient` + `checkAndArchiveTickets`, cette dernière sans dépendance `auditLog`). Les 5 fonctions restantes (`createTicket`/`updateTicket`/`updateStatutTicket`/`deleteTicket`/`archiveTicket`) restent sur `D1Database`. Bonus sécurité : SQL interpolé (`boutique_id = ${boutiqueId}`) remplacé par un paramètre lié dans `checkAndArchiveTickets`. `lib/timezone.ts` appliqué au calcul `en_retard` de `getKanban()` (`parseUtcTimestamp` sur `date_promesse`). Tests scindés `mockDatabase`/`mockD1` (45/45 ✅, 3 nouveaux). **Validé en local live** : cycle complet création→statuts→hooks garantie/email→archivage, 6/6 ✅.
