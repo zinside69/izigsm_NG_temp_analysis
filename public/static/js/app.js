@@ -28,6 +28,7 @@ function buildSidebar(activePage) {
 
   const pages = [
     { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard', section:'principal', badge: null },
+    { id:'clients',            icon:'👥', label:'Clients',              href:'clients',            section:'principal', badge: null },
     { id:'tickets', icon:'🔧', label:'Prises en charge', href:'tickets', section:'principal', badge: getTicketBadge() },
     { id:'kanban', icon:'📊', label:'Kanban', href:'kanban', section:'principal', badge: null },
     { id:'stats', icon:'📈', label:'Statistiques', href:'stats', section:'principal', badge: null },
@@ -42,7 +43,6 @@ function buildSidebar(activePage) {
     { id:'agenda', icon:'📅', label:'Agenda', href:'agenda', section:'gestion', badge: null },
     { id:'rachats',            icon:'📒', label:'Livre de police',      href:'rachats',            section:'gestion', badge: null },
     { id:'reconditionnement',  icon:'🔄', label:'Reconditionnement',    href:'reconditionnement',  section:'gestion', badge: null },
-    { id:'clients',            icon:'👥', label:'Clients',              href:'clients',            section:'gestion', badge: null },
     { id:'personnel', icon:'🕐', label:'Personnel', href:'personnel', section:'gestion', badge: null },
     { id:'notifications', icon:'✉️', label:'Notifications Email', href:'notifications', section:'gestion', badge: null },
     { id:'settings', icon:'⚙️', label:'Paramètres', href:'settings', section:'config', badge: null },

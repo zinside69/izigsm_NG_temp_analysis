@@ -46,15 +46,15 @@ import {
 
 const SQL_COUNT_CLIENTS = `SELECT COUNT(*) as cnt FROM clients c WHERE c.boutique_id = ? AND c.actif = 1`
 
-const SQL_LIST_CLIENTS = `SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.ville, c.created_at, (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets, (SELECT COALESCE(SUM(f.total_ttc), 0) FROM factures f WHERE f.client_id = c.id AND f.statut != 'ANNULE') as ca_total FROM clients c WHERE c.boutique_id = ? AND c.actif = 1 ORDER BY c.created_at DESC LIMIT ? OFFSET ?`
+const SQL_LIST_CLIENTS = `SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.adresse, c.code_postal, c.ville, c.pays, c.created_at, c.type_client, c.raison_sociale, c.siret, c.tva_intracom, (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets, (SELECT COALESCE(SUM(f.total_ttc), 0) FROM factures f WHERE f.client_id = c.id AND f.statut != 'ANNULE') as ca_total FROM clients c WHERE c.boutique_id = ? AND c.actif = 1 ORDER BY c.created_at DESC LIMIT ? OFFSET ?`
 
 const SQL_GET_CLIENT = `SELECT c.*, b.nom as boutique_nom FROM clients c JOIN boutiques b ON b.id = c.boutique_id WHERE c.id = ? AND c.actif = 1`
 
 const SQL_GET_APPAREILS = `SELECT * FROM appareils WHERE client_id = ? ORDER BY created_at DESC`
 
-const SQL_INSERT_CLIENT = `INSERT INTO clients (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+const SQL_INSERT_CLIENT = `INSERT INTO clients (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, type_client, raison_sociale, siret, tva_intracom, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
 
-const SQL_UPDATE_CLIENT = `UPDATE clients SET prenom=?, nom=?, email=?, telephone=?, adresse=?, code_postal=?, ville=?, pays=?, notes=?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1`
+const SQL_UPDATE_CLIENT = `UPDATE clients SET prenom=?, nom=?, email=?, telephone=?, adresse=?, code_postal=?, ville=?, pays=?, type_client=?, raison_sociale=?, siret=?, tva_intracom=?, notes=?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1`
 
 const SQL_DELETE_CLIENT = `UPDATE clients SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1`
 
@@ -90,7 +90,7 @@ const SQL_RGPD_APPAREILS = `SELECT id, marque, modele, imei, numero_serie, coule
 
 const SQL_PURGE_CHECK = `SELECT id, prenom, nom, email, actif FROM clients WHERE id = ?`
 
-const SQL_PURGE_UPDATE = `UPDATE clients SET prenom = 'Anonymisé', nom = ?, email = NULL, telephone = NULL, adresse = NULL, code_postal = NULL, ville = NULL, notes = NULL, actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+const SQL_PURGE_UPDATE = `UPDATE clients SET prenom = 'Anonymisé', nom = ?, email = NULL, telephone = NULL, adresse = NULL, code_postal = NULL, ville = NULL, raison_sociale = NULL, siret = NULL, tva_intracom = NULL, notes = NULL, actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
 
 const SQL_PURGE_APPAREILS = `UPDATE appareils SET imei = NULL, numero_serie = NULL, notes = NULL WHERE client_id = ?`
 
@@ -102,6 +102,7 @@ const CLIENT_ROW = {
   id: 10, boutique_id: 1, prenom: 'Alice', nom: 'Dupont',
   email: 'alice@example.com', telephone: '0601020304',
   adresse: '1 rue test', code_postal: '75001', ville: 'Paris', pays: 'France',
+  type_client: 'particulier', raison_sociale: null, siret: null, tva_intracom: null,
   notes: null, actif: 1, created_at: '2026-01-01T10:00:00Z', updated_at: '2026-01-01T10:00:00Z',
   boutique_nom: 'Ma Boutique',
 }
@@ -149,7 +150,7 @@ describe('listClients', () => {
 
   it('filtre search : 4 LIKE injectés dans les bindings du COUNT', async () => {
     const SQL_COUNT_SEARCH = `SELECT COUNT(*) as cnt FROM clients c WHERE c.boutique_id = ? AND c.actif = 1 AND (c.nom LIKE ? OR c.prenom LIKE ? OR c.email LIKE ? OR c.telephone LIKE ?)`
-    const SQL_LIST_SEARCH  = `SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.ville, c.created_at, (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets, (SELECT COALESCE(SUM(f.total_ttc), 0) FROM factures f WHERE f.client_id = c.id AND f.statut != 'ANNULE') as ca_total FROM clients c WHERE c.boutique_id = ? AND c.actif = 1 AND (c.nom LIKE ? OR c.prenom LIKE ? OR c.email LIKE ? OR c.telephone LIKE ?) ORDER BY c.created_at DESC LIMIT ? OFFSET ?`
+    const SQL_LIST_SEARCH  = `SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.adresse, c.code_postal, c.ville, c.pays, c.created_at, c.type_client, c.raison_sociale, c.siret, c.tva_intracom, (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets, (SELECT COALESCE(SUM(f.total_ttc), 0) FROM factures f WHERE f.client_id = c.id AND f.statut != 'ANNULE') as ca_total FROM clients c WHERE c.boutique_id = ? AND c.actif = 1 AND (c.nom LIKE ? OR c.prenom LIKE ? OR c.email LIKE ? OR c.telephone LIKE ?) ORDER BY c.created_at DESC LIMIT ? OFFSET ?`
     db.__setResponse(SQL_COUNT_SEARCH, { cnt: 1 })
     db.__setListResponse(SQL_LIST_SEARCH, [CLIENT_ROW])
 

@@ -68,6 +68,23 @@ function canAccessClient(user: any, client: any, boutiqueId: number | null): boo
   return client.boutique_id === boutiqueId
 }
 
+/**
+ * Valide type_client + les champs société associés (raison_sociale/siret obligatoires
+ * uniquement si professionnel — un particulier n'a jamais ces champs).
+ * @param body - Corps de la requête (POST/PUT client)
+ * @returns message d'erreur ou null si valide
+ */
+function validateClientTypeSociete(body: any): string | null {
+  const type = body.type_client ?? 'particulier'
+  if (!['particulier', 'professionnel'].includes(type))
+    return 'type_client invalide (particulier ou professionnel attendu).'
+  if (type === 'professionnel' && !body.raison_sociale?.trim())
+    return 'Raison sociale obligatoire pour un client professionnel.'
+  if (body.siret && !/^\d{14}$/.test(body.siret.replace(/\s/g, '')))
+    return 'SIRET invalide (14 chiffres attendus).'
+  return null
+}
+
 // ─── GET /api/clients ─────────────────────────────────────────────────────────
 
 /**
@@ -165,6 +182,8 @@ clients.post('/', requireRole('admin', 'manager', 'technicien'), async (c) => {
     return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
   if (email && !validateEmail(email))
     return c.json({ success: false, error: 'Email invalide.' }, 400)
+  const typeError = validateClientTypeSociete(body)
+  if (typeError) return c.json({ success: false, error: typeError }, 400)
 
   const result = await createClient(dbPort, boutiqueId, body)
   await auditLog(db, {
@@ -231,6 +250,8 @@ clients.put('/:id', requireRole('admin', 'manager', 'technicien'), async (c) => 
     return c.json({ success: false, error: 'Prénom et nom obligatoires.' }, 400)
   if (email && !validateEmail(email))
     return c.json({ success: false, error: 'Email invalide.' }, 400)
+  const typeError = validateClientTypeSociete(body)
+  if (typeError) return c.json({ success: false, error: typeError }, 400)
 
   const existing = await getClientById(dbPort, id)
   if (!existing) return c.json({ success: false, error: 'Client introuvable.' }, 404)

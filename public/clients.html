@@ -172,13 +172,38 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="client-id">
+
+      <div class="form-field full" style="margin-bottom:14px;">
+        <label>Type de client</label>
+        <div style="display:flex;gap:6px;">
+          <button type="button" id="btn-type-particulier" class="btn btn-secondary btn-sm" onclick="setClientType('particulier')" style="flex:1;">Particulier</button>
+          <button type="button" id="btn-type-professionnel" class="btn btn-secondary btn-sm" onclick="setClientType('professionnel')" style="flex:1;">Professionnel</button>
+        </div>
+      </div>
+
+      <!-- Champs société — visibles uniquement en mode Professionnel -->
+      <div id="client-societe-fields" style="display:none;" class="form-grid">
+        <div class="form-field full">
+          <label>Raison sociale *</label>
+          <input type="text" id="c-raison-sociale" placeholder="SAS Réparation Express">
+        </div>
+        <div class="form-field">
+          <label>SIRET</label>
+          <input type="text" id="c-siret" placeholder="123 456 789 00012" maxlength="14">
+        </div>
+        <div class="form-field">
+          <label>TVA intracommunautaire</label>
+          <input type="text" id="c-tva-intracom" placeholder="FR12345678900">
+        </div>
+      </div>
+
       <div class="form-grid">
         <div class="form-field">
-          <label>Prénom</label>
+          <label id="label-c-prenom">Prénom</label>
           <input type="text" id="c-prenom" placeholder="Jean">
         </div>
         <div class="form-field">
-          <label>Nom *</label>
+          <label id="label-c-nom">Nom *</label>
           <input type="text" id="c-nom" placeholder="Dupont" required>
         </div>
         <div class="form-field">
@@ -189,9 +214,11 @@
           <label>Téléphone</label>
           <input type="tel" id="c-telephone" placeholder="+33 6 12 34 56 78">
         </div>
-        <div class="form-field">
+        <div class="form-field full" style="position:relative;">
           <label>Adresse</label>
-          <input type="text" id="c-adresse" placeholder="12 rue de la Paix">
+          <input type="text" id="c-adresse" placeholder="12 rue de la Paix" autocomplete="off"
+            oninput="onAdresseInput(this.value)" onfocus="onAdresseInput(this.value)">
+          <div id="adresse-suggestions" style="display:none;position:absolute;z-index:999;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:220px;overflow-y:auto;"></div>
         </div>
         <div class="form-field">
           <label>Code postal</label>

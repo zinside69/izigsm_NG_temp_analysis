@@ -24,6 +24,8 @@ import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type TypeClient = 'particulier' | 'professionnel'
+
 export interface ClientRow {
   id: number
   boutique_id: number
@@ -35,6 +37,10 @@ export interface ClientRow {
   code_postal: string | null
   ville: string | null
   pays: string
+  type_client: TypeClient
+  raison_sociale: string | null
+  siret: string | null
+  tva_intracom: string | null
   notes: string | null
   actif: number
   created_at: string
@@ -57,6 +63,10 @@ export interface CreateClientData {
   code_postal?: string | null
   ville?: string | null
   pays?: string
+  type_client?: TypeClient
+  raison_sociale?: string | null
+  siret?: string | null
+  tva_intracom?: string | null
   notes?: string | null
 }
 
@@ -119,7 +129,8 @@ export async function listClients(
   )
 
   const rows = await db.all<ClientRow>(`
-    SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.ville, c.created_at,
+    SELECT c.id, c.prenom, c.nom, c.email, c.telephone, c.adresse, c.code_postal, c.ville, c.pays, c.created_at,
+           c.type_client, c.raison_sociale, c.siret, c.tva_intracom,
            (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.actif = 1) as nb_tickets,
            (SELECT COALESCE(SUM(f.total_ttc), 0)
             FROM   factures f WHERE f.client_id = c.id AND f.statut != 'ANNULE') as ca_total
@@ -182,12 +193,16 @@ export async function createClient(
   boutiqueId: number,
   data: CreateClientData
 ): Promise<{ id: number }> {
-  const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = data
+  const {
+    prenom, nom, email, telephone, adresse, code_postal, ville, pays,
+    type_client, raison_sociale, siret, tva_intracom, notes
+  } = data
 
   const result = await db.get<{ id: number }>(`
     INSERT INTO clients
-      (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (boutique_id, prenom, nom, email, telephone, adresse, code_postal, ville, pays,
+       type_client, raison_sociale, siret, tva_intracom, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `, [
     boutiqueId, prenom, nom,
@@ -197,6 +212,10 @@ export async function createClient(
     code_postal ?? null,
     ville       ?? null,
     pays        ?? 'France',
+    type_client    ?? 'particulier',
+    raison_sociale ?? null,
+    siret          ?? null,
+    tva_intracom   ?? null,
     notes       ?? null
   ])
 
@@ -218,12 +237,16 @@ export async function updateClient(
   id: number,
   data: CreateClientData
 ): Promise<boolean> {
-  const { prenom, nom, email, telephone, adresse, code_postal, ville, pays, notes } = data
+  const {
+    prenom, nom, email, telephone, adresse, code_postal, ville, pays,
+    type_client, raison_sociale, siret, tva_intracom, notes
+  } = data
 
   const res = await db.run(`
     UPDATE clients
     SET prenom=?, nom=?, email=?, telephone=?, adresse=?,
-        code_postal=?, ville=?, pays=?, notes=?,
+        code_postal=?, ville=?, pays=?,
+        type_client=?, raison_sociale=?, siret=?, tva_intracom=?, notes=?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND actif = 1
   `, [
@@ -234,6 +257,10 @@ export async function updateClient(
     code_postal ?? null,
     ville       ?? null,
     pays        ?? 'France',
+    type_client    ?? 'particulier',
+    raison_sociale ?? null,
+    siret          ?? null,
+    tva_intracom   ?? null,
     notes       ?? null,
     id
   ])
@@ -544,6 +571,10 @@ export async function exportClientRgpd(
       code_postal: client.code_postal,
       ville:       client.ville,
       pays:        client.pays,
+      type_client:     client.type_client,
+      raison_sociale:  client.raison_sociale,
+      siret:           client.siret,
+      tva_intracom:    client.tva_intracom,
       notes:       client.notes,
       created_at:  client.created_at,
     },
@@ -590,6 +621,9 @@ export async function purgeClient(
       adresse      = NULL,
       code_postal  = NULL,
       ville        = NULL,
+      raison_sociale = NULL,
+      siret          = NULL,
+      tva_intracom   = NULL,
       notes        = NULL,
       actif        = 0,
       updated_at   = CURRENT_TIMESTAMP

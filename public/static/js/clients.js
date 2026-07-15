@@ -19,6 +19,8 @@ let _filterMode   = 'all';
 let _searchQuery  = '';
 let _csvHeaders   = [];   // colonnes CSV brutes
 let _csvRows      = [];   // données CSV parsées
+let _clientType    = 'particulier';  // type actif dans le modal (particulier|professionnel)
+let _adresseTimer  = null;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -128,8 +130,8 @@ function _renderTable() {
           <div style="display:flex;align-items:center;gap:10px;">
             <div class="avatar-circle" style="background:${color}">${initials}</div>
             <div>
-              <div style="font-weight:600">${name}</div>
-              <div style="font-size:.73rem;color:var(--text-muted)">${_esc(c.ville || '')}</div>
+              <div style="font-weight:600">${name}${c.type_client === 'professionnel' ? ' <span class="badge badge-info" style="font-size:.65rem;">🏢 Pro</span>' : ''}</div>
+              <div style="font-size:.73rem;color:var(--text-muted)">${_esc(c.raison_sociale || c.ville || '')}</div>
             </div>
           </div>
         </td>
@@ -185,6 +187,7 @@ function setFilter(el, mode) {
  */
 function openNewClient() {
   _clearClientForm();
+  setClientType('particulier');
   _setText('modal-client-title', 'Nouveau client');
   document.getElementById('client-id').value = '';
   openModal('modal-client');
@@ -208,7 +211,11 @@ function editClient(id) {
   _setVal('c-code-postal', c.code_postal || '');
   _setVal('c-ville',       c.ville       || '');
   _setVal('c-pays',        c.pays        || 'France');
+  _setVal('c-raison-sociale', c.raison_sociale || '');
+  _setVal('c-siret',          c.siret          || '');
+  _setVal('c-tva-intracom',   c.tva_intracom   || '');
   _setVal('c-notes',       c.notes       || '');
+  setClientType(c.type_client || 'particulier');
   openModal('modal-client');
 }
 
@@ -227,6 +234,16 @@ async function saveClient() {
     showFlash('Email invalide.', 'error');
     return;
   }
+  const raisonSociale = (document.getElementById('c-raison-sociale')?.value || '').trim();
+  if (_clientType === 'professionnel' && !raisonSociale) {
+    showFlash('La raison sociale est obligatoire pour un client professionnel.', 'error');
+    return;
+  }
+  const siret = (document.getElementById('c-siret')?.value || '').replace(/\s/g, '');
+  if (siret && !/^\d{14}$/.test(siret)) {
+    showFlash('SIRET invalide (14 chiffres attendus).', 'error');
+    return;
+  }
 
   const btn = document.getElementById('btn-save-client');
   if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
@@ -240,6 +257,10 @@ async function saveClient() {
     code_postal: (document.getElementById('c-code-postal')?.value || '').trim() || null,
     ville:       (document.getElementById('c-ville')?.value       || '').trim() || null,
     pays:        (document.getElementById('c-pays')?.value        || '').trim() || 'France',
+    type_client:     _clientType,
+    raison_sociale:  _clientType === 'professionnel' ? raisonSociale : null,
+    siret:           _clientType === 'professionnel' ? (siret || null) : null,
+    tva_intracom:    _clientType === 'professionnel' ? ((document.getElementById('c-tva-intracom')?.value || '').trim() || null) : null,
     notes:       (document.getElementById('c-notes')?.value       || '').trim() || null,
     boutique_id: getBoutiqueId(),
   };
@@ -281,6 +302,100 @@ async function deleteClient(id) {
     showFlash(err.message || 'Erreur lors de la suppression.', 'error');
   }
 }
+
+// ─── Type de client (particulier / professionnel) ──────────────────────────────
+
+/**
+ * Bascule le modal client entre particulier et professionnel :
+ * affiche/masque les champs société (raison sociale/SIRET/TVA) et adapte
+ * le libellé du champ Nom (contact vs personne physique).
+ * @param {'particulier'|'professionnel'} type
+ */
+function setClientType(type) {
+  _clientType = type;
+  const isPro = type === 'professionnel';
+
+  const fields = document.getElementById('client-societe-fields');
+  if (fields) fields.style.display = isPro ? 'grid' : 'none';
+
+  document.getElementById('btn-type-particulier')?.classList.toggle('btn-primary', !isPro);
+  document.getElementById('btn-type-particulier')?.classList.toggle('btn-secondary', isPro);
+  document.getElementById('btn-type-professionnel')?.classList.toggle('btn-primary', isPro);
+  document.getElementById('btn-type-professionnel')?.classList.toggle('btn-secondary', !isPro);
+
+  const labelNom = document.getElementById('label-c-nom');
+  if (labelNom) labelNom.textContent = isPro ? 'Nom du contact *' : 'Nom *';
+}
+
+// ─── Autocomplete adresse (API Adresse gouvernementale — data.gouv.fr) ─────────
+// Appel fetch() direct (pas apiGet/ApiService) : l'API BAN est publique, sans clé,
+// et ApiService attache systématiquement le JWT iziGSM en Authorization — il ne
+// faut surtout pas l'envoyer à un tiers, même officiel. Aucune donnée client
+// n'est transmise avant la saisie volontaire de l'utilisateur dans le champ.
+const ADRESSE_API_BASE = 'https://api-adresse.data.gouv.fr/search/';
+
+/** Déclenché à chaque frappe dans le champ Adresse */
+function onAdresseInput(val) {
+  clearTimeout(_adresseTimer);
+  const box = document.getElementById('adresse-suggestions');
+  if (!box) return;
+
+  if (!val || val.trim().length < 3) {
+    box.style.display = 'none';
+    return;
+  }
+
+  _adresseTimer = setTimeout(async () => {
+    let features = [];
+    try {
+      const res = await fetch(`${ADRESSE_API_BASE}?q=${encodeURIComponent(val)}&limit=5`);
+      const json = await res.json();
+      features = json.features || [];
+    } catch {
+      box.style.display = 'none';
+      return;
+    }
+
+    if (!features.length) { box.style.display = 'none'; return; }
+
+    box.innerHTML = features.map((f, i) => `
+      <div class="adresse-suggestion-item" data-idx="${i}"
+           style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;"
+           onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+        ${_esc(f.properties.label)}
+      </div>
+    `).join('');
+    box.dataset.features = JSON.stringify(features);
+    box.style.display = 'block';
+    if (!box.dataset.wired) {
+      box.dataset.wired = '1';
+      box.addEventListener('click', e => {
+        const item = e.target.closest('.adresse-suggestion-item');
+        if (!item) return;
+        const feats = JSON.parse(box.dataset.features || '[]');
+        selectAdresseFromSuggestion(feats[Number(item.dataset.idx)]);
+      });
+    }
+  }, 300);
+}
+
+/** Remplit adresse/code postal/ville depuis une suggestion BAN cliquée */
+function selectAdresseFromSuggestion(feature) {
+  if (!feature) return;
+  const p = feature.properties;
+  _setVal('c-adresse',     p.name || p.label || '');
+  _setVal('c-code-postal', p.postcode || '');
+  _setVal('c-ville',       p.city || '');
+  document.getElementById('adresse-suggestions').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  const box = document.getElementById('adresse-suggestions');
+  const inp = document.getElementById('c-adresse');
+  if (box && inp && !inp.contains(e.target) && !box.contains(e.target)) {
+    box.style.display = 'none';
+  }
+});
 
 // ─── Historique CRM ───────────────────────────────────────────────────────────
 
@@ -833,7 +948,8 @@ function _esc(str) {
 
 /** Vide les champs du formulaire client. */
 function _clearClientForm() {
-  ['c-prenom','c-nom','c-email','c-telephone','c-adresse','c-code-postal','c-ville','c-notes'].forEach(id => {
+  ['c-prenom','c-nom','c-email','c-telephone','c-adresse','c-code-postal','c-ville','c-notes',
+   'c-raison-sociale','c-siret','c-tva-intracom'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
