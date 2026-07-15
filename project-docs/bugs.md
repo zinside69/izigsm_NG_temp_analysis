@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## Optimisation photos : URL présignée courte durée au lieu de fetch+blob — 2026-07-15
+
+Suite au fix vignettes/lightbox (entrée suivante), amélioration inspirée d'un pattern trouvé dans `izigsm_NG/izigsm_app` (architecture microservices abandonnée, cf. `decisions.md` 2026-07-12) : `services/reparation-service` exposait un endpoint `GET /:id/url` retournant une URL directe/présignée plutôt que le binaire — évite le problème `<img src>` sans passer par un `fetch()`+blob côté client.
+
+**Implémenté** :
+- `src/lib/photoToken.ts` (nouveau) — jetons HMAC-SHA256 courte durée (5 min), signés avec `JWT_SECRET`, scopés à `{photoId, boutiqueId, exp}`. Pas de JWT de session dans l'URL (1h, tous droits — mauvaise pratique dans une URL/historique navigateur) ni de credentials S3/R2 (le binding R2 de ce projet est direct, sans API S3).
+- `GET /api/tickets/:id/photos/:photoId/url` (nouveau, `routes/tickets.ts`, authentifié normalement) → `{success, url: "/api/photo-view/<token>", expires_in: 300}`.
+- `GET /api/photo-view/:token` (nouveau, `index.tsx`, **public** — hors `authMiddleware`, même pattern que la route iCal publique existante) → vérifie le jeton, stream le binaire R2.
+- Frontend (`tickets.js`) : `loadAuthenticatedImage()` simplifié — appelle `/url` (JSON authentifié) puis affecte l'URL retournée directement à `img.src`, sans `fetch()`/blob/`URL.createObjectURL` intermédiaire.
+
+**Validé en prod** : cycle complet (créer ticket+photo test → `/url` → `/photo-view/<token>` → bytes identiques à l'original) ; `/url` sans token → 401 ; `/photo-view/` avec jeton invalide → 401. Nettoyé après coup.
+
+**Bug de sécurité découvert en cours de route (non corrigé, hors périmètre de cette tâche)** : `GET /api/tickets/:id/photos` et `POST /api/tickets/:id/photos` (`routes/tickets.ts`) appellent `getBoutiqueId(c)` avec un seul argument (le contexte Hono) alors que la fonction importée (`lib/middleware.ts`) attend `(user, paramBoutiqueId)` — erreur de type confirmée par `tsc --noEmit` (`Context ... is missing properties from JwtPayload`), donc bug réel, pas juste suspecté. En JS ça s'exécute quand même : `user` reçoit le contexte Hono au lieu du payload JWT, `user.role`/`user.boutique_id` sont `undefined` → la vérification d'isolation `if (boutiqueId && ticket.boutique_id !== ...)` ne se déclenche jamais (toujours falsy). **Conséquence potentielle : un utilisateur authentifié d'une boutique pourrait lister/uploader des photos sur un ticket d'une autre boutique en devinant son ID.** Le nouvel endpoint `/url` que je viens d'ajouter utilise le bon pattern (`getBoutiqueId(user, c.req.query('boutique_id'))`) et n'est pas concerné. **À corriger dans une tâche dédiée** — mérite un test spécifique avant déploiement (isolation multi-tenant = sensible), pas un correctif de passage.
+
 ## 2 bugs frontend ticket (vignettes photo/lightbox noires + fiche détail vidée de son contenu) — CORRIGÉS le 2026-07-15
 
 Signalés par test utilisateur après le lot de 3 fixes précédent, reproduits en navigateur réel (Claude in Chrome) sur le lot précédent uniquement — ces deux-là sont corrigés par lecture de code, non reproduits en navigateur avant fix (pas de repro demandée sur ce tour).

@@ -1,41 +1,34 @@
-# Recovery Prompt — iziGSM — 2026-07-15 (checkpoint 18 — chantier Ports & Adapters TERMINÉ)
+# Recovery Prompt — iziGSM — 2026-07-15 (checkpoint 21)
 
 ## Vue d'ensemble
-SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Objectif long terme : pouvoir sortir de Cloudflare (VPS + Postgres) sans changer le CDC fonctionnel — chantier Ports & Adapters démarré le 2026-07-12, **terminé le 2026-07-15**.
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Le chantier Ports & Adapters (démarré 2026-07-12) est **terminé et déployé en production** depuis le 2026-07-15.
 
 ## Architecture actuelle
 - Backend Hono/TypeScript sur Cloudflare Workers, pattern Controller (`routes/`) → Service (`services/`) → jamais de SQL inline dans une route
-- **Pattern Ports & Adapters, chantier complet** : `src/ports/database.ts` (interface `Database` : `all/get/run`, SQL brut) + `src/adapters/cloudflare/d1Database.ts` (implémentation D1, seule active), injecté via middleware global (`src/index.tsx`, `c.set('db', new D1DatabaseAdapter(c.env.DB))`) et lu dans les routes via `c.get('db')`
-- **20/20 services passés par le chantier** — chacun migré au moins partiellement. Règle de migration constante sur tout le chantier : toute fonction dépendant d'`auditLog()`, `nextNumero()`, `enregistrerTransaction()` ou `db.batch()` reste sur `D1Database` brut (`c.env.DB`), le reste passe par le port `Database` (`c.get('db')`). Certains services (emailService, agendaService, phoneCatalogService, garantiesService à 90%, reconditionnementService à 92%) n'avaient aucune dépendance bloquante et sont migrés **intégralement**.
-- **`src/lib/timezone.ts`** (créé le 2026-07-12, complété le 2026-07-15) : `parseUtcTimestamp()`, `todayParis()`, `currentMonthParis()` — appliqués systématiquement partout où une borne "aujourd'hui"/"ce mois-ci" était déléguée à `DATE('now')`/`strftime(...,'now')` (UTC serveur D1) ou à `new Date()` local (ambigu hors Cloudflare Workers). Services traités : `personnelService.ts`, `caisseService.ts` (2026-07-12), `ticketService.ts` (`getKanban`), `garantiesService.ts` (vérifié, rien à corriger — comparaisons UTC↔UTC pures), `agendaService.ts` (`getKpisAgenda` + `getWeekStart`/`getWeekEnd` refaits en arithmétique UTC pure), `statsService.ts` (toutes les fonctions à borne temporelle, + 2 helpers locaux `addDaysParis`/`addMonthsParis`).
+- **Pattern Ports & Adapters, chantier complet et déployé** : `src/ports/database.ts` (interface `Database`) + `src/adapters/cloudflare/d1Database.ts`, injecté via `src/index.tsx` (`c.set('db', new D1DatabaseAdapter(c.env.DB))`), lu via `c.get('db')`. 20/20 services passés par le chantier, chacun migré au moins partiellement (règle constante : toute fonction dépendant d'`auditLog()`/`nextNumero()`/`enregistrerTransaction()`/`db.batch()` reste sur `D1Database` brut).
+- **`src/lib/timezone.ts`** : `parseUtcTimestamp()`/`todayParis()`/`currentMonthParis()`, appliqués partout où une borne "aujourd'hui" dépendait de `DATE('now')`/`new Date()` ambigu. Détail service par service dans `todo.md`.
+- **`src/lib/photoToken.ts`** (nouveau, 2026-07-15) : jetons HMAC-SHA256 courte durée (5 min) pour l'accès direct aux photos de tickets via `<img src>` (qui ne peut jamais porter de header `Authorization`). Émis par `GET /api/tickets/:id/photos/:photoId/url` (authentifié), consommés par `GET /api/photo-view/:token` (public, `index.tsx`, hors `authMiddleware` — même pattern que la route iCal publique).
 
-## Historique des 20 checkpoints (services migrés, dans l'ordre)
-1-5. `photosService`, `publicService`, `boutiqueService`, `rachatService`, `personnelService` (2026-07-12)
-6-8. `caisseService`, `factureService`, `devisService` (2026-07-12/13)
-9-12. `authService`, `stockService`, `clientService`, `fournisseursService` (2026-07-14)
-13. `servicesService.ts` — 8/22 fonctions (2026-07-15)
-14. `ticketService.ts` — 6/11 fonctions, fix SQL injection `checkAndArchiveTickets` (2026-07-15)
-15. `reconditionnementService.ts` — 12/13 fonctions (2026-07-15)
-16. `phoneCatalogService.ts` — 5/5 intégral, 0→11 tests créés (2026-07-15)
-17. `emailService.ts` — 13/13 intégral, fix `processRelancesDevis` colonne `montant_ttc` (2026-07-15)
-18. `garantiesService.ts` — 9/10 fonctions (2026-07-15)
-19. `agendaService.ts` — 12/12 intégral, fix `getWeekStart`/`getWeekEnd` UTC-safe (2026-07-15)
-20. `statsService.ts` — 10/10 intégral, fix `mode_paiement` (2 endpoints cassés depuis toujours), **dernier service** (2026-07-15)
+## Déploiement — état réel (important, corrige les checkpoints précédents)
+**Tout est déployé en production** (`repairdesk.fr`) depuis le 2026-07-15 : les checkpoints 6 à 20 (chantier Ports & Adapters complet) ont été buildés et déployés (`wrangler pages deploy`), plus une série de correctifs post-déploiement trouvés par test utilisateur réel (`telnet@bbox.fr`) :
+- Auth frontend cassée (token photo/archivage vide, refresh JWT jamais fonctionnel)
+- Impression fiche ticket, changement de statut, création de ticket non persistée
+- Vignettes/lightbox photos 401 silencieux + fiche détail vidée (mauvais noms de champs API)
+- `openLightbox()` manquée au premier correctif (oubli), puis corrigée
+- Jeton signé courte durée pour les photos (remplace le blob+fetch, ce checkpoint)
 
-## Bugs préexistants découverts et corrigés pendant le chantier (détail complet : `bugs.md`)
-- Route `/services/marques`+`/services/modeles` inaccessibles depuis Sprint 2.38 (collision avec `/services/:id`)
-- SQL injection potentielle dans `checkAndArchiveTickets` (interpolation `boutique_id` non paramétrée)
-- `processRelancesDevis()` — colonne `montant_ttc` inexistante (vraie colonne : `total_ttc`) — relance devis batch cassée depuis toujours
-- `exportCsvCa()`/`getRapportComptable()` — colonne `mode_paiement` inexistante sur `factures` (vit sur `paiements`) — 2 endpoints cassés depuis toujours
-- Test "1er du mois courant" (pré-existant non-bloquant depuis 2026-07-09) réparé par la migration timezone
-- 2 bugs RGPD critiques (`clientService.ts`, checkpoint 11, 2026-07-14) — voir historique précédent
+`sw.js` `CACHE_VERSION` bumpée à chaque déploiement (`v2.45` → `v2.52` sur cette session) pour forcer l'invalidation du cache App Shell.
 
-## Bugs préexistants non corrigés (hors périmètre migration, décision de conception requise)
-- `routes/auth.ts:481` — `sendEmail()` appelée avec une arité incorrecte (5 args au lieu d'un objet) — email de réinitialisation mot de passe jamais envoyé. Nécessite de choisir entre adapter `sendEmail()` (boutique-scopé) ou créer un nouveau helper système (façon `sendOtpInscription`) pour ce cas hors-boutique.
-- `computeFin()` (`agendaService.ts`) — `new Date(debut)` sans suffixe de fuseau, ambigu sur machine non-UTC (sans impact production, Workers = UTC). 2 tests unitaires non-bloquants documentés.
+## Bug de sécurité ouvert — priorité à évaluer avec l'utilisateur
+`GET`/`POST /api/tickets/:id/photos` (`routes/tickets.ts`) appellent `getBoutiqueId(c)` avec un seul argument (le contexte Hono) au lieu de `(user, paramBoutiqueId)` attendu par `lib/middleware.ts`. Confirmé par `tsc --noEmit` (erreur de type, pas juste suspecté) : `user` reçoit le contexte Hono entier, `user.role`/`user.boutique_id` valent `undefined`, la garde d'isolation `if (boutiqueId && ticket.boutique_id !== ...)` ne se déclenche jamais. **Impact potentiel : un utilisateur authentifié pourrait lister/uploader des photos sur un ticket d'une autre boutique en devinant son ID.** Le nouvel endpoint `/url` (jeton signé) utilise le bon pattern et n'est pas concerné. Détail complet dans `bugs.md` — mérite un test d'isolation dédié avant tout déploiement du fix (pas un correctif de passage).
+
+## Autres bugs connus non corrigés (détail complet `bugs.md`)
+- `routes/auth.ts:481` — `sendEmail()` appelée avec une arité incorrecte, email de réinitialisation mot de passe jamais envoyé. Nécessite une décision de conception (adapter `sendEmail()` vs nouveau helper système).
+- `computeFin()` (`agendaService.ts`) — `new Date(debut)` sans suffixe fuseau, ambigu hors UTC. Sans impact prod (Workers = UTC). 2 tests non-bloquants.
 - `boutique_creneaux` vide, aucune UI de config → prise de RDV en ligne sans créneaux
 - `www.repairdesk.fr` → 521 (Gandi, hors de notre contrôle)
 - `/factures/:id/emettre` n'envoie aucun email
+- `populateTechniciens()` liste tous les rôles, pas seulement les techniciens
 
 ## Contraintes
 - Ne jamais toucher aux records MX/SPF/webmail de `repairdesk.fr`
@@ -47,10 +40,10 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - Bandeaux `════` pour les regroupements logiques d'endpoints dans les fichiers routes
 
 ## État git au moment de ce checkpoint
-Tous les checkpoints du chantier (13 à 20 de cette session, soit 8 commits) sont commités, rebasés et pushés sur `origin/main`. Working tree propre. Suite de tests : 791/793 (2 échecs pré-existants confirmés, `computeFin()` sensible au fuseau machine, sans impact production).
+Tout commité et pushé sur `origin/main` (dernier commit du fix photo token). Working tree propre après ce checkpoint. Suite de tests : 791/793 (2 échecs pré-existants confirmés, `computeFin()` sensible au fuseau machine, sans impact production).
 
 ## Prochaines étapes recommandées
-1. **Déploiement en production** — plusieurs checkpoints (depuis le 6, session du 2026-07-14) ne sont pas encore déployés sur `repairdesk.fr`. Un déploiement groupé complet du chantier est à planifier avec l'utilisateur (build → test → déploiement → validation).
-2. Traiter les 2 bugs non corrigés listés ci-dessus (reset password, `computeFin`) si prioritaires.
-3. Hors chantier Ports & Adapters : purge RGPD automatique, multi-sites géré, rebranding "Mon Atelier"→"MyDesk", programme de parrainage — voir `todo.md` pour le détail complet.
-4. Si la bascule VPS/Postgres est engagée un jour : adaptateur `PostgresDatabase` implémentant `src/ports/database.ts`, + traduction des dialectes SQLite-only (`julianday()`, `datetime('now', ...)`, `||`, `INSERT ... RETURNING`) — documenté comme limite connue dans `bugs.md`.
+1. **Décider de la priorité du bug d'isolation photos** (`getBoutiqueId(c)` mal appelé) — recommandé avant tout usage multi-boutiques actif sur ces 2 endpoints spécifiques
+2. Traiter les autres bugs non corrigés si prioritaires (reset password, `computeFin`)
+3. Hors chantier Ports & Adapters : purge RGPD automatique, multi-sites géré, rebranding "Mon Atelier"→"MyDesk", programme de parrainage — voir `todo.md`
+4. Si la bascule VPS/Postgres est engagée un jour : adaptateur `PostgresDatabase` + traduction des dialectes SQLite-only (`julianday()`, `datetime('now', ...)`, `||`, `INSERT ... RETURNING`) — documenté comme limite connue dans `bugs.md`

@@ -1,4 +1,12 @@
-# iziGSM — État courant (MàJ : 2026-07-15, 3 fixes frontend ticket post-déploiement)
+# iziGSM — État courant (MàJ : 2026-07-15, fix photos ticket — jeton signé)
+
+## Fix photos ticket — jeton signé courte durée — 2026-07-15
+
+Suite au fix vignettes/lightbox (blob+fetch), remplacé par un système de jeton HMAC-SHA256 courte durée (5 min, `src/lib/photoToken.ts`) : `GET /api/tickets/:id/photos/:photoId/url` (authentifié) émet un jeton scopé `{photoId, boutiqueId, exp}`, consommé par `GET /api/photo-view/:token` (public, hors `authMiddleware`, `index.tsx`). Évite le passage par `fetch()`+blob côté client — `img.src` reçoit directement l'URL avec jeton. Validé en prod (cycle complet + rejets 401 sans/avec mauvais jeton). `sw.js` bumpé `v2.51`→`v2.52`.
+
+**Bug de sécurité découvert en cours de route, non corrigé (hors périmètre de cette tâche)** : `GET`/`POST /api/tickets/:id/photos` appellent `getBoutiqueId(c)` avec un seul argument au lieu de `(user, paramBoutiqueId)` — l'isolation multi-tenant sur ces 2 endpoints ne se déclenche jamais (`user`/`boutiqueId` valent `undefined`, la condition de garde est toujours fausse). Confirmé par erreur de type `tsc --noEmit`, pas juste suspecté. **Impact potentiel : un utilisateur authentifié pourrait lister/uploader des photos sur un ticket d'une autre boutique en devinant son ID.** Détail complet + priorité de correction dans `bugs.md`.
+
+## 3 fixes frontend ticket post-déploiement — 2026-07-15
 
 ## Fix 3 bugs frontend ticket — 2026-07-15 (signalé par test utilisateur `telnet@bbox.fr`)
 
