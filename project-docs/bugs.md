@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 2 bugs frontend ticket (vignettes photo/lightbox noires + fiche détail vidée de son contenu) — CORRIGÉS le 2026-07-15
+
+Signalés par test utilisateur après le lot de 3 fixes précédent, reproduits en navigateur réel (Claude in Chrome) sur le lot précédent uniquement — ces deux-là sont corrigés par lecture de code, non reproduits en navigateur avant fix (pas de repro demandée sur ce tour).
+
+### 1. Vignettes photo invisibles + lightbox = écran noir au clic
+`buildPhotoThumb()` (`tickets.js`) utilisait `<img src="/api/tickets/:id/photos/:photoId/view">` — une balise `<img>` classique ne peut jamais porter de header `Authorization`, or cette route est derrière `authMiddleware` (`tickets.use('*', authMiddleware)`, `routes/tickets.ts:53`). Chaque vignette recevait donc un 401 silencieux. `openLightbox()` faisait exactement la même chose sur un `<img>` plein écran avec un fond `rgba(0,0,0,0.85)` (`tickets.html:433`) — d'où l'"écran noir" au clic (l'image ne charge jamais, seul le fond du lightbox est visible). **Cassé depuis l'introduction des photos tickets (Sprint 2.36).**
+**Fix** : nouvelle fonction `loadAuthenticatedImage(url, imgEl)` — `fetch()` avec `Authorization: Bearer` + `getToken()`, conversion en blob URL (`URL.createObjectURL`), affectée à `img.src` une fois chargée (fallback vers l'icône placeholder existante en cas d'échec). Utilisée à la fois par les vignettes et par la lightbox.
+
+### 2. Fiche détail (bouton œil) vidée : appareil/description/prix/téléphone vides
+`loadTickets()` mappait la réponse de `GET /api/tickets` avec des noms de clés qui **n'existent pas** dans la réponse réelle de `listTickets()` (`ticketService.ts:261`) : `t.description` au lieu de `t.description_panne`, `t.marque`/`t.modele` au lieu de `t.appareil_marque`/`t.appareil_modele`, `t.client_tel` au lieu de `t.client_telephone`, `t.devis_montant` au lieu de `t.prix_estime`/`t.prix_final`. Résultat : ces champs étaient **toujours vides** dans `allTicketsCache`, aussi bien dans le tableau de liste (colonnes Appareil/Problème vides, régression cachée par les tests qui portent uniquement sur `services/*.ts`, pas sur ce fichier statique) que dans la fiche détail ouverte via le bouton œil (`viewTicket()`), qui lit exclusivement ce cache sans re-fetch pour ces champs (contrairement à `editTicket()`, qui recharge `/api/tickets/:id`). Un dossier avec une description substantielle en base semblait totalement vide à l'ouverture. **Cassé probablement depuis le passage au SELECT allégé de `listTickets()`.**
+**Fix** : `loadTickets()` corrigé pour lire les vraies clés de la réponse API. `email`/`imei`/`notes_internes` ne sont toujours pas renvoyés par la liste allégée (choix backend assumé) — non corrigé, hors périmètre de ce signalement (le bouton œil n'affiche pas l'email, l'IMEI reste vide si non renseigné ailleurs).
+
+**Déployé et vérifié en prod** (`sw.js` bumpé `v2.49`→`v2.50`, fichiers statiques confirmés à jour). **Non reproduit en navigateur réel avant/après fix sur ce tour** — corrections basées sur lecture de code et correspondance avec les symptômes rapportés.
+
 ## 3 bugs frontend ticket (impression, changement de statut, création silencieusement non persistée) — CORRIGÉS le 2026-07-15
 
 Signalés en une seule fois par test utilisateur (`telnet@bbox.fr`), après le fix auth de la session (entrée ci-dessous). Investigation par lecture directe du code frontend `public/static/js/tickets.js`/`app.js`/`factures.js`, sans reproduction navigateur (Claude in Chrome non utilisé sur ce tour) — chaque root cause est confirmée par lecture de code, pas par observation runtime.

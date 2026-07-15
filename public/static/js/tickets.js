@@ -59,23 +59,31 @@ async function loadTickets() {
     const result = await apiGet('/api/tickets', params);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
 
-    // Mapper API vers format attendu par renderTickets
+    // Mapper API vers format attendu par renderTickets — les noms doivent matcher
+    // la sélection réelle de listTickets() (ticketService.ts) : description_panne,
+    // appareil_marque/appareil_modele, client_telephone, prix_estime/prix_final.
+    // Bug préexistant (voir bugs.md) : ces champs étaient mappés depuis des clés
+    // qui n'existent pas dans la réponse API (description/marque/modele/client_tel/
+    // devis_montant) — toujours vides en pratique, colonnes liste + fiche détail
+    // (bouton œil) affichaient un dossier vidé de son contenu. email/imei/notes ne
+    // sont pas renvoyés par la liste allégée — viewTicket() recharge la fiche
+    // complète via /api/tickets/:id pour ces champs (même pattern qu'editTicket()).
     allTicketsCache = (result.data?.data || []).map(t => ({
       id:          t.id,
       clientName:  t.client_nom   || t.clientName  || '—',
-      phone:       t.client_tel   || t.phone        || '',
+      phone:       t.client_telephone || t.phone    || '',
       email:       t.client_email || t.email        || '',
-      deviceType:  t.marque       || t.deviceType   || '',
-      deviceModel: t.modele       || t.deviceModel  || '',
+      deviceType:  t.appareil_marque || t.deviceType  || '',
+      deviceModel: t.appareil_modele || t.deviceModel || '',
       imei:        t.imei         || '',
-      description: t.description  || '',
+      description: t.description_panne || t.description || '',
       notes:       t.notes_internes || t.notes      || '',
       status:      mapStatutToLegacy(t.statut || t.status),
       statut:      t.statut       || '',
       priority:    t.priorite     || t.priority     || 'Moyenne',
       technician:   t.technicien_nom || t.technician || 'Non assigné',
       technicianId: t.technicien_id ?? null,
-      price:       t.devis_montant  || t.price      || 0,
+      price:       t.prix_final ?? t.prix_estime ?? t.price ?? 0,
       numero:      t.numero       || '',
       hasSignature: false,
       attachments: [],
@@ -1116,12 +1124,32 @@ function buildPhotoThumb(ticketId, photo) {
   const imgUrl = `/api/tickets/${ticketId}/photos/${photo.id}/view`;
 
   div.innerHTML = `
-    <img src="${imgUrl}" alt="${esc(photo.nom_fichier)}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23f3f4f6%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>📷</text></svg>'">
+    <img alt="${esc(photo.nom_fichier)}" loading="lazy">
     <button class="photo-thumb-del" onclick="deletePhotoConfirm(event, ${ticketId}, ${photo.id})" title="Supprimer">✕</button>
     <div class="photo-thumb-label">${esc(photo.nom_fichier)}</div>
   `;
-  div.querySelector('img').addEventListener('click', () => openLightbox(imgUrl));
+  const imgEl = div.querySelector('img');
+  loadAuthenticatedImage(imgUrl, imgEl);
+  imgEl.addEventListener('click', () => openLightbox(imgUrl));
   return div;
+}
+
+/**
+ * loadAuthenticatedImage — charge une image protégée par JWT (route /view,
+ * derrière authMiddleware) via fetch() + Authorization, puis l'affiche via une
+ * blob URL. Une balise <img src="..."> classique ne peut porter aucun header
+ * Authorization — c'est pour ça que les vignettes/la lightbox n'ont jamais
+ * fonctionné (401 systématique, silencieux côté <img>).
+ */
+async function loadAuthenticatedImage(url, imgEl) {
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    imgEl.src = URL.createObjectURL(blob);
+  } catch (err) {
+    imgEl.src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23f3f4f6%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>📷</text></svg>';
+  }
 }
 
 // ── Drag & drop dropzone photos ───────────────────────────────────────────────
