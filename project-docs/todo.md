@@ -35,7 +35,7 @@ Décisions validées avec l'utilisateur (AskUserQuestion) : API `recherche-entre
 - [x] **Déployé le 2026-07-16** (`npm run build` + `wrangler pages deploy dist --project-name izigsm`), `repairdesk.fr/api/health` → 200 après déploiement
 - [x] **Validé en prod le 2026-07-16** (Claude in Chrome, `admin@izigsm.fr`, SIRET réel DINUM `13002526500013`) : toast "Fiche entreprise trouvée et pré-remplie", raison sociale/adresse/code postal/ville/TVA (`FR07130025265`) tous corrects — round-trip complet confirmé, aucune donnée de test enregistrée (modal fermé sans "Enregistrer")
 
-### D. Fix sécurité — isolation photos tickets — **corrigé et testé le 2026-07-16, PAS commité**
+### D. Fix sécurité — isolation photos tickets — **corrigé, testé, commité, pushé et déployé le 2026-07-16** (commit `506990f`)
 Bug ouvert depuis le checkpoint 21 (2026-07-15), signalé priorité à évaluer dans `bugs.md`/`recovery-prompt.md`.
 - [x] `GET`/`POST /api/tickets/:id/photos` (`routes/tickets.ts`) : `getBoutiqueId(c)` (contexte Hono seul) remplacé par `getBoutiqueId(user, queryBoutiqueId)` (via `ctx(c)`), même pattern que `/photos/:photoId/url` déjà correct
 - [x] Condition de garde durcie : `if (!boutiqueId || ticket.boutique_id !== boutiqueId)` (deny-by-default), au lieu de l'ancienne `if (boutiqueId && ...)` qui laissait passer quand `boutiqueId` était `undefined`
@@ -43,7 +43,7 @@ Bug ouvert depuis le checkpoint 21 (2026-07-15), signalé priorité à évaluer 
 - [x] `tsc --noEmit` : aucune nouvelle erreur liée à `tickets.ts`. Tests 791/793 (mêmes 2 échecs pré-existants `computeFin()`)
 - [x] **Test d'isolation dédié en local live** (`wrangler pages dev` + D1 local) : technicien créé pour `TestBoutique2` (id 2) → `GET`/`POST /api/tickets/1/photos` (ticket de la boutique 1) → **403** (avant fix : 200, faille reproduite et confirmée) ; accès légitime (admin + `boutique_id` correct) → 200 ; `boutique_id` erroné passé par un admin → 403. Utilisateur de test supprimé après coup.
 - [x] **Limite découverte, non corrigée (hors périmètre)** : `admin@izigsm.fr` a `boutique_id: null` — reçoit désormais 403 sur ces 3 endpoints photos sans `boutique_id` explicite dans l'UI (déjà le cas pour `/url` depuis le 2026-07-15, pas une régression de ce fix). Détail `bugs.md`.
-- [ ] **Commit + push + déploiement** — en attente de confirmation utilisateur
+- [x] **Commit + push + déploiement** (`506990f`, `wrangler pages deploy`), `repairdesk.fr/api/health` → 200 après déploiement
 
 ## Analyse comparative monatelier.net — couverture complète (2026-07-11 v3)
 

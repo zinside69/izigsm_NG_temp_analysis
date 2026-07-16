@@ -25,7 +25,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - Validé en local avec un SIRET réel (DINUM), puis **rebasé sur `origin/main` sans conflit** (commit auto `3d05bab` chore backup D1 intercalé), pushé (`a25c472`), buildé et déployé (`wrangler pages deploy dist --project-name izigsm`)
 - **Validé en prod le 2026-07-16** (Claude in Chrome, `admin@izigsm.fr`, même SIRET DINUM `13002526500013`) : toast "Fiche entreprise trouvée et pré-remplie", raison sociale/adresse/code postal/ville/TVA (`FR07130025265`) tous corrects, round-trip complet confirmé
 
-**D. Fix sécurité — isolation photos tickets (corrigé et testé le 2026-07-16, PAS commité)**
+**D. Fix sécurité — isolation photos tickets (corrigé, testé, commité, pushé et déployé le 2026-07-16, commit `506990f`)**
 - `GET`/`POST /api/tickets/:id/photos` (`routes/tickets.ts`) appelaient `getBoutiqueId(c)` (contexte Hono seul) au lieu de `getBoutiqueId(user, queryBoutiqueId)` — l'isolation multi-tenant ne se déclenchait jamais (bug ouvert depuis le checkpoint 21)
 - Fix : même pattern que `/photos/:photoId/url` (déjà correct), condition durcie en deny-by-default
 - **Test d'isolation dédié en local live** : technicien boutique 2 → 403 sur ticket boutique 1 (avant fix : 200, faille reproduite) ; accès légitime toujours 200 ; `tsc`/tests 791/793 inchangés
@@ -34,12 +34,11 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 Détail complet dans `todo.md` § Checkpoint 22 et `bugs.md` (3 bugs documentés le 2026-07-15 + 1 corrigé le 2026-07-16).
 
 ## État git à la fin de ce checkpoint
-Les lots A, B et C sont sur `origin/main` et déployés en prod (`repairdesk.fr/api/health` → 200 après déploiement du lot C). Le lot D (fix isolation photos) est **corrigé et testé localement, pas encore commité/pushé/déployé** — en attente de confirmation utilisateur. Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`).
+Les lots A, B, C et D sont tous sur `origin/main` et déployés en prod (`repairdesk.fr/api/health` → 200 après déploiement du lot D, commit `506990f`). Working tree propre (hors archive `izigsm_v2.45.0_backup_2026-07-16.zip`, non trackée intentionnellement). Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`).
 
 ## Prochaines étapes recommandées
-1. Commit + push + déploiement du lot D (fix isolation photos), sur confirmation utilisateur
-2. Reste ouvert après ça : reset password jamais envoyé, `boutique_creneaux` vide, limite admin `boutique_id: null` sur endpoints photos — voir `bugs.md`
-3. Mettre à jour ces 4 fichiers project-docs si un nouveau chantier démarre (checkpoint 23)
+1. Reste ouvert : reset password jamais envoyé, `boutique_creneaux` vide, limite admin `boutique_id: null` sur endpoints photos — voir `bugs.md`
+2. Mettre à jour ces 4 fichiers project-docs si un nouveau chantier démarre (checkpoint 23)
 
 ---
 
