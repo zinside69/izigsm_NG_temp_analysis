@@ -363,19 +363,20 @@ tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, data: PhotoRow[] }
  */
 tickets.get('/:id/photos', async (c) => {
-  const { user, dbPort, queryBoutiqueId } = ctx(c)
+  const { user, dbPort } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   try {
     const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
-    // Isolation multi-tenant (fix 2026-07-16) : getBoutiqueId() attend (user, paramBoutiqueId),
-    // pas le contexte Hono seul — l'appel précédent getBoutiqueId(c) résolvait toujours
-    // boutiqueId à undefined, désactivant silencieusement cette vérification pour tout rôle.
-    // Même pattern que GET /:id/photos/:photoId/url (déjà correct).
-    const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
-    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
+    // Isolation multi-tenant (fix 2026-07-16, ajusté le 2026-07-16) : admin (rôle global,
+    // souvent sans boutique_id propre) accède à toute boutique sans le préciser en query
+    // param — même convention que boutiques.ts (`user.role !== 'admin' && ...`). Non-admin
+    // reste strictement limité à sa propre boutique. Avant cet ajustement, getBoutiqueId()
+    // renvoyait null pour un admin sans boutique_id et sans query param, le bloquant à tort
+    // sur ces 3 endpoints (le frontend n'envoie jamais boutique_id ici) — voir bugs.md.
+    if (user.role !== 'admin' && ticket.boutique_id !== user.boutique_id) {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 
@@ -397,7 +398,7 @@ tickets.get('/:id/photos', async (c) => {
  * @returns { success, data: PhotoRow }
  */
 tickets.post('/:id/photos', async (c) => {
-  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   const r2 = c.env.PHOTOS
@@ -409,9 +410,8 @@ tickets.post('/:id/photos', async (c) => {
     const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
-    // Isolation multi-tenant (fix 2026-07-16) : voir commentaire identique sur GET /:id/photos.
-    const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
-    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
+    // Isolation multi-tenant : voir commentaire identique sur GET /:id/photos.
+    if (user.role !== 'admin' && ticket.boutique_id !== user.boutique_id) {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 
@@ -502,15 +502,18 @@ tickets.get('/:id/photos/:photoId/url', async (c) => {
     const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
-    const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
-    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
+    // Isolation multi-tenant : voir commentaire identique sur GET /:id/photos.
+    if (user.role !== 'admin' && ticket.boutique_id !== user.boutique_id) {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 
     const meta = await getPhotoById(dbPort, photoId)
     if (!meta || meta.ticket_id !== ticketId) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
 
-    const token = await signPhotoToken(photoId, boutiqueId, c.env.JWT_SECRET)
+    // Jeton scopé à la boutique réelle du ticket (pas celle de l'appelant — un admin
+    // global n'a pas de boutique_id propre, mais le jeton doit rester vérifiable contre
+    // la boutique effective de la photo pour rester cohérent avec photoToken.ts).
+    const token = await signPhotoToken(photoId, ticket.boutique_id, c.env.JWT_SECRET)
     return c.json({ success: true, url: `/api/photo-view/${token}`, expires_in: 300 })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500)
