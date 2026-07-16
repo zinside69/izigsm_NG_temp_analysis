@@ -10,7 +10,7 @@ Implémente la feature "Accord" spécifiée le 2026-07-10 (double validation bou
 
 **Acompte structuré** : demandé en même temps, décisions de scope actées (encaissement manuel + en ligne, demandé au devis + à la prise en charge) mais **explicitement reporté à une session dédiée** (dépendances Stripe + NF525 à cadrer). Détail complet dans `todo.md`.
 
-Validé en local live de bout en bout (devis→orange→override→vert, isolation rôle technicien confirmée, 409 sur re-override). Tests 803/805 (fixtures SQL mises à jour). `CACHE_VERSION` bumpée `v2.55`→`v2.56` (fichiers frontend touchés : `tickets.js`, `suivi.html`).
+Validé en local live de bout en bout (devis→orange→override→vert, isolation rôle technicien confirmée, 409 sur re-override). Tests 803/805 (fixtures SQL mises à jour). `CACHE_VERSION` bumpée `v2.55`→`v2.56`. **Déployé (`271accb`)**, `sw.js` confirme `izigsm-v2.56` en prod.
 
 ## Checkpoint 24 — populateTechniciens() filtré + CACHE_VERSION bumpée, 2026-07-16
 

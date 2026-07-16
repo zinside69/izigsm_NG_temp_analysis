@@ -14,7 +14,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 Détail complet dans `todo.md`/`bugs.md`.
 
 ## État git à la fin de ce checkpoint
-Commité (à faire), tests 803/805 (fixtures SQL `ticketService.test.ts`/`publicService.test.ts` mises à jour suite au nouveau LEFT JOIN devis). `CACHE_VERSION` bumpée `v2.55`→`v2.56` (frontend touché : `tickets.js`, `suivi.html`).
+Commité, pushé et déployé (`271accb`), `repairdesk.fr/api/health` → 200 et `sw.js` confirme `izigsm-v2.56` après déploiement. Tests 803/805 (fixtures SQL `ticketService.test.ts`/`publicService.test.ts` mises à jour suite au nouveau LEFT JOIN devis).
 
 ## Prochaines étapes recommandées
 1. Session dédiée pour l'acompte structuré (voir `todo.md` § Chantier futur — décisions déjà prises, reste à cadrer le modèle de données + l'intégration paiement)
