@@ -1,22 +1,24 @@
-# iziGSM — État courant (MàJ : 2026-07-15, checkpoint 22 — autocomplete prise en charge + fiche client société/SIRET)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 22 — autocomplete prise en charge + fiche client société/SIRET, lot C déployé)
 
 ## Checkpoint 22 — reprise via conversation en cours (pas `/init recover`), 2026-07-15
 
-Trois lots de travail dans cette session, sur `izigsm/webapp/` :
+Quatre lots de travail dans cette session, sur `izigsm/webapp/` :
 
 **A. Bug + feature prise en charge (déployé, commits `c30984e`/`03e384d`)** : autocomplete Modèle réparé (bug d'extraction `res.data` vs `res.data.data`), champ Marque converti en autocomplete (126 marques réelles, remplace un `<select>` figé à 7 options), grille schéma de déverrouillage 9 points ajoutée (stockée dans la colonne texte existante, pas de migration). Faille XSS trouvée et corrigée dans les deux autocompletes (onclick interpolé → `data-*`/listener délégué).
 
 **B. Fiche client type société (déployé, commit `f3938c5`, migration `0035` en prod)** : toggle particulier/professionnel, champs raison sociale/SIRET/TVA intracom, autocomplete adresse via l'API gouvernementale BAN. Bug corrigé au passage : `listClients()` ne renvoyait jamais adresse/code_postal/siret/tva_intracom (édition perdait ces champs). Sidebar : Clients remonté sous Tableau de bord.
 
-**C. Recherche entreprise par SIRET (commité, PAS déployé, PAS pushé)** : `recherche-entreprises.api.gouv.fr`, auto à 14 chiffres, pré-remplit raison sociale/adresse/TVA (calculée depuis le SIREN) sans jamais écraser une saisie manuelle. **L'utilisateur pousse lui-même depuis son terminal et déploiera plus tard** — ne pas pousser ni déployer ce lot sans confirmation explicite dans une future session.
+**C. Recherche entreprise par SIRET (pushé et déployé le 2026-07-16)** : `recherche-entreprises.api.gouv.fr`, auto à 14 chiffres, pré-remplit raison sociale/adresse/TVA (calculée depuis le SIREN) sans jamais écraser une saisie manuelle. Commit `97f96b2` rebasé sans conflit sur `origin/main` (`a25c472`), buildé et déployé (`wrangler pages deploy`). **Validé en prod** (Claude in Chrome, SIRET réel DINUM `13002526500013`) : toast de confirmation, raison sociale/adresse/code postal/ville/TVA (`FR07130025265`) tous corrects.
 
-Détail complet des 3 lots dans `todo.md` (§ Checkpoint 22). Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`, sans rapport).
+**D. Fix sécurité — isolation photos tickets (corrigé et testé le 2026-07-16, PAS commité)** : `GET`/`POST /api/tickets/:id/photos` appelaient `getBoutiqueId(c)` (contexte Hono seul, bug ouvert depuis le checkpoint 21) — remplacé par `getBoutiqueId(user, queryBoutiqueId)`, même pattern que `/photos/:photoId/url`. Test d'isolation dédié en local live : technicien d'une autre boutique → 403 sur un ticket qui n'est pas le sien (avant fix : 200, faille reproduite). En attente de confirmation utilisateur pour commit/push/déploiement.
+
+Détail complet des 4 lots dans `todo.md` (§ Checkpoint 22). Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`, sans rapport).
 
 ## Fix photos ticket — jeton signé courte durée — 2026-07-15
 
 Suite au fix vignettes/lightbox (blob+fetch), remplacé par un système de jeton HMAC-SHA256 courte durée (5 min, `src/lib/photoToken.ts`) : `GET /api/tickets/:id/photos/:photoId/url` (authentifié) émet un jeton scopé `{photoId, boutiqueId, exp}`, consommé par `GET /api/photo-view/:token` (public, hors `authMiddleware`, `index.tsx`). Évite le passage par `fetch()`+blob côté client — `img.src` reçoit directement l'URL avec jeton. Validé en prod (cycle complet + rejets 401 sans/avec mauvais jeton). `sw.js` bumpé `v2.51`→`v2.52`.
 
-**Bug de sécurité découvert en cours de route, non corrigé (hors périmètre de cette tâche)** : `GET`/`POST /api/tickets/:id/photos` appellent `getBoutiqueId(c)` avec un seul argument au lieu de `(user, paramBoutiqueId)` — l'isolation multi-tenant sur ces 2 endpoints ne se déclenche jamais (`user`/`boutiqueId` valent `undefined`, la condition de garde est toujours fausse). Confirmé par erreur de type `tsc --noEmit`, pas juste suspecté. **Impact potentiel : un utilisateur authentifié pourrait lister/uploader des photos sur un ticket d'une autre boutique en devinant son ID.** Détail complet + priorité de correction dans `bugs.md`.
+**Bug de sécurité découvert en cours de route — CORRIGÉ le 2026-07-16** (voir § Checkpoint 22 lot D ci-dessus) : `GET`/`POST /api/tickets/:id/photos` appelaient `getBoutiqueId(c)` avec un seul argument au lieu de `(user, paramBoutiqueId)` — l'isolation multi-tenant sur ces 2 endpoints ne se déclenchait jamais. Détail complet dans `bugs.md`.
 
 ## 3 fixes frontend ticket post-déploiement — 2026-07-15
 

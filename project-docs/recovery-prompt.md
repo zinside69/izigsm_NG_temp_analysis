@@ -1,4 +1,4 @@
-# Recovery Prompt — iziGSM — 2026-07-15 (checkpoint 22)
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 22, lot C déployé)
 
 ## Vue d'ensemble
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Chantier Ports & Adapters terminé et déployé depuis le checkpoint 21. Ce checkpoint (22) couvre 3 lots distincts sur l'écran Prise en charge et la fiche Client.
@@ -19,20 +19,27 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 - Sidebar : Clients remonté sous Tableau de bord
 - `sw.js` v2.53→v2.54
 
-**C. Recherche entreprise par SIRET — commité, PAS déployé, PAS pushé**
+**C. Recherche entreprise par SIRET — pushé et déployé le 2026-07-16**
 - `recherche-entreprises.api.gouv.fr` (remplace l'ancienne API Sirene INSEE à clé), auto-déclenché à 14 chiffres
 - Pré-remplit raison sociale/adresse/TVA (calculée depuis SIREN) sans écraser une saisie manuelle
-- Validé en local avec un SIRET réel (DINUM). **L'utilisateur pousse lui-même depuis son terminal ("je ferai le push sur le terminal") et déploiera plus tard ("on déploiera plus tard")** — ne pas pousser ni déployer ce commit sans qu'il le redemande explicitement.
+- Validé en local avec un SIRET réel (DINUM), puis **rebasé sur `origin/main` sans conflit** (commit auto `3d05bab` chore backup D1 intercalé), pushé (`a25c472`), buildé et déployé (`wrangler pages deploy dist --project-name izigsm`)
+- **Validé en prod le 2026-07-16** (Claude in Chrome, `admin@izigsm.fr`, même SIRET DINUM `13002526500013`) : toast "Fiche entreprise trouvée et pré-remplie", raison sociale/adresse/code postal/ville/TVA (`FR07130025265`) tous corrects, round-trip complet confirmé
 
-Détail complet dans `todo.md` § Checkpoint 22 et `bugs.md` (3 bugs documentés ce jour).
+**D. Fix sécurité — isolation photos tickets (corrigé et testé le 2026-07-16, PAS commité)**
+- `GET`/`POST /api/tickets/:id/photos` (`routes/tickets.ts`) appelaient `getBoutiqueId(c)` (contexte Hono seul) au lieu de `getBoutiqueId(user, queryBoutiqueId)` — l'isolation multi-tenant ne se déclenchait jamais (bug ouvert depuis le checkpoint 21)
+- Fix : même pattern que `/photos/:photoId/url` (déjà correct), condition durcie en deny-by-default
+- **Test d'isolation dédié en local live** : technicien boutique 2 → 403 sur ticket boutique 1 (avant fix : 200, faille reproduite) ; accès légitime toujours 200 ; `tsc`/tests 791/793 inchangés
+- Limite découverte (non corrigée, hors périmètre) : `admin@izigsm.fr` a `boutique_id: null`, reçoit désormais 403 sur ces 3 endpoints photos sans `boutique_id` explicite — déjà le cas pour `/url` depuis le 2026-07-15, pas une régression. Détail `bugs.md`.
+
+Détail complet dans `todo.md` § Checkpoint 22 et `bugs.md` (3 bugs documentés le 2026-07-15 + 1 corrigé le 2026-07-16).
 
 ## État git à la fin de ce checkpoint
-Le lot C (recherche SIRET + mise à jour de ces 4 fichiers project-docs) est **commité localement, pas pushé** — geste volontaire de l'utilisateur. Les lots A et B sont déjà sur `origin/main` et déployés en prod. Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`).
+Les lots A, B et C sont sur `origin/main` et déployés en prod (`repairdesk.fr/api/health` → 200 après déploiement du lot C). Le lot D (fix isolation photos) est **corrigé et testé localement, pas encore commité/pushé/déployé** — en attente de confirmation utilisateur. Tests 791/793 sur toute la session (2 échecs pré-existants `computeFin()`).
 
 ## Prochaines étapes recommandées
-1. L'utilisateur pousse le commit du lot C depuis son terminal quand il le souhaite
-2. Déploiement du lot C (build + `wrangler pages deploy`) à faire plus tard, sur demande explicite — pas de migration DB requise pour ce lot (pur frontend)
-3. Reste ouvert : bug isolation photos (`getBoutiqueId(c)`), reset password jamais envoyé, `boutique_creneaux` vide — voir `bugs.md`
+1. Commit + push + déploiement du lot D (fix isolation photos), sur confirmation utilisateur
+2. Reste ouvert après ça : reset password jamais envoyé, `boutique_creneaux` vide, limite admin `boutique_id: null` sur endpoints photos — voir `bugs.md`
+3. Mettre à jour ces 4 fichiers project-docs si un nouveau chantier démarre (checkpoint 23)
 
 ---
 

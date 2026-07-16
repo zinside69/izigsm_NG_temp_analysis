@@ -363,15 +363,19 @@ tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, data: PhotoRow[] }
  */
 tickets.get('/:id/photos', async (c) => {
-  const { dbPort } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   try {
     const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
-    const boutiqueId = getBoutiqueId(c)
-    if (boutiqueId && ticket.boutique_id !== Number(boutiqueId)) {
+    // Isolation multi-tenant (fix 2026-07-16) : getBoutiqueId() attend (user, paramBoutiqueId),
+    // pas le contexte Hono seul — l'appel précédent getBoutiqueId(c) résolvait toujours
+    // boutiqueId à undefined, désactivant silencieusement cette vérification pour tout rôle.
+    // Même pattern que GET /:id/photos/:photoId/url (déjà correct).
+    const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 
@@ -393,7 +397,7 @@ tickets.get('/:id/photos', async (c) => {
  * @returns { success, data: PhotoRow }
  */
 tickets.post('/:id/photos', async (c) => {
-  const { user, db, dbPort } = ctx(c)
+  const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const ticketId = parseInt(c.req.param('id'), 10)
 
   const r2 = c.env.PHOTOS
@@ -405,8 +409,9 @@ tickets.post('/:id/photos', async (c) => {
     const ticket = await getTicketForPhoto(dbPort, ticketId)
     if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
 
-    const boutiqueId = getBoutiqueId(c)
-    if (boutiqueId && ticket.boutique_id !== Number(boutiqueId)) {
+    // Isolation multi-tenant (fix 2026-07-16) : voir commentaire identique sur GET /:id/photos.
+    const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+    if (!boutiqueId || ticket.boutique_id !== boutiqueId) {
       return c.json({ success: false, error: 'Accès refusé.' }, 403)
     }
 

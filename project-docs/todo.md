@@ -1,6 +1,6 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## Checkpoint 22 (2026-07-15, suite session) — Prise en charge : autocomplete + schéma ; Fiche client : type société + SIRET
+## Checkpoint 22 (2026-07-15, suite session ; lot C déployé le 2026-07-16) — Prise en charge : autocomplete + schéma ; Fiche client : type société + SIRET
 
 ### A. Prise en charge — autocomplete marque/modèle + grille schéma (commits `c30984e`, `03e384d`, déployés)
 - [x] Bug corrigé : `onModeleInput()` (`tickets.js`) lisait `res.data` au lieu de `res.data?.data` — l'autocomplete Modèle ne renvoyait jamais aucune suggestion depuis toujours (route `/api/services/modeles` fonctionnait, seule l'extraction JS était fausse)
@@ -23,14 +23,27 @@
 - [x] Tests `clientService.test.ts` mis à jour (mocks SQL désynchronisés par les nouvelles colonnes — 6 tests réparés), 791/793 global
 - [x] Déployé en prod, validé en local puis en direct (création client Pro, édition round-trip, sélection dans le menu déroulant CLIENT d'une nouvelle prise en charge)
 
-### C. Recherche entreprise par SIRET — **commité mais PAS déployé, PAS pushé** (l'utilisateur pousse lui-même depuis le terminal)
+### C. Recherche entreprise par SIRET — **pushé et déployé le 2026-07-16** (commit `97f96b2`, rebasé en `a25c472` sur `origin/main`)
 Décisions validées avec l'utilisateur (AskUserQuestion) : API `recherche-entreprises.api.gouv.fr` (gratuite sans clé, remplace l'ancienne API Sirene INSEE qui demandait une clé — un MCP data.gouv.fr n'est pas utilisable par le navigateur d'un utilisateur final en prod, seulement par moi en dev) ; déclenchement auto dès 14 chiffres valides ; pré-remplissage raison sociale + adresse complète + TVA intracom calculée depuis le SIREN.
 - [x] `onSiretInput()`/`lookupSiret()` (`clients.js`) — recherche auto à 14 chiffres, utilise `matching_etablissements[0]` (pas `siege`, qui pointerait sur le siège social si le SIRET saisi est un établissement secondaire)
 - [x] `computeTvaFromSiren()` — formule standard clé = (12 + 3×(SIREN mod 97)) mod 97, vérifiée sur un cas réel (SIREN 130025265 → `FR07130025265`)
 - [x] `_fillIfEmpty()` — ne remplit jamais un champ déjà saisi manuellement (vérifié en test : raison sociale tapée à la main conservée, adresse/CP/ville/TVA remplis car vides)
 - [x] Validé en local (`wrangler pages dev`) avec un SIRET réel (DINUM, `13002526500013`) — raison sociale, adresse, code postal, ville, TVA tous corrects
 - [x] Tests 791/793 (aucun changement backend, pur frontend)
-- [x] **Commité** (message `feat(clients): recherche entreprise par SIRET...`) — **pas pushé** (l'utilisateur le fait depuis son terminal), **pas déployé** ("on déploiera plus tard")
+- [x] **Commité** (message `feat(clients): recherche entreprise par SIRET...`)
+- [x] **Pushé le 2026-07-16** — rebase sans conflit sur `origin/main` (commit auto-intercalé `3d05bab` chore backup D1, sans lien), push `a25c472`
+- [x] **Déployé le 2026-07-16** (`npm run build` + `wrangler pages deploy dist --project-name izigsm`), `repairdesk.fr/api/health` → 200 après déploiement
+- [x] **Validé en prod le 2026-07-16** (Claude in Chrome, `admin@izigsm.fr`, SIRET réel DINUM `13002526500013`) : toast "Fiche entreprise trouvée et pré-remplie", raison sociale/adresse/code postal/ville/TVA (`FR07130025265`) tous corrects — round-trip complet confirmé, aucune donnée de test enregistrée (modal fermé sans "Enregistrer")
+
+### D. Fix sécurité — isolation photos tickets — **corrigé et testé le 2026-07-16, PAS commité**
+Bug ouvert depuis le checkpoint 21 (2026-07-15), signalé priorité à évaluer dans `bugs.md`/`recovery-prompt.md`.
+- [x] `GET`/`POST /api/tickets/:id/photos` (`routes/tickets.ts`) : `getBoutiqueId(c)` (contexte Hono seul) remplacé par `getBoutiqueId(user, queryBoutiqueId)` (via `ctx(c)`), même pattern que `/photos/:photoId/url` déjà correct
+- [x] Condition de garde durcie : `if (!boutiqueId || ticket.boutique_id !== boutiqueId)` (deny-by-default), au lieu de l'ancienne `if (boutiqueId && ...)` qui laissait passer quand `boutiqueId` était `undefined`
+- [x] Commentaires JSDoc ajoutés expliquant le fix et son lien avec `/url`
+- [x] `tsc --noEmit` : aucune nouvelle erreur liée à `tickets.ts`. Tests 791/793 (mêmes 2 échecs pré-existants `computeFin()`)
+- [x] **Test d'isolation dédié en local live** (`wrangler pages dev` + D1 local) : technicien créé pour `TestBoutique2` (id 2) → `GET`/`POST /api/tickets/1/photos` (ticket de la boutique 1) → **403** (avant fix : 200, faille reproduite et confirmée) ; accès légitime (admin + `boutique_id` correct) → 200 ; `boutique_id` erroné passé par un admin → 403. Utilisateur de test supprimé après coup.
+- [x] **Limite découverte, non corrigée (hors périmètre)** : `admin@izigsm.fr` a `boutique_id: null` — reçoit désormais 403 sur ces 3 endpoints photos sans `boutique_id` explicite dans l'UI (déjà le cas pour `/url` depuis le 2026-07-15, pas une régression de ce fix). Détail `bugs.md`.
+- [ ] **Commit + push + déploiement** — en attente de confirmation utilisateur
 
 ## Analyse comparative monatelier.net — couverture complète (2026-07-11 v3)
 
