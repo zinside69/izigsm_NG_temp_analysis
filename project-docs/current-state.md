@@ -1,4 +1,14 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 25 — feature Accord timeline + override + CACHE_VERSION v2.56)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 26 — brainstorming acompte structuré EN COURS, rien codé)
+
+## Checkpoint 26 — brainstorming acompte structuré (skill superpowers:brainstorming), 2026-07-16
+
+**Aucun code modifié ce checkpoint** — session de conception pure, conforme au hard-gate du skill brainstorming (pas d'implémentation avant design approuvé). Reprend le chantier "acompte structuré" reporté au checkpoint 25.
+
+Décomposé en 2 sous-projets : **(A) acompte manuel** (traité dans cette session) et **(B) paiement en ligne/Stripe** (session future dédiée). Décisions validées pour (A) : un seul acompte par dossier, montant libre, et surtout — **modèle "facture d'acompte"** plutôt qu'une table de suivi séparée, découvert nécessaire car `createAvoir()` exige une facture verrouillée existante (l'utilisateur veut un avoir, pas un remboursement, en cas d'annulation). Ce choix réutilise `factures`/`avoirs`/`journal_nf525` tels quels, sans étendre la chaîne NF525. Avoir sur acompte annulé : validité 2 mois **réellement appliquée** (pas juste imprimée) — nécessite une nouvelle colonne `date_expiration` sur `avoirs` + logique d'expiration automatique.
+
+Design "Vue d'ensemble" présenté, pas encore approuvé par l'utilisateur — session interrompue pour un checkpoint avant de continuer. Détail complet des décisions et des points restant à valider dans `todo.md` § Chantier futur — acompte structuré.
+
+**Reprise** : continuer la présentation du design (skill brainstorming), sections restantes (modèle de données détaillé, mécanisme de déduction, UI), avant d'écrire le spec dans `docs/superpowers/specs/2026-07-16-acompte-structure-design.md`.
 
 ## Checkpoint 25 — feature "Accord" (timeline suivi.html + override staff), 2026-07-16
 

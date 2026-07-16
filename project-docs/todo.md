@@ -212,11 +212,28 @@ Demandé le 2026-07-16 en même temps que la feature "Accord" ci-dessus, mais ex
 - Moment de la demande : **les deux** — au devis (dans la continuité du flow Accord) et à la prise en charge initiale du ticket (avant que le montant final soit connu)
 - L'acompte perçu vient **en déduction de la commande/devis/facture à la livraison**
 
-**Non scopé, à faire en session dédiée** :
-- [ ] Modèle de données : où l'acompte perçu est-il rattaché (ticket ? devis ? nouvelle table dédiée ?) — `paiements` existant a `facture_id` NOT NULL, ne peut pas accueillir un acompte perçu avant qu'une facture existe
-- [ ] Intégration paiement en ligne : choix du prestataire (Stripe le plus probable), gestion des clés API par boutique (même pattern que `email_api_key` ?), webhooks de confirmation
-- [ ] Implication NF525 : un acompte encaissé doit-il transiter par `journal_nf525` au moment de l'encaissement, ou seulement à la facturation finale ? Zone sensible, cf. règle du projet "migrations touchant factures/avoirs/journal_nf525 → validation explicite obligatoire"
-- [ ] UI : où le champ acompte apparaît-il (formulaire prise en charge, écran devis, les deux ?) et comment le montant restant dû est-il calculé/affiché au client sur `suivi.html`
+**Brainstorming démarré le 2026-07-16 (skill `superpowers:brainstorming`) — EN COURS, design pas encore validé par l'utilisateur.**
+
+**Décomposition actée** : ce chantier combine 2 sous-systèmes indépendants — **(A) acompte encaissé manuellement** (pas de dépendance externe) et **(B) paiement en ligne** (intégration Stripe complète — clés API, webhooks, PCI). Décision : scoper et spécifier (A) en premier dans cette session, (B) devient sa propre session dédiée plus tard, quand un prestataire sera choisi. L'enum `paiements.mode_paiement` inclut déjà `'stripe'` (jamais utilisé) — l'interface de (A) doit rester compatible pour que (B) puisse s'y brancher plus tard sans re-design.
+
+**Décisions validées pour le sous-projet (A) — acompte manuel** :
+1. Cardinalité : **un seul acompte par dossier** (ticket ou devis) pour ce MVP — pas de cumul de plusieurs acomptes successifs.
+2. Montant : **libre, saisi par la boutique** — pas de calcul en % configurable (cohérent avec `prix_estime` déjà saisi librement aujourd'hui).
+3. **Modèle de données — "facture d'acompte", pas de nouvelle table de suivi** : l'acompte perçu génère une vraie ligne dans `factures` (numérotée, verrouillée, émise immédiatement) plutôt qu'un enregistrement à part. Raison découverte en investiguant le code existant : `createAvoir()` (déjà en place) **exige une facture existante et verrouillée** (`facture.locked`) — impossible d'émettre un avoir sans facture d'origine. Comme l'utilisateur veut un avoir (pas un remboursement) en cas d'annulation, l'acompte doit être une vraie facture dès sa perception. Bénéfice : réutilise `enregistrerTransaction()` tel quel (type `'facture'` déjà supporté) — **aucune extension de la chaîne NF525 nécessaire**, contrairement à l'hypothèse initiale d'une table `acomptes` séparée.
+4. **Traçabilité NF525** : entrée dans la chaîne au moment de l'émission de la facture d'acompte (immédiat), pas différé — découle directement de la décision précédente.
+5. **Annulation → avoir, pas de remboursement** : `createAvoir()` existant réutilisé sur la facture d'acompte. **Validité 2 mois réellement appliquée par le système** (pas juste une mention imprimée) — nécessite d'ajouter `date_expiration` sur `avoirs` (colonne absente aujourd'hui, migration additive) + une logique d'expiration automatique, sur le modèle de `expireDevisPerimes()` déjà existant pour les devis. À trancher : cette expiration s'applique-t-elle à tous les avoirs ou seulement ceux liés à un acompte annulé ?
+6. **Déduction à la facturation finale** : mécanisme exact pas encore validé avec l'utilisateur — piste envisagée : insérer automatiquement une ligne `paiements` sur la facture finale référençant la facture d'acompte, réduisant le solde dû via le calcul `montant_paye`/`statut` déjà existant (`ajouterPaiement()`), sans nouveau champ.
+
+**Reste à valider avec l'utilisateur (design en cours, section "Vue d'ensemble" présentée, pas encore approuvée)** :
+- [ ] Confirmer le flow complet (vue d'ensemble) présenté le 2026-07-16
+- [ ] Modèle de données détaillé : nouvelle colonne sur `factures` pour distinguer une facture d'acompte d'une facture normale (`factures` n'a pas de colonne `type` aujourd'hui, contrairement à `avoirs` qui a déjà `type: remboursement|bon_achat|echange`) ; numérotation dédiée (préfixe `ACO-` ?) ou même séquence que les factures normales
+- [ ] Mécanisme exact de déduction à la facturation finale (ligne `paiements` auto-générée, proposé ci-dessus, à valider)
+- [ ] `date_expiration` sur `avoirs` : portée (tous les avoirs ou juste ceux d'acompte annulé) + logique d'expiration automatique
+- [ ] UI : où le bouton "Demander un acompte" apparaît (fiche ticket ET fiche devis, décision déjà prise) + écran d'encaissement manuel (montant, mode paiement, référence — probablement même pattern que `ajouterPaiement()` déjà existant côté factures)
+- [ ] Affichage du solde restant dû au client sur `suivi.html`
+- [ ] **Sous-projet (B) — paiement en ligne** : hors scope de cette session, nécessite le choix d'un prestataire (Stripe pressenti) avant tout cadrage
+
+**Prochaine étape si reprise** : continuer la présentation du design section par section (skill `superpowers:brainstorming`, étape "Présenter le design"), obtenir l'approbation, puis écrire le spec dans `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` avant d'invoquer `writing-plans`.
 
 ## Chantier Ports & Adapters + assignation technicien (2026-07-12)
 

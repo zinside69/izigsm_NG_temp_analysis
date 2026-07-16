@@ -1,3 +1,22 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 26, brainstorming acompte structuré EN COURS)
+
+## Vue d'ensemble (checkpoint 26)
+Session de conception pure (skill `superpowers:brainstorming`) pour le chantier "acompte structuré" reporté au checkpoint 25 — **aucun code modifié**. Repo/stack inchangés, voir vue d'ensemble checkpoint 25 ci-dessous pour le contexte technique complet.
+
+## Où on en est
+Décomposé en 2 sous-projets : **(A) acompte manuel** (cette session) / **(B) paiement en ligne Stripe** (session future). Décisions validées pour (A) :
+1. Un seul acompte par dossier (ticket ou devis), pas de cumul
+2. Montant libre saisi par la boutique, pas de %
+3. **Modèle "facture d'acompte"** (pas de nouvelle table) — l'acompte génère une vraie facture émise/verrouillée dès sa perception. Découvert nécessaire : `createAvoir()` exige une facture verrouillée existante, et l'utilisateur veut un avoir (pas un remboursement) sur annulation. Réutilise `factures`/`avoirs`/`journal_nf525` tels quels — pas d'extension de la chaîne NF525.
+4. Avoir sur acompte annulé : validité 2 mois **réellement appliquée** (nouvelle colonne `date_expiration` sur `avoirs` + expiration automatique à construire, sur le modèle de `expireDevisPerimes()`)
+
+Design "Vue d'ensemble" (le flow complet) présenté à l'utilisateur, **pas encore approuvé** — interrompu pour un checkpoint. Détail complet dans `todo.md` § Chantier futur — acompte structuré.
+
+## Prochaine étape
+Reprendre la présentation du design (skill `superpowers:brainstorming`) : sections restantes = modèle de données détaillé (colonne pour distinguer facture d'acompte vs normale, numérotation), mécanisme de déduction à la facturation finale, portée de `date_expiration`, UI (bouton + écran d'encaissement + affichage solde restant sur `suivi.html`). Une fois toutes les sections approuvées → écrire `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` → self-review → faire relire à l'utilisateur → invoquer `writing-plans`. **Ne pas coder avant l'approbation du spec écrit** (hard-gate du skill).
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 25, feature Accord + override)
 
 ## Vue d'ensemble
