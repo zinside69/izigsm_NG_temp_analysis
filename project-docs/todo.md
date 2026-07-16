@@ -204,36 +204,14 @@ La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` 
 
 **Validé en local live (2026-07-16)** : cycle complet — devis créé/envoyé → timeline `suivi.html` affiche l'étape "Accord" en orange pulsant (capture confirmée) → override manuel depuis la fiche ticket (compte manager réel) → badge passe à "✅ Accord client obtenu", bouton disparaît → timeline publique repasse en vert. Isolation rôle vérifiée : technicien bloqué (403) sur `PUT /devis/:id/statut` (endpoint générique) mais autorisé sur `POST /devis/:id/accord-manuel` ; 409 confirmé en re-tentant l'override sur un devis déjà accepté. Entrée `audit_logs` `ACCORD_MANUEL_STAFF` confirmée en base. Tests 803/805 (12 tests SQL fixtures mis à jour dans `ticketService.test.ts`/`publicService.test.ts` suite au nouveau LEFT JOIN, mêmes 2 échecs pré-existants `computeFin()`).
 
-## Chantier futur — acompte structuré (décisions prises le 2026-07-16, PAS implémenté)
-Demandé le 2026-07-16 en même temps que la feature "Accord" ci-dessus, mais explicitement **séquencé dans une session séparée** (décision utilisateur) — plus complexe, touche potentiellement le paiement en ligne et le NF525.
+## Chantier futur — acompte structuré (spec écrite le 2026-07-16, PAS implémenté)
+Demandé le 2026-07-16 en même temps que la feature "Accord" ci-dessus, séquencé en 2 sous-projets : **(A) acompte encaissé manuellement** (spécifié) et **(B) paiement en ligne Stripe** (session future dédiée, hors scope tant qu'un prestataire n'est pas choisi).
 
-**Décisions déjà validées avec l'utilisateur** :
-- Encaissement : **les deux modes** — enregistrement manuel par la boutique (client paie en personne/virement/CB physique, un membre de l'équipe saisit le montant) **et** paiement en ligne (lien envoyé au client, nécessite un prestataire type Stripe — aucun n'est intégré aujourd'hui dans iziGSM, nouvelle dépendance externe)
-- Moment de la demande : **les deux** — au devis (dans la continuité du flow Accord) et à la prise en charge initiale du ticket (avant que le montant final soit connu)
-- L'acompte perçu vient **en déduction de la commande/devis/facture à la livraison**
+**Design (A) entièrement approuvé section par section avec l'utilisateur, spec écrite et pushée** : `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` (commit `ae094a7`) — **source de vérité pour ce chantier**, ne pas dupliquer les décisions ici. Résumé : un seul acompte par dossier, montant libre, modèle "facture d'acompte" réutilisant `factures`/`avoirs`/`journal_nf525` existants (même séquence `FAC-`, pas d'extension NF525), facture finale = solde restant via ligne négative de déduction, annulation → avoir (2 mois réellement appliqués, pas de remboursement), rôles admin/manager.
 
-**Brainstorming démarré le 2026-07-16 (skill `superpowers:brainstorming`) — EN COURS, design pas encore validé par l'utilisateur.**
-
-**Décomposition actée** : ce chantier combine 2 sous-systèmes indépendants — **(A) acompte encaissé manuellement** (pas de dépendance externe) et **(B) paiement en ligne** (intégration Stripe complète — clés API, webhooks, PCI). Décision : scoper et spécifier (A) en premier dans cette session, (B) devient sa propre session dédiée plus tard, quand un prestataire sera choisi. L'enum `paiements.mode_paiement` inclut déjà `'stripe'` (jamais utilisé) — l'interface de (A) doit rester compatible pour que (B) puisse s'y brancher plus tard sans re-design.
-
-**Décisions validées pour le sous-projet (A) — acompte manuel** :
-1. Cardinalité : **un seul acompte par dossier** (ticket ou devis) pour ce MVP — pas de cumul de plusieurs acomptes successifs.
-2. Montant : **libre, saisi par la boutique** — pas de calcul en % configurable (cohérent avec `prix_estime` déjà saisi librement aujourd'hui).
-3. **Modèle de données — "facture d'acompte", pas de nouvelle table de suivi** : l'acompte perçu génère une vraie ligne dans `factures` (numérotée, verrouillée, émise immédiatement) plutôt qu'un enregistrement à part. Raison découverte en investiguant le code existant : `createAvoir()` (déjà en place) **exige une facture existante et verrouillée** (`facture.locked`) — impossible d'émettre un avoir sans facture d'origine. Comme l'utilisateur veut un avoir (pas un remboursement) en cas d'annulation, l'acompte doit être une vraie facture dès sa perception. Bénéfice : réutilise `enregistrerTransaction()` tel quel (type `'facture'` déjà supporté) — **aucune extension de la chaîne NF525 nécessaire**, contrairement à l'hypothèse initiale d'une table `acomptes` séparée.
-4. **Traçabilité NF525** : entrée dans la chaîne au moment de l'émission de la facture d'acompte (immédiat), pas différé — découle directement de la décision précédente.
-5. **Annulation → avoir, pas de remboursement** : `createAvoir()` existant réutilisé sur la facture d'acompte. **Validité 2 mois réellement appliquée par le système** (pas juste une mention imprimée) — nécessite d'ajouter `date_expiration` sur `avoirs` (colonne absente aujourd'hui, migration additive) + une logique d'expiration automatique, sur le modèle de `expireDevisPerimes()` déjà existant pour les devis. À trancher : cette expiration s'applique-t-elle à tous les avoirs ou seulement ceux liés à un acompte annulé ?
-6. **Déduction à la facturation finale** : mécanisme exact pas encore validé avec l'utilisateur — piste envisagée : insérer automatiquement une ligne `paiements` sur la facture finale référençant la facture d'acompte, réduisant le solde dû via le calcul `montant_paye`/`statut` déjà existant (`ajouterPaiement()`), sans nouveau champ.
-
-**Reste à valider avec l'utilisateur (design en cours, section "Vue d'ensemble" présentée, pas encore approuvée)** :
-- [ ] Confirmer le flow complet (vue d'ensemble) présenté le 2026-07-16
-- [ ] Modèle de données détaillé : nouvelle colonne sur `factures` pour distinguer une facture d'acompte d'une facture normale (`factures` n'a pas de colonne `type` aujourd'hui, contrairement à `avoirs` qui a déjà `type: remboursement|bon_achat|echange`) ; numérotation dédiée (préfixe `ACO-` ?) ou même séquence que les factures normales
-- [ ] Mécanisme exact de déduction à la facturation finale (ligne `paiements` auto-générée, proposé ci-dessus, à valider)
-- [ ] `date_expiration` sur `avoirs` : portée (tous les avoirs ou juste ceux d'acompte annulé) + logique d'expiration automatique
-- [ ] UI : où le bouton "Demander un acompte" apparaît (fiche ticket ET fiche devis, décision déjà prise) + écran d'encaissement manuel (montant, mode paiement, référence — probablement même pattern que `ajouterPaiement()` déjà existant côté factures)
-- [ ] Affichage du solde restant dû au client sur `suivi.html`
-- [ ] **Sous-projet (B) — paiement en ligne** : hors scope de cette session, nécessite le choix d'un prestataire (Stripe pressenti) avant tout cadrage
-
-**Prochaine étape si reprise** : continuer la présentation du design section par section (skill `superpowers:brainstorming`, étape "Présenter le design"), obtenir l'approbation, puis écrire le spec dans `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` avant d'invoquer `writing-plans`.
+- [ ] **En attente de la relecture du spec écrit par l'utilisateur** (hard-gate skill brainstorming, distinct de l'approbation section-par-section déjà obtenue)
+- [ ] Une fois confirmé : invoquer `writing-plans` pour le plan d'implémentation détaillé, avant tout code
+- [ ] **Sous-projet (B) — paiement en ligne** : hors scope, nécessite le choix d'un prestataire (Stripe pressenti) avant tout cadrage
 
 ## Chantier Ports & Adapters + assignation technicien (2026-07-12)
 

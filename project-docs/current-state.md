@@ -1,4 +1,15 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 26 — brainstorming acompte structuré EN COURS, rien codé)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 27 — spec acompte structuré écrite et pushée, rien codé)
+
+## Checkpoint 27 — spec acompte structuré finalisée, en attente de relecture utilisateur, 2026-07-16
+
+Suite du checkpoint 26 : le design a été présenté section par section (vue d'ensemble, modèle de données, API/rôles, UI/tests) et **entièrement approuvé** par l'utilisateur, avec 3 clarifications importantes obtenues en cours de route (toutes intégrées au spec) :
+1. Numérotation `FAC-` partagée entre facture normale et facture d'acompte — explicitement demandé par l'utilisateur de justifier pourquoi ce n'est pas une entorse à NF525 (une facture d'acompte est légalement une "facture", même catégorie qu'une facture normale — contrairement aux devis/avoirs qui sont des catégories de documents distinctes et ont donc leur propre séquence)
+2. Résolution d'une tension entre "l'acompte doit compter dans le CA du jour" et "facture finale = montant total" (qui aurait exigé d'exclure l'acompte du CA pour éviter un double comptage) → tranché en faveur de **facture finale = solde restant uniquement**, via une ligne négative de déduction
+3. Confirmation à l'annulation d'un ticket avec acompte perçu : `confirm()` avec texte explicite + motif fixe pré-rempli (pas de formulaire dédié pour le MVP)
+
+**Spec écrit et pushé** : `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` (commit `ae094a7`), auto-relu (une affirmation trop forte corrigée — le cas où une facture finale et une annulation pourraient théoriquement coexister sur un même dossier, non bloquant mais documenté comme edge case non couvert par ce MVP).
+
+**En attente de la relecture utilisateur du spec écrit avant d'invoquer le skill `writing-plans`** (hard-gate du skill brainstorming — ne pas coder avant l'approbation du spec écrit, distincte de l'approbation section-par-section déjà obtenue).
 
 ## Checkpoint 26 — brainstorming acompte structuré (skill superpowers:brainstorming), 2026-07-16
 

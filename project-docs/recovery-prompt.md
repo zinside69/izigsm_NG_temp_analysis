@@ -1,3 +1,24 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 27, spec acompte structuré écrite — en attente de relecture)
+
+## Vue d'ensemble (checkpoint 27)
+Suite directe du checkpoint 26. Session de conception pure (skill `superpowers:brainstorming`) pour le chantier "acompte structuré" — **aucun code modifié à ce stade**. Repo/stack inchangés, voir vue d'ensemble checkpoint 25 ci-dessous pour le contexte technique complet.
+
+## Où on en est
+Le design complet (sous-projet A — acompte manuel) a été présenté section par section et **entièrement approuvé** par l'utilisateur :
+1. Un seul acompte par dossier, montant libre saisi par la boutique
+2. **Modèle "facture d'acompte"** (pas de nouvelle table) — réutilise `factures`/`avoirs`/`journal_nf525` tels quels, pas d'extension NF525
+3. **Numérotation `FAC-` partagée** avec les factures normales (pas de séquence dédiée) — une facture d'acompte est légalement une "facture", pas une catégorie distincte comme devis/avoir ; deux séquences indépendantes pour la même catégorie créerait une chaîne de facturation parallèle, contraire au principe de NF525
+4. **Facture finale = solde restant uniquement** (ligne négative de déduction "Acompte déjà facturé") — tranché après avoir identifié une tension entre "l'acompte doit compter dans le CA du jour" et "facture finale = montant total" (qui aurait exigé d'exclure l'acompte du CA pour éviter le double comptage)
+5. Annulation avec acompte perçu → `createAvoir()` existant réutilisé, motif fixe pré-rempli, `date_expiration` +2 mois réellement appliquée (nouvelle colonne sur `avoirs`)
+6. Rôles : admin/manager uniquement (cohérent avec le reste de la gestion financière)
+
+**Spec écrit, auto-relu et pushé** : `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` (commit `ae094a7`). Un edge case a été corrigé pendant l'auto-relecture : `convertirDevis()` n'est pas gatée par le statut du ticket, donc une facture finale et une annulation pourraient théoriquement coexister sur un même dossier — documenté comme non couvert par ce MVP plutôt que présenté comme un cas impossible.
+
+## Prochaine étape
+**En attente de la relecture du spec écrit par l'utilisateur** (hard-gate du skill brainstorming — distinct de l'approbation section-par-section déjà obtenue pendant la conception). Une fois confirmé → invoquer le skill `writing-plans` pour transformer le spec en plan d'implémentation détaillé, avant tout code.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 26, brainstorming acompte structuré EN COURS)
 
 ## Vue d'ensemble (checkpoint 26)
