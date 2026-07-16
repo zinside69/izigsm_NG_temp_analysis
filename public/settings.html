@@ -59,6 +59,9 @@
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="email" onclick="Settings.switchTab('email')">
         <i class="fas fa-envelope mr-1"></i>Emails
       </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="horaires" onclick="Settings.switchTab('horaires')">
+        <i class="fas fa-calendar-check mr-1"></i>Horaires RDV
+      </button>
     </div>
 
     <!-- TAB: Boutique -->
@@ -380,6 +383,23 @@
       </form>
     </div>
 
+    <!-- TAB: Horaires RDV -->
+    <div id="tab-horaires" class="tab-content">
+      <form id="form-horaires" onsubmit="Settings.saveHoraires(event)" class="space-y-4">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-1"><i class="fas fa-calendar-check text-blue-600 mr-2"></i>Créneaux bookables en ligne</h3>
+          <p class="text-sm text-gray-500 mb-4">Définissez les plages horaires où vos clients peuvent prendre RDV depuis votre page publique. Sans créneau configuré sur un jour, aucun RDV n'est proposé ce jour-là.</p>
+          <div id="horaires-jours" class="space-y-4"><!-- rempli par Settings.renderHoraires() --></div>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer le planning
+          </button>
+        </div>
+      </form>
+    </div>
+
   </div>
 </div>
 
@@ -389,6 +409,14 @@
 const Settings = (() => {
   let _boutiqueId = null;
   let _settings   = {};
+  let _creneaux   = [];
+
+  const JOURS_SEMAINE = [
+    { n: 1, label: 'Lundi' },    { n: 2, label: 'Mardi' },
+    { n: 3, label: 'Mercredi' }, { n: 4, label: 'Jeudi' },
+    { n: 5, label: 'Vendredi' }, { n: 6, label: 'Samedi' },
+    { n: 7, label: 'Dimanche' },
+  ];
 
   async function init() {
     // session chargée via localStorage
@@ -401,6 +429,7 @@ const Settings = (() => {
       return;
     }
     await loadSettings();
+    await loadHoraires();
     // Aperçu numéros en temps réel
     ['prefix_ticket','prefix_facture','prefix_devis','prefix_avoir','prefix_rachat','format_numero','padding_numero']
       .forEach(id => {
@@ -412,8 +441,8 @@ const Settings = (() => {
   async function loadSettings() {
     try {
       const r = await apiGet(`/api/boutiques/${_boutiqueId}`);
-      if (!r.success) throw new Error(r.error);
-      const b = r.data;
+      if (!r.data?.success) throw new Error(r.error || r.data?.error || 'Erreur inconnue');
+      const b = r.data.data;
       _settings = b.settings || {};
 
       // Onglet boutique
@@ -501,7 +530,7 @@ const Settings = (() => {
     });
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}`, body);
-      r.success ? showToast('✅ Boutique mise à jour') : showToast('❌ ' + r.error, 'error');
+      r.data?.success ? showToast('✅ Boutique mise à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -520,7 +549,7 @@ const Settings = (() => {
     };
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
-      r.success ? showToast('✅ Numérotation mise à jour') : showToast('❌ ' + r.error, 'error');
+      r.data?.success ? showToast('✅ Numérotation mise à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -534,7 +563,7 @@ const Settings = (() => {
     };
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
-      r.success ? showToast('✅ Facturation mise à jour') : showToast('❌ ' + r.error, 'error');
+      r.data?.success ? showToast('✅ Facturation mise à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -550,7 +579,88 @@ const Settings = (() => {
     };
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
-      r.success ? showToast('✅ Paramètres mis à jour') : showToast('❌ ' + r.error, 'error');
+      r.data?.success ? showToast('✅ Paramètres mis à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  // ─── Onglet Horaires RDV (créneaux bookables, MOD-14) ─────────────────────
+
+  /**
+   * Charge le planning de créneaux (`GET /api/boutiques/:id/creneaux`) puis affiche.
+   * Séparé de loadSettings() : table `boutique_creneaux` dédiée, distincte du
+   * champ JSON `boutique_settings.horaires` (affichage vitrine uniquement).
+   */
+  async function loadHoraires() {
+    try {
+      const r = await apiGet(`/api/boutiques/${_boutiqueId}/creneaux`);
+      _creneaux = r.data?.success ? (r.data.data || []) : [];
+    } catch (e) { _creneaux = []; }
+    renderHoraires();
+  }
+
+  /** Reconstruit les 7 cartes jour + réinjecte les plages chargées. */
+  function renderHoraires() {
+    const wrap = document.getElementById('horaires-jours');
+    if (!wrap) return;
+    wrap.innerHTML = JOURS_SEMAINE.map(j => `
+      <div class="border border-gray-200 rounded-lg p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-semibold text-sm text-gray-700">${j.label}</span>
+          <button type="button" onclick="Settings.addPlage(${j.n})" class="text-blue-600 hover:text-blue-800 text-xs font-medium">
+            <i class="fas fa-plus mr-1"></i>Ajouter une plage
+          </button>
+        </div>
+        <div class="plages-container space-y-2" data-jour-plages="${j.n}">
+          <p class="text-xs text-gray-400 italic plage-empty">Fermé — aucune plage configurée</p>
+        </div>
+      </div>
+    `).join('');
+
+    _creneaux.forEach(cr => addPlage(cr.jour_semaine, cr));
+  }
+
+  /**
+   * Ajoute une ligne "plage horaire" dans le jour donné (DOM direct, pas de
+   * re-render complet — préserve les valeurs déjà saisies dans les autres lignes).
+   * @param jour    1=Lundi … 7=Dimanche
+   * @param values  Valeurs initiales optionnelles (rechargement) — sinon défauts 09:00-18:00/30min
+   */
+  function addPlage(jour, values = {}) {
+    const container = document.querySelector(`[data-jour-plages="${jour}"]`);
+    if (!container) return;
+    container.querySelector('.plage-empty')?.remove();
+
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 plage-row';
+    row.innerHTML = `
+      <input type="time" class="plage-debut border rounded px-2 py-1 text-sm" value="${values.heure_debut || '09:00'}" step="300">
+      <span class="text-gray-400 text-xs">→</span>
+      <input type="time" class="plage-fin border rounded px-2 py-1 text-sm" value="${values.heure_fin || '18:00'}" step="300">
+      <span class="text-gray-400 text-xs">/ créneau</span>
+      <input type="number" class="plage-duree border rounded px-2 py-1 text-sm" value="${values.duree_slot || 30}" min="5" max="480" step="5" style="width:64px">
+      <span class="text-gray-400 text-xs">min</span>
+      <button type="button" onclick="this.closest('.plage-row').remove()" class="text-red-400 hover:text-red-600 ml-auto">
+        <i class="fas fa-trash text-xs"></i>
+      </button>`;
+    container.appendChild(row);
+  }
+
+  /** Lit toutes les lignes du DOM (pas `_creneaux`, qui n'est que l'état initial chargé) et enregistre. */
+  async function saveHoraires(e) {
+    e.preventDefault();
+    const creneaux = [];
+    document.querySelectorAll('.plage-row').forEach(row => {
+      const jour = parseInt(row.closest('[data-jour-plages]')?.dataset.jourPlages || '0', 10);
+      creneaux.push({
+        jour_semaine: jour,
+        heure_debut:  row.querySelector('.plage-debut').value,
+        heure_fin:    row.querySelector('.plage-fin').value,
+        duree_slot:   parseInt(row.querySelector('.plage-duree').value, 10),
+      });
+    });
+    try {
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/creneaux`, { creneaux });
+      r.data?.success ? showToast('✅ Planning enregistré') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -576,8 +686,8 @@ const Settings = (() => {
     if (apiKey) payload.email_api_key = apiKey;  // seulement si modifiée
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload);
-      if (r.success) showToast('Configuration email enregistrée.');
-      else showToast(r.error || 'Erreur.', 'error');
+      if (r.data?.success) showToast('Configuration email enregistrée.');
+      else showToast(r.error || r.data?.error || 'Erreur.', 'error');
     } catch { showToast('Erreur réseau.', 'error'); }
   }
 
@@ -590,17 +700,20 @@ const Settings = (() => {
     res.classList.remove('hidden');
     try {
       const r = await apiPost(`/api/notifications/test?boutique_id=${_boutiqueId}`, { to });
-      if (r.success) {
+      if (r.data?.success) {
         res.className = 'mt-2 text-sm text-green-600';
-        res.textContent = r.simulated ? '⚠️ Mode simulé — aucune clé API configurée.' : '✅ Email envoyé avec succès !';
+        res.textContent = r.data.simulated ? '⚠️ Mode simulé — aucune clé API configurée.' : '✅ Email envoyé avec succès !';
       } else {
         res.className = 'mt-2 text-sm text-red-600';
-        res.textContent = '❌ ' + (r.error || 'Échec d\'envoi.');
+        res.textContent = '❌ ' + (r.error || r.data?.error || 'Échec d\'envoi.');
       }
     } catch { res.className = 'mt-2 text-sm text-red-600'; res.textContent = '❌ Erreur réseau.'; }
   }
 
-  return { init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements, saveEmail, sendTestEmail };
+  return {
+    init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements, saveEmail, sendTestEmail,
+    addPlage, saveHoraires,
+  };
 })();
 
 document.addEventListener('DOMContentLoaded', Settings.init);

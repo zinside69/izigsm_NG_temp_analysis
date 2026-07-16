@@ -46,7 +46,7 @@ import {
 } from '../lib/auth'
 import { validateEmail, auditLog } from '../lib/db'
 import { authMiddleware } from '../lib/middleware'
-import { sendOtpInscription } from '../services/emailService'
+import { sendOtpInscription, sendResetPasswordEmail } from '../services/emailService'
 import type { Database } from '../ports/database'
 import {
   findUserByEmail,
@@ -475,25 +475,17 @@ auth.post('/reset-password-request', async (c) => {
       const frontendUrl = (c.env as any).FRONTEND_URL ?? 'http://localhost:3000'
       const resetLink = `${frontendUrl}/reset-password.html?token=${token}&email=${encodeURIComponent(email)}`
 
-      // Fire-and-forget email (emailService si disponible)
-      try {
-        const { sendEmail } = await import('../services/emailService')
-        await sendEmail(c.env.DB, user.id, email, 'autre', {
-          subject: 'Réinitialisation de votre mot de passe iziGSM',
-          htmlBody: `
-            <div style="font-family:sans-serif;max-width:520px;margin:auto;">
-              <h2 style="color:#6366f1;">Réinitialisation de mot de passe</h2>
-              <p>Vous avez demandé à réinitialiser votre mot de passe iziGSM.</p>
-              <p style="margin:24px 0;">
-                <a href="${resetLink}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;"
-                >Réinitialiser mon mot de passe</a>
-              </p>
-              <p style="color:#667085;font-size:.88rem;">Ce lien expire dans <strong>1 heure</strong>.<br>
-              Si vous n'avez pas fait cette demande, ignorez cet email.</p>
-              <p style="color:#667085;font-size:.82rem;">Ou copiez ce lien : ${resetLink}</p>
-            </div>`,
-        })
-      } catch (_) { /* non bloquant */ }
+      // Email système (fire-and-forget) — sendResetPasswordEmail(), pas sendEmail() :
+      // la réinitialisation est une action compte, pas liée à une boutique_id (NOT NULL
+      // dans sendEmail()/email_logs). Même modèle que sendOtpInscription() à l'inscription.
+      // Corrige le bug historique : sendEmail() était appelée avec user.id à la place d'un
+      // boutiqueId, ce qui échouait systématiquement (silencieusement, try/catch non bloquant).
+      const apiKey = c.env.RESEND_API_KEY
+      if (apiKey) {
+        try {
+          await sendResetPasswordEmail(apiKey, email, resetLink)
+        } catch (_) { /* non bloquant */ }
+      }
 
       await auditLog(c.env.DB, { user_id: user.id, action: 'RESET_PASSWORD_REQUEST', entite_type: 'user', entite_id: user.id })
     }

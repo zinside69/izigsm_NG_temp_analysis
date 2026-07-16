@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 22 — autocomplete prise en charge + fiche client société/SIRET, lot C déployé)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 23 — reset password + créneaux RDV + bug settings.html, pas encore déployé)
+
+## Checkpoint 23 — reset password + créneaux RDV bookables + bug settings.html, 2026-07-16
+
+Suite directe du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus (`bugs.md`) + 1 bug annexe découvert en validant :
+
+**E. Reset password jamais envoyé (corrigé, pas déployé)** : `sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique disparue. Envoi réel non testé (pas de clé Resend locale, test prod = email réel, nécessite confirmation explicite).
+
+**F. Créneaux RDV bookables — `boutique_creneaux` était vide pour toutes les boutiques (corrigé, pas déployé)** : `creneauxService.ts` (nouveau) + `GET`/`PUT /api/boutiques/:id/creneaux` + onglet "Horaires RDV" dans `settings.html`. 12 tests nouveaux. Cycle complet validé en local live : API + `getDisponibilites()` publique génère bien des créneaux réels + round-trip navigateur (compte manager réel, ajout plage, sauvegarde confirmée).
+
+**G. Bug annexe — `settings.html` entier cassé depuis la migration ApiService→apiGet (corrigé, pas déployé)** : 10 sites `r.success`/`r.data` au lieu de `r.data.success`/`r.data.data` — les 5 onglets existants ne préaffichaient jamais les vraies valeurs (risque d'écrasement par des champs vides) et le toast de sauvegarde affichait toujours "❌ échec" même en cas de succès, depuis le commit `a62c4fd`. Détecté en validant l'onglet Horaires RDV (qui reproduisait initialement le même bug).
+
+Détail complet des 3 items dans `todo.md` § Checkpoint 23 et `bugs.md`. Tests 803/805 (12 nouveaux, mêmes 2 échecs pré-existants `computeFin()`). Rien commité/pushé/déployé — en attente de confirmation utilisateur.
 
 ## Checkpoint 22 — reprise via conversation en cours (pas `/init recover`), 2026-07-15
 

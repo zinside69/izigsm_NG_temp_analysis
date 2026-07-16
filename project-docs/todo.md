@@ -1,5 +1,22 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## Checkpoint 23 (2026-07-16) — Bugs ouverts traités : reset password + créneaux RDV
+
+Suite du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus non corrigés listés dans `bugs.md`/`recovery-prompt.md`.
+
+### E. Reset password jamais envoyé — voir `bugs.md` § reset-password-request pour le détail complet
+`sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique `Expected 1 arguments, but got 5` disparue. Non validé en envoi réel (pas de `RESEND_API_KEY` locale, envoi prod nécessite confirmation explicite — action "envoi de message" soumise à autorisation).
+
+### F. Créneaux RDV bookables (boutique_creneaux vide) — voir `todo.md` § Bug prise de RDV en ligne pour le détail complet
+`creneauxService.ts` (nouveau) + routes `GET`/`PUT /api/boutiques/:id/creneaux` + onglet "Horaires RDV" dans `settings.html`. 12 tests nouveaux. Cycle complet validé en local live (API + UI + génération réelle de créneaux publics via `getDisponibilites()`).
+
+### G. Bug annexe découvert : `settings.html` entier cassé depuis la migration ApiService→apiGet — voir `bugs.md` § settings.html pour le détail complet
+10 sites avec `r.success`/`r.data` au lieu de `r.data.success`/`r.data.data` — les 5 onglets existants (Boutique, Numérotation, Facturation, Paiements, Emails) ne préaffichaient jamais les valeurs existantes et affichaient toujours un toast d'échec même en cas de succès, depuis le commit `a62c4fd`. Tous corrigés dans le même passage.
+
+- [x] `tsc --noEmit` : aucune nouvelle erreur sur les fichiers touchés (2 erreurs pré-existantes `auth.ts:335`/`622` sans lien, confirmées via `git stash`)
+- [x] Tests 803/805 (12 nouveaux `creneauxService.test.ts`, mêmes 2 échecs pré-existants `computeFin()`)
+- [ ] Commit + push + déploiement — en attente de confirmation utilisateur
+
 ## Checkpoint 22 (2026-07-15, suite session ; lot C déployé le 2026-07-16) — Prise en charge : autocomplete + schéma ; Fiche client : type société + SIRET
 
 ### A. Prise en charge — autocomplete marque/modèle + grille schéma (commits `c30984e`, `03e384d`, déployés)
@@ -129,10 +146,15 @@ Constaté le 2026-07-10 en testant les liens vitrine/RDV. `createBoutiqueWithSet
 - [ ] Réutiliser la logique de génération de slug de `boutiques.ts:137` dans `createBoutiqueWithSettings()` (authService.ts) — fix ciblé, pas de nouvelle table/migration nécessaire
 - [ ] Vérifier s'il faut aussi backfiller le slug des boutiques déjà créées sans (SOTELI id 2, Desk1 id 3)
 
-## Bug — prise de RDV en ligne : aucun créneau disponible (table boutique_creneaux vide)
-Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`publicService.ts:286`) lit la table `boutique_creneaux` (horaires bookables hebdomadaires par boutique) pour générer les créneaux — **cette table est vide pour toutes les boutiques, sans exception**, et **aucune UI ni route API n'existe pour la configurer** (recherché dans tout `src/` et `public/` — seule la migration `0025_rdv_public.sql` la crée). Le moteur lui-même est correct : il croise déjà les créneaux template avec les vrais RDV existants (table `rendez_vous`, celle de l'agenda interne) pour exclure les créneaux occupés — donc booking public et agenda interne sont déjà connectés au niveau données.
-- [ ] Construire l'écran de configuration des horaires bookables (settings.html ou nouvel onglet) + route CRUD `boutique_creneaux`
-- [ ] Vérifier besoin exprimé par l'utilisateur : affichage agenda (RDV en cours + disponibilités) directement sur le dashboard technicien (au-delà de la page `/agenda` dédiée déjà existante) — à clarifier en session dédiée
+## Bug — prise de RDV en ligne : aucun créneau disponible (table boutique_creneaux vide) — CORRIGÉ le 2026-07-16
+Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`publicService.ts:286`) lit la table `boutique_creneaux` (horaires bookables hebdomadaires par boutique) pour générer les créneaux — **cette table était vide pour toutes les boutiques, sans exception**, et **aucune UI ni route API n'existait pour la configurer** (seule la migration `0025_rdv_public.sql` la créait). Le moteur lui-même était correct : il croise déjà les créneaux template avec les vrais RDV existants (table `rendez_vous`, celle de l'agenda interne) pour exclure les créneaux occupés — booking public et agenda interne déjà connectés au niveau données.
+- [x] `src/services/creneauxService.ts` (nouveau) — `listCreneaux()`, `replaceCreneaux()` (delete-then-insert du planning complet, choix volontaire plutôt qu'un diff partiel), `validateCreneaux()` (jour 1-7, format HH:MM, heure_debut < heure_fin, durée 5-480 min)
+- [x] Routes `GET`/`PUT /api/boutiques/:id/creneaux` (`routes/boutiques.ts`), même pattern d'isolation que `/:id/settings` (admin/manager, non-admin restreint à sa boutique)
+- [x] Nouvel onglet "Horaires RDV" dans `settings.html` — grille 7 jours, plages multiples par jour (ajout/suppression dynamique), lecture/écriture directe du DOM au submit (même pattern que les autres onglets `saveXxx()`)
+- [x] 12 tests unitaires `tests/creneauxService.test.ts` (0 test existant avant, comme `phoneCatalogService.ts`) — validation pure + `listCreneaux`/`replaceCreneaux` sur `mockDatabase`
+- [x] **Bug annexe découvert et corrigé au passage** : `settings.html` entier était cassé depuis la migration ApiService→apiGet (`r.success`/`r.data` au lieu de `r.data.success`/`r.data.data`) — détail complet dans `bugs.md`, impacte les 5 onglets existants en plus du nouveau
+- [x] **Validé en local live** (`wrangler pages dev`, compte manager réel boutique 2) : cycle complet API (GET vide→PUT 2 plages→GET confirme) + `getDisponibilites()` publique confirme 14 créneaux générés pour un lundi avec 2 plages (09h-12h + 14h-18h/30min) — la chaîne données→moteur→UI est bout-en-bout fonctionnelle ; validations 422 (heures invalides, jour hors 1-7) et isolation cross-boutique (403) confirmées ; round-trip complet dans le navigateur (ajout plage + "✅ Planning enregistré")
+- [ ] Vérifier besoin exprimé par l'utilisateur : affichage agenda (RDV en cours + disponibilités) directement sur le dashboard technicien (au-delà de la page `/agenda` dédiée déjà existante) — à clarifier en session dédiée, hors périmètre de ce fix
 
 ## Bug majeur — emails transactionnels jamais envoyés — CORRIGÉ et VALIDÉ le 2026-07-10
 - [x] `waitUntil()` ajouté sur les 5 triggers fire-and-forget (tickets créé/terminé/livré/archivage auto, SAV ouvert, devis envoyé)

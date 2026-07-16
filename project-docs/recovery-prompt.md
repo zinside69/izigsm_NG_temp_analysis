@@ -1,3 +1,35 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 23, bugs reset password + créneaux RDV traités)
+
+## Vue d'ensemble
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Suite directe du checkpoint 22 (lots A-D déployés) : traite les 2 derniers bugs connus + 1 bug annexe découvert en cours de route.
+
+## Ce qui a été fait ce checkpoint (23)
+
+**E. Reset password jamais envoyé — corrigé, pas déployé**
+- `sendResetPasswordEmail()` (nouveau, `emailService.ts`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts` — même modèle que `sendOtpInscription()` (email système, clé Resend globale, pas de `boutique_id`)
+- `tsc` : erreur historique `Expected 1 arguments, but got 5` disparue
+- Non validé en envoi réel (pas de `RESEND_API_KEY` en local ; un test en prod enverrait un vrai email — nécessite confirmation explicite avant de le faire)
+
+**F. Créneaux RDV bookables (`boutique_creneaux` vide) — corrigé, pas déployé**
+- `src/services/creneauxService.ts` (nouveau) + `GET`/`PUT /api/boutiques/:id/creneaux` (`routes/boutiques.ts`) + onglet "Horaires RDV" dans `settings.html` (grille 7 jours, plages multiples)
+- 12 tests nouveaux (`tests/creneauxService.test.ts`, 0 test existant avant)
+- **Cycle complet validé en local live** : API (GET vide→PUT→GET) + `getDisponibilites()` publique confirme 14 créneaux générés pour un lundi type + round-trip navigateur réel (compte manager boutique 2, ajout plage, "✅ Planning enregistré")
+
+**G. Bug annexe — `settings.html` entier cassé depuis la migration ApiService→apiGet — corrigé, pas déployé**
+- 10 sites (`r.success`/`r.data` au lieu de `r.data.success`/`r.data.data`) — les 5 onglets existants (Boutique, Numérotation, Facturation, Paiements, Emails) ne préaffichaient jamais les valeurs réelles et le toast de sauvegarde affichait toujours "❌ échec" même en cas de succès, depuis le commit `a62c4fd`. Risque réel avant fix : écraser des vraies données par des champs vides en sauvegardant un onglet jamais pré-rempli.
+
+Détail complet des 3 items dans `todo.md` § Checkpoint 23 et `bugs.md`.
+
+## État git à la fin de ce checkpoint
+`tsc --noEmit` : aucune nouvelle erreur (2 pré-existantes `auth.ts:335`/`622`, sans lien, confirmées `git stash`). Tests 803/805 (12 nouveaux, mêmes 2 échecs pré-existants `computeFin()`). **Rien commité/pushé/déployé pour ce checkpoint** — en attente de confirmation utilisateur.
+
+## Prochaines étapes recommandées
+1. Commit + push + déploiement des lots E/F/G, sur confirmation utilisateur
+2. Décider si l'envoi réel du reset-password doit être validé en prod (enverrait un vrai email)
+3. Reste ouvert après ça : limite admin `boutique_id: null` sur endpoints photos, dette technique diverse — voir `bugs.md`/`todo.md`
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 22, lot C déployé)
 
 ## Vue d'ensemble

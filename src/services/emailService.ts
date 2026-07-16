@@ -327,6 +327,61 @@ export async function sendOtpInscription(
   }
 }
 
+/**
+ * Envoie l'email de réinitialisation de mot de passe.
+ * Email système comme `sendOtpInscription()` ci-dessus, pour la même raison : la
+ * réinitialisation est une action compte, pas une action liée à une boutique
+ * particulière (l'utilisateur peut d'ailleurs ne plus en avoir une). Corrige le
+ * bug historique de `routes/auth.ts` qui appelait `sendEmail()` — scopé
+ * `boutique_id` (NOT NULL) — avec `user.id` à la place d'un `boutiqueId`,
+ * ce qui levait systématiquement une exception avalée silencieusement par le
+ * `try/catch` non bloquant de l'appelant (aucun email jamais envoyé).
+ *
+ * @param apiKey    Clé API Resend (c.env.RESEND_API_KEY)
+ * @param to        Email du compte à réinitialiser
+ * @param resetLink Lien complet vers `reset-password.html?token=...&email=...`
+ * @returns         { success: boolean } — ne jette jamais d'exception
+ */
+export async function sendResetPasswordEmail(
+  apiKey:    string,
+  to:        string,
+  resetLink: string
+): Promise<{ success: boolean }> {
+  const html = baseLayout(`
+    <p>Vous avez demandé à réinitialiser votre mot de passe iziGSM.</p>
+    <p style="margin:24px 0;">
+      <a href="${resetLink}" class="btn">Réinitialiser mon mot de passe</a>
+    </p>
+    <p>Ce lien expire dans <strong>1 heure</strong>.<br>
+    Si vous n'avez pas fait cette demande, ignorez cet email.</p>
+    <p style="color:#667085;font-size:.82rem;">Ou copiez ce lien : ${resetLink}</p>
+  `, 'iziGSM')
+
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        from:    'iziGSM <noreply@mail.repairdesk.fr>',
+        to:      [to],
+        subject: 'Réinitialisation de votre mot de passe iziGSM',
+        html,
+      }),
+    })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      console.error('[sendResetPasswordEmail] Resend HTTP', resp.status, body)
+    }
+    return { success: resp.ok }
+  } catch (e) {
+    console.error('[sendResetPasswordEmail]', e)
+    return { success: false }
+  }
+}
+
 // ─── Emails métier ────────────────────────────────────────────────────────────
 
 /**

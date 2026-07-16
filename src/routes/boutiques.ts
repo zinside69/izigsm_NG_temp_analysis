@@ -18,6 +18,8 @@
  *   POST   /api/boutiques                    → Créer boutique (admin seulement)
  *   PUT    /api/boutiques/:id                → Modifier infos boutique (admin/manager)
  *   PUT    /api/boutiques/:id/settings       → Modifier paramètres boutique (admin/manager)
+ *   GET    /api/boutiques/:id/creneaux       → Planning créneaux RDV bookables (MOD-14)
+ *   PUT    /api/boutiques/:id/creneaux       → Remplacer le planning créneaux (admin/manager)
  *   GET    /api/boutiques/:id/stats          → KPIs globaux boutique
  *   GET    /api/boutiques/:id/nf525/verify   → Vérifier intégrité chaîne NF525
  *   POST   /api/boutiques/:id/nf525/cloture  → Clôture journalière NF525
@@ -46,6 +48,7 @@ import {
   type UpdateBoutiqueInput,
   type UpdateSettingsInput,
 } from '../services/boutiqueService'
+import { listCreneaux, replaceCreneaux, validateCreneaux } from '../services/creneauxService'
 import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
@@ -290,6 +293,64 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
 
   await updateBoutiqueSettings(c.get('db'), id, input)
   return c.json({ success: true, message: 'Paramètres mis à jour.' })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CRÉNEAUX RDV EN LIGNE (MOD-14) — table `boutique_creneaux`, séparée de
+// `boutique_settings.horaires` (JSON d'affichage vitrine, non utilisé pour le calcul
+// des disponibilités réelles, voir publicService.ts → getDisponibilites())
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/boutiques/:id/creneaux ──────────────────────────────────────────
+
+/**
+ * GET /api/boutiques/:id/creneaux
+ * Liste le planning hebdomadaire de créneaux bookables d'une boutique.
+ *
+ * @param id  Identifiant numérique de la boutique
+ * @returns 200 `{ success: true, data: CreneauRow[] }`
+ * @returns 403 si non-admin tente d'accéder à une autre boutique
+ */
+boutiques.get('/:id/creneaux', async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  if (user.role !== 'admin' && user.boutique_id !== id)
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  const creneaux = await listCreneaux(c.get('db'), id)
+  return c.json({ success: true, data: creneaux })
+})
+
+// ─── PUT /api/boutiques/:id/creneaux ──────────────────────────────────────────
+
+/**
+ * PUT /api/boutiques/:id/creneaux
+ * Remplace intégralement le planning hebdomadaire de créneaux bookables.
+ * Réservé à `admin` et `manager`. Non-admin ne peut modifier que sa boutique.
+ *
+ * Body JSON : { "creneaux": [{ jour_semaine, heure_debut, heure_fin, duree_slot }, ...] }
+ * (jour_semaine : 1=Lundi … 7=Dimanche — cohérent avec getDisponibilites())
+ *
+ * @param id  Identifiant numérique de la boutique
+ * @returns 200 `{ success: true, message: 'Planning mis à jour.' }`
+ * @returns 403 si non-admin tente de modifier une autre boutique
+ * @returns 422 si un créneau est invalide (jour/heures/durée)
+ */
+boutiques.put('/:id/creneaux', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  if (user.role !== 'admin' && user.boutique_id !== id)
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  const { creneaux } = await c.req.json().catch(() => ({ creneaux: null }))
+  if (!Array.isArray(creneaux))
+    return c.json({ success: false, error: 'Corps invalide : "creneaux" doit être un tableau.' }, 400)
+
+  const erreur = validateCreneaux(creneaux)
+  if (erreur) return c.json({ success: false, error: erreur }, 422)
+
+  await replaceCreneaux(c.get('db'), id, creneaux)
+  return c.json({ success: true, message: 'Planning mis à jour.' })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
