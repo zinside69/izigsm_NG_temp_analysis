@@ -4,18 +4,18 @@
 
 Suite du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus non corrigés listés dans `bugs.md`/`recovery-prompt.md`.
 
-### E. Reset password jamais envoyé — voir `bugs.md` § reset-password-request pour le détail complet
+### E. Reset password jamais envoyé — commité, pushé, déployé (`2dbb297`) — voir `bugs.md` § reset-password-request pour le détail complet
 `sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique `Expected 1 arguments, but got 5` disparue. Non validé en envoi réel (pas de `RESEND_API_KEY` locale, envoi prod nécessite confirmation explicite — action "envoi de message" soumise à autorisation).
 
-### F. Créneaux RDV bookables (boutique_creneaux vide) — voir `todo.md` § Bug prise de RDV en ligne pour le détail complet
+### F. Créneaux RDV bookables (boutique_creneaux vide) — commité, pushé, déployé (`2dbb297`) — voir `todo.md` § Bug prise de RDV en ligne pour le détail complet
 `creneauxService.ts` (nouveau) + routes `GET`/`PUT /api/boutiques/:id/creneaux` + onglet "Horaires RDV" dans `settings.html`. 12 tests nouveaux. Cycle complet validé en local live (API + UI + génération réelle de créneaux publics via `getDisponibilites()`).
 
-### G. Bug annexe découvert : `settings.html` entier cassé depuis la migration ApiService→apiGet — voir `bugs.md` § settings.html pour le détail complet
+### G. Bug annexe découvert : `settings.html` entier cassé depuis la migration ApiService→apiGet — commité, pushé, déployé (`2dbb297`) — voir `bugs.md` § settings.html pour le détail complet
 10 sites avec `r.success`/`r.data` au lieu de `r.data.success`/`r.data.data` — les 5 onglets existants (Boutique, Numérotation, Facturation, Paiements, Emails) ne préaffichaient jamais les valeurs existantes et affichaient toujours un toast d'échec même en cas de succès, depuis le commit `a62c4fd`. Tous corrigés dans le même passage.
 
 - [x] `tsc --noEmit` : aucune nouvelle erreur sur les fichiers touchés (2 erreurs pré-existantes `auth.ts:335`/`622` sans lien, confirmées via `git stash`)
 - [x] Tests 803/805 (12 nouveaux `creneauxService.test.ts`, mêmes 2 échecs pré-existants `computeFin()`)
-- [ ] Commit + push + déploiement — en attente de confirmation utilisateur
+- [x] Commit + push + déploiement (`2dbb297`, `wrangler pages deploy`), `repairdesk.fr/api/health` → 200 après déploiement
 
 ## Checkpoint 22 (2026-07-15, suite session ; lot C déployé le 2026-07-16) — Prise en charge : autocomplete + schéma ; Fiche client : type société + SIRET
 
