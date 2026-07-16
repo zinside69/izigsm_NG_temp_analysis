@@ -63,6 +63,9 @@ async function loadDevisStats() {
   try {
     const result = await apiGet('/api/devis/stats');
     if (!result.ok) return;
+    // apiGet() renvoie {ok,status,data,error} où data est le corps JSON complet
+    // {success,data} de la route — result.data seul est l'enveloppe, pas les stats
+    // (bug corrigé le 2026-07-16 : les KPIs affichaient toujours 0).
     const s = result.data?.data || {};
     const container = document.getElementById('devis-stats');
     if (!container) return;
@@ -254,6 +257,9 @@ async function openDevisDetail(id) {
     const result = await apiGet('/api/devis/' + id);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
 
+    // result.data est l'enveloppe {success,data} de la route, pas le devis lui-même
+    // (même bug que loadDevisStats() ci-dessus — corrigé le 2026-07-16, cette fiche
+    // détail n'affichait jamais aucune donnée réelle auparavant).
     const d = result.data?.data;
     titre.textContent = `Devis ${d.numero}`;
 
@@ -391,6 +397,8 @@ async function openEditDevis(id) {
   try {
     const result = await apiGet('/api/devis/' + id);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
+    // Même bug que openDevisDetail() ci-dessus (corrigé le 2026-07-16) : sans
+    // ?.data, le formulaire de modification ne se pré-remplissait jamais.
     const d = result.data?.data;
 
     document.getElementById('d-client').value  = d.client_id || '';
