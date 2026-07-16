@@ -19,6 +19,7 @@ import {
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
+import { auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
@@ -138,6 +139,46 @@ facturation.put('/devis/:id/statut', requireRole('admin', 'manager'), async (c) 
   try {
     const result = await updateStatutDevis(c.env.DB, id, user.sub, statut as StatutDevis)
     return c.json({ success: true, ...result, message: `Statut mis à jour : ${statut}.` })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+})
+
+/**
+ * POST /api/devis/:id/accord-manuel
+ * Valide manuellement l'accord d'un devis "envoyé" — feature "Accord" (timeline
+ * suivi.html), permet à l'équipe de débloquer la prise en charge quand le client
+ * ne répond pas au lien public (`POST /api/public/devis/:token/repondre`).
+ *
+ * Autorisation volontairement plus large que `PUT /devis/:id/statut` (admin/manager
+ * seulement) : technicien/manager/admin, sans délai imposé — décision explicite
+ * (2026-07-16), le jugement de "client injoignable" est laissé à l'équipe terrain.
+ * Reste néanmoins une action distincte et tracée (`ACCORD_MANUEL_STAFF`, en plus
+ * du log générique déjà écrit par `updateStatutDevis()`) — pas un simple alias de
+ * `PUT /devis/:id/statut`, pour ne pas élargir au passage tout le pouvoir de gestion
+ * des devis (annuler, refuser…) à un rôle technicien.
+ *
+ * @param id  Identifiant du devis
+ * @returns 200 `{ success, statut_avant, statut_apres, message }`
+ * @returns 409 si le devis n'est pas au statut `envoye` (déjà répondu, brouillon, expiré…)
+ */
+facturation.post('/devis/:id/accord-manuel', requireRole('admin', 'manager', 'technicien'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  const devis = await getDevis(c.get('db'), id)
+  if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+  if (devis.statut !== 'envoye')
+    return c.json({ success: false, error: `Ce devis ne peut pas être validé manuellement (statut actuel : ${devis.statut}).` }, 409)
+
+  try {
+    const result = await updateStatutDevis(c.env.DB, id, user.sub, 'accepte')
+    await auditLog(c.env.DB, {
+      boutique_id: devis.boutique_id, user_id: user.sub,
+      action: 'ACCORD_MANUEL_STAFF', entite_type: 'devis', entite_id: id,
+      apres: { raison: 'client non-répondant, validé par l\'équipe' },
+    })
+    return c.json({ success: true, ...result, message: 'Accord validé manuellement.' })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 422)
   }

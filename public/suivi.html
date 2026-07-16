@@ -20,6 +20,7 @@
     .step-done  .step-dot { background:#22c55e; color:white; }
     .step-active .step-dot { background:#3b82f6; color:white; box-shadow:0 0 0 4px rgba(59,130,246,.3); }
     .step-pending .step-dot { background:#f3f4f6; color:#9ca3af; border:2px solid #e5e7eb; }
+    .step-accord-pending .step-dot { background:#f59e0b; color:white; box-shadow:0 0 0 4px rgba(245,158,11,.3); }
     @keyframes pulse-ring { 0%{transform:scale(.95);box-shadow:0 0 0 0 rgba(59,130,246,.4)} 70%{transform:scale(1);box-shadow:0 0 0 10px rgba(59,130,246,0)} 100%{transform:scale(.95)} }
     .pulse { animation: pulse-ring 2s infinite; }
   </style>
@@ -235,7 +236,7 @@ function renderTicket(t) {
   }
 
   // Timeline
-  renderTimeline(t.statut)
+  renderTimeline(t.statut, t.devis_statut)
 
   // Infos pratiques
   const infos = []
@@ -273,9 +274,16 @@ function renderTicket(t) {
   }
 }
 
-function renderTimeline(statut) {
-  const stepOrder = STEPS.map(s => s.key)
+/**
+ * @param statut       Statut courant du ticket (StatutTicket)
+ * @param devisStatut  Statut du devis le plus récent lié au ticket (null si aucun) —
+ *                      pilote l'état gris/orange/vert de l'étape "Accord" indépendamment
+ *                      du statut ticket seul (double validation boutique→client).
+ */
+function renderTimeline(statut, devisStatut) {
+  const stepOrder  = STEPS.map(s => s.key)
   const currentIdx = stepOrder.indexOf(statut)
+  const accordIdx  = stepOrder.indexOf('attente_accord')
   const el = document.getElementById('timeline')
 
   // Statuts terminaux non linéaires
@@ -288,8 +296,22 @@ function renderTimeline(statut) {
   }
 
   el.innerHTML = STEPS.map((step, i) => {
-    const isDone   = i < currentIdx
-    const isActive = i === currentIdx
+    // Étape "Accord" : orange tant que le devis attend une réponse client, quel que
+    // soit le statut ticket (même s'il est déjà "actif" au sens générique) — sinon
+    // traitée comme les autres étapes (done/active/pending sur le statut ticket seul).
+    if (i === accordIdx && devisStatut === 'envoye') {
+      return `
+      <div class="flex flex-col items-center gap-1 flex-1 step-accord-pending">
+        <div class="step-dot pulse"><i class="fas ${step.icon} text-sm"></i></div>
+        <span class="text-xs font-medium text-center leading-tight text-orange-600">${step.label}</span>
+      </div>`
+    }
+
+    // Devis accepté : l'étape est résolue même si le ticket est encore littéralement
+    // au statut attente_accord (fenêtre entre l'acceptation et le changement manuel
+    // de statut par l'équipe).
+    const isDone   = i < currentIdx || (i === accordIdx && devisStatut === 'accepte')
+    const isActive = i === currentIdx && !isDone
     const cls = isDone ? 'step-done' : isActive ? 'step-active' : 'step-pending'
     return `
     <div class="flex flex-col items-center gap-1 flex-1 ${cls}">

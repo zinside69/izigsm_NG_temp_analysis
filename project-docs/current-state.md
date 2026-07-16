@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 24 — populateTechniciens() + bump CACHE_VERSION v2.55)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 25 — feature Accord timeline + override + CACHE_VERSION v2.56)
+
+## Checkpoint 25 — feature "Accord" (timeline suivi.html + override staff), 2026-07-16
+
+Implémente la feature "Accord" spécifiée le 2026-07-10 (double validation boutique→client, réutilise le flow devis existant, pas de nouveau système de token) + une extension demandée dans la foulée : override manuel par le staff en cas de non-réponse client.
+
+**Timeline `suivi.html`** : l'étape "Accord" (gris/orange/vert) dérive désormais de `devis_statut` (devis le plus récent lié au ticket), pas seulement du statut ticket. `getTicketPublicByToken()`/`getTicketById()` exposent ce champ via un `LEFT JOIN devis` corrélé. Bug annexe trouvé et corrigé : `routes/public.ts` filtrait explicitement les champs renvoyés, `devis_statut` était résolu côté service mais jamais exposé au client.
+
+**Override staff** (`POST /api/devis/:id/accord-manuel`, admin/manager/technicien) : permet de forcer l'acceptation d'un devis "envoyé" sans réponse client, pour débloquer la prise en charge. Volontairement plus étroit que `PUT /devis/:id/statut` (réservé admin/manager) — seule la transition `envoye→accepte`, pas un accès général à la gestion des devis. Tracé (`ACCORD_MANUEL_STAFF`). Bouton correspondant dans la fiche détail ticket (`tickets.js`).
+
+**Acompte structuré** : demandé en même temps, décisions de scope actées (encaissement manuel + en ligne, demandé au devis + à la prise en charge) mais **explicitement reporté à une session dédiée** (dépendances Stripe + NF525 à cadrer). Détail complet dans `todo.md`.
+
+Validé en local live de bout en bout (devis→orange→override→vert, isolation rôle technicien confirmée, 409 sur re-override). Tests 803/805 (fixtures SQL mises à jour). `CACHE_VERSION` bumpée `v2.55`→`v2.56` (fichiers frontend touchés : `tickets.js`, `suivi.html`).
 
 ## Checkpoint 24 — populateTechniciens() filtré + CACHE_VERSION bumpée, 2026-07-16
 

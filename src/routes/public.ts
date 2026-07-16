@@ -108,6 +108,7 @@ pub.get('/ticket/:token', async (c) => {
         date_livraison: ticket.date_livraison,
         client_prenom:  ticket.client_prenom,
         boutique_slug: ticket.boutique_slug,
+        devis_statut:  ticket.devis_statut,
         boutique: {
           nom:       ticket.boutique_nom,
           telephone: ticket.boutique_telephone,

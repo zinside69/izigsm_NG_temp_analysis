@@ -45,6 +45,9 @@ export interface TicketPublic {
   boutique_adresse:  string | null
   boutique_ville:    string | null
   boutique_slug:     string | null
+  /** Statut du devis le plus récent lié au ticket, ou `null` si aucun — pilote la
+   *  couleur (gris/orange/vert) de l'étape "Accord" dans la timeline `suivi.html`. */
+  devis_statut:      string | null
 }
 
 /** Infos publiques d'une boutique (vitrine). */
@@ -135,10 +138,14 @@ export async function getTicketPublicByToken(
       b.email    AS boutique_email,
       b.adresse  AS boutique_adresse,
       b.ville    AS boutique_ville,
-      b.slug     AS boutique_slug
+      b.slug     AS boutique_slug,
+      d.statut   AS devis_statut
     FROM   tickets t
     JOIN   clients  c ON c.id = t.client_id
     JOIN   boutiques b ON b.id = t.boutique_id
+    LEFT JOIN devis d ON d.id = (
+      SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
+    )
     WHERE  t.tracking_token = ? AND t.actif = 1
   `, [token])
 }

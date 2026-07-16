@@ -180,7 +180,7 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 - [ ] `src/routes/auth.ts:659` — exemple dans un commentaire JSDoc (`workshopName: "Mon Atelier"`) — cosmétique, à corriger pour cohérence
 - Vérifier aussi les autres pages internes (`dashboard.html`, `settings.html`, etc.) non auditées ici — recherche limitée à `src/` et `public/` en surface
 
-## Page de suivi ticket — étape "Accord" avec double validation boutique→client (spécifié 2026-07-10)
+## Page de suivi ticket — étape "Accord" avec double validation boutique→client — IMPLÉMENTÉE le 2026-07-16 (spécifié 2026-07-10)
 La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` L276-303) avec une étape `attente_accord` / label "Accord" / icône `fa-handshake` (`STEPS`, `suivi.html:151`) — mais son état est aujourd'hui purement dérivé du statut linéaire du ticket (fait/actif/à venir), sans notion d'approbation client réelle.
 
 **Comportement demandé** : quand la boutique valide un diagnostic/devis (passe le ticket en `attente_accord`), un lien d'approbation est envoyé au client. Dès que le client clique et accepte, l'étape passe au vert (preuve d'acceptation). États chronologiques de l'étape "Accord" :
@@ -192,11 +192,31 @@ La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` 
 1. **Email d'abord, SMS bloqué** : le lien part par email (Resend, même mécanisme que le reste — déjà fiable depuis le fix du jour). Le SMS reste explicitement hors scope tant qu'un fournisseur SMS (Twilio ou autre) n'est pas choisi — c'était Post-MVP partout ailleurs dans le projet, pas de raison de le sortir du lot ici sans décision dédiée.
 2. **Réutiliser le flow devis existant**, ne pas dupliquer un système de token : `devis.ticket_id` (FK optionnelle, `migrations/0006_facturation.sql:10`) et `devis.statut` (`envoye`/`accepte`/`refuse`) couvrent déjà exactement ce besoin. `devis-public.html` + `POST /api/public/devis/:token/repondre` gèrent déjà la page cliquable + l'action d'acceptation.
 
-**Reste à faire pour implémenter** :
-- [ ] Dans `renderTimeline()` (`suivi.html`), calculer l'état de l'étape "Accord" à partir du devis lié au ticket (si `devis.ticket_id = t.id` existe : `envoye`→orange, `accepte`→vert, `refuse`→état à définir) plutôt que du statut ticket seul
-- [ ] `GET /api/public/ticket/:token` (`publicService.ts`) doit exposer les infos du devis lié (statut au minimum) pour que le frontend puisse calculer cet état
-- [ ] Vérifier que l'envoi du devis (`POST /devis/:id/envoyer`, déjà fonctionnel depuis le fix du jour) est bien le déclencheur naturel de l'état "orange"
-- [ ] SMS : décision fournisseur à prendre séparément (Twilio le plus documenté dans le projet) avant d'ajouter ce canal
+**Implémenté le 2026-07-16** :
+- [x] `renderTimeline()` (`suivi.html`) calcule l'état de l'étape "Accord" à partir de `devis_statut` (nouveau paramètre) : `envoye`→orange (`.step-accord-pending`, pulse), `accepte`→vert (même si le ticket est encore littéralement au statut `attente_accord`, fenêtre entre acceptation et changement de statut par l'équipe), sinon comportement générique inchangé (gris/bleu selon position dans `STEPS`)
+- [x] `getTicketPublicByToken()`/`getTicketById()` (`publicService.ts`/`ticketService.ts`) exposent `devis_statut` — `LEFT JOIN devis d ON d.id = (SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1)` (le plus récent, un ticket peut avoir eu plusieurs devis dans le temps)
+- [x] **Bug annexe trouvé en validant** : la route `GET /api/public/ticket/:token` (`routes/public.ts`) filtre explicitement les champs renvoyés au client — `devis_statut` était bien résolu par le service mais jamais copié dans la réponse JSON. Corrigé dans le même commit.
+- [x] Envoi du devis (`POST /devis/:id/envoyer`, déjà fonctionnel) confirmé comme déclencheur naturel de l'état orange — aucun changement nécessaire côté envoi.
+- [x] **Override "client injoignable"** (demandé le 2026-07-16, pas dans la spec initiale) : `POST /api/devis/:id/accord-manuel` (nouveau, `routes/facturation.ts`), autorisé `admin`/`manager`/`technicien` — délibérément plus large que `PUT /devis/:id/statut` (admin/manager seulement) mais **volontairement étroit** (transition `envoye→accepte` uniquement, pas un alias du endpoint générique) pour ne pas élargir tout le pouvoir de gestion des devis au rôle technicien. Tracé (`ACCORD_MANUEL_STAFF` en plus du log générique `updateStatutDevis()`), sans délai imposé (décision explicite 2026-07-16 : le jugement "client injoignable" est laissé à l'équipe).
+- [x] Bouton "Valider l'accord manuellement (client injoignable)" dans la fiche détail ticket (`tickets.js`, nouveau bloc "Accord devis"), visible uniquement si `devis_statut === 'envoye'`.
+- [ ] SMS : décision fournisseur à prendre séparément (Twilio le plus documenté dans le projet) avant d'ajouter ce canal — toujours hors scope
+- [ ] Nuance visuelle mineure non traitée : le badge de statut principal (`statut_label`, dérivé de `t.statut` seul) peut afficher "Accord en attente" alors que la timeline montre déjà l'étape verte (devis accepté, ticket pas encore avancé manuellement) — pas une régression, juste deux sources d'info distinctes, pourrait mériter un ajustement de libellé si ça prête à confusion en usage réel
+
+**Validé en local live (2026-07-16)** : cycle complet — devis créé/envoyé → timeline `suivi.html` affiche l'étape "Accord" en orange pulsant (capture confirmée) → override manuel depuis la fiche ticket (compte manager réel) → badge passe à "✅ Accord client obtenu", bouton disparaît → timeline publique repasse en vert. Isolation rôle vérifiée : technicien bloqué (403) sur `PUT /devis/:id/statut` (endpoint générique) mais autorisé sur `POST /devis/:id/accord-manuel` ; 409 confirmé en re-tentant l'override sur un devis déjà accepté. Entrée `audit_logs` `ACCORD_MANUEL_STAFF` confirmée en base. Tests 803/805 (12 tests SQL fixtures mis à jour dans `ticketService.test.ts`/`publicService.test.ts` suite au nouveau LEFT JOIN, mêmes 2 échecs pré-existants `computeFin()`).
+
+## Chantier futur — acompte structuré (décisions prises le 2026-07-16, PAS implémenté)
+Demandé le 2026-07-16 en même temps que la feature "Accord" ci-dessus, mais explicitement **séquencé dans une session séparée** (décision utilisateur) — plus complexe, touche potentiellement le paiement en ligne et le NF525.
+
+**Décisions déjà validées avec l'utilisateur** :
+- Encaissement : **les deux modes** — enregistrement manuel par la boutique (client paie en personne/virement/CB physique, un membre de l'équipe saisit le montant) **et** paiement en ligne (lien envoyé au client, nécessite un prestataire type Stripe — aucun n'est intégré aujourd'hui dans iziGSM, nouvelle dépendance externe)
+- Moment de la demande : **les deux** — au devis (dans la continuité du flow Accord) et à la prise en charge initiale du ticket (avant que le montant final soit connu)
+- L'acompte perçu vient **en déduction de la commande/devis/facture à la livraison**
+
+**Non scopé, à faire en session dédiée** :
+- [ ] Modèle de données : où l'acompte perçu est-il rattaché (ticket ? devis ? nouvelle table dédiée ?) — `paiements` existant a `facture_id` NOT NULL, ne peut pas accueillir un acompte perçu avant qu'une facture existe
+- [ ] Intégration paiement en ligne : choix du prestataire (Stripe le plus probable), gestion des clés API par boutique (même pattern que `email_api_key` ?), webhooks de confirmation
+- [ ] Implication NF525 : un acompte encaissé doit-il transiter par `journal_nf525` au moment de l'encaissement, ou seulement à la facturation finale ? Zone sensible, cf. règle du projet "migrations touchant factures/avoirs/journal_nf525 → validation explicite obligatoire"
+- [ ] UI : où le champ acompte apparaît-il (formulaire prise en charge, écran devis, les deux ?) et comment le montant restant dû est-il calculé/affiché au client sur `suivi.html`
 
 ## Chantier Ports & Adapters + assignation technicien (2026-07-12)
 

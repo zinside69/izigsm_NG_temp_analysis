@@ -370,15 +370,24 @@ export async function getTicketById(
   db: Database,
   id: number
 ): Promise<any | null> {
+  // devis_id/devis_statut : devis le plus récent lié à ce ticket (feature "Accord",
+  // suivi.html dérive l'état gris/orange/vert de l'étape attente_accord de ce champ,
+  // pas seulement du statut ticket). Un ticket peut avoir plusieurs devis dans le
+  // temps (ex. refusé puis revu) — on ne considère que le dernier.
   const ticket = await db.get<any>(`
     SELECT t.*,
            c.prenom || ' ' || c.nom   AS client_nom,
            c.email                    AS client_email,
            c.telephone                AS client_telephone,
-           u.prenom || ' ' || u.nom   AS technicien_nom
+           u.prenom || ' ' || u.nom   AS technicien_nom,
+           d.id                       AS devis_id,
+           d.statut                   AS devis_statut
     FROM   tickets t
     JOIN   clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.technicien_id
+    LEFT JOIN devis d ON d.id = (
+      SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
+    )
     WHERE  t.id = ? AND t.actif = 1
   `, [id])
 

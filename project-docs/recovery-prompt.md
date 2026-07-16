@@ -1,3 +1,28 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 25, feature Accord + override)
+
+## Vue d'ensemble
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Suite du checkpoint 24. Implémente la feature "Accord" spécifiée le 2026-07-10 + un override staff demandé le 2026-07-16.
+
+## Ce qui a été fait ce checkpoint (25)
+
+**Timeline "Accord" (`suivi.html`)** : réutilise le flow devis existant (pas de nouveau système de token, décision du 2026-07-10). L'étape passe orange quand un devis est `envoye`, vert quand `accepte` — même si le ticket est encore littéralement au statut `attente_accord` (fenêtre avant que l'équipe change manuellement le statut). `getTicketPublicByToken()`/`getTicketById()` exposent `devis_statut` via `LEFT JOIN devis` (le plus récent lié au ticket). **Bug annexe trouvé et corrigé** : `routes/public.ts` filtrait explicitement les champs renvoyés au client public — `devis_statut` résolu par le service mais jamais exposé, corrigé dans le même commit.
+
+**Override staff — "client injoignable"** (demandé en complément, pas dans la spec initiale) : `POST /api/devis/:id/accord-manuel`, autorisé `admin`/`manager`/`technicien` (décision 2026-07-16 : sans délai imposé, jugement laissé à l'équipe). Volontairement étroit — seule la transition `envoye→accepte`, contrairement à `PUT /devis/:id/statut` (admin/manager, toutes transitions) — pour ne pas élargir tout le pouvoir de gestion des devis au rôle technicien. Tracé (`ACCORD_MANUEL_STAFF`, audit log distinct). Bouton "Valider l'accord manuellement" dans la fiche détail ticket (`tickets.js`), visible seulement si le devis est en attente.
+
+**Acompte structuré — reporté à une session dédiée** (décision explicite 2026-07-16) : demandé dans la foulée de la feature Accord, mais scope plus lourd (paiement en ligne = intégration Stripe à choisir, + implications NF525 sur le moment où l'acompte transite par le journal fiscal). Décisions déjà actées : encaissement manuel ET en ligne, demandé au devis ET à la prise en charge, déduit à la livraison. Détail complet `todo.md`.
+
+Détail complet dans `todo.md`/`bugs.md`.
+
+## État git à la fin de ce checkpoint
+Commité (à faire), tests 803/805 (fixtures SQL `ticketService.test.ts`/`publicService.test.ts` mises à jour suite au nouveau LEFT JOIN devis). `CACHE_VERSION` bumpée `v2.55`→`v2.56` (frontend touché : `tickets.js`, `suivi.html`).
+
+## Prochaines étapes recommandées
+1. Session dédiée pour l'acompte structuré (voir `todo.md` § Chantier futur — décisions déjà prises, reste à cadrer le modèle de données + l'intégration paiement)
+2. SMS pour la feature Accord : décision fournisseur (Twilio) toujours en attente
+3. Nuance mineure notée dans `todo.md` : badge de statut principal peut être en léger décalage visuel avec la timeline juste après un override (pas une régression)
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 24, populateTechniciens() + CACHE_VERSION v2.55)
 
 ## Vue d'ensemble

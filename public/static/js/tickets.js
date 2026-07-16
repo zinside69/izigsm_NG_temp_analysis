@@ -265,6 +265,7 @@ function viewTicket(id) {
       </div>
     </div>
     <div id="detail-etat-securite"></div>
+    <div id="detail-accord"></div>
     <div style="margin-top:16px;">
       <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Changer le statut</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -293,8 +294,67 @@ function viewTicket(id) {
   // État/sécurité/signature réelle absents du cache liste — chargés depuis la fiche détail.
   if (ticketsUseApi) {
     apiGet('/api/tickets/' + id)
-      .then(result => { if (result.ok) renderEtatSecuriteDetail(result.data?.data || result.data); })
+      .then(result => {
+        if (!result.ok) return;
+        const t = result.data?.data || result.data;
+        renderEtatSecuriteDetail(t);
+        renderAccordDetail(t);
+      })
       .catch(() => {});
+  }
+}
+
+/**
+ * Affiche l'état de l'accord (devis lié au ticket) dans la fiche détail, avec un
+ * bouton de validation manuelle si le devis attend encore une réponse client —
+ * feature "Accord" (double validation boutique→client, timeline suivi.html).
+ * N'affiche rien si aucun devis n'est lié au ticket.
+ */
+function renderAccordDetail(t) {
+  const el = document.getElementById('detail-accord');
+  if (!el || !t) return;
+
+  if (!t.devis_id || !t.devis_statut) { el.innerHTML = ''; return; }
+
+  const BADGES = {
+    envoye:  { cls: 'status-badge status-draft',  label: '🟠 Devis envoyé — en attente de réponse client' },
+    accepte: { cls: 'status-badge status-done',   label: '✅ Accord client obtenu' },
+    refuse:  { cls: 'status-badge status-draft',  label: '❌ Devis refusé par le client' },
+  };
+  const badge = BADGES[t.devis_statut];
+  if (!badge) { el.innerHTML = ''; return; }
+
+  const boutonOverride = t.devis_statut === 'envoye'
+    ? `<button class="btn btn-sm btn-ghost" style="margin-top:8px;" onclick="validerAccordManuel(${t.devis_id})">
+         Valider l'accord manuellement (client injoignable)
+       </button>`
+    : '';
+
+  el.innerHTML = `
+    <div style="margin-top:16px;">
+      <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Accord devis</label>
+      <span class="${badge.cls}">${badge.label}</span>
+      ${boutonOverride}
+    </div>`;
+}
+
+/**
+ * Force l'acceptation d'un devis "envoyé" sans réponse du client (technicien/manager/
+ * admin) — POST /api/devis/:id/accord-manuel, tracé côté serveur (ACCORD_MANUEL_STAFF).
+ * Recharge la fiche détail pour refléter le nouvel état.
+ */
+async function validerAccordManuel(devisId) {
+  if (!confirm('Valider cet accord manuellement ? À utiliser uniquement si le client est injoignable — cette action est tracée.')) return;
+  try {
+    const r = await apiPost(`/api/devis/${devisId}/accord-manuel`, {});
+    if (r.data?.success) {
+      showToast('✅ Accord validé manuellement.');
+      if (window._currentTicketId) viewTicket(window._currentTicketId);
+    } else {
+      showToast('❌ ' + (r.error || r.data?.error || 'Échec de la validation.'), 'error');
+    }
+  } catch (e) {
+    showToast('❌ Erreur réseau.', 'error');
   }
 }
 
