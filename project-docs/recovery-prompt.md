@@ -14,7 +14,7 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 Détail complet dans `todo.md`/`bugs.md`.
 
 ## État git à la fin de ce checkpoint
-`tickets.js` + `sw.js` modifiés, tests 803/805 inchangés (mêmes 2 échecs pré-existants `computeFin()`).
+Commité, pushé et déployé (`d3a3592`), `repairdesk.fr/api/health` → 200 et `sw.js` confirme `CACHE_VERSION izigsm-v2.55` après déploiement. Tests 803/805 inchangés (mêmes 2 échecs pré-existants `computeFin()`).
 
 ## Prochaines étapes recommandées
 1. Reste ouvert : limite RGPD purge automatique, multi-sites géré, rebranding MyDesk, feature "Accord" timeline suivi ticket — voir `todo.md`
