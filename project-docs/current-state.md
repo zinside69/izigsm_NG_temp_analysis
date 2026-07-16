@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 27 — spec acompte structuré écrite et pushée, rien codé)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 28 — plan d'implémentation acompte écrit, en attente du choix d'exécution)
+
+## Checkpoint 28 — plan d'implémentation acompte structuré écrit, PAS commencé, 2026-07-16
+
+Suite du checkpoint 27 (spec approuvée). Skill `superpowers:writing-plans` invoqué pour transformer le spec en plan détaillé.
+
+**Bonus avant le plan** : en recherchant du contexte pour le plan (l'écran cible du futur bouton "Demander un acompte" est la fiche détail devis), découverte et correction d'un bug significatif — `devis.js` avait 3 fonctions cassées depuis toujours (`loadDevisStats()`, `openDevisDetail()`, `openEditDevis()`), même classe que le bug `settings.html` du checkpoint 23 (`result.data` au lieu de `result.data?.data`). Corrigé, testé en local live, déployé (commit `d876981`). **Balayage plus large repéré mais pas traité** : même pattern probable dans `agenda.js`/`sav.js`/`stats.html` (~17 endpoints), documenté dans `todo.md` pour une session dédiée.
+
+**Plan écrit** : `docs/superpowers/plans/2026-07-16-acompte-structure.md` (commit `15bdea8`) — 10 tâches TDD avec commits fréquents. Auto-relecture du plan a trouvé un vrai trou de couverture par rapport au spec (le mécanisme de déduction à la facture finale — ligne négative — n'avait pas de tâche dédiée) — corrigé en ajoutant la Task 7 (`convertirDevis()`), tâches suivantes renumérotées.
+
+**Résumé des 10 tâches** : (1) migration `type_facture`/`date_expiration`, (2) `createFactureAcompte()`, (3) `createAvoir()` + `date_expiration`, (4) exposer la facture d'acompte sur `getTicketById()`/`getDevis()`, (5-6) routes `POST /api/tickets|devis/:id/acompte`, (7) `convertirDevis()` déduit l'acompte de la facture finale, (8-9) UI `tickets.js`/`devis.js`, (10) affichage `suivi.html`.
+
+**En attente du choix de mode d'exécution** (proposé par le skill `writing-plans`, jamais tranché) : subagent-driven (`superpowers:subagent-driven-development`, un subagent frais par tâche + relecture) vs inline (`superpowers:executing-plans`, exécution dans cette session par lots). **Aucun code de ce plan n'a encore été écrit.**
 
 ## Checkpoint 27 — spec acompte structuré finalisée, en attente de relecture utilisateur, 2026-07-16
 

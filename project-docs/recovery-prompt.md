@@ -1,3 +1,22 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 28, plan d'implémentation acompte écrit — RIEN CODÉ)
+
+## Vue d'ensemble (checkpoint 28)
+Suite du checkpoint 27 (spec approuvée). Skill `superpowers:writing-plans` invoqué, plan complet écrit et pushé : `docs/superpowers/plans/2026-07-16-acompte-structure.md` (commit `15bdea8`) — 10 tâches TDD. **Aucune tâche du plan n'a été commencée.**
+
+## Où on en est
+- **Bonus avant le plan** : bug `devis.js` trouvé et corrigé (3 fonctions cassées, même classe que `settings.html` checkpoint 23) — déployé (`d876981`). Balayage plus large repéré (`agenda.js`/`sav.js`/`stats.html`, ~17 endpoints) mais pas traité, documenté dans `todo.md`.
+- **Plan** : auto-relecture a trouvé et comblé un trou de couverture (déduction acompte à la facture finale, devenue Task 7) avant validation.
+- **10 tâches** : (1) migration DB, (2) `createFactureAcompte()`, (3) `createAvoir()`+`date_expiration`, (4) exposer l'acompte sur `getTicketById()`/`getDevis()`, (5-6) routes ticket/devis, (7) déduction à `convertirDevis()`, (8-9) UI `tickets.js`/`devis.js`, (10) `suivi.html`.
+
+## Prochaine étape
+**Choisir le mode d'exécution** avant de reprendre :
+1. Subagent-driven (`superpowers:subagent-driven-development`) — un subagent frais par tâche, relecture entre chaque
+2. Inline (`superpowers:executing-plans`) — exécution dans la session, par lots avec points de contrôle
+
+Puis exécuter les 10 tâches du plan dans l'ordre (dépendances strictes : 1→2→{3,4}→{5,6}→7→{8,9}→10).
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 27, spec acompte structuré écrite — en attente de relecture)
 
 ## Vue d'ensemble (checkpoint 27)
