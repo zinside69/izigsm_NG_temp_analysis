@@ -1,5 +1,15 @@
 # iziGSM — Bugs connus
 
+## `populateTechniciens()` listait tous les rôles (admin/manager/technicien) — CORRIGÉ le 2026-07-16
+
+`populateTechniciens()` (`tickets.js`) alimentait le `<select id="t-technician">` (assignation technicien à la création de ticket) avec **tous** les utilisateurs renvoyés par `GET /api/users` — admin et manager compris, pas seulement les techniciens. Fonctionnel (le champ enregistrait bien un `technicien_id` valide) mais sémantiquement trompeur : un manager pouvait s'auto-assigner un ticket comme "technicien", ou apparaître dans une liste censée représenter l'équipe technique.
+
+**Fix appliqué** : filtre côté frontend `.filter(u => u.role === 'technicien')` avant le `.map()` qui construit les options — `GET /api/users` reste un endpoint générique inchangé (actuellement son seul consommateur, mais garder son contrat général au cas où `personnel.html`/une autre page viendrait à l'utiliser un jour).
+
+**Validé en local live** (compte manager réel boutique 1) : avant fix, le select affichait `Non assigné, Sophie Martin (manager), Lucas Dubois (technicien), Emma Bernard (technicien), Iso MgrB1 (manager)` — 5 entrées ; après fix, `Non assigné, Lucas Dubois, Emma Bernard` — 3 entrées, les 2 seuls vrais techniciens.
+
+**Découverte importante pendant la validation, sans lien direct avec ce fix** : le build local ne suffisait pas à voir le changement dans le navigateur — le Service Worker (`sw.js`, `CACHE_VERSION` stratégie Cache First) servait encore l'ancien `tickets.js` depuis un onglet déjà visité, malgré un rebuild + redéploiement complet. `CACHE_VERSION` n'avait pas été bumpée depuis `v2.54` (lot B, checkpoint 22) alors que plusieurs déploiements frontend ont eu lieu depuis dans cette même session (lot C — `clients.js`/SIRET ; lot G — `settings.html`) sans bump correspondant. **Bumpé à `v2.55`** dans ce commit — couvre rétroactivement l'invalidation de cache pour tous les changements frontend accumulés depuis `v2.54`, pas seulement celui-ci. Même classe de dette déjà documentée plus bas (§ "Service Worker `sw.js` — CACHE_VERSION jamais bumpée depuis Sprint 2.14/2.17") — non résolue structurellement (toujours manuel), juste rattrapée ponctuellement une fois de plus.
+
 ## `settings.html` — TOUTE la page (5 onglets) silencieusement cassée depuis la migration ApiService → apiGet/apiPut — CORRIGÉ le 2026-07-16
 
 Découvert en validant en local live la nouvelle fonctionnalité créneaux RDV (voir `todo.md` Checkpoint 23). Même classe de bug que l'entrée `onModeleInput()` ci-dessous, mais avec un rayon d'impact beaucoup plus large : **10 sites** dans `settings.html` faisaient `r.success`/`r.data`/`r.simulated` directement sur le retour d'`apiGet()`/`apiPut()`/`apiPost()`, qui renvoient `{ok, status, data, error}` — `data` étant le corps JSON complet `{success, data, ...}`. `r.success` valait donc toujours `undefined` (falsy), `r.data` était l'objet `{success, data}` entier (jamais les vraies données).

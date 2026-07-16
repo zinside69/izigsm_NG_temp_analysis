@@ -1,3 +1,27 @@
+# Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 24, populateTechniciens() + CACHE_VERSION v2.55)
+
+## Vue d'ensemble
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Suite du checkpoint 23. Deux items traités : bug slug boutiques (déjà corrigé, doc rattrapée) et `populateTechniciens()` (filtre par rôle).
+
+## Ce qui a été fait ce checkpoint (24)
+
+**Bug slug boutiques libre-service — pas de code à changer, doc corrigée** : revérification a montré que ce bug (todo.md le listait comme ouvert) était en réalité déjà corrigé et backfillé en prod depuis le commit `92f0db8` (2026-07-11). Les 3 boutiques prod (`iziGSM Paris 11`, `SOTELI`, `Desk1`) ont toutes un slug valide, confirmé via `GET /api/boutiques`. La checkbox n'avait simplement jamais été cochée.
+
+**`populateTechniciens()` filtré par rôle** : `tickets.js` listait tous les rôles (admin/manager/technicien) dans le select d'assignation, pas seulement les techniciens. Fix : `.filter(u => u.role === 'technicien')`.
+
+**Découverte importante pendant la validation — `CACHE_VERSION` bumpée `v2.54`→`v2.55`** : le Service Worker (Cache First) servait encore l'ancien `tickets.js` malgré un rebuild/redéploiement complet — `CACHE_VERSION` n'avait pas été bumpée depuis le lot B du checkpoint 22, alors que les lots C (`clients.js`, SIRET) et G (`settings.html`) de cette session ont changé du frontend sans bump correspondant. Le bump de ce checkpoint invalide rétroactivement le cache pour TOUS ces changements accumulés depuis `v2.54`, pas seulement `populateTechniciens()`. **Point de vigilance pour les prochains checkpoints** : penser à bumper `CACHE_VERSION` à chaque déploiement touchant un fichier `public/static/js/*.js` ou `public/*.html`, pas seulement en fin de session.
+
+Détail complet dans `todo.md`/`bugs.md`.
+
+## État git à la fin de ce checkpoint
+`tickets.js` + `sw.js` modifiés, tests 803/805 inchangés (mêmes 2 échecs pré-existants `computeFin()`).
+
+## Prochaines étapes recommandées
+1. Reste ouvert : limite RGPD purge automatique, multi-sites géré, rebranding MyDesk, feature "Accord" timeline suivi ticket — voir `todo.md`
+2. Vigilance `CACHE_VERSION` à chaque futur déploiement frontend (voir note ci-dessus)
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 23, bugs reset password + créneaux RDV traités)
 
 ## Vue d'ensemble

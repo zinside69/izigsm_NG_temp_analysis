@@ -1,4 +1,10 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 23 — reset password + créneaux RDV + bug settings.html, déployé `2dbb297`)
+# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 24 — populateTechniciens() + bump CACHE_VERSION v2.55)
+
+## Checkpoint 24 — populateTechniciens() filtré + CACHE_VERSION bumpée, 2026-07-16
+
+Suite du checkpoint 23. Bug slug boutiques libre-service revérifié : **déjà corrigé depuis le 2026-07-11** (`92f0db8`), seule la checkbox `todo.md` n'avait jamais été mise à jour — aucune action de code nécessaire, doc corrigée.
+
+`populateTechniciens()` (`tickets.js`) listait tous les rôles (admin/manager/technicien) au lieu des seuls techniciens — filtre `.filter(u => u.role === 'technicien')` ajouté. **Découverte importante en validant** : le Service Worker servait encore l'ancien `tickets.js` malgré le rebuild/redéploiement — `CACHE_VERSION` n'avait pas été bumpée depuis `v2.54` (checkpoint 22 lot B) alors que les lots C (`clients.js`) et G (`settings.html`) de cette session avaient changé du frontend sans bump correspondant. Bumpé à `v2.55`, ce qui invalide rétroactivement le cache pour tous ces changements accumulés, pas seulement celui-ci. Détail complet dans `bugs.md`.
 
 ## Checkpoint 23 — reset password + créneaux RDV bookables + bug settings.html, 2026-07-16
 

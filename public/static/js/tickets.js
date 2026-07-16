@@ -966,10 +966,14 @@ async function populateTechniciens() {
   if (!select) return;
   try {
     const r = await apiGet('/api/users');
-    const techniciens = (r.data?.data || []).map(u => ({
-      id:  u.id,
-      nom: (u.prenom || '') + ' ' + (u.nom || ''),
-    }));
+    // Filtré au rôle technicien : GET /api/users est un endpoint générique (retourne
+    // aussi admin/manager) — ce select n'a de sens que pour assigner un vrai technicien.
+    const techniciens = (r.data?.data || [])
+      .filter(u => u.role === 'technicien')
+      .map(u => ({
+        id:  u.id,
+        nom: (u.prenom || '') + ' ' + (u.nom || ''),
+      }));
     techniciens.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.id;
