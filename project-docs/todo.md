@@ -1,5 +1,13 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## Bug étendu — pattern `r.success`/`r.data` cassé, ampleur à confirmer (découvert le 2026-07-16, PAS traité)
+En corrigeant `devis.js` (3 fonctions, voir `bugs.md`), un balayage rapide a montré le même pattern cassé (`r.success`/`r.data` lu directement sur le retour d'`apiGet`/`apiPost`/`apiPut`, au lieu de `r.data.success`/`r.data.data`) dans **`agenda.js`, `sav.js` et `stats.html`** — au moins 17 endpoints backend renvoyant `{success, data}` imbriqué sont potentiellement concernés côté frontend (comptage rapide des routes, pas un audit exhaustif fonction par fonction). Même classe de bug que `settings.html` (checkpoint 23) et `devis.js` (ce jour) : silencieux, aucune erreur visible, juste des données jamais affichées ou des stats à zéro en permanence.
+- [ ] Auditer `agenda.js` fonction par fonction (KPIs, RDV, clients/tickets cache, détail RDV) — page Agenda potentiellement très impactée (plusieurs fonctions concernées d'après le grep initial)
+- [ ] Auditer `sav.js` fonction par fonction (garanties, dossiers SAV, expiration)
+- [ ] Auditer `stats.html` (7 occurrences de `r.success` repérées) — page Stats/Analytics potentiellement affichant des chiffres faux depuis toujours
+- [ ] Pour chaque site, vérifier d'abord la route backend correspondante (`{success, data}` imbriqué vs corps plat) avant de corriger — certains sites peuvent être corrects si la route ne nest pas sous `data` (cf. `devis.js` : création/conversion étaient déjà bons)
+- [ ] Valider chaque fix en local live avec de vraies données (pas juste relire le code) — un test à 0/vide ne prouve rien, ce bug produit justement des zéros silencieux
+
 ## Checkpoint 23 (2026-07-16) — Bugs ouverts traités : reset password + créneaux RDV
 
 Suite du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus non corrigés listés dans `bugs.md`/`recovery-prompt.md`.

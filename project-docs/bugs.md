@@ -1,5 +1,22 @@
 # iziGSM — Bugs connus
 
+## `devis.js` — 3 fonctions cassées depuis toujours (`res.data` au lieu de `res.data.data`) — CORRIGÉ le 2026-07-16
+
+Trouvé en recherchant du contexte pour le plan d'implémentation de l'acompte structuré (fiche détail devis = écran cible pour le futur bouton "Demander un acompte"). Même classe de bug que `settings.html` (checkpoint 23) et `onModeleInput()` (`tickets.js`) : `apiGet()` renvoie `{ok, status, data, error}` où `data` est le corps JSON complet `{success, data}` de la route — 3 endroits dans `devis.js` traitaient `result.data` comme si c'était directement l'objet utile.
+
+**Impact réel, en prod depuis l'écriture de ces fonctions** :
+- `loadDevisStats()` (ligne 66) : les KPIs en haut de la page Devis (Total, Brouillon, Envoyés, Acceptés, Refusés, CA signé, Taux conv.) affichaient **toujours 0** (fallback `?? 0` sur des champs `undefined`) — silencieux, pas d'erreur visible, juste des chiffres faux en permanence.
+- `openDevisDetail()` (ligne 257) : la fiche détail d'un devis (clic sur l'icône œil) n'a **jamais affiché aucune donnée réelle** — client, lignes, montants, notes tous `undefined`.
+- `openEditDevis()` (ligne 394) : le formulaire de modification d'un devis ne **pré-remplissait jamais** les vraies valeurs (client, lignes, notes, validité) au chargement.
+
+**Vérifié à ne PAS être buggé** (même fichier, même pattern d'apparence mais routes différentes qui renvoient un corps JSON plat, sans `data` imbriqué) : la liste des devis (`allDevisCache = result.data?.data || []`), la création (`result.data?.id`), la conversion en facture (`result.data?.facture_numero`) — ces routes (`POST /api/devis`, `PUT /api/devis/:id/convertir`) renvoient `{success, id, ...}` à plat, pas `{success, data: {...}}`.
+
+**Fix appliqué** : les 3 sites corrigés en `result.data?.data` (stats) / `result.data?.data` (détail, édition).
+
+**Validé en local live** (compte manager réel, devis de test créé via API) : stats affichent `Total: 1, Brouillon: 1` (avant fix : toujours 0) ; fiche détail affiche client/ligne/montants/notes réels (avant fix : tout vide) ; formulaire de modification pré-rempli correctement (avant fix : champs vides).
+
+**Balayage plus large effectué** : le même pattern (`r.success`/`r.data` sur le wrapper au lieu de `r.data.success`/`r.data.data`) a été repéré en quantité dans `agenda.js`, `sav.js` et `stats.html` (au moins 17 endpoints backend concernés d'après un comptage rapide des routes `{success, data}`) — **pas traité dans ce passage**, ampleur à confirmer et à traiter dans une session dédiée. Voir `todo.md` § Bug étendu `r.success`/`r.data`.
+
 ## `populateTechniciens()` listait tous les rôles (admin/manager/technicien) — CORRIGÉ le 2026-07-16
 
 `populateTechniciens()` (`tickets.js`) alimentait le `<select id="t-technician">` (assignation technicien à la création de ticket) avec **tous** les utilisateurs renvoyés par `GET /api/users` — admin et manager compris, pas seulement les techniciens. Fonctionnel (le champ enregistrait bien un `technicien_id` valide) mais sémantiquement trompeur : un manager pouvait s'auto-assigner un ticket comme "technicien", ou apparaître dans une liste censée représenter l'équipe technique.

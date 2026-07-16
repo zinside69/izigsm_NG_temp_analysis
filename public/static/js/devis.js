@@ -63,7 +63,7 @@ async function loadDevisStats() {
   try {
     const result = await apiGet('/api/devis/stats');
     if (!result.ok) return;
-    const s = result.data;
+    const s = result.data?.data || {};
     const container = document.getElementById('devis-stats');
     if (!container) return;
     container.innerHTML = [
@@ -254,7 +254,7 @@ async function openDevisDetail(id) {
     const result = await apiGet('/api/devis/' + id);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
 
-    const d = result.data;
+    const d = result.data?.data;
     titre.textContent = `Devis ${d.numero}`;
 
     const clientNom = [d.client_prenom, d.client_nom].filter(Boolean).join(' ') || '—';
@@ -391,7 +391,7 @@ async function openEditDevis(id) {
   try {
     const result = await apiGet('/api/devis/' + id);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
-    const d = result.data;
+    const d = result.data?.data;
 
     document.getElementById('d-client').value  = d.client_id || '';
     document.getElementById('d-notes').value   = d.notes     || '';
