@@ -4,7 +4,7 @@
 
 Suite du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus non corrigés listés dans `bugs.md`/`recovery-prompt.md`.
 
-### E. Reset password jamais envoyé — commité, pushé, déployé (`2dbb297`) — voir `bugs.md` § reset-password-request pour le détail complet
+### E. Reset password jamais envoyé — commité, pushé, déployé (`2dbb297`), **validé en prod avec envoi réel reçu** (`telnet@bbox.fr`, 2026-07-16) — voir `bugs.md` § reset-password-request pour le détail complet
 `sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique `Expected 1 arguments, but got 5` disparue. Non validé en envoi réel (pas de `RESEND_API_KEY` locale, envoi prod nécessite confirmation explicite — action "envoi de message" soumise à autorisation).
 
 ### F. Créneaux RDV bookables (boutique_creneaux vide) — commité, pushé, déployé (`2dbb297`) — voir `todo.md` § Bug prise de RDV en ligne pour le détail complet

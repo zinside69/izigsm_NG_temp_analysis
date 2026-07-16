@@ -5,10 +5,10 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 
 ## Ce qui a été fait ce checkpoint (23)
 
-**E. Reset password jamais envoyé — commité, pushé, déployé (`2dbb297`)**
+**E. Reset password jamais envoyé — commité, pushé, déployé (`2dbb297`), validé en prod avec envoi réel**
 - `sendResetPasswordEmail()` (nouveau, `emailService.ts`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts` — même modèle que `sendOtpInscription()` (email système, clé Resend globale, pas de `boutique_id`)
 - `tsc` : erreur historique `Expected 1 arguments, but got 5` disparue
-- Non validé en envoi réel (pas de `RESEND_API_KEY` en local ; un test en prod enverrait un vrai email — nécessite confirmation explicite avant de le faire)
+- **Validé en prod le 2026-07-16** : `POST /api/auth/reset-password-request` avec `telnet@bbox.fr` (compte réel, sur confirmation explicite utilisateur) → email de réinitialisation réellement reçu, confirmé par l'utilisateur. Flux fonctionnel de bout en bout.
 
 **F. Créneaux RDV bookables (`boutique_creneaux` vide) — commité, pushé, déployé (`2dbb297`)**
 - `src/services/creneauxService.ts` (nouveau) + `GET`/`PUT /api/boutiques/:id/creneaux` (`routes/boutiques.ts`) + onglet "Horaires RDV" dans `settings.html` (grille 7 jours, plages multiples)
@@ -24,8 +24,7 @@ Détail complet des 3 items dans `todo.md` § Checkpoint 23 et `bugs.md`.
 `tsc --noEmit` : aucune nouvelle erreur (2 pré-existantes `auth.ts:335`/`622`, sans lien, confirmées `git stash`). Tests 803/805 (12 nouveaux, mêmes 2 échecs pré-existants `computeFin()`). Lots E, F, G commités (`2dbb297`), pushés et déployés (`repairdesk.fr/api/health` → 200 après déploiement). Working tree propre (hors archive `izigsm_v2.45.0_backup_2026-07-16.zip`, non trackée intentionnellement).
 
 ## Prochaines étapes recommandées
-1. Décider si l'envoi réel du reset-password doit être validé en prod (enverrait un vrai email à un compte réel — action soumise à autorisation explicite, pas déclenchée dans ce checkpoint)
-2. Reste ouvert : limite admin `boutique_id: null` sur endpoints photos, dette technique diverse — voir `bugs.md`/`todo.md`
+1. Reste ouvert : limite admin `boutique_id: null` sur endpoints photos, dette technique diverse — voir `bugs.md`/`todo.md`
 
 ---
 

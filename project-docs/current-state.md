@@ -4,7 +4,7 @@
 
 Suite directe du checkpoint 22 (lots A-D déjà déployés). Traite les 2 derniers bugs connus (`bugs.md`) + 1 bug annexe découvert en validant :
 
-**E. Reset password jamais envoyé (commité, pushé, déployé, `2dbb297`)** : `sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique disparue. Envoi réel non testé (pas de clé Resend locale, test prod = email réel, nécessite confirmation explicite).
+**E. Reset password jamais envoyé (commité, pushé, déployé, `2dbb297`, validé en prod avec envoi réel)** : `sendResetPasswordEmail()` (nouveau, `emailService.ts`, modèle `sendOtpInscription()`) remplace l'appel `sendEmail()` mal paramétré dans `routes/auth.ts`. `tsc` : erreur historique disparue. **Testé en prod le 2026-07-16** avec `telnet@bbox.fr` (compte réel) : email de réinitialisation reçu, confirmé par l'utilisateur.
 
 **F. Créneaux RDV bookables — `boutique_creneaux` était vide pour toutes les boutiques (commité, pushé, déployé, `2dbb297`)** : `creneauxService.ts` (nouveau) + `GET`/`PUT /api/boutiques/:id/creneaux` + onglet "Horaires RDV" dans `settings.html`. 12 tests nouveaux. Cycle complet validé en local live : API + `getDisponibilites()` publique génère bien des créneaux réels + round-trip navigateur (compte manager réel, ajout plage, sauvegarde confirmée).
 
