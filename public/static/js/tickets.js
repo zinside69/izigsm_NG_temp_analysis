@@ -739,16 +739,20 @@ async function changeStatus(id, statut) {
       if (!confirm(confirmMsg)) return;
 
       try {
-        // facture_acompte_montant est un TTC ; approximation HT à 20% de TVA pour la
-        // ligne de l'avoir (le taux réel de l'acompte n'est pas exposé par l'API —
-        // cf. avertissement Task 8 brief, acceptée pour ce MVP).
+        // HT + taux TVA réels de l'acompte (exposés par getTicketById(), pas
+        // approximés à 20% — revue finale du chantier a signalé qu'un taux fixe
+        // reproduirait la pollution du rapport comptable déjà corrigée en Task 7,
+        // commit e154e13). Fallback 20% seulement si l'API ne les a jamais exposés
+        // (ancien cache navigateur / vieille session), ne devrait jamais arriver.
+        const prixHt   = ticketDetail.facture_acompte_ht ?? Math.round((montant / 1.2) * 100) / 100;
+        const tvaTaux  = ticketDetail.facture_acompte_tva_taux ?? 20;
         // Endpoint réel vérifié : POST /api/avoirs (routes/facturation.ts) avec
         // facture_id dans le BODY, pas POST /api/factures/:id/avoir comme supposé
         // par le plan — corrigé après vérification du contrat réel de la route.
         const rAvoir = await apiPost('/api/avoirs', {
           facture_id: ticketDetail.facture_acompte_id,
           motif:      `Annulation de la prise en charge #${id}`,
-          lignes:     [{ description: 'Acompte annulé', quantite: 1, prix_unitaire_ht: Math.round((montant / 1.2) * 100) / 100, tva_taux: 20 }],
+          lignes:     [{ description: 'Acompte annulé', quantite: 1, prix_unitaire_ht: prixHt, tva_taux: tvaTaux }],
           date_expiration: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
         });
         if (!rAvoir.data?.success) {

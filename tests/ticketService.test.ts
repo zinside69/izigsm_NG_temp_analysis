@@ -263,7 +263,7 @@ describe('getKanban()', () => {
 describe('getTicketById()', () => {
   let db: ReturnType<typeof createMockDatabase>
 
-  const SQL_TICKET = `SELECT t.*, c.prenom || ' ' || c.nom AS client_nom, c.email AS client_email, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom, d.id AS devis_id, d.statut AS devis_statut, fa.id AS facture_acompte_id, fa.numero AS facture_acompte_numero, fa.total_ttc AS facture_acompte_montant FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id) WHERE t.id = ? AND t.actif = 1`
+  const SQL_TICKET = `SELECT t.*, c.prenom || ' ' || c.nom AS client_nom, c.email AS client_email, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom, d.id AS devis_id, d.statut AS devis_statut, fa.id AS facture_acompte_id, fa.numero AS facture_acompte_numero, fa.total_ttc AS facture_acompte_montant, fa.total_ht AS facture_acompte_ht, (SELECT tva_taux FROM lignes_document WHERE document_type = 'facture' AND document_id = fa.id LIMIT 1) AS facture_acompte_tva_taux FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id) WHERE t.id = ? AND t.actif = 1`
   const SQL_HISTO  = `SELECT h.*, u.prenom || ' ' || u.nom AS user_nom FROM tickets_statuts_historique h JOIN users u ON u.id = h.user_id WHERE h.ticket_id = ? ORDER BY h.created_at ASC`
   const SQL_PHOTOS = 'SELECT * FROM tickets_photos WHERE ticket_id = ? ORDER BY created_at'
 
@@ -286,6 +286,7 @@ describe('getTicketById()', () => {
     db.__setResponse(SQL_TICKET, {
       ...TICKET_WITH_CLIENT,
       facture_acompte_id: 7, facture_acompte_numero: 'FAC-2026-00007', facture_acompte_montant: 120,
+      facture_acompte_ht: 100, facture_acompte_tva_taux: 20,
     })
     db.__setListResponse(SQL_HISTO, [])
     db.__setListResponse(SQL_PHOTOS, [])
@@ -295,6 +296,11 @@ describe('getTicketById()', () => {
     expect(res.facture_acompte_id).toBe(7)
     expect(res.facture_acompte_numero).toBe('FAC-2026-00007')
     expect(res.facture_acompte_montant).toBe(120)
+    // HT réel + taux TVA réel (lu sur la ligne, pas recalculé) — évite une
+    // approximation à un taux fixe côté frontend lors de la génération de l'avoir
+    // sur annulation, voir tickets.js changeStatus() et le fix Task 7 (commit e154e13).
+    expect(res.facture_acompte_ht).toBe(100)
+    expect(res.facture_acompte_tva_taux).toBe(20)
   })
 
   it('retourne null si ticket inexistant', async () => {

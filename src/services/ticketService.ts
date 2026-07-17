@@ -377,6 +377,12 @@ export async function getTicketById(
   // facture_acompte_* : facture type_facture='acompte' liée directement au ticket
   // OU à son devis le plus récent (un acompte peut avoir été demandé à l'un ou
   // l'autre moment, voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
+  // facture_acompte_tva_taux : lu directement sur la ligne "Acompte" (pas recalculé
+  // depuis ht/tva) — même raison que le fix convertirDevis() (commit e154e13) : un
+  // recalcul (tva/ht) aurait produit un taux légèrement décalé (ex. 19.99% au lieu
+  // de 20%) à cause de l'arrondi déjà appliqué sur les totaux stockés. Exposé pour
+  // que tickets.js n'ait plus à approximer un taux fixe 20% lors de la génération
+  // de l'avoir sur annulation (changeStatus()).
   const ticket = await db.get<any>(`
     SELECT t.*,
            c.prenom || ' ' || c.nom   AS client_nom,
@@ -387,7 +393,10 @@ export async function getTicketById(
            d.statut                   AS devis_statut,
            fa.id                      AS facture_acompte_id,
            fa.numero                  AS facture_acompte_numero,
-           fa.total_ttc               AS facture_acompte_montant
+           fa.total_ttc               AS facture_acompte_montant,
+           fa.total_ht                AS facture_acompte_ht,
+           (SELECT tva_taux FROM lignes_document
+              WHERE document_type = 'facture' AND document_id = fa.id LIMIT 1) AS facture_acompte_tva_taux
     FROM   tickets t
     JOIN   clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.technicien_id
