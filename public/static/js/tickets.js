@@ -266,6 +266,7 @@ function viewTicket(id) {
     </div>
     <div id="detail-etat-securite"></div>
     <div id="detail-accord"></div>
+    <div id="detail-acompte"></div>
     <div style="margin-top:16px;">
       <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Changer le statut</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -299,6 +300,7 @@ function viewTicket(id) {
         const t = result.data?.data || result.data;
         renderEtatSecuriteDetail(t);
         renderAccordDetail(t);
+        renderAcompteDetail(t, 'ticket');
       })
       .catch(() => {});
   }
@@ -336,6 +338,74 @@ function renderAccordDetail(t) {
       <span class="${badge.cls}">${badge.label}</span>
       ${boutonOverride}
     </div>`;
+}
+
+/**
+ * Affiche le statut de l'acompte (facture d'acompte liée) dans la fiche détail,
+ * avec un bouton de demande si aucun acompte n'existe encore — feature acompte
+ * structuré (sous-projet A, voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
+ * @param t          Détail complet du ticket (ou devis) renvoyé par l'API
+ * @param contextType 'ticket' ou 'devis' — détermine l'endpoint appelé
+ */
+function renderAcompteDetail(t, contextType) {
+  const el = document.getElementById('detail-acompte');
+  if (!el || !t) return;
+
+  const entityId = t.id;
+
+  if (!t.facture_acompte_id) {
+    el.innerHTML = `
+      <div style="margin-top:16px;">
+        <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Acompte</label>
+        <button class="btn btn-sm btn-ghost" onclick="demanderAcompte(${entityId}, '${contextType}')">
+          💰 Demander un acompte
+        </button>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="margin-top:16px;">
+      <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Acompte</label>
+      <span class="status-badge status-done">
+        💰 Acompte facturé : ${formatMoney(t.facture_acompte_montant)} (${esc(t.facture_acompte_numero)})
+      </span>
+    </div>`;
+}
+
+/**
+ * Ouvre un mini-formulaire (prompt) pour demander un acompte — montant HT libre,
+ * TVA par défaut 20%, mode de paiement. POST /api/tickets/:id/acompte ou
+ * /api/devis/:id/acompte selon contextType. `prompt()` est un choix volontairement
+ * minimal pour ce MVP (pas de pattern de mini-modal existant ailleurs dans le
+ * projet pour ce genre de saisie courte — vérifié absence de openQuickModal/promptModal).
+ */
+async function demanderAcompte(entityId, contextType) {
+  const montantStr = prompt('Montant HT de l\'acompte (€) :');
+  if (!montantStr) return;
+  const montant_ht = parseFloat(montantStr.replace(',', '.'));
+  if (!montant_ht || montant_ht <= 0) {
+    showToast('❌ Montant invalide.', 'error');
+    return;
+  }
+  const modePaiement = prompt('Mode de paiement (especes, cb, cheque, virement) :', 'especes');
+  if (!modePaiement) return;
+
+  const endpoint = contextType === 'devis'
+    ? `/api/devis/${entityId}/acompte`
+    : `/api/tickets/${entityId}/acompte`;
+
+  try {
+    const r = await apiPost(endpoint, { montant_ht, tva_taux: 20, mode_paiement: modePaiement });
+    if (r.data?.success) {
+      showToast(`✅ Acompte facturé : ${r.data.facture_numero}`);
+      if (contextType === 'ticket' && window._currentTicketId) viewTicket(window._currentTicketId);
+    } else {
+      showToast('❌ ' + (r.error || r.data?.error || 'Échec de la facturation.'), 'error');
+    }
+  } catch (e) {
+    showToast('❌ Erreur réseau.', 'error');
+  }
 }
 
 /**
@@ -640,6 +710,54 @@ function _buildTicketHTML(d) {
 window.printTicket = printTicket;
 
 async function changeStatus(id, statut) {
+  // Annulation d'un ticket ayant un acompte facturé : demander confirmation du
+  // montant puis générer un avoir (60 jours de validité) AVANT d'annuler — feature
+  // acompte structuré (sous-projet A, voir
+  // docs/superpowers/specs/2026-07-16-acompte-structure-design.md). Le reste de la
+  // fonction (appel PUT statut, refresh, toasts) est inchangé par rapport à
+  // l'implémentation précédente : on ne fait qu'insérer ce garde-fou en tête pour
+  // le seul cas statut === 'annule', sans toucher au comportement existant des
+  // autres transitions.
+  if (statut === 'annule' && ticketsUseApi) {
+    // facture_acompte_id n'est pas dans le cache liste (allTicketsCache) — recharger
+    // le détail complet pour savoir s'il y a un acompte avant de confirmer.
+    let ticketDetail = null;
+    try {
+      const r = await apiGet('/api/tickets/' + id);
+      if (r.ok) {
+        const t = r.data?.data || r.data;
+        if (t?.facture_acompte_id) ticketDetail = t;
+      }
+    } catch (_) { /* si le fetch échoue, on retombe sur la confirmation générique ci-dessous */ }
+
+    if (ticketDetail) {
+      const montant = ticketDetail.facture_acompte_montant;
+      const confirmMsg = `Ce ticket a un acompte facturé de ${montant}€ — annuler générera un avoir de ${montant}€ valable 2 mois.`;
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        // facture_acompte_montant est un TTC ; approximation HT à 20% de TVA pour la
+        // ligne de l'avoir (le taux réel de l'acompte n'est pas exposé par l'API —
+        // cf. avertissement Task 8 brief, acceptée pour ce MVP).
+        const rAvoir = await apiPost('/api/avoirs', {
+          facture_id: ticketDetail.facture_acompte_id,
+          motif:      `Annulation de la prise en charge #${id}`,
+          lignes:     [{ description: 'Acompte annulé', quantite: 1, prix_unitaire_ht: Math.round((montant / 1.2) * 100) / 100, tva_taux: 20 }],
+          date_expiration: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+        if (!rAvoir.data?.success) {
+          showFlash('Erreur: ' + (rAvoir.error || rAvoir.data?.error || 'Échec de la création de l\'avoir.'), 'error');
+          return;
+        }
+      } catch (e) {
+        showFlash('Erreur: création de l\'avoir impossible (réseau).', 'error');
+        return;
+      }
+    } else {
+      if (!confirm('Annuler cette prise en charge ?')) return;
+    }
+  }
+
   try {
     if (ticketsUseApi) {
       const result = await apiPut('/api/tickets/' + id + '/statut', { statut });
