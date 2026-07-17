@@ -533,6 +533,7 @@ async function _fetchTicketPrintData(id) {
   } catch {}
 
   return {
+    id:         t.id || id,
     boutique,
     numero:     t.numero    || ('#' + id),
     statut:     t.statut    || 'recu',
