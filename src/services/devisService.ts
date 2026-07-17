@@ -190,6 +190,10 @@ export async function listDevis(
  */
 export async function getDevis(db: Database, id: number): Promise<any | null> {
   const [devis, lignes] = await Promise.all([
+    // facture_acompte_* : facture type_facture='acompte' liée directement à ce devis
+    // OU à son ticket parent (d.ticket_id, colonne existante, nullable) — un acompte
+    // peut avoir été demandé depuis le ticket avant que le devis ne soit créé, voir
+    // docs/superpowers/specs/2026-07-16-acompte-structure-design.md.
     db.get<any>(`
       SELECT d.*,
              c.nom       AS client_nom,
