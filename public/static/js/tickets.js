@@ -718,6 +718,9 @@ async function changeStatus(id, statut) {
   // l'implémentation précédente : on ne fait qu'insérer ce garde-fou en tête pour
   // le seul cas statut === 'annule', sans toucher au comportement existant des
   // autres transitions.
+  // ticketsUseApi : garde-fou acompte/avoir uniquement en mode API — en mode
+  // hors-ligne (localStorage), aucune facture d'acompte réelle n'existe côté
+  // serveur pour générer un avoir dessus, comportement offline inchangé.
   if (statut === 'annule' && ticketsUseApi) {
     // facture_acompte_id n'est pas dans le cache liste (allTicketsCache) — recharger
     // le détail complet pour savoir s'il y a un acompte avant de confirmer.
@@ -739,6 +742,9 @@ async function changeStatus(id, statut) {
         // facture_acompte_montant est un TTC ; approximation HT à 20% de TVA pour la
         // ligne de l'avoir (le taux réel de l'acompte n'est pas exposé par l'API —
         // cf. avertissement Task 8 brief, acceptée pour ce MVP).
+        // Endpoint réel vérifié : POST /api/avoirs (routes/facturation.ts) avec
+        // facture_id dans le BODY, pas POST /api/factures/:id/avoir comme supposé
+        // par le plan — corrigé après vérification du contrat réel de la route.
         const rAvoir = await apiPost('/api/avoirs', {
           facture_id: ticketDetail.facture_acompte_id,
           motif:      `Annulation de la prise en charge #${id}`,
