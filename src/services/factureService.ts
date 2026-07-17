@@ -44,6 +44,7 @@ export interface CreateAvoirInput {
   motif:           string
   lignes:          LigneInput[]
   notes?:          string
+  /** ISO 8601. Absent = pas d'expiration (comportement historique, ex. avoir SAV). */
   date_expiration?: string
 }
 
@@ -486,7 +487,7 @@ export async function createAvoir(
     type, input.motif,
     total_ht, total_tva, total_ttc,
     input.notes ?? null,
-    input.date_expiration ?? null,
+    input.date_expiration ?? null, // null = pas d'expiration, cf. commentaire migration 0036
   ).first<{ id: number }>()
 
   if (!result?.id) throw new Error('Erreur lors de la création de l\'avoir.')
