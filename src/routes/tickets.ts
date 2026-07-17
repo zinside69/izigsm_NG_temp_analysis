@@ -578,7 +578,10 @@ tickets.post('/:id/acompte', requireRole('admin', 'manager'), async (c) => {
   }
 
   const { montant_ht, tva_taux, mode_paiement, reference } = await c.req.json().catch(() => ({}))
-  if (!montant_ht || montant_ht <= 0)
+  // typeof/isNaN, pas juste `<= 0` : une chaîne non numérique (ex. "abc") est truthy et
+  // "abc" <= 0 vaut false (comparaison NaN), donc passerait ce garde et produirait des
+  // totaux NaN sur une facture verrouillée NF525 — même garde que caisse.ts.
+  if (typeof montant_ht !== 'number' || isNaN(montant_ht) || montant_ht <= 0)
     return c.json({ success: false, error: 'montant_ht doit être positif.' }, 400)
   if (!mode_paiement)
     return c.json({ success: false, error: 'mode_paiement obligatoire.' }, 400)

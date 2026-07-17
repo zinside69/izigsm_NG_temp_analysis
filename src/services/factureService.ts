@@ -302,7 +302,11 @@ export async function createFactureAcompte(
 ): Promise<{ facture_id: number; facture_numero: string }> {
   if (!input.ticket_id && !input.devis_id)
     throw new Error('ticket_id ou devis_id requis.')
-  if (input.montant_ht <= 0)
+  // typeof/isNaN en plus de <= 0 : défense en profondeur pour tout appelant qui ne
+  // validerait pas déjà en amont (routes tickets.ts/facturation.ts le font, mais
+  // cette fonction ne doit pas dépendre de la discipline de ses appelants pour
+  // éviter des totaux NaN sur une facture verrouillée NF525).
+  if (typeof input.montant_ht !== 'number' || isNaN(input.montant_ht) || input.montant_ht <= 0)
     throw new Error('montant_ht doit être positif.')
 
   const existing = await db.prepare(`
