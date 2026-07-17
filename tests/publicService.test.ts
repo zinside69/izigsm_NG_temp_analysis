@@ -33,7 +33,7 @@ import {
 
 // ─── SQL normalisés ───────────────────────────────────────────────────────────
 
-const SQL_TICKET_TOKEN = `SELECT t.id, t.numero, t.tracking_token, t.statut, t.appareil_marque, t.appareil_modele, t.description_panne, t.diagnostic, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.date_livraison, c.prenom AS client_prenom, c.nom AS client_nom, b.nom AS boutique_nom, b.telephone AS boutique_telephone, b.email AS boutique_email, b.adresse AS boutique_adresse, b.ville AS boutique_ville, b.slug AS boutique_slug, d.statut AS devis_statut FROM tickets t JOIN clients c ON c.id = t.client_id JOIN boutiques b ON b.id = t.boutique_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) WHERE t.tracking_token = ? AND t.actif = 1`
+const SQL_TICKET_TOKEN = `SELECT t.id, t.numero, t.tracking_token, t.statut, t.appareil_marque, t.appareil_modele, t.description_panne, t.diagnostic, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.date_livraison, c.prenom AS client_prenom, c.nom AS client_nom, b.nom AS boutique_nom, b.telephone AS boutique_telephone, b.email AS boutique_email, b.adresse AS boutique_adresse, b.ville AS boutique_ville, b.slug AS boutique_slug, d.statut AS devis_statut, fa.total_ttc AS acompte_montant, fa.numero AS acompte_numero FROM tickets t JOIN clients c ON c.id = t.client_id JOIN boutiques b ON b.id = t.boutique_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id) WHERE t.tracking_token = ? AND t.actif = 1`
 
 const SQL_BOUTIQUE_SLUG = `SELECT id, nom, siret, adresse, code_postal, ville, telephone, email, site_web, logo_url, description, horaires, slug, facebook_url, instagram_url, google_maps_url FROM boutiques WHERE slug = ? AND actif = 1`
 
@@ -58,7 +58,7 @@ const TICKET_PUBLIC: TicketPublic = {
   boutique_nom: 'iziGSM Paris', boutique_telephone: '0140000000',
   boutique_email: 'contact@izigsm.fr', boutique_adresse: '1 rue Test',
   boutique_ville: 'Paris', boutique_slug: 'izigsm-paris',
-  devis_statut: null,
+  devis_statut: null, acompte_montant: null, acompte_numero: null,
 }
 
 const BOUTIQUE_PUBLIC: BoutiquePublic = {
@@ -126,6 +126,17 @@ describe('getTicketPublicByToken', () => {
     expect(result).toHaveProperty('appareil_marque')
     expect(result).toHaveProperty('date_reception')
     expect(result).toHaveProperty('boutique_telephone')
+  })
+
+  it('expose acompte_montant/acompte_numero quand un acompte existe', async () => {
+    db.__setResponse(SQL_TICKET_TOKEN, {
+      ...TICKET_PUBLIC, acompte_montant: 120, acompte_numero: 'FAC-2026-00007',
+    })
+
+    const result = await getTicketPublicByToken(db, 'abc123def456abc1')
+
+    expect(result.acompte_montant).toBe(120)
+    expect(result.acompte_numero).toBe('FAC-2026-00007')
   })
 })
 

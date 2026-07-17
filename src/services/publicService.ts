@@ -48,6 +48,10 @@ export interface TicketPublic {
   /** Statut du devis le plus récent lié au ticket, ou `null` si aucun — pilote la
    *  couleur (gris/orange/vert) de l'étape "Accord" dans la timeline `suivi.html`. */
   devis_statut:      string | null
+  /** Montant TTC de la facture d'acompte liée, ou null si aucun acompte. */
+  acompte_montant:   number | null
+  /** Numéro de la facture d'acompte liée, ou null si aucun acompte. */
+  acompte_numero:    string | null
 }
 
 /** Infos publiques d'une boutique (vitrine). */
@@ -139,13 +143,16 @@ export async function getTicketPublicByToken(
       b.adresse  AS boutique_adresse,
       b.ville    AS boutique_ville,
       b.slug     AS boutique_slug,
-      d.statut   AS devis_statut
+      d.statut   AS devis_statut,
+      fa.total_ttc AS acompte_montant,
+      fa.numero    AS acompte_numero
     FROM   tickets t
     JOIN   clients  c ON c.id = t.client_id
     JOIN   boutiques b ON b.id = t.boutique_id
     LEFT JOIN devis d ON d.id = (
       SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
     )
+    LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id)
     WHERE  t.tracking_token = ? AND t.actif = 1
   `, [token])
 }

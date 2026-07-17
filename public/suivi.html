@@ -257,6 +257,16 @@ function renderTicket(t) {
     document.getElementById('prix-body').innerHTML = rows.join('')
   }
 
+  // Acompte
+  if (t.acompte_montant) {
+    const soldeRestant = (t.prix_final ?? t.prix_estime ?? 0) - t.acompte_montant
+    document.getElementById('prix-section').classList.remove('hidden')
+    const rows = document.getElementById('prix-body').innerHTML
+    document.getElementById('prix-body').innerHTML = rows +
+      prixRow('Acompte versé', -t.acompte_montant) +
+      prixRow('Solde restant', Math.max(soldeRestant, 0), true)
+  }
+
   // Contact boutique
   const b = t.boutique
   const contacts = []
