@@ -212,14 +212,36 @@ La timeline "Progression" existe déjà (`suivi.html:93-94`, `renderTimeline()` 
 
 **Validé en local live (2026-07-16)** : cycle complet — devis créé/envoyé → timeline `suivi.html` affiche l'étape "Accord" en orange pulsant (capture confirmée) → override manuel depuis la fiche ticket (compte manager réel) → badge passe à "✅ Accord client obtenu", bouton disparaît → timeline publique repasse en vert. Isolation rôle vérifiée : technicien bloqué (403) sur `PUT /devis/:id/statut` (endpoint générique) mais autorisé sur `POST /devis/:id/accord-manuel` ; 409 confirmé en re-tentant l'override sur un devis déjà accepté. Entrée `audit_logs` `ACCORD_MANUEL_STAFF` confirmée en base. Tests 803/805 (12 tests SQL fixtures mis à jour dans `ticketService.test.ts`/`publicService.test.ts` suite au nouveau LEFT JOIN, mêmes 2 échecs pré-existants `computeFin()`).
 
-## Chantier futur — acompte structuré (spec écrite le 2026-07-16, PAS implémenté)
-Demandé le 2026-07-16 en même temps que la feature "Accord" ci-dessus, séquencé en 2 sous-projets : **(A) acompte encaissé manuellement** (spécifié) et **(B) paiement en ligne Stripe** (session future dédiée, hors scope tant qu'un prestataire n'est pas choisi).
+## Chantier acompte structuré — sous-projet (A) IMPLÉMENTÉ le 2026-07-17 (subagent-driven-development, 10 tâches)
+Design approuvé le 2026-07-16 (spec `docs/superpowers/specs/2026-07-16-acompte-structure-design.md`, commit `ae094a7`), plan écrit le même jour (`docs/superpowers/plans/2026-07-16-acompte-structure.md`, commit `15bdea8`, 10 tâches TDD), **implémenté et revu de bout en bout le 2026-07-17** — ledger complet des 10 tâches + revue finale dans `.superpowers/sdd/progress.md`.
 
-**Design (A) entièrement approuvé section par section avec l'utilisateur, spec écrite et pushée** : `docs/superpowers/specs/2026-07-16-acompte-structure-design.md` (commit `ae094a7`) — **source de vérité pour ce chantier**, ne pas dupliquer les décisions ici. Résumé : un seul acompte par dossier, montant libre, modèle "facture d'acompte" réutilisant `factures`/`avoirs`/`journal_nf525` existants (même séquence `FAC-`, pas d'extension NF525), facture finale = solde restant via ligne négative de déduction, annulation → avoir (2 mois réellement appliqués, pas de remboursement), rôles admin/manager.
+**Résumé fonctionnel** : bouton "Demander un acompte" sur ticket et devis (admin/manager), montant libre facturé immédiatement comme une vraie facture verrouillée (`type_facture='acompte'`, séquence `FAC-` partagée, aucune extension NF525). Déduite automatiquement à la facture finale (`convertirDevis()`, ligne négative "Acompte déjà facturé"). Annulation d'un ticket avec acompte perçu → avoir généré automatiquement (`date_expiration` +60 jours, réellement persistée). Affichage : badge staff (tickets.js/devis.js) + "Acompte versé/Solde restant" sur la page de suivi client publique (`suivi.html`).
 
-- [ ] **En attente de la relecture du spec écrit par l'utilisateur** (hard-gate skill brainstorming, distinct de l'approbation section-par-section déjà obtenue)
-- [ ] Une fois confirmé : invoquer `writing-plans` pour le plan d'implémentation détaillé, avant tout code
-- [ ] **Sous-projet (B) — paiement en ligne** : hors scope, nécessite le choix d'un prestataire (Stripe pressenti) avant tout cadrage
+- [x] Migration `0036_acompte_structure.sql` (`factures.type_facture`, `avoirs.date_expiration`)
+- [x] `createFactureAcompte()` (`factureService.ts`) — crée+émet+verrouille, rejette les doublons (409)
+- [x] `createAvoir()` accepte `date_expiration` optionnel
+- [x] `getTicketById()`/`getDevis()` exposent `facture_acompte_*` (id/numéro/montant/HT/taux TVA réel)
+- [x] `POST /api/tickets/:id/acompte` + `POST /api/devis/:id/acompte` (admin/manager, isolation boutique testée en live)
+- [x] `convertirDevis()` déduit l'acompte de la facture finale (ligne négative + totaux réduits)
+- [x] UI `tickets.js` (bouton, badge, annulation→avoir) + UI `devis.js` (dupliquée, `tickets.js` non chargé sur `devis.html`) + UI `suivi.html` (acompte versé/solde restant)
+- [x] Revue finale de branche (modèle opus) : "With fixes" → les 2 findings Important traités (voir ci-dessous)
+
+**2 findings de la revue finale traités** :
+- Validation `montant_ht` durcie (typeof/isNaN, pas juste `<= 0`) sur les 2 routes + `createFactureAcompte()` — une chaîne non numérique produisait des totaux NaN sur une facture verrouillée NF525.
+- `changeStatus()` (annulation avec avoir) utilisait un taux TVA fixe 20% + approximation `montant/1.2` — corrigé pour lire le HT/taux réels de l'acompte (`facture_acompte_ht`/`facture_acompte_tva_taux`, exposés par `getTicketById()`), même précaution que le fix `convertirDevis()` (éviter un taux fantôme dans `getRapportComptable()`, le rapport destiné à l'expert-comptable).
+
+**Confirmé comme périmètre MVP intentionnel (pas un gap)** : `avoirs.date_expiration` est persistée mais aucune logique n'applique/consomme automatiquement l'expiration (cohérent avec le reste du projet — aucun type d'avoir n'a de logique de consommation automatique, la purge RGPD automatique est déjà un chantier séparé identifié ci-dessous).
+
+**Dette mineure non bloquante, à traiter si besoin réel se présente** :
+- [ ] Check "un seul acompte par dossier" (`createFactureAcompte()`) non atomique (read-then-insert) — index UNIQUE partiel disponible si une vraie collision survient un jour (`ON factures(ticket_id) WHERE type_facture='acompte'`, idem `devis_id`)
+- [ ] `devis.js` `demanderAcompte()` ne rafraîchit pas automatiquement la fiche après succès (contrairement à `tickets.js`) — rechargement manuel nécessaire pour voir le badge
+- [ ] `suivi.html` calcule le solde depuis `prix_final`/`prix_estime` du ticket, pas depuis les totaux devis/facture faisant autorité — écart possible après conversion
+- [ ] Aucun test d'intégration bout-en-bout create→convert→deduct→avoir (couverture actuelle = tests unitaires isolés par fonction, DB mockée)
+- [ ] `LEFT JOIN factures` dans `getTicketPublicByToken()` sans garde d'unicité si un ticket avait un jour 2+ acomptes (verbatim du plan)
+
+**Non déployé au moment de cette mise à jour** — build+déploiement en attente de décision utilisateur.
+
+- [ ] **Sous-projet (B) — paiement en ligne Stripe** : toujours hors scope, nécessite le choix d'un prestataire avant tout cadrage
 
 ## Chantier Ports & Adapters + assignation technicien (2026-07-12)
 

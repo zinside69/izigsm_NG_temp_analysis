@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-16, checkpoint 28 — plan d'implémentation acompte écrit, en attente du choix d'exécution)
+# iziGSM — État courant (MàJ : 2026-07-17, checkpoint 29 — acompte structuré implémenté, 10/10 tâches + revue finale, PAS déployé)
+
+## Checkpoint 29 — acompte structuré implémenté de bout en bout (subagent-driven-development), 2026-07-17
+
+Suite du checkpoint 28 (plan écrit). Exécution du plan 10 tâches (`docs/superpowers/plans/2026-07-16-acompte-structure.md`) via `superpowers:subagent-driven-development`, directement sur `main` (comme le précédent chantier Ports & Adapters) — un subagent implémenteur + un subagent reviewer par tâche, revue finale de branche (modèle opus) sur l'ensemble.
+
+**Avant le chantier acompte, dans la même session** : bug étendu `r.success`/`r.data` (même classe que `devis.js`/`settings.html`) corrigé dans `agenda.js`/`sav.js`/`stats.html` — 19 fonctions cassées depuis toujours, ces 3 pages étaient intégralement non fonctionnelles (KPIs jamais affichés, formulaires toujours en échec silencieux). Commit `33d9a739`.
+
+**Les 10 tâches, toutes terminées et approuvées** — détail complet task par task, chaque finding et son traitement, dans `.superpowers/sdd/progress.md` (ledger SDD) et le résumé consolidé dans `todo.md` § "Chantier acompte structuré". Résumé fonctionnel : acompte facturé immédiatement (vraie facture verrouillée, séquence `FAC-` partagée), déduit automatiquement à la facture finale, annulation avec acompte perçu → avoir automatique (2 mois), UI staff (tickets/devis) + UI publique (`suivi.html`).
+
+**Incident de session (pas un problème de code)** : le subagent implémenteur de la Task 8 a été coupé par la limite de dépense mensuelle de l'utilisateur juste après avoir committé mais avant d'écrire son rapport — code intact, juste pas de rapport détaillé. Revue Task 8 faite sans rapport implémenteur (sur le diff seul), validation live du flux avoir refaite directement par le contrôleur (script Node contre `wrangler pages dev --local`) pour combler le vide.
+
+**Revue finale de branche (33d9a739..09d7e23, 17 commits, verdict initial "With fixes")** : les 5 fixes post-revue par tâche vérifiés réellement en HEAD (pas juste les messages de commit), invariant "un seul acompte par dossier" vérifié cohérent sur les 5 sites qui en dépendent, isolation boutique/rôle cohérente sur les 2 routes. 2 findings Important traités après la revue (commit `a9d28d5`) : validation `montant_ht` durcie (déjà fait avant la revue finale, Tasks 5/6), et surtout `changeStatus()` (annulation avec avoir) qui approximait le HT/taux TVA de l'acompte à 20% fixe au lieu de lire les valeurs réelles — corrigé pour éviter de reproduire la pollution du rapport comptable déjà fixée en Task 7. `avoirs.date_expiration` jamais "appliquée" automatiquement (juste persistée) confirmé comme périmètre MVP intentionnel par lecture directe du spec, pas un gap.
 
 ## Checkpoint 28 — plan d'implémentation acompte structuré écrit, PAS commencé, 2026-07-16
 
