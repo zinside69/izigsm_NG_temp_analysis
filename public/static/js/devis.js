@@ -324,7 +324,15 @@ async function openDevisDetail(id) {
       ${d.notes ? `<div style="margin-top:14px;padding:12px 14px;background:#f1f5f9;border-radius:8px;font-size:0.88rem;color:var(--text);">
         <strong>Notes :</strong> ${esc(d.notes)}
       </div>` : ''}
+
+      <!-- Placeholder acompte : id 'detail-acompte' réutilisé volontairement (même id
+           que la fiche détail ticket dans tickets.js) — les modals modal-ticket-detail
+           et modal-devis-detail ne sont jamais ouverts simultanément, donc pas de
+           collision réelle dans le DOM. Voir renderAcompteDetail() ci-dessous. -->
+      <div id="detail-acompte"></div>
     `;
+
+    renderAcompteDetail(d, 'devis');
 
     // Boutons footer selon statut
     const footerBtns = [];
@@ -770,6 +778,105 @@ function checkFromTicket() {
 
 function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ─── Acompte (dupliqué depuis tickets.js) ──────────────────────────────────────
+// devis.html ne charge PAS tickets.js (vérifié : `grep static/js/tickets.js
+// public/devis.html` → aucun résultat, seul devis.js est inclus). renderAcompteDetail()
+// et demanderAcompte() sont donc dupliquées ici À L'IDENTIQUE plutôt que partagées —
+// NE PAS SUPPRIMER en pensant que c'est du code mort, c'est la seule copie disponible
+// sur la page Devis. Si tickets.js est un jour chargé sur devis.html, envisager de
+// factoriser dans un fichier commun (ex. acompte.js) et de supprimer ce duplicata.
+// Source : tickets.js (feature acompte structuré, sous-projet A — voir
+// docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
+
+/**
+ * Affiche le statut de l'acompte (facture d'acompte liée) dans la fiche détail,
+ * avec un bouton de demande si aucun acompte n'existe encore — feature acompte
+ * structuré (sous-projet A, voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
+ * @param t          Détail complet du ticket (ou devis) renvoyé par l'API
+ * @param contextType 'ticket' ou 'devis' — détermine l'endpoint appelé
+ */
+function renderAcompteDetail(t, contextType) {
+  const el = document.getElementById('detail-acompte');
+  if (!el || !t) return;
+
+  const entityId = t.id;
+
+  if (!t.facture_acompte_id) {
+    el.innerHTML = `
+      <div style="margin-top:16px;">
+        <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Acompte</label>
+        <button class="btn btn-sm btn-ghost" onclick="demanderAcompte(${entityId}, '${contextType}')">
+          💰 Demander un acompte
+        </button>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="margin-top:16px;">
+      <label style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;">Acompte</label>
+      <span class="status-badge status-done">
+        💰 Acompte facturé : ${formatMoney(t.facture_acompte_montant)} (${esc(t.facture_acompte_numero)})
+      </span>
+    </div>`;
+}
+
+/**
+ * Ouvre un mini-formulaire (prompt) pour demander un acompte — montant HT libre,
+ * TVA par défaut 20%, mode de paiement. POST /api/tickets/:id/acompte ou
+ * /api/devis/:id/acompte selon contextType. `prompt()` est un choix volontairement
+ * minimal pour ce MVP (pas de pattern de mini-modal existant ailleurs dans le
+ * projet pour ce genre de saisie courte — vérifié absence de openQuickModal/promptModal).
+ */
+async function demanderAcompte(entityId, contextType) {
+  const montantStr = prompt('Montant HT de l\'acompte (€) :');
+  if (!montantStr) return;
+  const montant_ht = parseFloat(montantStr.replace(',', '.'));
+  if (!montant_ht || montant_ht <= 0) {
+    showToast('❌ Montant invalide.', 'error');
+    return;
+  }
+  const modePaiement = prompt('Mode de paiement (especes, cb, cheque, virement) :', 'especes');
+  if (!modePaiement) return;
+
+  const endpoint = contextType === 'devis'
+    ? `/api/devis/${entityId}/acompte`
+    : `/api/tickets/${entityId}/acompte`;
+
+  try {
+    const r = await apiPost(endpoint, { montant_ht, tva_taux: 20, mode_paiement: modePaiement });
+    if (r.data?.success) {
+      showToast(`✅ Acompte facturé : ${r.data.facture_numero}`);
+      if (contextType === 'ticket' && window._currentTicketId) viewTicket(window._currentTicketId);
+    } else {
+      showToast('❌ ' + (r.error || r.data?.error || 'Échec de la facturation.'), 'error');
+    }
+  } catch (e) {
+    showToast('❌ Erreur réseau.', 'error');
+  }
+}
+
+// ── Helper : showToast (si pas défini globalement dans app.js) ─────────────────
+// Dépendance de demanderAcompte() ci-dessus, dupliquée pour la même raison (voir
+// commentaire en tête de section) — devis.html ne charge ni tickets.js ni kanban.js
+// (seuls fichiers du projet définissant showToast), et app.js n'expose pas
+// showNotification. Sans ce fallback, demanderAcompte() lèverait une ReferenceError
+// non interceptée à l'appel (vérifié : `grep showToast public/static/js/app.js
+// public/devis.html` → aucun résultat).
+function showToast(msg, type = 'info') {
+  // Réutilise la fonction globale de app.js si disponible
+  if (typeof window.showNotification === 'function') {
+    window.showNotification(msg, type);
+    return;
+  }
+  // Fallback minimal
+  const toast = document.createElement('div');
+  toast.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:99999;padding:12px 18px;border-radius:10px;font-size:0.88rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.15);color:#fff;background:${type==='error'?'#ef4444':type==='success'?'#22c55e':'#6366f1'};transition:opacity .3s;`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 350); }, 3000);
 }
 
 // ─── Exposition globale ────────────────────────────────────────────────────────
