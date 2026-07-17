@@ -434,6 +434,50 @@ export async function convertirDevis(
     WHERE  document_type = 'devis' AND document_id = ?
   `).bind(facture.id, id).run()
 
+  // Déduction acompte structuré (2026-07-16) : si une facture d'acompte a été
+  // émise pour ce devis ou son ticket, ajouter une ligne négative et réduire les
+  // totaux de la facture finale d'autant — la facture finale ne demande alors que
+  // le solde restant, voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md.
+  const acompte = await db.prepare(`
+    SELECT id, numero, total_ht, total_tva, total_ttc FROM factures
+    WHERE type_facture = 'acompte' AND (devis_id = ? OR ticket_id = ?)
+  `).bind(id, devis.ticket_id ?? 0).first<{
+    id: number; numero: string; total_ht: number; total_tva: number; total_ttc: number
+  }>()
+
+  if (acompte) {
+    const maxOrdre = await db.prepare(`
+      SELECT COALESCE(MAX(ordre), 0) as maxOrdre FROM lignes_document WHERE document_type = 'facture' AND document_id = ?
+    `).bind(facture.id).first<{ maxOrdre: number }>()
+
+    // Taux de TVA affiché sur la ligne négative, recalculé depuis l'acompte
+    // (tva/ht) pour rester cohérent avec le taux réellement appliqué sur la
+    // facture d'acompte — fallback 20% si total_ht=0 (évite une division par zéro).
+    const tvaTauxAffiche = acompte.total_ht > 0
+      ? Math.round((acompte.total_tva / acompte.total_ht) * 10000) / 100
+      : 20
+
+    await db.prepare(`
+      INSERT INTO lignes_document
+        (document_type, document_id, ordre, description, quantite,
+         prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+      VALUES ('facture', ?, ?, ?, 1, ?, ?, ?, ?, ?, NULL)
+    `).bind(
+      facture.id, (maxOrdre?.maxOrdre ?? 0) + 1,
+      `Acompte déjà facturé (${acompte.numero})`,
+      -acompte.total_ht, tvaTauxAffiche,
+      -acompte.total_ht, -acompte.total_tva, -acompte.total_ttc,
+    ).run()
+
+    const totalHt  = Math.round((devis.total_ht  - acompte.total_ht)  * 100) / 100
+    const totalTva = Math.round((devis.total_tva - acompte.total_tva) * 100) / 100
+    const totalTtc = Math.round((devis.total_ttc - acompte.total_ttc) * 100) / 100
+
+    await db.prepare(`
+      UPDATE factures SET total_ht = ?, total_tva = ?, total_ttc = ? WHERE id = ?
+    `).bind(totalHt, totalTva, totalTtc, facture.id).run()
+  }
+
   // Marquer le devis accepté + lié à la facture
   await db.prepare(`
     UPDATE devis SET statut = 'accepte', facture_id = ?, repondu_le = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP

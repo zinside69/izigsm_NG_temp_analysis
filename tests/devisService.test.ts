@@ -932,6 +932,66 @@ describe('devisService', () => {
       expect(auditCall!.params).toContain('facture')
       expect(auditCall!.params).toContain(24)
     })
+
+    // ─── Acompte structuré : déduction à la conversion ──────────────────────
+
+    const SQL_CHECK_ACOMPTE_CONVERSION = n(`
+      SELECT id, numero, total_ht, total_tva, total_ttc FROM factures
+      WHERE type_facture = 'acompte' AND (devis_id = ? OR ticket_id = ?)
+    `)
+    const SQL_MAX_ORDRE_LIGNES = n(`
+      SELECT COALESCE(MAX(ordre), 0) as maxOrdre FROM lignes_document WHERE document_type = 'facture' AND document_id = ?
+    `)
+    const SQL_UPDATE_TOTAUX_FACTURE = n(`UPDATE factures SET total_ht = ?, total_tva = ?, total_ttc = ? WHERE id = ?`)
+
+    it('sans acompte : total facture = total devis (comportement inchangé)', async () => {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, {
+        ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null,
+        client_id: 3, ticket_id: null, total_ht: 100, total_tva: 20, total_ttc: 120,
+      })
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+        prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
+        prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
+      })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 30 })
+      dbD1.__setNotFound(SQL_CHECK_ACOMPTE_CONVERSION)
+
+      await convertirDevis(dbD1 as any, 10, 10)
+
+      const calls = dbD1.__getCalls()
+      expect(calls.find(c => c.sql === SQL_UPDATE_TOTAUX_FACTURE)).toBeUndefined()
+    })
+
+    it('avec acompte : ajoute une ligne négative et réduit les totaux de la facture', async () => {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, {
+        ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null,
+        client_id: 3, ticket_id: 42, total_ht: 100, total_tva: 20, total_ttc: 120,
+      })
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+        prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
+        prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
+      })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 31 })
+      dbD1.__setResponse(SQL_CHECK_ACOMPTE_CONVERSION, {
+        id: 7, numero: 'FAC-2026-00007', total_ht: 41.67, total_tva: 8.33, total_ttc: 50,
+      })
+      dbD1.__setResponse(SQL_MAX_ORDRE_LIGNES, { maxOrdre: 2 })
+
+      await convertirDevis(dbD1 as any, 10, 10)
+
+      const calls = dbD1.__getCalls()
+      const updateCall = calls.find(c => c.sql === SQL_UPDATE_TOTAUX_FACTURE)
+      expect(updateCall).toBeDefined()
+      expect(updateCall!.params[0]).toBeCloseTo(58.33) // 100 - 41.67
+      expect(updateCall!.params[1]).toBeCloseTo(11.67) // 20 - 8.33
+      expect(updateCall!.params[2]).toBeCloseTo(70)    // 120 - 50
+
+      const ligneCall = calls.find(c =>
+        c.sql.includes('INSERT INTO lignes_document') && c.params.includes('Acompte déjà facturé (FAC-2026-00007)')
+      )
+      expect(ligneCall).toBeDefined()
+      expect(ligneCall!.params).toContain(3) // ordre = maxOrdre(2) + 1
+    })
   })
 
   // ─── getDevisByToken ───────────────────────────────────────────────────────
