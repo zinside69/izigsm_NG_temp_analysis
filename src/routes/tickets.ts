@@ -44,6 +44,7 @@ import {
   MIME_AUTORISES,
   TAILLE_MAX,
 } from '../services/photosService'
+import { createFactureAcompte } from '../services/factureService'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; PHOTOS?: R2Bucket; RESEND_API_KEY?: string }
 // 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
@@ -544,6 +545,58 @@ tickets.delete('/:id/photos/:photoId', requireRole('admin', 'manager', 'technici
     return c.json({ success: true, message: 'Photo supprimée.' })
   } catch (err: any) {
     const status = err.message.includes('introuvable') ? 404 : 500
+    return c.json({ success: false, error: err.message }, status)
+  }
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ACOMPTE (sous-projet A — encaissement manuel)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── POST /api/tickets/:id/acompte ────────────────────────────────────────────
+/**
+ * POST /api/tickets/:id/acompte
+ * Facture un acompte pour ce ticket — voir
+ * docs/superpowers/specs/2026-07-16-acompte-structure-design.md.
+ * Réservé admin/manager (gestion financière, cohérent avec le reste de la
+ * facturation dans ce projet — pas technicien, contrairement à l'override
+ * "Accord" qui est volontairement plus large).
+ *
+ * @param id  — ID du ticket
+ * @body { montant_ht, tva_taux, mode_paiement, reference? }
+ * @returns 201 { success, facture_id, facture_numero, message }
+ * @returns 409 si un acompte existe déjà pour ce ticket
+ */
+tickets.post('/:id/acompte', requireRole('admin', 'manager'), async (c) => {
+  const { user, db, dbPort } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+
+  const ticket = await getTicketById(dbPort, ticketId)
+  if (!ticket) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+  if (user.role !== 'admin' && ticket.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
+
+  const { montant_ht, tva_taux, mode_paiement, reference } = await c.req.json().catch(() => ({}))
+  if (!montant_ht || montant_ht <= 0)
+    return c.json({ success: false, error: 'montant_ht doit être positif.' }, 400)
+  if (!mode_paiement)
+    return c.json({ success: false, error: 'mode_paiement obligatoire.' }, 400)
+
+  try {
+    const result = await createFactureAcompte(db, user.sub, {
+      boutique_id: ticket.boutique_id,
+      client_id:   ticket.client_id,
+      ticket_id:   ticketId,
+      devis_id:    ticket.devis_id ?? null,
+      montant_ht,
+      tva_taux:    tva_taux ?? 20,
+      mode_paiement,
+      reference,
+    })
+    return c.json({ success: true, ...result, message: 'Acompte facturé.' }, 201)
+  } catch (err: any) {
+    const status = err.message.includes('déjà été facturé') ? 409 : 422
     return c.json({ success: false, error: err.message }, status)
   }
 })
