@@ -263,7 +263,7 @@ describe('getKanban()', () => {
 describe('getTicketById()', () => {
   let db: ReturnType<typeof createMockDatabase>
 
-  const SQL_TICKET = `SELECT t.*, c.prenom || ' ' || c.nom AS client_nom, c.email AS client_email, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom, d.id AS devis_id, d.statut AS devis_statut FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) WHERE t.id = ? AND t.actif = 1`
+  const SQL_TICKET = `SELECT t.*, c.prenom || ' ' || c.nom AS client_nom, c.email AS client_email, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom, d.id AS devis_id, d.statut AS devis_statut, fa.id AS facture_acompte_id, fa.numero AS facture_acompte_numero, fa.total_ttc AS facture_acompte_montant FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id LEFT JOIN devis d ON d.id = ( SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1 ) LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id) WHERE t.id = ? AND t.actif = 1`
   const SQL_HISTO  = `SELECT h.*, u.prenom || ' ' || u.nom AS user_nom FROM tickets_statuts_historique h JOIN users u ON u.id = h.user_id WHERE h.ticket_id = ? ORDER BY h.created_at ASC`
   const SQL_PHOTOS = 'SELECT * FROM tickets_photos WHERE ticket_id = ? ORDER BY created_at'
 
@@ -280,6 +280,21 @@ describe('getTicketById()', () => {
     expect(res.id).toBe(42)
     expect(res.historique).toHaveLength(1)
     expect(res.photos).toEqual([])
+  })
+
+  it('expose facture_acompte_* quand un acompte existe', async () => {
+    db.__setResponse(SQL_TICKET, {
+      ...TICKET_WITH_CLIENT,
+      facture_acompte_id: 7, facture_acompte_numero: 'FAC-2026-00007', facture_acompte_montant: 120,
+    })
+    db.__setListResponse(SQL_HISTO, [])
+    db.__setListResponse(SQL_PHOTOS, [])
+
+    const res = await getTicketById(db, 42)
+
+    expect(res.facture_acompte_id).toBe(7)
+    expect(res.facture_acompte_numero).toBe('FAC-2026-00007')
+    expect(res.facture_acompte_montant).toBe(120)
   })
 
   it('retourne null si ticket inexistant', async () => {

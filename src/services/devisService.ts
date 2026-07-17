@@ -202,10 +202,14 @@ export async function getDevis(db: Database, id: number): Promise<any | null> {
              b.adresse   AS boutique_adresse,
              b.telephone AS boutique_telephone,
              b.email     AS boutique_email,
-             b.tva_numero AS boutique_tva
+             b.tva_numero AS boutique_tva,
+             fa.id        AS facture_acompte_id,
+             fa.numero    AS facture_acompte_numero,
+             fa.total_ttc AS facture_acompte_montant
       FROM   devis d
       LEFT   JOIN clients   c ON c.id = d.client_id
       LEFT   JOIN boutiques b ON b.id = d.boutique_id
+      LEFT   JOIN factures  fa ON fa.type_facture = 'acompte' AND (fa.devis_id = d.id OR fa.ticket_id = d.ticket_id)
       WHERE  d.id = ?
     `, [id]),
 

@@ -141,10 +141,14 @@ const SQL_GET_DEVIS = n(`
          b.adresse   AS boutique_adresse,
          b.telephone AS boutique_telephone,
          b.email     AS boutique_email,
-         b.tva_numero AS boutique_tva
+         b.tva_numero AS boutique_tva,
+         fa.id        AS facture_acompte_id,
+         fa.numero    AS facture_acompte_numero,
+         fa.total_ttc AS facture_acompte_montant
   FROM   devis d
   LEFT   JOIN clients   c ON c.id = d.client_id
   LEFT   JOIN boutiques b ON b.id = d.boutique_id
+  LEFT   JOIN factures  fa ON fa.type_facture = 'acompte' AND (fa.devis_id = d.id OR fa.ticket_id = d.ticket_id)
   WHERE  d.id = ?
 `)
 
@@ -475,6 +479,19 @@ describe('devisService', () => {
       expect(result.boutique_nom).toBe('iziGSM Paris')
       expect(result.lignes).toHaveLength(1)
       expect(result.lignes[0].description).toBe('Réparation écran')
+    })
+
+    it('expose facture_acompte_* quand un acompte existe', async () => {
+      db.__setResponse(SQL_GET_DEVIS, {
+        ...DEVIS_ENRICHI,
+        facture_acompte_id: 7, facture_acompte_numero: 'FAC-2026-00007', facture_acompte_montant: 120,
+      })
+      db.__setListResponse(SQL_GET_LIGNES, [])
+
+      const result = await getDevis(db as any, 10)
+
+      expect(result.facture_acompte_id).toBe(7)
+      expect(result.facture_acompte_numero).toBe('FAC-2026-00007')
     })
 
     it('retourne lignes vides si aucune ligne', async () => {

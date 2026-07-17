@@ -374,6 +374,9 @@ export async function getTicketById(
   // suivi.html dérive l'état gris/orange/vert de l'étape attente_accord de ce champ,
   // pas seulement du statut ticket). Un ticket peut avoir plusieurs devis dans le
   // temps (ex. refusé puis revu) — on ne considère que le dernier.
+  // facture_acompte_* : facture type_facture='acompte' liée directement au ticket
+  // OU à son devis le plus récent (un acompte peut avoir été demandé à l'un ou
+  // l'autre moment, voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
   const ticket = await db.get<any>(`
     SELECT t.*,
            c.prenom || ' ' || c.nom   AS client_nom,
@@ -381,13 +384,17 @@ export async function getTicketById(
            c.telephone                AS client_telephone,
            u.prenom || ' ' || u.nom   AS technicien_nom,
            d.id                       AS devis_id,
-           d.statut                   AS devis_statut
+           d.statut                   AS devis_statut,
+           fa.id                      AS facture_acompte_id,
+           fa.numero                  AS facture_acompte_numero,
+           fa.total_ttc               AS facture_acompte_montant
     FROM   tickets t
     JOIN   clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.technicien_id
     LEFT JOIN devis d ON d.id = (
       SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
     )
+    LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id)
     WHERE  t.id = ? AND t.actif = 1
   `, [id])
 
