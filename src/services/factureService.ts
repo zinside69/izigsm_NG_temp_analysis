@@ -256,6 +256,100 @@ export async function emettreFacture(
   }
 }
 
+// ─── Acompte structuré ────────────────────────────────────────────────────────
+
+export interface CreateFactureAcompteInput {
+  boutique_id:   number
+  client_id:     number
+  ticket_id?:    number | null
+  devis_id?:     number | null
+  montant_ht:    number
+  tva_taux:      number
+  mode_paiement: string
+  reference?:    string
+}
+
+/**
+ * Crée un acompte encaissé manuellement, sous forme de vraie facture émise
+ * immédiatement (voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md).
+ * Réutilise la même séquence FAC- que les factures normales (une facture
+ * d'acompte est légalement une "facture", pas une catégorie distincte) et
+ * enchaîne ajouterPaiement() + emettreFacture() déjà existants — aucune
+ * extension de la chaîne NF525.
+ *
+ * Un seul acompte par dossier (ticket ou devis) : rejette si une facture
+ * type_facture='acompte' existe déjà pour ce ticket_id/devis_id.
+ *
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend de `nextNumero()`/`auditLog()`/`ajouterPaiement()`/`emettreFacture()`,
+ * tous sur `D1Database` brut.
+ *
+ * @param db     - Instance D1Database
+ * @param userId - ID de l'utilisateur qui encaisse l'acompte
+ * @param input  - Montant HT + taux TVA (comme une ligne de devis/facture standard,
+ *                 pas un montant TTC — cohérent avec le reste de la saisie de prix
+ *                 dans l'app) + rattachement ticket_id et/ou devis_id
+ */
+export async function createFactureAcompte(
+  db:     D1Database,
+  userId: number,
+  input:  CreateFactureAcompteInput
+): Promise<{ facture_id: number; facture_numero: string }> {
+  if (!input.ticket_id && !input.devis_id)
+    throw new Error('ticket_id ou devis_id requis.')
+  if (input.montant_ht <= 0)
+    throw new Error('montant_ht doit être positif.')
+
+  const existing = await db.prepare(`
+    SELECT id FROM factures WHERE type_facture = 'acompte' AND (ticket_id = ? OR devis_id = ?)
+  `).bind(input.ticket_id ?? 0, input.devis_id ?? 0).first<{ id: number }>()
+  if (existing) throw new Error('Un acompte a déjà été facturé pour ce dossier.')
+
+  const { total_ht, total_tva, total_ttc } = calculLignes([
+    { quantite: 1, prix_unitaire_ht: input.montant_ht, tva_taux: input.tva_taux },
+  ])
+
+  const numero = await nextNumero(db, input.boutique_id, 'facture')
+
+  const facture = await db.prepare(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, devis_id, type_facture, total_ht, total_tva, total_ttc, statut)
+    VALUES (?, ?, ?, ?, ?, 'acompte', ?, ?, ?, 'brouillon')
+    RETURNING id
+  `).bind(
+    input.boutique_id, numero, input.client_id,
+    input.ticket_id ?? null, input.devis_id ?? null,
+    total_ht, total_tva, total_ttc,
+  ).first<{ id: number }>()
+
+  if (!facture?.id) throw new Error('Erreur lors de la création de la facture d\'acompte.')
+  const factureId = facture.id
+
+  await db.prepare(`
+    INSERT INTO lignes_document
+      (document_type, document_id, ordre, description, quantite,
+       prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+    VALUES ('facture', ?, 1, 'Acompte', 1, ?, ?, ?, ?, ?, NULL)
+  `).bind(factureId, input.montant_ht, input.tva_taux, total_ht, total_tva, total_ttc).run()
+
+  // Encaissement immédiat (le client a déjà payé au moment de la demande) puis
+  // émission — ajouterPaiement() exige locked=0, doit donc précéder emettreFacture().
+  await ajouterPaiement(db, factureId, userId, {
+    montant:       total_ttc,
+    mode_paiement: input.mode_paiement,
+    reference:     input.reference,
+  })
+  await emettreFacture(db, factureId, userId)
+
+  await auditLog(db, {
+    boutique_id: input.boutique_id, user_id: userId,
+    action: 'CREATE_FACTURE_ACOMPTE', entite_type: 'facture', entite_id: factureId,
+    apres: { numero, ticket_id: input.ticket_id ?? null, devis_id: input.devis_id ?? null, total_ttc },
+  })
+
+  return { facture_id: factureId, facture_numero: numero }
+}
+
 // ─── Avoirs ───────────────────────────────────────────────────────────────────
 
 /**

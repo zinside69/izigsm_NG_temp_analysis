@@ -28,9 +28,11 @@ import {
   createAvoir,
   getDevisPourNf525,
   updateFactureHash,
+  createFactureAcompte,
   type StatutFacture,
   type CreateAvoirInput,
   type LigneInput,
+  type CreateFactureAcompteInput,
 } from '../src/services/factureService'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -861,5 +863,133 @@ describe('updateFactureHash()', () => {
     const updateCall = calls.find(c => c.sql === SQL_UPDATE_FACTURE_HASH)
     expect(updateCall).toBeDefined()
     expect(updateCall!.params).toEqual(['abc123def456', 20])
+  })
+})
+
+// ─── createFactureAcompte ─────────────────────────────────────────────────────
+
+describe('createFactureAcompte()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  const SQL_CHECK_ACOMPTE_EXISTANT = n(`SELECT id FROM factures WHERE type_facture = 'acompte' AND (ticket_id = ? OR devis_id = ?)`)
+  const SQL_INSERT_FACTURE_ACOMPTE = n(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, devis_id, type_facture, total_ht, total_tva, total_ttc, statut)
+    VALUES (?, ?, ?, ?, ?, 'acompte', ?, ?, ?, 'brouillon')
+    RETURNING id
+  `)
+  const SQL_GET_FACTURE_PAIEMENT = n(`SELECT id, total_ttc, montant_paye, boutique_id, locked FROM factures WHERE id = ?`)
+  const SQL_GET_FACTURE_EMETTRE  = n(`SELECT * FROM factures WHERE id = ?`)
+  const SQL_NF525_LAST_HASH      = n(`SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1`)
+
+  function setupNumeroFacture() {
+    db.__setResponse(
+      'SELECT prefix_ticket, prefix_facture, prefix_devis, prefix_avoir, prefix_rachat, format_numero, padding_numero FROM boutique_settings WHERE boutique_id = ?',
+      { prefix_facture: 'FAC', format_numero: 'annee', padding_numero: 5 }
+    )
+    db.__setResponse(
+      'SELECT dernier_num FROM sequences WHERE boutique_id = ? AND type = ? AND annee = ?',
+      { dernier_num: 7 }
+    )
+  }
+
+  function setupCreationComplete(factureId: number) {
+    setupNumeroFacture()
+    db.__setNotFound(SQL_CHECK_ACOMPTE_EXISTANT)
+    db.__setResponseFn(SQL_INSERT_FACTURE_ACOMPTE, () => ({ id: factureId }))
+    db.__setResponse(SQL_GET_FACTURE_PAIEMENT, {
+      id: factureId, total_ttc: 120, montant_paye: 0, boutique_id: 1, locked: 0,
+    })
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, {
+      id: factureId, boutique_id: 1, client_id: 3, numero: 'FAC-2026-00007',
+      total_ht: 100, total_tva: 20, total_ttc: 120, locked: 0,
+    })
+    db.__setNotFound(SQL_NF525_LAST_HASH)
+  }
+
+  beforeEach(() => { db = createMockD1() })
+
+  const BASE_INPUT: CreateFactureAcompteInput = {
+    boutique_id: 1, client_id: 3, ticket_id: 42, devis_id: null,
+    montant_ht: 100, tva_taux: 20,
+    mode_paiement: 'especes',
+  }
+
+  it('lance Error si ni ticket_id ni devis_id', async () => {
+    await expect(createFactureAcompte(db, 10, { ...BASE_INPUT, ticket_id: null, devis_id: null }))
+      .rejects.toThrow('ticket_id ou devis_id requis.')
+  })
+
+  it('lance Error si montant_ht <= 0', async () => {
+    await expect(createFactureAcompte(db, 10, { ...BASE_INPUT, montant_ht: 0 }))
+      .rejects.toThrow('montant_ht doit être positif.')
+  })
+
+  it('lance Error si un acompte existe déjà pour ce dossier', async () => {
+    db.__setResponse(SQL_CHECK_ACOMPTE_EXISTANT, { id: 99 })
+
+    await expect(createFactureAcompte(db, 10, BASE_INPUT))
+      .rejects.toThrow('Un acompte a déjà été facturé pour ce dossier.')
+  })
+
+  it('crée la facture, retourne facture_id + facture_numero', async () => {
+    setupCreationComplete(50)
+
+    const result = await createFactureAcompte(db, 10, BASE_INPUT)
+
+    expect(result.facture_id).toBe(50)
+    expect(result.facture_numero).toMatch(/^FAC-/)
+  })
+
+  it('INSERT facture avec type_facture=acompte et bons montants', async () => {
+    setupCreationComplete(50)
+
+    await createFactureAcompte(db, 10, BASE_INPUT)
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_INSERT_FACTURE_ACOMPTE)
+    expect(insertCall).toBeDefined()
+    // (boutique_id, numero, client_id, ticket_id, devis_id, total_ht, total_tva, total_ttc)
+    expect(insertCall!.params[0]).toBe(1)   // boutique_id
+    expect(insertCall!.params[2]).toBe(3)   // client_id
+    expect(insertCall!.params[3]).toBe(42)  // ticket_id
+    expect(insertCall!.params[4]).toBeNull() // devis_id
+    expect(insertCall!.params[5]).toBe(100) // total_ht
+    expect(insertCall!.params[6]).toBe(20)  // total_tva
+    expect(insertCall!.params[7]).toBe(120) // total_ttc
+  })
+
+  it('enregistre le paiement puis émet et verrouille la facture', async () => {
+    setupCreationComplete(50)
+
+    await createFactureAcompte(db, 10, BASE_INPUT)
+
+    const calls = db.__getCalls()
+    expect(calls.some(c => c.sql.includes('INSERT INTO paiements'))).toBe(true)
+    expect(calls.some(c => c.sql.includes('INSERT INTO journal_nf525'))).toBe(true)
+    const lockCall = calls.find(c => c.sql.includes('SET') && c.sql.includes('locked') && c.sql.includes('factures'))
+    expect(lockCall).toBeDefined()
+  })
+
+  it('appelle auditLog CREATE_FACTURE_ACOMPTE', async () => {
+    setupCreationComplete(50)
+
+    await createFactureAcompte(db, 10, BASE_INPUT)
+
+    const calls = db.__getCalls()
+    const auditCall = calls.find(c => c.sql.includes('INSERT INTO audit_logs') && c.params.includes('CREATE_FACTURE_ACOMPTE'))
+    expect(auditCall).toBeDefined()
+  })
+
+  it('fonctionne aussi rattaché à un devis (ticket_id null)', async () => {
+    setupCreationComplete(51)
+
+    const result = await createFactureAcompte(db, 10, { ...BASE_INPUT, ticket_id: null, devis_id: 7 })
+
+    expect(result.facture_id).toBe(51)
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_INSERT_FACTURE_ACOMPTE)
+    expect(insertCall!.params[3]).toBeNull() // ticket_id
+    expect(insertCall!.params[4]).toBe(7)    // devis_id
   })
 })
