@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-07-17, checkpoint 29 — acompte structuré implémenté, 10/10 tâches + revue finale, PAS déployé)
+# iziGSM — État courant (MàJ : 2026-07-17, checkpoint 30 — impression ticket EN COURS, 2/8 tâches, session suspendue)
+
+## Checkpoint 30 — chantier impression ticket démarré (subagent-driven-development), session suspendue le soir du 2026-07-17
+
+Nouveau chantier, brainstormé et planifié dans la foulée du checkpoint 29 (acompte structuré). Objectif : 2 nouveaux formats d'impression ticket thermique (72mm) — ticket client à emporter + étiquette technicien à coller sur l'appareil — en plus de la fiche A4 existante (corrigée au passage : elle affichait les notes internes, une fuite de confidentialité). QR code (lien de suivi client ou lien interne technicien selon le format) + code-barre EAN-13 (ID ticket) sur les 3 formats. Pas d'agent d'impression externe (QZ Tray écarté) — `window.print()` natif comme l'existant, l'imprimante thermique 72mm est reconnue comme imprimante système standard.
+
+**Spec** : `docs/superpowers/specs/2026-07-17-impression-ticket-design.md` (commit `2b63d23`) — décisions détaillées (rôle QR vs EAN-13, recherche par scan additive-OR, deep-link technicien sans gestion de reconnexion).
+**Plan** : `docs/superpowers/plans/2026-07-17-impression-ticket.md` (commit `10cd47e`) — 8 tâches TDD/local-live.
+
+**État d'avancement — 2/8 tâches, session suspendue avant la revue de Task 2** (voir `.superpowers/sdd/progress.md` pour le détail complet) :
+- [x] Task 1 : `_fetchTicketPrintData()` expose l'ID numérique (commit `a9bf783`) — revue a trouvé un rapport de validation non prouvé (langage conditionnel "Would display..."), contrôleur a refait la validation réellement (script Node + wrangler local, confirmé).
+- [x] Task 2 (implémentée, **PAS ENCORE REVUE**) : `listTickets()` reconnaît un token scanné (QR) ou un ID EAN-13 dans la recherche, en plus du texte libre existant (commit `236f8c2`) — 5/5 tests verts, suite complète 824 passed.
+- [ ] Tasks 3-8 : pas commencées (helpers QR/EAN-13 + libs CDN, 2 nouveaux formats thermiques, 3 boutons d'impression, deep-link technicien).
+
+**Prochaine étape au retour** : dispatcher le reviewer sur Task 2 (BASE `a9bf783`, HEAD `236f8c2`) avant de continuer vers Task 3 — ne pas re-dispatcher l'implémenteur, juste la revue, per le ledger SDD.
+
+**Incident de session** : plusieurs blocages du dispatch de subagent par le classificateur du mode auto pendant ce chantier (Task 5 de l'agent tool, motif "Blocked by classifier") — résolu en sortant du mode auto, pas un problème de code. À surveiller si ça se reproduit.
 
 ## Checkpoint 29 — acompte structuré implémenté de bout en bout (subagent-driven-development), 2026-07-17
 
