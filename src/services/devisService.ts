@@ -450,12 +450,16 @@ export async function convertirDevis(
       SELECT COALESCE(MAX(ordre), 0) as maxOrdre FROM lignes_document WHERE document_type = 'facture' AND document_id = ?
     `).bind(facture.id).first<{ maxOrdre: number }>()
 
-    // Taux de TVA affiché sur la ligne négative, recalculé depuis l'acompte
-    // (tva/ht) pour rester cohérent avec le taux réellement appliqué sur la
-    // facture d'acompte — fallback 20% si total_ht=0 (évite une division par zéro).
-    const tvaTauxAffiche = acompte.total_ht > 0
-      ? Math.round((acompte.total_tva / acompte.total_ht) * 10000) / 100
-      : 20
+    // Taux de TVA affiché sur la ligne négative : lu directement sur la ligne
+    // "Acompte" de la facture d'acompte (créée par createFactureAcompte()), pas
+    // recalculé depuis total_tva/total_ht — un recalcul (ex. 8.33/41.67=19.99%)
+    // aurait pollué la ventilation par taux de getRapportComptable() (destinée à
+    // l'expert-comptable, groupe par tva_taux arrondi) avec un taux fantôme
+    // distinct du 20% réel, au lieu de s'annuler dans le même panier.
+    const acompteLigne = await db.prepare(`
+      SELECT tva_taux FROM lignes_document WHERE document_type = 'facture' AND document_id = ? LIMIT 1
+    `).bind(acompte.id).first<{ tva_taux: number }>()
+    const tvaTauxAffiche = acompteLigne?.tva_taux ?? 20
 
     await db.prepare(`
       INSERT INTO lignes_document

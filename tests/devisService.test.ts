@@ -942,6 +942,9 @@ describe('devisService', () => {
     const SQL_MAX_ORDRE_LIGNES = n(`
       SELECT COALESCE(MAX(ordre), 0) as maxOrdre FROM lignes_document WHERE document_type = 'facture' AND document_id = ?
     `)
+    const SQL_ACOMPTE_LIGNE_TVA = n(`
+      SELECT tva_taux FROM lignes_document WHERE document_type = 'facture' AND document_id = ? LIMIT 1
+    `)
     const SQL_UPDATE_TOTAUX_FACTURE = n(`UPDATE factures SET total_ht = ?, total_tva = ?, total_ttc = ? WHERE id = ?`)
 
     it('sans acompte : total facture = total devis (comportement inchangé)', async () => {
@@ -976,6 +979,7 @@ describe('devisService', () => {
         id: 7, numero: 'FAC-2026-00007', total_ht: 41.67, total_tva: 8.33, total_ttc: 50,
       })
       dbD1.__setResponse(SQL_MAX_ORDRE_LIGNES, { maxOrdre: 2 })
+      dbD1.__setResponse(SQL_ACOMPTE_LIGNE_TVA, { tva_taux: 20 })
 
       await convertirDevis(dbD1 as any, 10, 10)
 
@@ -991,6 +995,34 @@ describe('devisService', () => {
       )
       expect(ligneCall).toBeDefined()
       expect(ligneCall!.params).toContain(3) // ordre = maxOrdre(2) + 1
+      // Taux lu sur la ligne d'acompte (20), pas recalculé depuis tva/ht (aurait
+      // donné 19.99 pour ces montants) — évite un taux fantôme dans le rapport comptable.
+      expect(ligneCall!.params[4]).toBe(20)
+    })
+
+    it('avec acompte : fallback 20% si la ligne acompte est introuvable', async () => {
+      dbD1.__setResponse(SQL_SELECT_DEVIS_BY_ID, {
+        ...DEVIS_ROW, statut: 'envoye', boutique_id: 1, facture_id: null,
+        client_id: 3, ticket_id: 42, total_ht: 100, total_tva: 20, total_ttc: 120,
+      })
+      dbD1.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+        prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
+        prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
+      })
+      dbD1.__setResponse(SQL_INSERT_FACTURE, { id: 32 })
+      dbD1.__setResponse(SQL_CHECK_ACOMPTE_CONVERSION, {
+        id: 7, numero: 'FAC-2026-00007', total_ht: 41.67, total_tva: 8.33, total_ttc: 50,
+      })
+      dbD1.__setResponse(SQL_MAX_ORDRE_LIGNES, { maxOrdre: 2 })
+      dbD1.__setNotFound(SQL_ACOMPTE_LIGNE_TVA)
+
+      await convertirDevis(dbD1 as any, 10, 10)
+
+      const calls = dbD1.__getCalls()
+      const ligneCall = calls.find(c =>
+        c.sql.includes('INSERT INTO lignes_document') && c.params.includes('Acompte déjà facturé (FAC-2026-00007)')
+      )
+      expect(ligneCall!.params[4]).toBe(20)
     })
   })
 
