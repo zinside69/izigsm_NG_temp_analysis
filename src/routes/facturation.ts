@@ -14,7 +14,7 @@ import {
 } from '../services/devisService'
 import {
   listFactures, getFacture, ajouterPaiement, emettreFacture,
-  listAvoirs, getAvoir, createAvoir,
+  listAvoirs, getAvoir, createAvoir, createFactureAcompte,
   getDevisPourNf525, updateFactureHash,
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
@@ -268,6 +268,52 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
     return c.json({ success: true, facture_id, facture_numero, message: 'Devis converti en facture.' })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 422)
+  }
+})
+
+/**
+ * POST /api/devis/:id/acompte
+ * Facture un acompte pour ce devis — voir
+ * docs/superpowers/specs/2026-07-16-acompte-structure-design.md.
+ * Réservé admin/manager. Même contrat que POST /api/tickets/:id/acompte.
+ *
+ * @param id  — ID du devis
+ * @body { montant_ht, tva_taux, mode_paiement, reference? }
+ * @returns 201 { success, facture_id, facture_numero, message }
+ * @returns 409 si un acompte existe déjà pour ce devis
+ */
+facturation.post('/devis/:id/acompte', requireRole('admin', 'manager'), async (c) => {
+  const user    = c.get('user')
+  const devisId = parseInt(c.req.param('id'), 10)
+
+  const devis = await getDevis(c.get('db'), devisId)
+  if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+  if (user.role !== 'admin' && devis.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
+
+  const { montant_ht, tva_taux, mode_paiement, reference } = await c.req.json().catch(() => ({}))
+  // typeof/isNaN, pas juste `<= 0` : voir routes/tickets.ts (même acompte, commit c7abcc4)
+  if (typeof montant_ht !== 'number' || isNaN(montant_ht) || montant_ht <= 0)
+    return c.json({ success: false, error: 'montant_ht doit être positif.' }, 400)
+  if (!mode_paiement)
+    return c.json({ success: false, error: 'mode_paiement obligatoire.' }, 400)
+
+  try {
+    const result = await createFactureAcompte(c.env.DB, user.sub, {
+      boutique_id: devis.boutique_id,
+      client_id:   devis.client_id,
+      ticket_id:   devis.ticket_id ?? null,
+      devis_id:    devisId,
+      montant_ht,
+      tva_taux:    tva_taux ?? 20,
+      mode_paiement,
+      reference,
+    })
+    return c.json({ success: true, ...result, message: 'Acompte facturé.' }, 201)
+  } catch (err: any) {
+    const status = err.message.includes('déjà été facturé') ? 409 : 422
+    return c.json({ success: false, error: err.message }, status)
   }
 })
 
