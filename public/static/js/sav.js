@@ -36,8 +36,12 @@ const SavApp = (() => {
   async function loadKpis() {
     try {
       const r = await apiGet('/api/sav/kpis')
-      if (!r.success) return
-      const d = r.data
+      // apiGet() renvoie {ok,status,data,error} où `data` est le corps JSON complet
+      // {success, data}. /sav/kpis imbrique sous `data` → il faut r.data?.data, pas
+      // r.success/r.data directement (même bug class que devis.js/settings.html).
+      if (!r.ok) return
+      const d = r.data?.data
+      if (!d) return
       document.getElementById('kv-actives').textContent     = d.garanties_actives    ?? 0
       document.getElementById('kv-expire-soon').textContent = d.garanties_expirant_7j ?? 0
       document.getElementById('kv-sav-ouverts').textContent = (d.sav_ouverts ?? 0) + (d.sav_en_traitement ?? 0)
@@ -83,15 +87,17 @@ const SavApp = (() => {
 
     try {
       const r = await apiGet(url)
-      if (!r.success) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">${r.error}</td></tr>`; return }
+      // GET /garanties renvoie {success, data:[...], pagination} imbriqué sous data.
+      if (!r.ok) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">${r.error}</td></tr>`; return }
+      const list = r.data?.data || []
 
-      if (!r.data.length) {
+      if (!list.length) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-400 py-8">Aucune garantie trouvée.</td></tr>'
         document.getElementById('garanties-pagination').innerHTML = ''
         return
       }
 
-      tbody.innerHTML = r.data.map(g => {
+      tbody.innerHTML = list.map(g => {
         const joursR  = g.jours_restants ?? null
         let joursHtml = '—'
         if (joursR !== null) {
@@ -128,7 +134,7 @@ const SavApp = (() => {
         </tr>`
       }).join('')
 
-      renderPagination('garanties-pagination', r.pagination, (p) => refreshGaranties(p))
+      renderPagination('garanties-pagination', r.data?.pagination, (p) => refreshGaranties(p))
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">Erreur réseau.</td></tr>`
     }
@@ -142,7 +148,8 @@ const SavApp = (() => {
     if (!confirm('Marquer automatiquement comme expirées toutes les garanties dont la date de fin est passée ?')) return
     try {
       const r = await apiPost('/api/garanties/expire', {})
-      if (r.success) { toast(`${r.data.expired} garantie(s) expirée(s).`); refreshGaranties(); loadKpis() }
+      // POST /garanties/expire renvoie {success, data:{expired}, message} imbriqué.
+      if (r.ok) { toast(`${r.data?.data?.expired ?? 0} garantie(s) expirée(s).`); refreshGaranties(); loadKpis() }
       else toast(r.error, 'error')
     } catch { toast('Erreur réseau.', 'error') }
   }
@@ -170,15 +177,17 @@ const SavApp = (() => {
 
     try {
       const r = await apiGet(url)
-      if (!r.success) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">${r.error}</td></tr>`; return }
+      // GET /sav renvoie {success, data:[...], pagination} imbriqué sous data.
+      if (!r.ok) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">${r.error}</td></tr>`; return }
+      const list = r.data?.data || []
 
-      if (!r.data.length) {
+      if (!list.length) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-400 py-8">Aucun dossier SAV.</td></tr>'
         document.getElementById('sav-pagination').innerHTML = ''
         return
       }
 
-      tbody.innerHTML = r.data.map(s => {
+      tbody.innerHTML = list.map(s => {
         const client  = s.client_prenom && s.client_nom ? `${s.client_prenom} ${s.client_nom}` : '—'
         const dateOuv = new Date(s.date_ouverture).toLocaleDateString('fr-FR')
         return `<tr class="hover:bg-gray-50 cursor-pointer" onclick="SavApp.openSavDetail(${s.id})">
@@ -205,7 +214,7 @@ const SavApp = (() => {
         </tr>`
       }).join('')
 
-      renderPagination('sav-pagination', r.pagination, (p) => refreshSav(p))
+      renderPagination('sav-pagination', r.data?.pagination, (p) => refreshSav(p))
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="8" class="text-center text-red-400 py-8">Erreur réseau.</td></tr>`
     }
@@ -242,8 +251,9 @@ const SavApp = (() => {
 
     try {
       const r = await apiGet(`/api/garanties/${gId}`)
-      if (r.success && r.data) {
-        const g = r.data
+      // GET /garanties/:id renvoie {success, data:{...}} imbriqué.
+      if (r.ok && r.data?.data) {
+        const g = r.data.data
         const client = g.client_prenom && g.client_nom ? `${g.client_prenom} ${g.client_nom}` : 'Client inconnu'
         const dateFin = g.date_fin ? new Date(g.date_fin).toLocaleDateString('fr-FR') : '—'
         const actif   = g.statut === 'active'
@@ -278,8 +288,11 @@ const SavApp = (() => {
 
     try {
       const r = await apiPost('/api/sav', body)
-      if (r.success) {
-        toast(r.message || 'Dossier SAV ouvert.')
+      // POST /sav renvoie {success, data:dossier, message} — `message` est dans le
+      // corps JSON imbriqué (r.data.message), pas au niveau du wrapper apiGet (r.message
+      // n'existe pas sur {ok,status,data,error}).
+      if (r.ok) {
+        toast(r.data?.message || 'Dossier SAV ouvert.')
         closeModal('modal-sav')
         refreshSav(1)
         loadKpis()
@@ -300,10 +313,11 @@ const SavApp = (() => {
 
     try {
       const r = await apiGet(`/api/sav/${id}`)
-      if (!r.success) { document.getElementById('detail-body').innerHTML = `<p class="text-red-500">${r.error}</p>`; return }
+      // GET /sav/:id renvoie {success, data:{...}} imbriqué.
+      if (!r.ok) { document.getElementById('detail-body').innerHTML = `<p class="text-red-500">${r.error}</p>`; return }
 
-      currentSavData = r.data
-      const s = r.data
+      currentSavData = r.data?.data
+      const s = r.data?.data
       const client = s.client_prenom && s.client_nom ? `${s.client_prenom} ${s.client_nom}` : '—'
       document.getElementById('detail-titre').textContent = `Dossier ${s.numero}`
 
@@ -354,8 +368,10 @@ const SavApp = (() => {
 
     try {
       const r = await apiPut(`/api/sav/${currentSavId}/statut`, { statut, resolution: resolution || undefined })
-      if (r.success) {
-        toast(r.message || `Statut → ${statut}`)
+      // PUT /sav/:id/statut renvoie {success, data, message} — message est imbriqué
+      // sous r.data, pas au niveau du wrapper apiGet.
+      if (r.ok) {
+        toast(r.data?.message || `Statut → ${statut}`)
         closeModal('modal-sav-detail')
         refreshSav(savPage)
         loadKpis()

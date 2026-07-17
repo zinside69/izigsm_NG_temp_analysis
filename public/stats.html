@@ -494,8 +494,12 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
         const r  = await apiGet(`/api/stats${qs}`)
-        if (!r.success) return
-        const d = r.data
+        // apiGet() renvoie {ok,status,data,error} où `data` est le corps JSON complet
+        // {success, data}. /api/stats imbrique sous `data` → il faut r.data?.data, pas
+        // r.success/r.data directement (même bug class que devis.js/settings.html).
+        if (!r.ok) return
+        const d = r.data?.data
+        if (!d) return
 
         // CA
         document.getElementById('kpi-ca-mois').textContent     = eur(d.ca_mois)
@@ -537,8 +541,11 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
         const r  = await apiGet(`/api/stats/ca-mensuel${qs}`)
-        if (!r.success) return
-        const { mois, total_12_mois, moyenne_mensuelle } = r.data
+        // /stats/ca-mensuel renvoie {success, data:{...}} imbriqué.
+        if (!r.ok) return
+        const caData = r.data?.data
+        if (!caData) return
+        const { mois, total_12_mois, moyenne_mensuelle } = caData
 
         document.getElementById('kpi-ca-total').textContent = eur(total_12_mois)
         document.getElementById('kpi-ca-moy').textContent   = `Moy. mensuelle : ${eur(moyenne_mensuelle)}`
@@ -553,7 +560,7 @@
           `Total affiché : ${eur(caValues.reduce((a, b) => a + b, 0))}`
 
         // Répartition CA par type (doughnut) — simulé depuis les données
-        renderCaTypeChart(r.data)
+        renderCaTypeChart(caData)
 
         // Top clients (si dispo dans la réponse ou appel séparé)
         await loadTopClients()
@@ -591,11 +598,15 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
         const r  = await apiGet(`/api/stats/tickets-statut${qs}`)
-        if (!r.success) return
-        const items = r.data.repartition || []
+        // /stats/tickets-statut renvoie {success, data:[...]} imbriqué — GET_TicketsParStatut()
+        // renvoie un tableau plat {key,label,color,cnt}, pas un objet {repartition,top_appareils}.
+        // NOTE (hors périmètre du fix r.success/r.data) : le backend n'expose pas de champ
+        // top_appareils du tout — ce bloc reste vide même après ce fix, cf. rapport de session.
+        if (!r.ok) return
+        const items = r.data?.data || []
 
-        const labels = items.map(i => i.statut.replace(/_/g, ' '))
-        const values = items.map(i => i.nb)
+        const labels = items.map(i => (i.label || i.statut || '').replace(/_/g, ' '))
+        const values = items.map(i => i.cnt ?? i.nb ?? 0)
         const colors = [
           '#6366f1','#8b5cf6','#f59e0b','#f97316','#3b82f6',
           '#14b8a6','#06b6d4','#22c55e','#6b7280','#ef4444',
@@ -603,8 +614,8 @@
 
         renderDoughnutChart('chart-tickets-statut', labels, values, colors.slice(0, items.length))
 
-        // Top appareils
-        const appareils = r.data.top_appareils || []
+        // Top appareils — non fourni par /stats/tickets-statut (voir note ci-dessus)
+        const appareils = []
         renderTopList('top-appareils-list', appareils, 'appareil', 'nb', '#3b82f6')
       } catch (e) { console.error('Tickets statut', e) }
     }
@@ -619,8 +630,12 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}&limit=15` : '?limit=15'
         const r  = await apiGet(`/api/stats/activite${qs}`)
-        if (!r.success) return
-        const items = r.data.items || []
+        // /stats/activite renvoie {success, data:[...]} imbriqué — getActiviteRecente()
+        // renvoie un tableau plat {type,ref,label,detail,date}, pas un objet {items:[...]}
+        // avec des champs description/created_at/user_nom (ces 3 champs n'existent pas
+        // côté backend — cf. rapport de session pour le détail de ce mismatch séparé).
+        if (!r.ok) return
+        const items = r.data?.data || []
         const el = document.getElementById('activite-list')
         if (!items.length) {
           el.innerHTML = '<div class="p-5 text-center text-gray-400 text-sm">Aucune activité récente.</div>'
@@ -630,10 +645,9 @@
           <div class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
             <span class="text-xl flex-shrink-0">${activityIcon(item.type)}</span>
             <div class="min-w-0">
-              <div class="text-sm text-gray-800 truncate font-medium">${escHtml(item.description || item.type)}</div>
-              <div class="text-xs text-gray-400">${fmtDateRelative(item.created_at)}</div>
+              <div class="text-sm text-gray-800 truncate font-medium">${escHtml((item.ref ? item.ref + ' — ' : '') + (item.label || item.detail || item.type))}</div>
+              <div class="text-xs text-gray-400">${fmtDateRelative(item.date || item.created_at)}</div>
             </div>
-            ${item.user_nom ? `<span class="ml-auto text-xs text-gray-400 flex-shrink-0">${escHtml(item.user_nom)}</span>` : ''}
           </div>`).join('')
       } catch (e) { console.error('Activité', e) }
     }
@@ -644,8 +658,12 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
         const r  = await apiGet(`/api/stats/techniciens${qs}`)
-        if (!r.success) return
-        const items = r.data.techniciens || []
+        // /stats/techniciens renvoie {success, data:[...]} imbriqué — getRapportTechnicien()
+        // renvoie un tableau plat {id,technicien,total_tickets,termines,en_cours,
+        // delai_moyen_jours}, pas un objet {techniciens:[...]}. Pas de champ ca_genere
+        // côté backend (colonne CA non calculée par ce rapport) — affiché en "—".
+        if (!r.ok) return
+        const items = r.data?.data || []
         const tbody = document.getElementById('techniciens-tbody')
 
         if (!items.length) {
@@ -654,23 +672,22 @@
           return
         }
 
-        const totalAssignes = items.reduce((s, t) => s + (t.tickets_en_cours || 0), 0)
+        const totalAssignes = items.reduce((s, t) => s + (t.en_cours || 0), 0)
         document.getElementById('kpi-tickets-assignes').textContent = totalAssignes
 
-        const maxTickets = Math.max(...items.map(t => t.tickets_en_cours || 0), 1)
+        const maxTickets = Math.max(...items.map(t => t.en_cours || 0), 1)
 
         tbody.innerHTML = items.map(t => {
-          const pct   = Math.round(((t.tickets_en_cours || 0) / maxTickets) * 100)
+          const pct   = Math.round(((t.en_cours || 0) / maxTickets) * 100)
           const color = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#22c55e'
           return `
           <tr>
             <td>
-              <div class="font-medium text-gray-800">${escHtml(t.nom || t.technicien_nom || '—')}</div>
-              <div class="text-xs text-gray-400">${escHtml(t.role || '')}</div>
+              <div class="font-medium text-gray-800">${escHtml(t.technicien || '—')}</div>
             </td>
-            <td class="text-right font-semibold text-blue-600">${t.tickets_en_cours ?? 0}</td>
-            <td class="text-right font-semibold text-green-600">${t.tickets_termines_mois ?? 0}</td>
-            <td class="text-right font-semibold text-indigo-600">${eur(t.ca_genere ?? 0)}</td>
+            <td class="text-right font-semibold text-blue-600">${t.en_cours ?? 0}</td>
+            <td class="text-right font-semibold text-green-600">${t.termines ?? 0}</td>
+            <td class="text-right font-semibold text-indigo-600">—</td>
             <td class="text-right text-gray-600">${t.delai_moyen_jours != null ? t.delai_moyen_jours + 'j' : '—'}</td>
             <td class="min-w-[120px]">
               <div class="progress-bar">
@@ -682,8 +699,8 @@
         }).join('')
 
         // Chart techniciens
-        const labels = items.map(t => (t.nom || t.technicien_nom || '?').split(' ')[0])
-        const values = items.map(t => t.tickets_termines_mois ?? 0)
+        const labels = items.map(t => (t.technicien || '?').split(' ')[0])
+        const values = items.map(t => t.termines ?? 0)
         renderBarChart('chart-techniciens', labels, values, 'Tickets terminés', '#8b5cf6')
       } catch (e) { console.error('Techniciens', e) }
     }
@@ -694,13 +711,16 @@
       try {
         const qs = _boutiqueId ? `?boutique_id=${_boutiqueId}&limit=10` : '?limit=10'
         const r  = await apiGet(`/api/stats/top-produits${qs}`)
-        if (!r.success) return
-        const items = r.data.produits || []
+        // /stats/top-produits renvoie {success, data:[...]} imbriqué — getTopProduits()
+        // renvoie un tableau plat {nom,qte_vendue,ca_total,...}, pas un objet {produits:[...]}
+        // avec un champ nb_vendu (le champ réel s'appelle qte_vendue).
+        if (!r.ok) return
+        const items = r.data?.data || []
 
-        renderTopList('top-produits-list', items, 'nom', 'nb_vendu', '#14b8a6', true)
+        renderTopList('top-produits-list', items, 'nom', 'qte_vendue', '#14b8a6', true)
 
         const labels = items.slice(0, 8).map(p => truncate(p.nom, 20))
-        const values = items.slice(0, 8).map(p => p.nb_vendu || 0)
+        const values = items.slice(0, 8).map(p => p.qte_vendue || 0)
         renderBarChart('chart-produits', labels, values, 'Quantité vendue', '#14b8a6', true)
       } catch (e) { console.error('Top produits', e) }
     }
@@ -861,8 +881,10 @@
         if (_from) qs.set('from', _from)
         if (_to)   qs.set('to',   _to)
         const r = await apiGet(`/api/stats/rapport-comptable?${qs}`)
-        if (!r.success) return
-        const d = r.data
+        // /stats/rapport-comptable renvoie {success, data:{...}} imbriqué.
+        if (!r.ok) return
+        const d = r.data?.data
+        if (!d) return
 
         const nbEl  = document.getElementById('rc-nb-factures')
         const htEl  = document.getElementById('rc-total-ht')

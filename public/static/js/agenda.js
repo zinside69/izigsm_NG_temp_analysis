@@ -58,8 +58,12 @@ async function loadKpis() {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/agenda/kpis?boutique_id=${bid}`)
-    if (!r.success) return
-    const k = r.data
+    // apiGet() renvoie {ok,status,data,error} où `data` est le corps JSON complet
+    // {success, data}. La route /agenda/kpis imbriquant sous `data`, il faut lire
+    // r.data?.data — jamais r.success/r.data directement (même bug class que devis.js).
+    if (!r.ok) return
+    const k = r.data?.data
+    if (!k) return
     document.getElementById('kpi-total-val').textContent   = k.total_rdv
     document.getElementById('kpi-auj-val').textContent     = k.rdv_auj
     document.getElementById('kpi-semaine-val').textContent = k.rdv_semaine
@@ -120,7 +124,8 @@ async function renderSemaine() {
 
   try {
     const r = await apiGet(`/api/agenda/view?${qs}`)
-    AgendaState.rdvCache = r.success ? r.data : {}
+    // /agenda/view renvoie {success, data:{...}} imbriqué → r.data.data, pas r.data.
+    AgendaState.rdvCache = r.ok ? (r.data?.data || {}) : {}
   } catch (e) {
     AgendaState.rdvCache = {}
   }
@@ -226,9 +231,12 @@ async function loadListe(page = 1) {
 
   try {
     const r = await apiGet(`/api/agenda?${qs}`)
-    if (!r.success) return
-    AgendaState.listeData  = r.data
-    AgendaState.listeTotal = r.total
+    // GET /agenda renvoie {success, ...result} avec result={data,total,page,limit}
+    // spreadé au niveau racine du corps JSON → tout est sous r.data (pas r.data direct,
+    // pas r.total au niveau du wrapper apiGet).
+    if (!r.ok) return
+    AgendaState.listeData  = r.data?.data  || []
+    AgendaState.listeTotal = r.data?.total || 0
     AgendaState.listePage  = page
     renderListe()
   } catch (e) { console.error('[liste]', e) }
@@ -329,8 +337,9 @@ async function loadClients() {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/clients?boutique_id=${bid}&limit=200`)
-    if (!r.success) return
-    AgendaState.clientsCache = r.data || []
+    // GET /clients renvoie {success, data:[...], pagination} imbriqué.
+    if (!r.ok) return
+    AgendaState.clientsCache = r.data?.data || []
     const sel = document.getElementById('rdv-client-id')
     AgendaState.clientsCache.forEach(c => {
       const opt = document.createElement('option')
@@ -345,8 +354,9 @@ async function loadTickets() {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/tickets?boutique_id=${bid}&limit=200&statut=RECEIVED,DIAGNOSED,WAITING_PARTS`)
-    if (!r.success) return
-    AgendaState.ticketsCache = r.data || []
+    // GET /tickets renvoie {success, ...result} avec result={data,total,...} imbriqué.
+    if (!r.ok) return
+    AgendaState.ticketsCache = r.data?.data || []
     const sel = document.getElementById('rdv-ticket-id')
     AgendaState.ticketsCache.forEach(t => {
       const opt = document.createElement('option')
@@ -432,7 +442,10 @@ async function saveRdv(e) {
       r = await apiPost('/api/agenda', payload)
     }
 
-    if (r.success) {
+    // POST/PUT /agenda ne renvoient pas de `data` exploitable ici (juste message) :
+    // seul r.ok (statut HTTP) compte. r.error est déjà résolu par apiGet() en cas
+    // d'échec (data?.error du corps JSON), donc directement utilisable.
+    if (r.ok) {
       toast(id ? 'RDV mis à jour ✅' : 'RDV créé ✅', 'green')
       closeModal('modal-rdv')
       refreshAll()
@@ -452,7 +465,8 @@ async function openDetailRdvById(id) {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/agenda/${id}?boutique_id=${bid}`)
-    if (r.success) openDetailRdv(r.data)
+    // GET /agenda/:id renvoie {success, data:{...}} imbriqué.
+    if (r.ok) openDetailRdv(r.data?.data)
   } catch (e) { toast('Erreur chargement RDV', 'red') }
 }
 
@@ -521,7 +535,8 @@ async function changeStatut(id, boutiqueId, statut, e) {
   e.stopPropagation()
   try {
     const r = await apiPatch(`/api/agenda/${id}/statut`, { boutique_id: boutiqueId, statut })
-    if (r.success) {
+    // PATCH /agenda/:id/statut ne renvoie qu'un message — seul r.ok compte.
+    if (r.ok) {
       toast(`Statut → ${statut} ✅`, 'green')
       closeModal('modal-detail-rdv')
       refreshAll()
@@ -536,7 +551,8 @@ async function editRdv(id) {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/agenda/${id}?boutique_id=${bid}`)
-    if (r.success) openModalRdv(r.data)
+    // GET /agenda/:id renvoie {success, data:{...}} imbriqué.
+    if (r.ok) openModalRdv(r.data?.data)
   } catch (e) { toast('Erreur chargement', 'red') }
 }
 
@@ -545,7 +561,8 @@ async function deleteRdv(id) {
   try {
     const bid = getBoutiqueId()
     const r   = await apiDelete(`/api/agenda/${id}?boutique_id=${bid}`)
-    if (r.success) {
+    // DELETE /agenda/:id ne renvoie qu'un message — seul r.ok compte.
+    if (r.ok) {
       toast('RDV supprimé', 'green')
       closeModal('modal-detail-rdv')
       refreshAll()
@@ -561,10 +578,13 @@ async function exportIcal() {
   try {
     const bid = getBoutiqueId()
     const r   = await apiGet(`/api/agenda/ical-token?boutique_id=${bid}`)
-    if (!r.success) { toast(r.error, 'red'); return }
+    // /agenda/ical-token renvoie {success, token, url} — `token` au même niveau que
+    // `success` (PAS imbriqué sous `data`), donc r.data.token (une seule imbrication,
+    // pas r.data.data.token comme les autres endpoints de ce fichier).
+    if (!r.ok) { toast(r.error, 'red'); return }
 
     const base = window.location.origin
-    const url  = `${base}/api/calendar/${r.token}.ics`
+    const url  = `${base}/api/calendar/${r.data?.token}.ics`
     document.getElementById('ical-url').textContent     = url
     document.getElementById('ical-download').href       = url
     document.getElementById('modal-ical').classList.remove('hidden')
