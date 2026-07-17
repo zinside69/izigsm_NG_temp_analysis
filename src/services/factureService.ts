@@ -263,11 +263,14 @@ export async function emettreFacture(
 export interface CreateFactureAcompteInput {
   boutique_id:   number
   client_id:     number
+  /** Au moins un des deux (ticket_id, devis_id) requis — rejeté sinon. */
   ticket_id?:    number | null
   devis_id?:     number | null
+  /** HT, pas TTC — cohérent avec la saisie de prix standard de l'app. */
   montant_ht:    number
   tva_taux:      number
   mode_paiement: string
+  /** Référence libre du paiement (n° chèque, transaction CB...), affichée sur la facture. */
   reference?:    string
 }
 
@@ -313,6 +316,8 @@ export async function createFactureAcompte(
 
   const numero = await nextNumero(db, input.boutique_id, 'facture')
 
+  // statut='brouillon' à la création : emettreFacture() (appelée plus bas) exige
+  // locked=0 pour verrouiller/émettre, donc la facture doit démarrer éditable.
   const facture = await db.prepare(`
     INSERT INTO factures
       (boutique_id, numero, client_id, ticket_id, devis_id, type_facture, total_ht, total_tva, total_ttc, statut)
