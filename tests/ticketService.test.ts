@@ -166,6 +166,90 @@ describe('listTickets()', () => {
     expect(res.pagination.total).toBe(0)
     expect(res.pagination.pages).toBe(0)
   })
+
+  describe('recherche par scan (token / EAN-13)', () => {
+    // NOTE : les SQL_COUNT/SQL_LIST du describe parent ci-dessus couvrent le cas
+    // "pas de recherche" (aucune clause LIKE). Dès que opts.search est fourni, la
+    // requête produite inclut TOUJOURS la clause OR à 3 branches (numero/marque/
+    // modele) — ici redéclarées localement (elles masquent les constantes du
+    // describe parent dans ce bloc) pour matcher exactement ce que produit
+    // listTickets() quand un search est passé mais qu'aucun pattern token/ID
+    // n'est détecté.
+    const SQL_COUNT = "SELECT COUNT(*) AS cnt FROM tickets t WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ?)"
+    const SQL_LIST  = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ?) ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
+
+    const SQL_COUNT_TOKEN = "SELECT COUNT(*) AS cnt FROM tickets t WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ? OR t.tracking_token = ?)"
+    const SQL_LIST_TOKEN  = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ? OR t.tracking_token = ?) ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
+
+    const SQL_COUNT_ID = "SELECT COUNT(*) AS cnt FROM tickets t WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ? OR t.id = ?)"
+    const SQL_LIST_ID   = `SELECT t.id, t.numero, t.statut, t.priorite, t.description_panne, t.appareil_marque, t.appareil_modele, t.prix_estime, t.prix_final, t.date_reception, t.date_promesse, t.technicien_id, c.prenom || ' ' || c.nom AS client_nom, c.telephone AS client_telephone, u.prenom || ' ' || u.nom AS technicien_nom FROM tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN users u ON u.id = t.technicien_id WHERE t.boutique_id = ? AND t.actif = 1 AND t.archived_at IS NULL AND (t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ? OR t.id = ?) ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
+
+    it('recherche par token complet (32 hex, scan QR direct)', async () => {
+      db.__setResponse(SQL_COUNT_TOKEN, { cnt: 1 })
+      db.__setListResponse(SQL_LIST_TOKEN, [TICKET_WITH_CLIENT])
+
+      const res = await listTickets(db, 1, { search: 'abc123def456abc123def456abc123de' })
+
+      expect(res.data).toHaveLength(1)
+      const calls = db.__getCalls()
+      const countCall = calls.find(c => c.sql === SQL_COUNT_TOKEN)
+      expect(countCall).toBeDefined()
+      expect(countCall!.params).toContain('abc123def456abc123def456abc123de')
+    })
+
+    it('recherche par URL de suivi complète (scan QR, extrait le token)', async () => {
+      db.__setResponse(SQL_COUNT_TOKEN, { cnt: 1 })
+      db.__setListResponse(SQL_LIST_TOKEN, [TICKET_WITH_CLIENT])
+
+      const res = await listTickets(db, 1, { search: 'https://repairdesk.fr/suivi/abc123def456abc123def456abc123de' })
+
+      expect(res.data).toHaveLength(1)
+      const calls = db.__getCalls()
+      const countCall = calls.find(c => c.sql === SQL_COUNT_TOKEN)
+      expect(countCall).toBeDefined()
+      // Le token est extrait de l'URL, pas l'URL entière liée en paramètre
+      expect(countCall!.params).toContain('abc123def456abc123def456abc123de')
+    })
+
+    it('recherche par EAN-13 complet (13 chiffres, retire le chiffre de contrôle)', async () => {
+      db.__setResponse(SQL_COUNT_ID, { cnt: 1 })
+      db.__setListResponse(SQL_LIST_ID, [TICKET_WITH_CLIENT])
+
+      // ID 42 encodé sur 12 chiffres (000000000042) + chiffre de contrôle fictif 9
+      const res = await listTickets(db, 1, { search: '0000000000429' })
+
+      expect(res.data).toHaveLength(1)
+      const calls = db.__getCalls()
+      const countCall = calls.find(c => c.sql === SQL_COUNT_ID)
+      expect(countCall).toBeDefined()
+      expect(countCall!.params).toContain(42)
+    })
+
+    it('recherche par ID tapé à la main (numérique court, pas un scan EAN-13)', async () => {
+      db.__setResponse(SQL_COUNT_ID, { cnt: 1 })
+      db.__setListResponse(SQL_LIST_ID, [TICKET_WITH_CLIENT])
+
+      const res = await listTickets(db, 1, { search: '42' })
+
+      expect(res.data).toHaveLength(1)
+      const calls = db.__getCalls()
+      const countCall = calls.find(c => c.sql === SQL_COUNT_ID)
+      expect(countCall).toBeDefined()
+      expect(countCall!.params).toContain(42)
+    })
+
+    it('recherche texte classique reste inchangée (non-régression)', async () => {
+      db.__setResponse(SQL_COUNT, { cnt: 1 })
+      db.__setListResponse(SQL_LIST, [TICKET_WITH_CLIENT])
+
+      const res = await listTickets(db, 1, { search: 'iPhone' })
+
+      expect(res.data).toHaveLength(1)
+      const calls = db.__getCalls()
+      const countCall = calls.find(c => c.sql === SQL_COUNT)
+      expect(countCall).toBeDefined()
+    })
+  })
 })
 
 // ─── getKanban ────────────────────────────────────────────────────────────────

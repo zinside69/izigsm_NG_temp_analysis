@@ -246,9 +246,35 @@ export async function listTickets(
     bindings.push(opts.client_id)
   }
   if (opts.search) {
-    conditions.push('(t.numero LIKE ? OR t.appareil_marque LIKE ? OR t.appareil_modele LIKE ?)')
+    // Recherche unifiée : texte libre (numero/marque/modele, comportement existant,
+    // TOUJOURS actif) OR token de suivi scanné (QR — 32 hex, ou URL contenant
+    // /suivi/<token>) OR ID numérique (EAN-13 scanné — 13 chiffres, le 13e est le
+    // chiffre de contrôle à ignorer, pas signifiant pour l'ID — ou ID tapé à la
+    // main). Un seul champ de recherche gère les 3 cas. Impression ticket, voir
+    // docs/superpowers/specs/2026-07-17-impression-ticket-design.md.
+    const orParts: string[] = ['t.numero LIKE ?', 't.appareil_marque LIKE ?', 't.appareil_modele LIKE ?']
     const s = `%${opts.search}%`
-    bindings.push(s, s, s)
+    const orBindings: any[] = [s, s, s]
+
+    const tokenInUrl = opts.search.match(/\/suivi\/([0-9a-f]{32})/i)
+    const tokenSeul  = opts.search.match(/^[0-9a-f]{32}$/i)
+    if (tokenInUrl || tokenSeul) {
+      const token = (tokenInUrl ? tokenInUrl[1] : opts.search).toLowerCase()
+      orParts.push('t.tracking_token = ?')
+      orBindings.push(token)
+    } else if (/^\d{13}$/.test(opts.search)) {
+      // Scan EAN-13 complet : 12 chiffres d'ID zéro-paddé + 1 chiffre de contrôle
+      // (non stocké, non signifiant côté recherche — seul l'ID compte).
+      orParts.push('t.id = ?')
+      orBindings.push(parseInt(opts.search.slice(0, 12), 10))
+    } else if (/^\d+$/.test(opts.search)) {
+      // ID tapé à la main (numérique, mais pas 13 chiffres donc pas un scan EAN-13).
+      orParts.push('t.id = ?')
+      orBindings.push(parseInt(opts.search, 10))
+    }
+
+    conditions.push('(' + orParts.join(' OR ') + ')')
+    bindings.push(...orBindings)
   }
 
   const where = 'WHERE ' + conditions.join(' AND ')
