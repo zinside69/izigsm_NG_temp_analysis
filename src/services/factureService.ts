@@ -39,11 +39,12 @@ export interface PaiementInput {
 }
 
 export interface CreateAvoirInput {
-  facture_id: number
-  type?:      TypeAvoir
-  motif:      string
-  lignes:     LigneInput[]
-  notes?:     string
+  facture_id:      number
+  type?:           TypeAvoir
+  motif:           string
+  lignes:          LigneInput[]
+  notes?:          string
+  date_expiration?: string
 }
 
 // ─── Factures ─────────────────────────────────────────────────────────────────
@@ -477,14 +478,15 @@ export async function createAvoir(
   const result = await db.prepare(`
     INSERT INTO avoirs
       (boutique_id, numero, facture_id, client_id, type, motif,
-       total_ht, total_tva, total_ttc, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       total_ht, total_tva, total_ttc, notes, date_expiration)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId, numero, input.facture_id, facture.client_id,
     type, input.motif,
     total_ht, total_tva, total_ttc,
     input.notes ?? null,
+    input.date_expiration ?? null,
   ).first<{ id: number }>()
 
   if (!result?.id) throw new Error('Erreur lors de la création de l\'avoir.')

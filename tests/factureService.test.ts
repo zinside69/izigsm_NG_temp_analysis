@@ -248,8 +248,8 @@ const SQL_NEXT_AVOIR_COUNT = n(`SELECT COUNT(*) as cnt FROM avoirs WHERE boutiqu
 const SQL_INSERT_AVOIR = n(`
   INSERT INTO avoirs
     (boutique_id, numero, facture_id, client_id, type, motif,
-     total_ht, total_tva, total_ttc, notes)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     total_ht, total_tva, total_ttc, notes, date_expiration)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -819,6 +819,49 @@ describe('createAvoir()', () => {
     expect(auditCall).toBeDefined()
     expect(auditCall!.params).toContain('CREATE_AVOIR')
     expect(auditCall!.params).toContain('avoir')
+  })
+
+  it('accepte et persiste date_expiration si fourni', async () => {
+    db.__setResponse(SQL_GET_FACTURE_AVOIR, { ...FACTURE_LOCKED, boutique_id: 1, client_id: 3 })
+    db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
+      prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
+    })
+    db.__setResponse(SQL_NEXT_AVOIR_COUNT, { cnt: 0 })
+    db.__setResponse(SQL_INSERT_AVOIR, { id: 8 })
+    setupNf525(db)
+
+    const input: CreateAvoirInput = {
+      facture_id: 20, motif: 'Annulation prise en charge #TKT-2026-00017',
+      lignes: [LIGNE_AVOIR_INPUT], date_expiration: '2026-09-16T00:00:00.000Z',
+    }
+
+    await createAvoir(db, 10, input)
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_INSERT_AVOIR)
+    expect(insertCall!.params).toContain('2026-09-16T00:00:00.000Z')
+  })
+
+  it('date_expiration reste null si non fourni (comportement existant inchangé)', async () => {
+    db.__setResponse(SQL_GET_FACTURE_AVOIR, { ...FACTURE_LOCKED, boutique_id: 1, client_id: 3 })
+    db.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      prefix_ticket: 'TKT', prefix_facture: 'FAC', prefix_devis: 'DEV',
+      prefix_avoir: 'AV', prefix_rachat: 'LP', format_numero: 'annee', padding_numero: 5,
+    })
+    db.__setResponse(SQL_NEXT_AVOIR_COUNT, { cnt: 0 })
+    db.__setResponse(SQL_INSERT_AVOIR, { id: 9 })
+    setupNf525(db)
+
+    const input: CreateAvoirInput = {
+      facture_id: 20, motif: 'Pièce défectueuse', lignes: [LIGNE_AVOIR_INPUT],
+    }
+
+    await createAvoir(db, 10, input)
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql === SQL_INSERT_AVOIR)
+    expect(insertCall!.params).toContain(null)
   })
 })
 
