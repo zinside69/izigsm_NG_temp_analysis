@@ -135,8 +135,8 @@ describe('getTicketPublicByToken', () => {
 
     const result = await getTicketPublicByToken(db, 'abc123def456abc1')
 
-    expect(result.acompte_montant).toBe(120)
-    expect(result.acompte_numero).toBe('FAC-2026-00007')
+    expect(result!.acompte_montant).toBe(120)
+    expect(result!.acompte_numero).toBe('FAC-2026-00007')
   })
 })
 
