@@ -1,7 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 34 — incident sécurité /login corrigé et déployé)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 34 — incident client /login résolu — vraie cause : extension NoScript)
 
-## Incident sécurité — /login servait potentiellement une version obsolète en cache — CORRIGÉ le 2026-07-18
-Utilisateur a signalé une connexion impossible + identifiants visibles dans l'URL (`?email=...&password=...`) sur `repairdesk.fr/login`. Root cause : le code déployé était déjà correct (vérifié), mais `/login` était précaché par le Service Worker (Cache First) — un navigateur avec une version en cache localement pouvait rester bloqué dessus. Fix : `/login`/`/register`/`/reset-password` retirés de tout cache, routés réseau uniquement (`NETWORK_ONLY_PATHS`, `public/sw.js`). Déployé (`CACHE_VERSION v2.63`, commit `40ac842`), vérifié en prod. Détail complet dans `bugs.md`.
+## Incident client — /login + dashboard cassés sur Chrome — RÉSOLU le 2026-07-18 (cause : extension NoScript, pas l'app)
+Utilisateur a signalé une connexion impossible + identifiants visibles dans l'URL sur `repairdesk.fr/login`, puis un dashboard vide (sidebar absente, widgets bloqués). Vraie cause trouvée en investiguant en direct sur son poste (Claude in Chrome) : l'extension **NoScript** bloquait l'exécution JS de la page (`repairdesk.fr` pas encore en site de confiance) — logs `DocumentFreezer`/`SyncMessage loops` confirmés en console. Résolu par l'utilisateur en ajoutant `repairdesk.fr` aux domaines de confiance NoScript. Le code applicatif n'était jamais en cause. Un fix Service Worker déployé en cours de route (retirer `/login`/`/register`/`/reset-password` du cache, `CACHE_VERSION v2.63`, commit `40ac842`) reste une amélioration légitime mais ne réglait pas ce symptôme précis. Détail complet + leçon méthodologique dans `bugs.md`.
 
 
 ## Déploiement production — 2026-07-18 (chantier impression ticket, 8/8 tâches)
