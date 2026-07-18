@@ -507,7 +507,7 @@ async function printTicket(id) {
  * détail ticket + profil boutique.
  *
  * @param {number} id - ID du ticket
- * @returns {Promise<object|null>} Objet normalisé prêt pour `_buildTicketHTML`,
+ * @returns {Promise<object|null>} Objet normalisé prêt pour `_buildTicketA4HTML`,
  *          ou null si l'API retourne une erreur (flash affiché)
  */
 async function _fetchTicketPrintData(id) {
