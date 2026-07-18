@@ -489,12 +489,14 @@ function renderEtatSecuriteDetail(t) {
  * @param {number} id - ID du ticket à imprimer
  * @returns {Promise<void>}
  */
-async function printTicket(id) {
+async function printTicket(id, format) {
   if (!id) return;
   try {
     const data = await _fetchTicketPrintData(id);
     if (!data) return;
-    const html = _buildTicketA4HTML(data);
+    const html = format === '3volets'
+      ? _buildTicketThermique3VoletsHTML(data)
+      : _buildTicketA4HTML(data);  // défaut = 'a4'
     _triggerPrint(html);
   } catch (err) {
     console.error('[printTicket]', err);

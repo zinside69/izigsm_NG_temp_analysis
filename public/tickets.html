@@ -427,7 +427,8 @@
       <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div style="display:flex;gap:8px;">
           <button class="btn btn-secondary" onclick="closeModal('modal-ticket-detail')">Fermer</button>
-          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
+          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId, 'a4')" title="Imprimer fiche A4">🖨 Fiche A4</button>
+          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId, '3volets')" title="Imprimer ticket 3 volets (thermique 72/80mm) — client x2 + technicien">🧾 Ticket 3 volets</button>
           <!-- Bouton Archiver (Sprint 2.37) — visible seulement si statut terminal -->
           <button id="btn-archiver-ticket" class="btn btn-sm" onclick="archiverTicket()"
                   style="display:none;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;"
