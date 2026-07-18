@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour — CORRIGÉ le 2026-07-18 (fenêtre de propagation CDN figée dans le précache SW)
+
+Signalé par l'utilisateur juste après le déploiement de l'amendement contenu ticket 3 volets/A4 (`v2.64`) : `sw.js` confirmait bien `CACHE_VERSION izigsm-v2.64`, mais le nouveau texte acompte était absent et `GET /api/health` semblait KO côté utilisateur alors que le contrôleur le voyait OK par fetch direct.
+
+**Root cause confirmée en investiguant en direct sur le poste de l'utilisateur (Claude in Chrome)** : le Service Worker de son navigateur avait bien installé et activé la nouvelle version (`izigsm-v2.64-static`/`izigsm-v2.64-pages` présents), mais `cache.add()` (précache App Shell à l'`install`) a exécuté son `fetch()` interne **pendant la fenêtre de propagation du cache CDN Cloudflare** juste après le déploiement — `/static/js/tickets.js` n'a pas de nom de fichier hashé (pas de cache-busting par contenu), donc Cloudflare peut légitimement servir une version encore ancienne à certains edges/PoP pendant quelques secondes/minutes après un déploiement. Le précache a figé cette version transitoire dans le nouveau `CACHE_VERSION` — cohérent en apparence (bon numéro de version) mais avec un contenu obsolète à l'intérieur.
+
+**Diagnostic** : `fetch('/static/js/tickets.js', {cache:'reload'})` renvoyait quand même l'ancien contenu depuis le navigateur de l'utilisateur (le Service Worker intercepte la requête et applique sa propre logique Cache First AVANT que le mode cache de la requête page ne s'applique — `cache:'reload'`/`no-store` côté page n'a aucun effet sur la logique interne du SW). Confirmé en listant les registrations (`active` bien sur v2.65 après fix, cache keys versionnés correctement) et en comparant la taille du fichier servi (93699 octets, ancien contenu) vs la taille réelle après fix (93964 octets).
+
+**Fix immédiat appliqué sur le poste de l'utilisateur** : désinscription du Service Worker + purge des caches via Claude in Chrome, contournant le contenu figé.
+
+**Fix structurel déployé** (`public/sw.js`, commit `796be8d`, `CACHE_VERSION v2.65`) : `cache.add(url)` → `cache.add(new Request(url, { cache: 'reload' }))` dans le handler `install` — force le fetch de précache à ignorer tout cache HTTP local/intermédiaire au moment de l'installation. **Limite reconnue** : ne garantit pas la fraîcheur du edge cache CDN Cloudflare lui-même (hors de notre contrôle) — réduit le risque côté client, ne l'élimine pas totalement si Cloudflare sert encore une version obsolète au moment exact du fetch.
+
+**Amélioration future à considérer, non faite** : ajouter un hash de contenu ou un paramètre de version dans les noms de fichiers statiques précachés (cache-busting classique) éliminerait ce risque à la source, indépendamment du timing de propagation CDN — chantier plus large (configuration du build Vite), pas fait dans l'urgence de ce fix.
+
 ## Incident client — identifiants visibles dans l'URL sur `/login` — VRAIE CAUSE : extension NoScript, PAS un bug applicatif (2026-07-18)
 
 Signalé par l'utilisateur : impossible de se connecter sur `https://repairdesk.fr`, URL affichant en clair `https://repairdesk.fr/login?email=...&password=...` après soumission — signe d'une soumission HTML native en `GET` au lieu du `fetch()` `POST` attendu. Dashboard vide (sidebar absente, widgets bloqués sur "Chargement...") signalé juste après sur la même machine.
