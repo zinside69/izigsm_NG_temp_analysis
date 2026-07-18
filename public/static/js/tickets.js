@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initSchemaGrid();
   populateClients();
   populateTechniciens();
+  _checkOpenDeepLink();
 });
 
 // ─── Chargement API ────────────────────────────────────────────────────────
@@ -101,6 +102,36 @@ async function loadTickets() {
   }
 
   renderTickets();
+}
+
+// ─── Lien interne technicien (étiquette imprimée) ───────────────────────────
+/**
+ * Si l'URL contient ?open=<token>, résout le token vers un ticket (réutilise
+ * la recherche par token de listTickets(), voir Task 2 de ce plan / docs/
+ * superpowers/specs/2026-07-17-impression-ticket-design.md) et ouvre
+ * directement sa fiche détail. Permet de scanner l'étiquette technicien
+ * (douchette USB sur poste déjà connecté à l'app — pas de gestion de
+ * reconnexion nécessaire, voir Décisions du spec) pour reprendre/mettre à
+ * jour le ticket sans recherche manuelle.
+ */
+async function _checkOpenDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('open');
+  if (!token) return;
+
+  try {
+    const boutiqueId = getBoutiqueId();
+    const r = await apiGet('/api/tickets', { search: token, ...(boutiqueId ? { boutique_id: boutiqueId } : {}) });
+    const results = r.ok ? (r.data?.data || r.data || []) : [];
+    if (results.length === 0) {
+      showFlash('⚠️ Ticket introuvable pour ce lien.', 'error');
+      return;
+    }
+    viewTicket(results[0].id);
+  } catch (e) {
+    console.error('[_checkOpenDeepLink]', e);
+    showFlash('⚠️ Erreur lors de la résolution du ticket.', 'error');
+  }
 }
 
 // Mapper statuts API snake_case vers anciens libellés
