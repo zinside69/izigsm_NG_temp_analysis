@@ -10,7 +10,7 @@
  * Versioning : incrémenter CACHE_VERSION à chaque déploiement majeur
  */
 
-const CACHE_VERSION  = 'izigsm-v2.64'
+const CACHE_VERSION  = 'izigsm-v2.65'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`
@@ -69,9 +69,16 @@ self.addEventListener('install', event => {
     caches.open(CACHE_STATIC)
       .then(cache => {
         // Précache le Shell en ignorant les erreurs individuelles (fichier manquant = non bloquant)
+        // cache: 'reload' — force le fetch à ignorer le cache HTTP local/intermédiaire.
+        // Incident réel du 2026-07-18 : un précache exécuté juste après un déploiement,
+        // pendant la fenêtre de propagation du cache CDN, a figé une version transitoire
+        // (pas encore la plus récente) d'un fichier statique dans le nouveau CACHE_VERSION —
+        // la fraîcheur du contenu précaché dépendait alors uniquement du hasard de propagation
+        // CDN au moment exact de l'installation. cache:'reload' réduit ce risque côté client
+        // (ne garantit pas la fraîcheur du edge cache CDN lui-même, hors de notre contrôle).
         return Promise.allSettled(
           APP_SHELL.map(url =>
-            cache.add(url).catch(err =>
+            cache.add(new Request(url, { cache: 'reload' })).catch(err =>
               console.warn('[SW] Précache ignoré :', url, err.message)
             )
           )
