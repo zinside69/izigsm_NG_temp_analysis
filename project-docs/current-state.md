@@ -1,4 +1,10 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 35 — contenu ticket 3 volets/A4 amendé et déployé)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 36 — incident propagation CDN corrigé, chantier cache-busting priorisé)
+
+## Incident propagation CDN figée dans le précache SW — CORRIGÉ le 2026-07-18
+Utilisateur a signalé le nouveau contenu (v2.64) absent malgré `CACHE_VERSION` à jour dans son navigateur. Root cause confirmée en direct (Claude in Chrome) : le précache du Service Worker a fetché `tickets.js` pendant la fenêtre de propagation du cache CDN Cloudflare juste après le déploiement, figeant une version transitoire encore ancienne sous le nouveau `CACHE_VERSION`. Fix immédiat appliqué sur le poste de l'utilisateur (désinscription SW + purge cache). Fix structurel déployé : `cache.add()` → `cache: 'reload'` au précache (`CACHE_VERSION v2.65`, commit `796be8d`) — réduit le risque sans l'éliminer totalement (limite du edge CDN hors de notre contrôle).
+
+**Chantier prioritaire identifié pour la prochaine session** (`todo.md`) : cache-busting par hash de contenu des fichiers statiques (`tickets.a3f8e1.js`) — élimination structurelle de cette classe de bug, nécessite un vrai chantier d'outillage Vite + manifeste + régénération dynamique du précache SW. Pas commencé, détail complet des sous-tâches dans `todo.md`.
+
 
 ## Amendement contenu ticket 3 volets + fiche A4 — DÉPLOYÉ le 2026-07-18 (commit `fbc28c4`)
 Suite comparaison directe avec `bon de réparation.pdf`/`print-prise-en-charge.php` (ancien `izigsm_app`) : IMEI/N° Série désormais toujours affichés (fallback "—") sur les 2 volets thermiques (client+technicien) ; texte légal acompte remplacé par 3 mentions reflétant le comportement réel (déduit si accepté / conservé si refusé / recyclage après 4 semaines), appliqué à la fois sur la fiche A4 et le ticket 3 volets, sur demande explicite de l'utilisateur — le cas d'annulation (avoir automatique) reste volontairement absent de ce texte. Pas de changement de schéma (état à l'entrée reste en tags checklist, pas de niveau de gravité ajouté), format Marque+Modèle groupé conservé, volet technicien reste sans acompte/signature. Déployé (`CACHE_VERSION v2.64`, commit `8aff690`), vérifié en prod.

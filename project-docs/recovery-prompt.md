@@ -1,3 +1,23 @@
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 36 — incident propagation CDN corrigé, chantier cache-busting priorisé pour la prochaine session)
+
+## Vue d'ensemble (checkpoint 36)
+Suite immédiate du checkpoint 35 (contenu ticket 3 volets/A4 déployé en `v2.64`). Juste après ce déploiement, l'utilisateur a signalé le nouveau contenu absent malgré `CACHE_VERSION` à jour dans son navigateur.
+
+**Root cause confirmée en investiguant en direct (Claude in Chrome, poste réel de l'utilisateur)** : le Service Worker avait bien installé/activé `v2.64` (cache keys versionnés correctement), mais son précache (`cache.add()` sur l'App Shell) avait fetché `/static/js/tickets.js` **pendant la fenêtre de propagation du cache CDN Cloudflare** juste après le déploiement — ce fichier n'a pas de nom hashé par contenu, donc Cloudflare pouvait légitimement servir une version encore ancienne à certains edges pendant quelques secondes/minutes post-déploiement. Le précache a figé cette version transitoire dans le nouveau `CACHE_VERSION` : cohérent en apparence (bon numéro affiché) mais avec un contenu réellement obsolète à l'intérieur. Piège découvert au passage : `fetch(url, {cache:'reload'})` côté page n'a AUCUN effet sur la logique interne du Service Worker qui intercepte la requête avant que ce mode de cache ne s'applique — un `cache:'no-store'` sur une requête page ne garantit jamais de contourner le cache du SW lui-même.
+
+**Fix immédiat** : désinscription du Service Worker + purge des caches directement sur le poste de l'utilisateur via Claude in Chrome — confirmé résolu (`tickets.js` re-fetché correct après coup).
+
+**Fix structurel déployé** (`public/sw.js`, commit `796be8d`, `CACHE_VERSION v2.65`) : `cache.add(url)` → `cache.add(new Request(url, { cache: 'reload' }))` au précache — force le fetch à ignorer tout cache HTTP local/intermédiaire au moment de l'installation. **Limite reconnue et documentée** : ne garantit pas la fraîcheur du edge cache CDN Cloudflare lui-même (hors de notre contrôle) — réduit le risque, ne l'élimine pas structurellement.
+
+## Chantier prioritaire identifié pour la PROCHAINE SESSION (voir `todo.md`, section 🔴 en tête de fichier)
+**Cache-busting par hash de contenu** des fichiers statiques (`tickets.a3f8e1.js` au lieu de `tickets.js`) — élimination structurelle de toute cette classe de bug, puisqu'une URL hashée par contenu ne peut jamais être servie périmée sous ce nom (changement de contenu = changement de nom = jamais de collision de cache possible, à aucune couche : CDN, navigateur, ou Service Worker).
+Sous-tâches identifiées (détail dans `todo.md`) : config Vite pour hasher `public/static/js/*.js`/`*.css`, manifeste de build, adaptation des balises `<script src>`/`<link href>` dans les pages HTML pour référencer les noms hashés via le manifeste, régénération dynamique de la liste `APP_SHELL` du Service Worker à partir de ce manifeste (au lieu de la liste statique actuelle), puis passage des fichiers hashés en cache long+immutable. **Rien commencé** — décision utilisateur du 2026-07-18 : inscrire en priorité pour la prochaine session, pas traité dans celle-ci.
+
+## État git à la fin de ce checkpoint
+Tout commité et pushé sur `main`. Fix structurel en prod (`v2.65`). Chantier cache-busting priorisé mais pas démarré.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 35 — chantier impression ticket 8/8 déployé, incident NoScript résolu, contenu amendé et déployé)
 
 ## Vue d'ensemble (checkpoint 35)

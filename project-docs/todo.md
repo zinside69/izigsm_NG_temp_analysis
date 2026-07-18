@@ -1,5 +1,18 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 PRIORITÉ prochaine session — Cache-busting par hash de contenu (2026-07-18)
+Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduit le risque mais ne l'élimine pas structurellement.
+
+**Chantier** : hasher le contenu des fichiers statiques dans leur nom (`tickets.a3f8e1.js` au lieu de `tickets.js`) — élimine la classe de bug à la source, une URL hashée ne peut jamais être servie périmée sous ce nom.
+- [ ] Configurer Vite pour hasher les assets `public/static/js/*.js`/`*.css` (actuellement copiés tels quels, hors du pipeline de build Vite qui gère déjà le hachage pour d'autres assets)
+- [ ] Générer un manifeste de build (mapping nom logique → nom hashé)
+- [ ] Adapter les balises `<script src="...">`/`<link href="...">` dans les pages HTML pour référencer les noms hashés (via le manifeste, pas en dur)
+- [ ] Régénérer dynamiquement la liste de précache `APP_SHELL` du Service Worker (`public/sw.js`) à partir du manifeste, plutôt que la liste statique actuelle
+- [ ] Une fois en place : passer les fichiers hashés en cache long + immutable (`Cache-Control: public, max-age=31536000, immutable`) — sûr uniquement parce que le contenu ne peut plus changer sous un même nom
+- [ ] Garder `sw.js` lui-même et les pages HTML d'entrée en network-first/no-cache (elles référencent les noms hashés, doivent toujours être à jour)
+
+## Chantier impression ticket — 8/8 tâches terminées, approuvées et DÉPLOYÉES (checkpoint 33, 2026-07-18)
+
 ## Chantier impression ticket — 8/8 tâches terminées, approuvées et DÉPLOYÉES (checkpoint 33, 2026-07-18)
 Voir `recovery-prompt.md` (checkpoint 32) pour le détail complet, notamment la clarification importante sur ce que couvrait réellement Task 4/4b (pas un "ticket technicien", contrairement à une hypothèse initiale de l'utilisateur).
 - [x] Task 6 (révisée) — ticket 3 volets thermique (client×2 + technicien), remplace le ticket client seul de Task 5 — commit `62b03e4`
