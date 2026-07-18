@@ -558,6 +558,53 @@ async function _fetchTicketPrintData(id) {
 }
 
 /**
+ * Génère un QR code encodant `text`, en data-URI prêt à injecter dans un
+ * <img src="...">. Retourne null si la lib CDN qrcode-generator n'a pas
+ * chargé (réseau coupé, CDN indisponible) — l'appelant doit gérer ce cas
+ * sans jamais bloquer l'impression (fallback lien texte).
+ * @param {string} text - Contenu à encoder (URL complète, cliquable/scannable)
+ * @param {number} [cellSize=4] - Taille en pixels de chaque module du QR
+ * @returns {string|null} Data-URI (image/gif) ou null
+ */
+function _renderQrDataUrl(text, cellSize) {
+  if (typeof qrcode === 'undefined') return null;
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    return qr.createDataURL(cellSize || 4, 2);
+  } catch (e) {
+    console.error('[QR]', e);
+    return null;
+  }
+}
+
+/**
+ * Génère un code-barre EAN-13 encodant l'ID numérique du ticket, en data-URI
+ * prêt à injecter dans un <img src="...">. L'ID est zéro-paddé sur 12
+ * chiffres, JsBarcode calcule et affiche automatiquement le 13e chiffre de
+ * contrôle (pas de calcul manuel nécessaire, comportement natif du format
+ * 'EAN13' de cette lib). Retourne null si la lib CDN JsBarcode n'a pas
+ * chargé — mêmes règles de fallback que _renderQrDataUrl().
+ * @param {number|string} ticketId - ID numérique brut du ticket (pas le numero texte)
+ * @returns {string|null} Data-URI (image/png) ou null
+ */
+function _renderEan13DataUrl(ticketId) {
+  if (typeof JsBarcode === 'undefined') return null;
+  try {
+    const code12 = String(ticketId).padStart(12, '0').slice(-12);
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas, code12, {
+      format: 'EAN13', width: 2, height: 45, displayValue: true, fontSize: 11, margin: 4,
+    });
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('[EAN13]', e);
+    return null;
+  }
+}
+
+/**
  * Construit le HTML complet de la fiche de prise en charge ticket pour impression.
  * Inclut zones de signature client/technicien et lien de suivi si token présent.
  *
