@@ -564,7 +564,7 @@ async function _fetchTicketPrintData(id) {
     // pas de changement backend nécessaire, seulement le mapping ici (Task 4b).
     acompteMontant: parseFloat(t.facture_acompte_montant || 0),
     acompteNumero:  t.facture_acompte_numero || '',
-    panne:      t.description      || t.panne_declaree || '',
+    panne:      t.description_panne || '',
     notes:      t.notes_internes   || t.notes          || '',
     prix:       parseFloat(t.prix_estime || t.prix_reparation || 0),
     dateEm:     t.created_at       || new Date().toISOString(),
