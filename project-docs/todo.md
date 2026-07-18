@@ -3,8 +3,9 @@
 ## Chantier impression ticket — Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS (checkpoint 32, 2026-07-18)
 Voir `recovery-prompt.md` (checkpoint 32) pour le détail complet, notamment la clarification importante sur ce que couvrait réellement Task 4/4b (pas un "ticket technicien", contrairement à une hypothèse initiale de l'utilisateur).
 - [x] Task 6 (révisée) — ticket 3 volets thermique (client×2 + technicien), remplace le ticket client seul de Task 5 — commit `62b03e4`
-- [ ] Task 7 (révisée) — 2 boutons d'impression ("Fiche A4"/"Ticket 3 volets") + dispatch `printTicket(id, format)` — **EN COURS**, dispatchée, pas encore commitée au moment de ce checkpoint
-- [ ] Task 8 — deep-link technicien `tickets.html?open=<token>` (le QR du volet technicien de Task 6 encode déjà cette URL par anticipation, pas encore fonctionnelle)
+- [x] Task 7 (révisée) — 2 boutons d'impression ("Fiche A4"/"Ticket 3 volets") + dispatch `printTicket(id, format)` — commit `47d7bb7`
+- [x] Task 8 — deep-link technicien `tickets.html?open=<token>` implémenté — commit `f8609b6`. **Bug trouvé en validation réelle, non corrigé** : ne fonctionne jamais pour un compte admin (`boutique_id: null`) — voir `bugs.md` § "Deep-link technicien ne fonctionne jamais pour un compte admin" pour le détail complet et la cause racine (route `GET /api/tickets` exige `boutique_id` sans exception admin)
+- [ ] Corriger le bug deep-link admin (voir `bugs.md`) — nécessite de modifier la route partagée `GET /api/tickets`, hors périmètre de Task 8, décision utilisateur : reporté à plus tard
 - [ ] Décider si un restyle visuel complet de la fiche A4 (bandeau bleu marine façon `bon de réparation.pdf`) est souhaité, séparément du contenu déjà ajouté (décision actuelle : système visuel indigo existant conservé)
 - [ ] Namespacer les futurs fichiers `.superpowers/sdd/task-N-*.md` créés hors plan écrit (ex. `impression-ticket-task-N-*.md`) — collision de naming générique a causé l'écrasement d'un rapport d'un chantier précédent (non récupérable, mais sans perte d'information unique)
 - [ ] Bug mineur non bloquant : nom de boutique sur fiche imprimée lit la 1ère boutique de `GET /api/boutiques` non filtrée, pas forcément celle du ticket
