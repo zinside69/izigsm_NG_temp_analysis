@@ -1,4 +1,7 @@
-# iziGSM — État courant (MàJ : 2026-07-17, checkpoint 30 — impression ticket EN COURS, 2/8 tâches, session suspendue)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 30 — impression ticket EN COURS, 3/8 tâches ; acompte structuré DÉPLOYÉ)
+
+## Déploiement production — 2026-07-18 (acompte structuré, checkpoint 29)
+Les 10 tâches + revue finale du chantier acompte structuré (checkpoint 29) ont été déployées sur `repairdesk.fr` (`npm run build` → `npx wrangler pages deploy dist --project-name izigsm`), sur confirmation explicite de l'utilisateur. Tests avant déploiement : 824/826 (2 échecs fuseau horaire pré-existants connus, `computeFin()`, sans impact prod). Vérifié après déploiement : `GET /api/health` → 200, `sw.js` confirme `CACHE_VERSION izigsm-v2.61`. **HEAD au moment du déploiement incluait aussi les Tasks 1-3 du chantier impression ticket** (déjà commitées sur `main`, revues/approuvées, code additif et inerte — recherche ticket par token/EAN-13 + helpers QR/EAN-13 non encore branchés à aucune UI) — signalé à l'utilisateur avant déploiement, pas d'objection. Plus de décalage `origin/main`/prod pour l'acompte structuré.
 
 ## Checkpoint 30 — chantier impression ticket démarré (subagent-driven-development), session suspendue le soir du 2026-07-17
 
