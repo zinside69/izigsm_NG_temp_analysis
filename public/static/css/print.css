@@ -311,6 +311,32 @@
   margin-bottom: 1mm;
 }
 
+/* ─── Acompte versé ──────────────────────────────────────────────────────────── */
+/* Palette #fffbf0/#ffe0a1/#7a5a1a réutilisée telle quelle (tickets.js:256/465) —
+   déjà utilisée ailleurs dans l'app pour ce type d'encart d'avertissement doux,
+   cohérence visuelle avec le reste de l'application plutôt qu'une nouvelle palette. */
+.print-acompte-box {
+  background: #fffbf0;
+  border: 1px solid #ffe0a1;
+  border-radius: 6px;
+  padding: 4mm 5mm;
+  margin-bottom: 6mm;
+}
+
+.print-acompte-title {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #7a5a1a;
+  margin-bottom: 2mm;
+}
+
+.print-acompte-mentions {
+  font-size: 8pt;
+  color: #7a5a1a;
+  line-height: 1.5;
+  padding-left: 4mm;
+}
+
 /* ─── Pied de page ───────────────────────────────────────────────────────────── */
 .print-footer {
   position: fixed;

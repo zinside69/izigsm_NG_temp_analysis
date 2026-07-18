@@ -542,8 +542,13 @@ async function _fetchTicketPrintData(id) {
                   : (t.clientName || '—'),
     tel:        t.client_telephone || t.client_tel || t.phone || '',
     email:      t.client_email     || t.email      || '',
-    marque:     t.marque    || t.deviceType  || '',
-    modele:     t.modele    || t.deviceModel || '',
+    // marque/modele : corrigé (Task 4b) — t.marque/t.deviceType et t.modele/t.deviceModel
+    // ne correspondent à aucun champ réellement renvoyé par GET /api/tickets/:id ; le
+    // vrai ticket stocke appareil_marque/appareil_modele (jointure appareils côté
+    // getTicketById, voir src/services/ticketService.ts). Bug préexistant signalé par
+    // le rapport de Task 4bis, corrigé ici puisqu'on retravaille cet affichage.
+    marque:     t.appareil_marque || '',
+    modele:     t.appareil_modele || '',
     // imei/numeroSerie : lus sur appareil_imei/appareil_numero_serie (jointure
     // LEFT JOIN appareils côté getTicketById — l'ancienne ligne lisait t.imei,
     // un champ qui n'a jamais existé sur `tickets`, donc toujours vide ; corrigé
@@ -554,6 +559,11 @@ async function _fetchTicketPrintData(id) {
     imei:        t.appareil_imei         || '',
     numeroSerie: t.appareil_numero_serie || '',
     adresse:     t.client_adresse        || '',
+    // acompteMontant/acompteNumero : exposés par getTicketById() depuis le chantier
+    // acompte structuré (LEFT JOIN factures fa, voir src/services/ticketService.ts) —
+    // pas de changement backend nécessaire, seulement le mapping ici (Task 4b).
+    acompteMontant: parseFloat(t.facture_acompte_montant || 0),
+    acompteNumero:  t.facture_acompte_numero || '',
     panne:      t.description      || t.panne_declaree || '',
     notes:      t.notes_internes   || t.notes          || '',
     prix:       parseFloat(t.prix_estime || t.prix_reparation || 0),
@@ -700,15 +710,17 @@ function _buildTicketA4HTML(d) {
           <div class="print-party-label">Client</div>
           <div class="print-party-name">${esc(d.client)}</div>
           <div class="print-party-detail">
-            ${d.tel   ? '📞 ' + esc(d.tel)   + '<br>' : ''}
-            ${d.email ? '✉ '  + esc(d.email)          : ''}
+            ${d.tel     ? '📞 ' + esc(d.tel)     + '<br>' : ''}
+            ${d.email   ? '✉ '  + esc(d.email)   + '<br>' : ''}
+            ${d.adresse ? '📍 ' + esc(d.adresse)          : ''}
           </div>
         </div>
         <div class="print-party-box">
           <div class="print-party-label">Appareil</div>
           <div class="print-party-name">${esc(d.marque)} ${esc(d.modele)}</div>
           <div class="print-party-detail">
-            ${d.imei ? 'IMEI / S.N. : <strong>' + esc(d.imei) + '</strong><br>' : ''}
+            ${d.imei        ? 'IMEI : <strong>' + esc(d.imei) + '</strong><br>' : ''}
+            ${d.numeroSerie ? 'N° Série : <strong>' + esc(d.numeroSerie) + '</strong><br>' : ''}
             <strong>Technicien :</strong> ${esc(d.technicien)}
           </div>
         </div>
@@ -735,6 +747,24 @@ function _buildTicketA4HTML(d) {
           </tr>
         </tbody>
       </table>
+
+      <!-- Acompte versé (Task 4b) : n'apparaît que si une facture d'acompte existe
+           (chantier acompte structuré). Le texte décrit le fonctionnement RÉEL déjà
+           implémenté (déduction automatique à convertirDevis(), avoir automatique à
+           l'annulation — voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md),
+           volontairement différent du vieux modèle PDF fourni comme référence : celui-ci
+           décrivait un processus manuel (conservation de l'acompte en cas de refus,
+           recyclage après 4 semaines) qui ne correspond à aucune règle réellement
+           implémentée dans ce système — le reproduire promettrait un comportement
+           inexistant. -->
+      ${d.acompteMontant > 0 ? `
+      <div class="print-acompte-box print-no-break">
+        <div class="print-acompte-title">Acompte versé : ${_money(d.acompteMontant)}</div>
+        <ul class="print-acompte-mentions">
+          <li>Facture d'acompte n° ${esc(d.acompteNumero)} — déduit automatiquement du montant total à la facturation finale.</li>
+          <li>En cas d'annulation avec acompte perçu, un avoir est émis automatiquement (valable 60 jours).</li>
+        </ul>
+      </div>` : ''}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
         <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
