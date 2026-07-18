@@ -794,17 +794,23 @@ function _buildTicketA4HTML(d) {
 }
 
 /**
- * Construit le HTML du ticket client au format thermique 72mm (à emporter par
- * le client à la prise en charge) — réutilise les classes .print-ticket* de
- * print.css. Contenu inspiré de l'ancien template izigsm_app (exemplaire
- * client du bon de prise en charge), adapté au schéma actuel : pas de zone de
- * signature (papier trop étroit, remplacée par la signature électronique déjà
- * captée ailleurs dans l'app — voir docs/superpowers/specs/2026-07-17-impression-ticket-design.md
- * et la décision utilisateur du 2026-07-18 dans .superpowers/sdd/progress.md).
+ * Construit le fragment HTML du volet "client" du ticket thermique 72mm
+ * (à emporter par le client à la prise en charge) — réutilise les classes
+ * .print-ticket* de print.css. Contenu inspiré de l'ancien template izigsm_app
+ * (exemplaire client du bon de prise en charge), adapté au schéma actuel : pas
+ * de zone de signature (papier trop étroit, remplacée par la signature
+ * électronique déjà captée ailleurs dans l'app — voir
+ * docs/superpowers/specs/2026-07-17-impression-ticket-design.md et la décision
+ * utilisateur du 2026-07-18 dans .superpowers/sdd/progress.md).
+ * Anciennement `_buildTicketThermiqueHTML` (Task 5, copie unique, wrapper
+ * #print-root inclus) — refactorisé en Task 6 en fragment réutilisable deux
+ * fois (2 exemplaires client identiques) par `_buildTicketThermique3VoletsHTML`.
  * @param {object} d - Données normalisées retournées par _fetchTicketPrintData
- * @returns {string} HTML complet prêt à être injecté dans #print-root
+ * @returns {string} Fragment HTML (<div class="print-ticket">...) à assembler
+ *          dans _buildTicketThermique3VoletsHTML — n'est plus injectable seul
+ *          dans #print-root.
  */
-function _buildTicketThermiqueHTML(d) {
+function _buildTicketVoletClientHTML(d) {
   const prixHTML = d.prix > 0 ? _money(d.prix) : 'Sur devis';
   const qrDataUrl  = d.tracking ? _renderQrDataUrl(window.location.origin + '/suivi/' + d.tracking) : null;
   const eanDataUrl = _renderEan13DataUrl(d.id);
@@ -821,8 +827,6 @@ function _buildTicketThermiqueHTML(d) {
   const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
 
   return `
-    <div id="print-root">
-      <link rel="stylesheet" href="/static/css/print.css">
       <div class="print-ticket">
         <div class="print-ticket-header">
           <div class="shop-name">${esc(d.boutique.nom)}</div>
@@ -882,7 +886,93 @@ function _buildTicketThermiqueHTML(d) {
           ${d.tracking ? `Suivi : ${window.location.origin}/suivi/${esc(d.tracking)}<br>` : ''}
           Merci de votre confiance !
         </div>
-      </div>
+
+        <div class="print-ticket-copy-label">— Exemplaire client —</div>
+      </div>`;
+}
+
+/**
+ * Construit le volet "technicien" du ticket 3 volets thermique — à coller sur
+ * l'appareil en atelier. AUCUNE information client (nom/tél/email/adresse) —
+ * confidentialité, ce volet voyage avec l'appareil physique, pas avec le
+ * dossier client. Le QR encode un lien technicien (fiche ticket directe),
+ * pas le lien de suivi client (/suivi/<token>) — voir Task 8 (deep-link
+ * tickets.html?open=<token>) pour le câblage frontend qui rendra ce lien
+ * réellement fonctionnel ; le QR encode déjà la bonne URL par anticipation.
+ * @param {object} d - Données normalisées retournées par _fetchTicketPrintData
+ * @returns {string} Fragment HTML (<div class="print-ticket">...) à assembler
+ *          dans _buildTicketThermique3VoletsHTML
+ */
+function _buildTicketVoletTechnicienHTML(d) {
+  const qrDataUrl  = d.tracking ? _renderQrDataUrl(window.location.origin + '/tickets.html?open=' + d.tracking) : null;
+  const eanDataUrl = _renderEan13DataUrl(d.id);
+
+  const ETAT_LABELS = {
+    rayures: 'Rayures', ecran_fissure: 'Écran fissuré',
+    degats_eaux: 'Dégâts eaux', boitier_endommage: 'Boîtier endommagé',
+  };
+  let etatParsed = {};
+  try { etatParsed = d.etatAppareil ? JSON.parse(d.etatAppareil) : {}; } catch {}
+  const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
+
+  return `
+      <div class="print-ticket">
+        <div class="print-ticket-header">
+          <div class="shop-name">${esc(d.boutique.nom)}</div>
+        </div>
+
+        <table class="print-ticket-lines">
+          <tr><td>N° ticket</td><td class="txt-right"><strong>${esc(d.numero)}</strong></td></tr>
+          <tr><td>Date</td><td class="txt-right">${_fmtDateTime(d.dateEm)}</td></tr>
+        </table>
+
+        <hr class="print-ticket-sep">
+
+        <div style="font-size:8.5pt;">
+          <strong>${esc(d.marque)} ${esc(d.modele)}</strong><br>
+          ${d.imei        ? 'IMEI : ' + esc(d.imei) + '<br>' : ''}
+          ${d.numeroSerie ? 'N° Série : ' + esc(d.numeroSerie) + '<br>' : ''}
+          ${etatLines.length ? 'État : ' + etatLines.map(esc).join(', ') : ''}
+        </div>
+
+        <hr class="print-ticket-sep">
+
+        <div style="font-size:8.5pt;">
+          <strong>Panne signalée :</strong><br>
+          ${esc(d.panne) || '<em>Non renseignée</em>'}
+        </div>
+
+        <hr class="print-ticket-sep">
+
+        <div style="text-align:center;">
+          ${qrDataUrl  ? `<img src="${qrDataUrl}" alt="QR technicien" style="width:26mm;height:26mm;">` : ''}
+          ${eanDataUrl ? `<img src="${eanDataUrl}" alt="Code-barre" style="width:60mm;margin-top:2mm;">` : ''}
+        </div>
+
+        <div class="print-ticket-copy-label">— Exemplaire technicien —</div>
+      </div>`;
+}
+
+/**
+ * Construit le HTML complet du ticket 3 volets (thermique 72/80mm) : 2
+ * exemplaires client identiques + 1 exemplaire technicien, séparés par des
+ * lignes de découpe pointillées — un seul job d'impression continu (voir
+ * décision utilisateur du 2026-07-18, .superpowers/sdd/progress.md). Reprend
+ * la structure de l'ancien template izigsm_app (3 exemplaires découpés),
+ * adaptée au schéma actuel.
+ * @param {object} d - Données normalisées retournées par _fetchTicketPrintData
+ * @returns {string} HTML complet prêt à être injecté dans #print-root
+ */
+function _buildTicketThermique3VoletsHTML(d) {
+  const cutLine = '<div class="print-cut-line">✂ ─ ─ ─ ─ ─ ─ ─ DÉCOUPER ICI ─ ─ ─ ─ ─ ─ ─ ✂</div>';
+  return `
+    <div id="print-root">
+      <link rel="stylesheet" href="/static/css/print.css">
+      ${_buildTicketVoletClientHTML(d)}
+      ${cutLine}
+      ${_buildTicketVoletClientHTML(d)}
+      ${cutLine}
+      ${_buildTicketVoletTechnicienHTML(d)}
     </div>`;
 }
 

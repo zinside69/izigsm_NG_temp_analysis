@@ -423,6 +423,25 @@
   padding-top: 3mm;
 }
 
+.print-cut-line {
+  text-align: center;
+  font-size: 7pt;
+  color: #555;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+  padding: 1mm 0;
+  margin: 3mm 0;
+}
+
+.print-ticket-copy-label {
+  text-align: center;
+  font-size: 6.5pt;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2mm;
+}
+
 /* ─── Badge statut ───────────────────────────────────────────────────────────── */
 .print-badge {
   display: inline-block;
