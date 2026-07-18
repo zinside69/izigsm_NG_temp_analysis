@@ -494,7 +494,7 @@ async function printTicket(id) {
   try {
     const data = await _fetchTicketPrintData(id);
     if (!data) return;
-    const html = _buildTicketHTML(data);
+    const html = _buildTicketA4HTML(data);
     _triggerPrint(html);
   } catch (err) {
     console.error('[printTicket]', err);
@@ -611,7 +611,7 @@ function _renderEan13DataUrl(ticketId) {
  * @param {object} d - Données normalisées retournées par `_fetchTicketPrintData`
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
-function _buildTicketHTML(d) {
+function _buildTicketA4HTML(d) {
   const STATUT_LABELS = {
     recu:           'Reçu',
     en_diagnostic:  'En diagnostic',
@@ -653,6 +653,9 @@ function _buildTicketHTML(d) {
   const signatureBoxHTML = (d.signatureClient && isValidSignatureDataUrl(d.signatureClient))
     ? `<img src="${d.signatureClient}" alt="Signature client" style="max-width:100%;max-height:24mm;">`
     : `<div style="color:#aaa;font-size:8pt;">Je certifie avoir déposé l'appareil décrit ci-dessus et accepté les conditions de réparation.</div>`;
+
+  const qrDataUrl  = d.tracking ? _renderQrDataUrl(window.location.origin + '/suivi/' + d.tracking) : null;
+  const eanDataUrl = _renderEan13DataUrl(d.id);
 
   return `
     <div id="print-root">
@@ -709,12 +712,6 @@ function _buildTicketHTML(d) {
 
       ${etatHTML}
 
-      ${d.notes ? `
-      <div style="margin-bottom:6mm;" class="print-no-break">
-        <div class="print-notes-label" style="margin-bottom:2mm;">Notes internes</div>
-        <div class="print-notes" style="background:#fff9ec;border-color:#ffe0a1;">${esc(d.notes)}</div>
-      </div>` : ''}
-
       <table class="print-table print-no-break" style="margin-bottom:4mm;">
         <thead>
           <tr>
@@ -741,8 +738,12 @@ function _buildTicketHTML(d) {
       </div>
 
       ${d.tracking ? `
-      <div style="margin-top:6mm;text-align:center;font-size:8pt;color:#aaa;" class="print-no-break">
-        Suivi en ligne : ${window.location.origin}/suivi/${esc(d.tracking)}
+      <div style="margin-top:6mm;display:flex;align-items:center;justify-content:center;gap:8mm;" class="print-no-break">
+        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR suivi" style="width:24mm;height:24mm;">` : ''}
+        ${eanDataUrl ? `<img src="${eanDataUrl}" alt="Code-barre" style="width:38mm;">` : ''}
+        <div style="font-size:8pt;color:#aaa;text-align:left;">
+          Suivi en ligne :<br>${window.location.origin}/suivi/${esc(d.tracking)}
+        </div>
       </div>` : ''}
 
       <div class="print-footer">
