@@ -1,4 +1,8 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 32 — impression ticket Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS ; acompte structuré DÉPLOYÉ)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 33 — chantier impression ticket 8/8 tâches TERMINÉ et DÉPLOYÉ)
+
+## Déploiement production — 2026-07-18 (chantier impression ticket, 8/8 tâches)
+Les 8 tâches du chantier impression ticket (+ 2 amendements hors plan, Tasks 4bis/4b) ont été déployées sur `repairdesk.fr`, sur confirmation explicite de l'utilisateur. Tests avant déploiement : 824/826 (2 échecs fuseau horaire pré-existants connus). `CACHE_VERSION` bumpée `v2.61` → `v2.62` (fichiers frontend touchés : `tickets.js`/`tickets.html`/`print.css`). Vérifié après déploiement : `GET /api/health` → 200, `sw.js` confirme `CACHE_VERSION izigsm-v2.62`. **2 bugs connus non corrigés, documentés dans `bugs.md`** : le deep-link technicien (`tickets.html?open=<token>`) ne fonctionne jamais pour un compte admin (route `GET /api/tickets` exige `boutique_id` sans exception admin), et une confusion connexe erreur/introuvable dans `_checkOpenDeepLink()` — les deux affectent maintenant la production, pas seulement le code. Archive locale du dossier webapp demandée par l'utilisateur, en attente.
+
 
 ## Checkpoint 32 — Task 6 clarifiée puis terminée (ticket 3 volets), Task 7 dispatchée, 2026-07-18
 

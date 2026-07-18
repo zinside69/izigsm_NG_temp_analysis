@@ -1,6 +1,6 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## Chantier impression ticket — Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS (checkpoint 32, 2026-07-18)
+## Chantier impression ticket — 8/8 tâches terminées, approuvées et DÉPLOYÉES (checkpoint 33, 2026-07-18)
 Voir `recovery-prompt.md` (checkpoint 32) pour le détail complet, notamment la clarification importante sur ce que couvrait réellement Task 4/4b (pas un "ticket technicien", contrairement à une hypothèse initiale de l'utilisateur).
 - [x] Task 6 (révisée) — ticket 3 volets thermique (client×2 + technicien), remplace le ticket client seul de Task 5 — commit `62b03e4`
 - [x] Task 7 (révisée) — 2 boutons d'impression ("Fiche A4"/"Ticket 3 volets") + dispatch `printTicket(id, format)` — commit `47d7bb7`
