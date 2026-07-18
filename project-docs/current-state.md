@@ -1,4 +1,9 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 31 — impression ticket Tasks 1-5/8 terminées et approuvées ; acompte structuré DÉPLOYÉ)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 32 — impression ticket Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS ; acompte structuré DÉPLOYÉ)
+
+## Checkpoint 32 — Task 6 clarifiée puis terminée (ticket 3 volets), Task 7 dispatchée, 2026-07-18
+
+Correction factuelle apportée à l'utilisateur en cours de session : Task 4/4b (fiche A4) ne contenait PAS déjà un "ticket technicien" (vérifié par grep — juste un champ nom + case signature vide). Après clarification (plusieurs tours d'AskUserQuestion), la vraie demande était un **ticket 3 volets** thermique (client×2 + technicien, un seul job d'impression avec pointillés), remplaçant le ticket client seul de Task 5 (dont le contenu a été réutilisé, pas perdu). **Task 6 (révisée) terminée et approuvée** (commit `62b03e4`) — confidentialité du volet technicien vérifiée directement dans le diff par le reviewer. **Task 7 (révisée, 2 boutons au lieu de 3) dispatchée, en cours** au moment de ce checkpoint. Voir `project-docs/recovery-prompt.md` (checkpoint 32) pour le détail complet.
+
 
 ## Checkpoint 31 — Tasks 3, 4, 4bis, 4b, 5 terminées et approuvées + 3 bugs préexistants corrigés, 2026-07-18
 

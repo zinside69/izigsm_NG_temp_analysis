@@ -1,10 +1,10 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## Chantier impression ticket — Tasks 1-5/8 terminées et approuvées (checkpoint 31, 2026-07-18)
-Voir `recovery-prompt.md` (checkpoint 31) pour le détail complet des 5 tâches + 2 tâches d'amendement (4bis, 4b).
-- [ ] Task 6 — étiquette technicien 72mm : **à revalider le contenu exact avec l'utilisateur avant de dispatcher** (pas encore décidé formellement, contrairement à Task 5)
-- [ ] Task 7 — 3 boutons d'impression + dispatch `printTicket(id, format)` (dépend de Task 6)
-- [ ] Task 8 — deep-link technicien `tickets.html?open=<token>`
+## Chantier impression ticket — Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS (checkpoint 32, 2026-07-18)
+Voir `recovery-prompt.md` (checkpoint 32) pour le détail complet, notamment la clarification importante sur ce que couvrait réellement Task 4/4b (pas un "ticket technicien", contrairement à une hypothèse initiale de l'utilisateur).
+- [x] Task 6 (révisée) — ticket 3 volets thermique (client×2 + technicien), remplace le ticket client seul de Task 5 — commit `62b03e4`
+- [ ] Task 7 (révisée) — 2 boutons d'impression ("Fiche A4"/"Ticket 3 volets") + dispatch `printTicket(id, format)` — **EN COURS**, dispatchée, pas encore commitée au moment de ce checkpoint
+- [ ] Task 8 — deep-link technicien `tickets.html?open=<token>` (le QR du volet technicien de Task 6 encode déjà cette URL par anticipation, pas encore fonctionnelle)
 - [ ] Décider si un restyle visuel complet de la fiche A4 (bandeau bleu marine façon `bon de réparation.pdf`) est souhaité, séparément du contenu déjà ajouté (décision actuelle : système visuel indigo existant conservé)
 - [ ] Namespacer les futurs fichiers `.superpowers/sdd/task-N-*.md` créés hors plan écrit (ex. `impression-ticket-task-N-*.md`) — collision de naming générique a causé l'écrasement d'un rapport d'un chantier précédent (non récupérable, mais sans perte d'information unique)
 - [ ] Bug mineur non bloquant : nom de boutique sur fiche imprimée lit la 1ère boutique de `GET /api/boutiques` non filtrée, pas forcément celle du ticket

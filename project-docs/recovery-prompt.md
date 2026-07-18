@@ -1,3 +1,32 @@
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 32 — chantier impression ticket, Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS)
+
+## Vue d'ensemble (checkpoint 32)
+Suite directe du checkpoint 31. Architecture inchangée. Le cadrage de Task 6 a nécessité plusieurs tours de clarification avec l'utilisateur (voir section dédiée ci-dessous) avant implémentation — important à lire en cas de reprise, car la compréhension initiale de la tâche était erronée et corrigée en cours de route.
+
+## Clarification majeure Task 6 — à bien comprendre avant toute reprise
+L'utilisateur a d'abord demandé un déploiement + une archive locale, puis a dévié la conversation vers Task 6 en affirmant (à tort) que Task 4/4b contenait déjà un "ticket technicien". **Vérifié par grep et corrigé factuellement** : Task 4/4b (fiche A4) ne contient qu'un champ texte "Technicien : [nom]" et une case de signature vide — rien qui ressemble à un document autonome sans infos client. Après clarification, la vraie demande était : à la prise en charge, **2 choix d'impression** (pas 3) — la fiche A4, OU un **"ticket 3 volets"** thermique 72/80mm imprimé en **un seul job continu** avec pointillés de découpe : 2 exemplaires client identiques + 1 exemplaire technicien (zéro info client). Task 5 (ticket client seul, déjà fait) n'était pas du travail perdu — son contenu a été refactorisé en fragment réutilisable pour les 2 volets client, la fonction standalone de Task 5 a été supprimée (plus de bouton "ticket client seul").
+
+## État des tâches du chantier impression ticket
+- Tasks 1-5 : terminées et approuvées (voir checkpoint 31 ci-dessous pour le détail)
+- **Task 6 (révisée) : terminée et approuvée** (commit `62b03e4`) — `_buildTicketVoletClientHTML`/`_buildTicketVoletTechnicienHTML`/`_buildTicketThermique3VoletsHTML`, ancienne fonction Task 5 proprement supprimée (pas de code mort), confidentialité du volet technicien vérifiée directement dans le diff par le reviewer (pas sur la foi du rapport) — aucune référence à `d.client`/`d.tel`/`d.email`/`d.adresse` dans la fonction technicien
+- **Task 7 (révisée) : EN COURS au moment de ce checkpoint** — dispatchée (2 boutons d'impression "Fiche A4"/"Ticket 3 volets" + dispatch `printTicket(id, format)`, `format ∈ 'a4'|'3volets'`), fichiers `public/static/js/tickets.js`/`public/tickets.html` modifiés mais **pas encore commités** au moment de l'écriture de ce recovery prompt — NE PAS re-dispatcher cette tâche si elle est toujours en cours, vérifier d'abord `git status`/le ledger `.superpowers/sdd/progress.md`
+- Task 8 (deep-link technicien `tickets.html?open=<token>`) — pas commencée, dernière tâche du plan. Note : le QR du volet technicien (Task 6) encode déjà l'URL `/tickets.html?open=<token>` par anticipation — cette tâche doit câbler le frontend pour que ce lien soit réellement fonctionnel.
+
+## Convention de nommage SDD à respecter pour toute nouvelle tâche ad-hoc
+Depuis l'incident du 2026-07-18 (fichier `task-5-report.md` d'un autre chantier écrasé sans proposition), tout fichier `.superpowers/sdd/` créé pour une tâche hors plan écrit de ce chantier doit être namespacé `impression-ticket-task-N-brief.md`/`-report.md` — jamais la convention générique `task-N-*.md` qui collisionne entre chantiers différents réutilisant la même numérotation.
+
+## Prochaines étapes recommandées
+1. Vérifier l'état de Task 7 (probablement terminée entre-temps) → revue si pas encore faite
+2. Task 8 (deep-link technicien)
+3. Décider du timing de déploiement (question posée à l'utilisateur le 2026-07-18, réponse "no preference" — a dévié vers la clarification Task 6 sans trancher) — à retrancher une fois Task 7/8 terminées
+4. Archive locale du dossier webapp demandée par l'utilisateur (snapshot complet daté, même convention que `izigsm_v2.45.0_backup_2026-07-16.zip`) — **pas encore faite**, en attente du déploiement (l'utilisateur avait dit "après avoir déployé en production, créez une archive")
+5. Voir `todo.md`/`bugs.md`/`decisions.md` pour le détail complet des décisions et bugs de ce chantier
+
+## État git à la fin de ce checkpoint
+Task 6 commitée et pushée. Task 7 en cours, fichiers modifiés non commités au moment de ce checkpoint — le sous-agent Task 7 committera lui-même à la fin de son travail.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 31 — chantier impression ticket, Tasks 1-5/8 terminées et approuvées)
 
 ## Vue d'ensemble (checkpoint 31)
