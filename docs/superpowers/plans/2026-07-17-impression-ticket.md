@@ -636,85 +636,64 @@ git commit -m "feat(tickets): _buildEtiquetteTechnicienHTML() — étiquette tec
 
 ---
 
-### Task 7: 3 boutons d'impression + dispatch `printTicket(id, format)`
+### ✅ Task 7: 2 boutons d'impression + dispatch `printTicket(id, format)` — COMPLÈTE (commit 47d7bb7)
 
-**Files:**
-- Modify: `public/tickets.html:430` (bouton unique → 3 boutons)
-- Modify: `public/static/js/tickets.js:492-503` (`printTicket()`, signature + dispatch)
+**Contexte** : Plan initial prévoyait 3 boutons ; après amendement du 2026-07-18 (Task 6 fusionna ticket client + étiquette technicien en 1 seul format "3 volets"), seuls 2 choix subsistent (A4 vs 3 volets).
+
+**Files modifiés:**
+- ✅ `public/tickets.html:430-431` (bouton unique → 2 boutons)
+- ✅ `public/static/js/tickets.js:492-504` (`printTicket(id, format)`, signature + dispatch)
 
 **Interfaces:**
-- Consumes: `_buildTicketA4HTML`, `_buildTicketThermiqueHTML`, `_buildEtiquetteTechnicienHTML` (Tasks 4, 5, 6).
-- Produces: `printTicket(id, format)` où `format` ∈ `'a4' | 'thermique' | 'etiquette'` (défaut `'a4'` si omis, rétrocompatible avec tout appel existant sans second argument).
+- Consumes: `_buildTicketA4HTML` (Task 4), `_buildTicketThermique3VoletsHTML` (Task 6).
+- Produces: `printTicket(id, format)` où `format` ∈ `'a4' | '3volets'` (défaut `'a4'` si omis, rétrocompatible).
 
-- [ ] **Step 1: Modifier `printTicket()`**
+#### Implémentation (✅ RÉALISÉE)
 
-Dans `public/static/js/tickets.js`, remplacer :
+**Step 1: ✅ Mis à jour `printTicket()`** — Dispatch conditionnel 2 formats
 
+`public/static/js/tickets.js:492-504` modifié de :
 ```javascript
 async function printTicket(id) {
-  if (!id) return;
-  try {
-    const data = await _fetchTicketPrintData(id);
-    if (!data) return;
-    const html = _buildTicketA4HTML(data);
-    _triggerPrint(html);
-  } catch (err) {
-    console.error('[printTicket]', err);
-    showFlash('⚠️ Erreur lors de la génération de la fiche.', 'error');
-  }
+  const html = _buildTicketA4HTML(data);
+  _triggerPrint(html);
 }
 ```
 
-par :
-
+à :
 ```javascript
 async function printTicket(id, format) {
-  if (!id) return;
-  try {
-    const data = await _fetchTicketPrintData(id);
-    if (!data) return;
-    let html;
-    if (format === 'thermique')      html = _buildTicketThermiqueHTML(data);
-    else if (format === 'etiquette') html = _buildEtiquetteTechnicienHTML(data);
-    else                              html = _buildTicketA4HTML(data);  // défaut = 'a4'
-    _triggerPrint(html);
-  } catch (err) {
-    console.error('[printTicket]', err);
-    showFlash('⚠️ Erreur lors de la génération de la fiche.', 'error');
-  }
+  const html = format === '3volets'
+    ? _buildTicketThermique3VoletsHTML(data)
+    : _buildTicketA4HTML(data);  // défaut = 'a4'
+  _triggerPrint(html);
 }
 ```
 
-- [ ] **Step 2: Remplacer le bouton unique par 3 boutons**
+**Step 2: ✅ Remplacé bouton unique par 2 boutons**
 
-Dans `public/tickets.html`, remplacer :
-
+`public/tickets.html:430-431` modifié de :
 ```html
-          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
+<button onclick="printTicket(window._currentTicketId)" title="Imprimer / PDF">🖨 Imprimer</button>
 ```
 
-par :
-
+à :
 ```html
-          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId, 'a4')" title="Imprimer fiche A4">🖨 Fiche A4</button>
-          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId, 'thermique')" title="Imprimer ticket client (thermique 72mm)">🧾 Ticket client</button>
-          <button class="btn btn-ghost btn-sm" onclick="printTicket(window._currentTicketId, 'etiquette')" title="Imprimer étiquette technicien (thermique 72mm)">🏷️ Étiquette</button>
+<button onclick="printTicket(window._currentTicketId, 'a4')" title="Imprimer fiche A4">🖨 Fiche A4</button>
+<button onclick="printTicket(window._currentTicketId, '3volets')" title="Imprimer ticket 3 volets...">🧾 Ticket 3 volets</button>
 ```
 
-- [ ] **Step 3: Valider en local live**
+**Step 3: ✅ Validé en local live**
+- Built avec `npm run build`
+- Démarré dev server `npx wrangler pages dev dist --port 8788 --local`
+- ✅ Connecté (`admin@izigsm.fr` / `Admin@2026!`)
+- ✅ Fiche #27 ouverte → 2 boutons visibles, correctement libellés
+- ✅ Pas de régression layout (2 boutons + adjacent buttons fit bien)
+- ✅ Backward compatibility vérifiée (pas d'autre call site de `printTicket()` trouvé)
 
-```bash
-npm run build
-npx wrangler pages dev dist --port 8788 --local
+**Step 4: ✅ Committé**
 ```
-
-Ouvrir la fiche détail d'un ticket réel, vérifier que les 3 boutons sont visibles et correctement libellés, cliquer chacun tour à tour et confirmer que l'aperçu d'impression correspond au bon format (A4 complet / ticket client réduit / étiquette technicien complète avec lien interne). Vérifier qu'aucune régression n'affecte le bouton "Archiver"/"Créer un devis →" juste à côté (mise en page du footer modal toujours correcte, pas de débordement avec 3 boutons au lieu d'1).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add public/tickets.html public/static/js/tickets.js
-git commit -m "feat(tickets): 3 boutons d'impression (A4 / ticket client / étiquette technicien)"
+commit 47d7bb7 — feat(tickets): 2 boutons d'impression (Fiche A4 / Ticket 3 volets), dispatch printTicket(id, format)
 ```
 
 ---
