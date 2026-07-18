@@ -1,5 +1,24 @@
 # iziGSM — Bugs connus
 
+## Incident sécurité — identifiants visibles dans l'URL sur `/login` en production — CORRIGÉ le 2026-07-18
+
+Signalé directement par l'utilisateur : impossible de se connecter sur `https://repairdesk.fr`, et l'URL affichait en clair `https://repairdesk.fr/login?email=...&password=...` après soumission du formulaire — signe d'une soumission HTML native en `GET` au lieu du `fetch()` `POST` attendu.
+
+**Root cause confirmée** : le code source ET le HTML réellement servi en production (vérifiés identiques par fetch direct) utilisaient déjà correctement `e.preventDefault()` + `fetch('/api/auth/login', {method:'POST',...})` — **le bug n'était pas dans le code déployé**. La vraie cause : `/login` était précaché par le Service Worker en stratégie **Cache First** (`APP_SHELL`, `sw.js`), et `sw.js` lui-même servi avec `Cache-Control: max-age=14400` (4h). Le navigateur du client servait probablement une version mise en cache localement (possiblement une ancienne itération de la page, ou un état transitoire), sans jamais revalider auprès du serveur — un formulaire de connexion ne devrait **jamais** dépendre d'un cache local, une page hors-ligne n'a de toute façon aucune utilité pour s'authentifier.
+
+**Diagnostic confirmé** : l'utilisateur a testé en navigation privée (bypass total du cache local) → connexion fonctionnelle immédiatement. Confirme sans ambiguïté un problème de cache navigateur, pas de code serveur.
+
+**Fix appliqué** (`public/sw.js`) :
+- `/login` retiré de `APP_SHELL` (n'est plus précaché à l'installation du SW)
+- Nouvelle liste `NETWORK_ONLY_PATHS = ['/login', '/register', '/reset-password']` — ces 3 pages d'authentification sont désormais routées en **réseau uniquement** dans le handler `fetch` (avant la branche Cache First générique), jamais mises en cache, quel que soit le mécanisme (précache install, cache-first au runtime)
+- Fallback offline de `cacheFirst()` simplifié (l'ancien fallback `caches.match('/login')` n'a plus de sens, cette page n'étant plus jamais en cache)
+
+**Déployé et vérifié en prod le 2026-07-18** (`CACHE_VERSION` `v2.62`→`v2.63`, commit `40ac842`) : `sw.js` servi confirme `NETWORK_ONLY_PATHS` présent, `/login` absent de `APP_SHELL`. `GET /api/health` → 200.
+
+**Portée** : seules `/register` et `/reset-password` ont été ajoutées par précaution (même classe de risque — formulaire d'authentification sensible), même si le signalement initial ne concernait que `/login`. Pas de suite de tests automatisée pour `sw.js` dans ce projet (fichier statique, pas de couverture vitest) — validé par inspection directe du contenu servi en prod après déploiement, pas de tests unitaires dédiés.
+
+**Non résolu / limite connue** : le mécanisme exact par lequel le navigateur du client a fini par servir une version obsolète n'a pas été formellement reproduit (pas d'accès aux devtools du poste client) — le diagnostic repose sur la confirmation en navigation privée + l'analyse du code du Service Worker, pas sur une reproduction exacte du scénario de staleness. Le fix (retrait du cache pour ces 3 pages) élimine la classe de risque entière, indépendamment du mécanisme précis de staleness en cause.
+
 ## Deep-link technicien (`tickets.html?open=<token>`) ne fonctionne jamais pour un compte admin — NON CORRIGÉ, 2026-07-18
 
 Découvert en validant réellement Task 8 (chantier impression ticket) — le rapport de l'implémenteur affirmait le scénario "lien valide → ticket ouvert" comme validé, mais seulement "vérifié par lecture de code", jamais réellement exécuté en navigateur. Le contrôleur a refait le test en conditions réelles et trouvé un vrai bug.

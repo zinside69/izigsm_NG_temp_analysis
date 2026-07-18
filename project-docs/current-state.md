@@ -1,4 +1,8 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 33 — chantier impression ticket 8/8 tâches TERMINÉ et DÉPLOYÉ)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 34 — incident sécurité /login corrigé et déployé)
+
+## Incident sécurité — /login servait potentiellement une version obsolète en cache — CORRIGÉ le 2026-07-18
+Utilisateur a signalé une connexion impossible + identifiants visibles dans l'URL (`?email=...&password=...`) sur `repairdesk.fr/login`. Root cause : le code déployé était déjà correct (vérifié), mais `/login` était précaché par le Service Worker (Cache First) — un navigateur avec une version en cache localement pouvait rester bloqué dessus. Fix : `/login`/`/register`/`/reset-password` retirés de tout cache, routés réseau uniquement (`NETWORK_ONLY_PATHS`, `public/sw.js`). Déployé (`CACHE_VERSION v2.63`, commit `40ac842`), vérifié en prod. Détail complet dans `bugs.md`.
+
 
 ## Déploiement production — 2026-07-18 (chantier impression ticket, 8/8 tâches)
 Les 8 tâches du chantier impression ticket (+ 2 amendements hors plan, Tasks 4bis/4b) ont été déployées sur `repairdesk.fr`, sur confirmation explicite de l'utilisateur. Tests avant déploiement : 824/826 (2 échecs fuseau horaire pré-existants connus). `CACHE_VERSION` bumpée `v2.61` → `v2.62` (fichiers frontend touchés : `tickets.js`/`tickets.html`/`print.css`). Vérifié après déploiement : `GET /api/health` → 200, `sw.js` confirme `CACHE_VERSION izigsm-v2.62`. **2 bugs connus non corrigés, documentés dans `bugs.md`** : le deep-link technicien (`tickets.html?open=<token>`) ne fonctionne jamais pour un compte admin (route `GET /api/tickets` exige `boutique_id` sans exception admin), et une confusion connexe erreur/introuvable dans `_checkOpenDeepLink()` — les deux affectent maintenant la production, pas seulement le code. Archive locale du dossier webapp demandée par l'utilisateur, en attente.
