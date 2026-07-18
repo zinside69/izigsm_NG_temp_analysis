@@ -1,5 +1,27 @@
 # iziGSM — Bugs connus
 
+## `panne` toujours vide sur les fiches imprimables (A4 et ticket thermique) — CORRIGÉ le 2026-07-18
+
+`_fetchTicketPrintData()` (`tickets.js`) mappait `panne: t.description || t.panne_declaree || ''` — aucun de ces deux champs n'existe sur la réponse réelle de `GET /api/tickets/:id`, le vrai champ est `description_panne`. Résultat : la section "Panne signalée"/"Panne déclarée" était **vide sur toutes les fiches imprimées** (A4 et ticket 72mm), depuis l'introduction de ces builders. Trouvé par l'implémenteur de Task 5 (chantier impression ticket) en testant le contenu réel généré.
+
+**Fix appliqué** : `panne: t.description_panne || ''`.
+
+**Validé en local live** (2026-07-18) : ticket de test créé avec `description_panne: "PANNE_FIX_TEST — batterie ne charge plus"`, `_fetchTicketPrintData()` appelé en direct dans un vrai navigateur, valeur réelle confirmée retournée (avant fix : chaîne vide). Ticket/client de test supprimés après coup.
+
+## marque/modèle mal mappés sur la fiche imprimable — CORRIGÉ le 2026-07-18 (Task 4b)
+
+`_fetchTicketPrintData()` lisait `marque: t.marque || t.deviceType`/`modele: t.modele || t.deviceModel` — champs inexistants sur la réponse réelle (vrais champs : `appareil_marque`/`appareil_modele`). Marque/modèle apparaissaient vides sur les fiches. Trouvé par l'implémenteur de Task 4bis en préparant l'ajout d'IMEI/N° série, corrigé dans Task 4b (retravaillait déjà ces champs). Validé en réel : "Apple iPhone 13" confirmé affiché après fix.
+
+## Nom de boutique potentiellement incorrect sur la fiche imprimable — NON CORRIGÉ (mineur)
+
+`_fetchTicketPrintData()` récupère le profil boutique via `GET /api/boutiques` (premier élément du tableau, non filtré) plutôt que la boutique réelle du ticket. Pour un compte multi-boutiques, la fiche pourrait afficher le nom/adresse d'une autre boutique que celle qui a réellement pris en charge le ticket. Signalé par l'implémenteur de Task 5 (chantier impression ticket, 2026-07-18), pas encore corrigé — impact limité (comptes single-boutique très majoritaires actuellement), mais à traiter avant tout usage multi-boutiques actif sur ces fiches.
+
+## Écrasement accidentel de `.superpowers/sdd/task-5-report.md` par un sous-agent — INCIDENT PROCESS, 2026-07-18
+
+Un sous-agent implémenteur (Task 5, chantier impression ticket) a écrasé un fichier de rapport SDD existant sans proposer d'abord — violation de la règle CLAUDE.md "ne jamais écraser un fichier sans proposer". Cause racine : convention de nommage générique `task-N-brief.md`/`task-N-report.md` du skill `subagent-driven-development`, réutilisée sans namespace entre 2 chantiers différents (acompte structuré et impression ticket) qui numérotent tous les deux leurs tâches à partir de 1 — collision inévitable sur "Task 5". Le fichier écrasé appartenait à un chantier déjà terminé et déployé (route `POST /api/tickets/:id/acompte`), dont le contenu réel est intégralement préservé ailleurs (commit git, `progress.md`, `todo.md`) — **aucune information unique perdue**, mais le fichier lui-même (git-ignoré, jamais commité, pas de sauvegarde système/cloud disponible sur ce poste) n'est pas récupérable.
+
+**Non corrigé structurellement** : pour toute future tâche ad-hoc hors plan écrit sur ce repo, namespacer les fichiers `.superpowers/sdd/` (ex. `impression-ticket-task-N-*.md`) plutôt que d'utiliser la convention générique du skill telle quelle.
+
 ## Chantier acompte structuré — 2 bugs trouvés en revue et corrigés avant tout déploiement — 2026-07-17
 
 Trouvés pendant les revues de tâches / la revue finale de branche du chantier "acompte structuré" (`superpowers:subagent-driven-development`, 10 tâches, `docs/superpowers/plans/2026-07-16-acompte-structure.md`) — jamais déployés en prod, donc sans impact utilisateur réel, mais documentés comme le reste des bugs de ce fichier.

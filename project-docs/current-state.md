@@ -1,4 +1,18 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 30 — impression ticket EN COURS, 3/8 tâches ; acompte structuré DÉPLOYÉ)
+# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 31 — impression ticket Tasks 1-5/8 terminées et approuvées ; acompte structuré DÉPLOYÉ)
+
+## Checkpoint 31 — Tasks 3, 4, 4bis, 4b, 5 terminées et approuvées + 3 bugs préexistants corrigés, 2026-07-18
+
+Suite du checkpoint 30 (2/8 tâches). Reprise via `/init recover`. Chantier impression ticket avancé à 5/8 tâches (Task 6/7/8 restantes) :
+- Task 3 (helpers QR/EAN-13 + libs CDN) revue et approuvée
+- Task 4 (fiche A4 : retrait fuite notes internes + QR/EAN) revue, approuvée, fuite prouvée absente en conditions réelles (ticket de test avec marqueur distinctif)
+- **Amendement de plan (décision utilisateur)** : 2 PDF de référence fournis (`docs/test impression.pdf`, `docs/bon de réparation.pdf`, issus de l'ancien template abandonné `izigsm_app`) pour enrichir le contenu des fiches imprimables. Décision : garder le format thermique 72mm déjà validé (pas le format A4 3-copies de l'ancien template), reprendre le contenu (IMEI/N° série/adresse/acompte), sans signature (électronique déjà captée ailleurs), système visuel A4 indigo existant conservé (pas le bandeau bleu marine du modèle — classes CSS partagées avec factures/devis).
+- **Task 4bis** (backend, hors plan écrit) : `getTicketById()` expose désormais IMEI/N° série (JOIN `appareils`) + adresse client
+- **Task 4b** (hors plan écrit) : fiche A4 enrichie (N° série, adresse, section "Acompte versé" encadrée)
+- Task 5 (révisée) : `_buildTicketThermiqueHTML()` — ticket client 72mm, contenu inspiré de l'ancien template, sans signature
+- **3 bugs préexistants corrigés au passage** : `panne` toujours vide sur les fiches imprimables (mauvais champ API), marque/modèle mal mappés (idem), commentaire JSDoc obsolète
+- **Incident process** : sous-agent Task 5 a écrasé `.superpowers/sdd/task-5-report.md` (contenu d'un chantier antérieur déjà documenté ailleurs, non tracké git, non récupérable) sans proposer avant — collision de naming générique `task-N-*.md` entre chantiers. À corriger : namespacer les futurs fichiers ad-hoc hors plan écrit.
+- Rien de ce chantier n'est encore déployé en prod. Voir `project-docs/recovery-prompt.md` (checkpoint 31) pour le détail complet et les prochaines étapes.
+
 
 ## Déploiement production — 2026-07-18 (acompte structuré, checkpoint 29)
 Les 10 tâches + revue finale du chantier acompte structuré (checkpoint 29) ont été déployées sur `repairdesk.fr` (`npm run build` → `npx wrangler pages deploy dist --project-name izigsm`), sur confirmation explicite de l'utilisateur. Tests avant déploiement : 824/826 (2 échecs fuseau horaire pré-existants connus, `computeFin()`, sans impact prod). Vérifié après déploiement : `GET /api/health` → 200, `sw.js` confirme `CACHE_VERSION izigsm-v2.61`. **HEAD au moment du déploiement incluait aussi les Tasks 1-3 du chantier impression ticket** (déjà commitées sur `main`, revues/approuvées, code additif et inerte — recherche ticket par token/EAN-13 + helpers QR/EAN-13 non encore branchés à aucune UI) — signalé à l'utilisateur avant déploiement, pas d'objection. Plus de décalage `origin/main`/prod pour l'acompte structuré.

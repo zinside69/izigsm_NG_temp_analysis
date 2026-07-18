@@ -123,3 +123,31 @@ Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attach
 **Pourquoi** : `factures`/`avoirs` sont sous contrainte légale NF525 (numérotation séquentielle sans trou, verrouillage post-émission). Une migration de schéma sur ces tables mérite une validation explicite et une session dédiée, pas un fix rapide en clôture de session — contrairement au fix `technicien_id` (pure logique applicative, pas de migration de schéma, risque contenu).
 
 **Comment appliquer** : ne pas traiter cette migration comme un fix mineur au détour d'une autre session — prévoir du temps dédié, tester en local avant toute application prod, vérifier qu'aucune donnée existante ne viole la nouvelle contrainte composite. Détail complet et preuves dans `bugs.md`.
+
+## 2026-07-18 — Amendement du chantier impression ticket : contenu inspiré de l'ancien template, format thermique conservé
+
+**Contexte** : l'utilisateur a fourni 2 PDF de référence (`docs/test impression.pdf`, `docs/bon de réparation.pdf`), retrouvés comme provenant de l'ancien template `izigsm_app/frontend/app/Views/pages/reparations/print-prise-en-charge.php` (app microservices abandonnée) — format POS 80mm/A4, 3 exemplaires découpés (client×2 + atelier), avec signature manuscrite.
+
+**Décision** : garder le format thermique 72mm déjà validé par le plan écrit (`docs/superpowers/plans/2026-07-17-impression-ticket.md`, Task 5) — pas le format A4 3-copies de l'ancien template. Reprendre le CONTENU (IMEI, N° série, adresse client, section acompte) mais **sans signature** (le format 72mm reste trop étroit, et une signature électronique est déjà captée ailleurs dans l'app — ne pas dupliquer). Une seule copie par ticket (pas les 3 exemplaires découpés).
+
+**Pourquoi** : le format 72mm avait déjà été conçu et approuvé dans le plan écrit du 2026-07-17 avant que ces PDF de référence n'apparaissent — les garder évite de recommencer une conception déjà validée, tout en enrichissant fidèlement le contenu utile du vieux modèle.
+
+## 2026-07-18 — Fiche A4 : système visuel indigo conservé, pas le bandeau bleu marine du modèle
+
+**Décision** : le contenu manquant du modèle (`bon de réparation.pdf`) a été ajouté à la fiche A4 (N° série, adresse, section acompte), mais le système visuel existant (header indigo `#6366f1`, classes `.print-header`/`.print-doc-title`/`.print-party-box`) a été **conservé tel quel**, pas remplacé par le bandeau bleu marine du modèle.
+
+**Pourquoi** : ces classes CSS sont partagées avec les autres documents imprimables de l'app (`factures.js`, devis) — les modifier aurait un impact visuel sur tous les documents imprimés, pas seulement les tickets. Un vrai restyle visuel complet (si souhaité) mérite une décision explicite séparée, pas un effet de bord d'un ajout de contenu.
+
+**Non encore validé explicitement par l'utilisateur** — signalé en cours de session, pas d'objection reçue à ce jour. À reconfirmer si un restyle visuel est demandé plus tard.
+
+## 2026-07-18 — Texte légal "Acompte versé" volontairement différent du vieux modèle PDF
+
+**Décision** : la section "Acompte versé" des fiches imprimables (A4 et 72mm) affiche un texte légal reflétant le fonctionnement RÉEL du chantier acompte structuré déjà implémenté (déduction automatique à la facturation finale, avoir automatique en cas d'annulation) — **pas** le texte de l'ancien modèle PDF (qui décrit un processus manuel : acompte conservé en cas de refus de devis, recyclage de l'appareil après 4 semaines de non-récupération).
+
+**Pourquoi** : aucune des mentions du vieux modèle (conservation manuelle, recyclage après délai) ne correspond à une règle réellement implémentée dans ce système — les reproduire aurait promis un comportement inexistant aux clients signant/lisant ce document.
+
+## 2026-07-18 — Incident : collision de naming SDD entre chantiers, fichier écrasé sans proposition
+
+**Constat** : le skill `subagent-driven-development` nomme les briefs/rapports de tâches `task-N-brief.md`/`task-N-report.md` de façon générique dans `.superpowers/sdd/`, sans namespace par chantier/plan. Deux chantiers différents (acompte structuré, impression ticket) numérotent chacun leurs tâches à partir de 1 — collision inévitable. Un sous-agent a écrasé `task-5-report.md` (contenu d'un chantier terminé, sans lien) sans proposer d'abord, violant la règle CLAUDE.md de non-écrasement. Fichier non récupérable (git-ignoré), mais aucune information unique perdue (contenu dupliqué ailleurs).
+
+**Décision** : pour toute future tâche ad-hoc de ce type (hors plan écrit, comme les Tasks 4bis/4b de ce chantier), namespacer les fichiers créés dans `.superpowers/sdd/` avec le nom du chantier (ex. `impression-ticket-task-N-*.md`) plutôt que la convention générique du skill. Voir `bugs.md` pour le détail complet de l'incident.

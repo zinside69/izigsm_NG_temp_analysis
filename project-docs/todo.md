@@ -1,5 +1,15 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## Chantier impression ticket — Tasks 1-5/8 terminées et approuvées (checkpoint 31, 2026-07-18)
+Voir `recovery-prompt.md` (checkpoint 31) pour le détail complet des 5 tâches + 2 tâches d'amendement (4bis, 4b).
+- [ ] Task 6 — étiquette technicien 72mm : **à revalider le contenu exact avec l'utilisateur avant de dispatcher** (pas encore décidé formellement, contrairement à Task 5)
+- [ ] Task 7 — 3 boutons d'impression + dispatch `printTicket(id, format)` (dépend de Task 6)
+- [ ] Task 8 — deep-link technicien `tickets.html?open=<token>`
+- [ ] Décider si un restyle visuel complet de la fiche A4 (bandeau bleu marine façon `bon de réparation.pdf`) est souhaité, séparément du contenu déjà ajouté (décision actuelle : système visuel indigo existant conservé)
+- [ ] Namespacer les futurs fichiers `.superpowers/sdd/task-N-*.md` créés hors plan écrit (ex. `impression-ticket-task-N-*.md`) — collision de naming générique a causé l'écrasement d'un rapport d'un chantier précédent (non récupérable, mais sans perte d'information unique)
+- [ ] Bug mineur non bloquant : nom de boutique sur fiche imprimée lit la 1ère boutique de `GET /api/boutiques` non filtrée, pas forcément celle du ticket
+- [ ] Déploiement groupé du chantier impression ticket à prévoir après Task 8 (rien déployé pour l'instant, seul l'acompte structuré l'est)
+
 ## Bug étendu — pattern `r.success`/`r.data` cassé, ampleur à confirmer (découvert le 2026-07-16, PAS traité)
 En corrigeant `devis.js` (3 fonctions, voir `bugs.md`), un balayage rapide a montré le même pattern cassé (`r.success`/`r.data` lu directement sur le retour d'`apiGet`/`apiPost`/`apiPut`, au lieu de `r.data.success`/`r.data.data`) dans **`agenda.js`, `sav.js` et `stats.html`** — au moins 17 endpoints backend renvoyant `{success, data}` imbriqué sont potentiellement concernés côté frontend (comptage rapide des routes, pas un audit exhaustif fonction par fonction). Même classe de bug que `settings.html` (checkpoint 23) et `devis.js` (ce jour) : silencieux, aucune erreur visible, juste des données jamais affichées ou des stats à zéro en permanence.
 - [ ] Auditer `agenda.js` fonction par fonction (KPIs, RDV, clients/tickets cache, détail RDV) — page Agenda potentiellement très impactée (plusieurs fonctions concernées d'après le grep initial)

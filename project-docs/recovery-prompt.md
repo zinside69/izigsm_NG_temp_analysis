@@ -1,3 +1,50 @@
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 31 — chantier impression ticket, Tasks 1-5/8 terminées et approuvées)
+
+## Vue d'ensemble (checkpoint 31)
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour centres de réparation GSM. Repo : `izigsm/webapp/` (racine git), remote GitHub `zinside69/izigsm_NG_temp_analysis`, branche `main`. Architecture inchangée depuis checkpoint 25 (Ports & Adapters terminé, `lib/timezone.ts` généralisé). Deux chantiers traités depuis checkpoint 25 :
+
+**Chantier acompte structuré (checkpoint 29) : DÉPLOYÉ le 2026-07-18.** 10/10 tâches + revue finale (déjà terminées le 2026-07-17), buildées et déployées sur confirmation explicite utilisateur (`repairdesk.fr`, `sw.js` confirme `CACHE_VERSION izigsm-v2.61`). Tests 824/826 avant déploiement (2 échecs fuseau horaire pré-existants). HEAD au déploiement incluait aussi les Tasks 1-3 (alors en cours) du chantier impression ticket — code additif/inerte, revues et approuvées, sans risque.
+
+**Chantier impression ticket (checkpoint 30→31) : Tasks 1-5 terminées et approuvées, mode subagent-driven-development, directement sur `main`.**
+- Task 1 : `_fetchTicketPrintData()` expose l'ID numérique (commit `a9bf783`)
+- Task 2 : `listTickets()` reconnaît token/EAN-13 en recherche, additif (commit `236f8c2`)
+- Task 3 : helpers `_renderQrDataUrl()`/`_renderEan13DataUrl()` + libs CDN (commit `3408f62`)
+- Task 4 : fiche A4 — retrait fuite notes internes + QR/EAN (commit `9f19e31`, + fix JSDoc `356c073`)
+- **Task 4bis (amendement hors plan écrit)** : backend expose IMEI/N° série (JOIN `appareils` via `ticket.appareil_id`)/adresse client (commit `c62c1a2`)
+- **Task 4b (amendement hors plan écrit)** : contenu de la fiche A4 enrichi (N° série, adresse, section "Acompte versé" encadrée) — **système visuel indigo existant conservé** (pas le bandeau bleu marine du modèle de référence, pour ne pas impacter factures/devis qui partagent les mêmes classes CSS) (commit `165c57b`)
+- Task 5 (révisée) : `_buildTicketThermiqueHTML()` — ticket client 72mm, contenu repris de l'ancien template `izigsm_app` (une seule copie, sans zone de signature — signature électronique déjà captée ailleurs) (commit `88afdc9`)
+- Fix hors-plan : bug préexistant `panne` toujours vide sur les fiches imprimables (`t.description`/`t.panne_declaree` inexistants, vrai champ `description_panne`) — corrigé et validé en réel (commit `b351132`)
+
+## Décisions importantes de cette session (2026-07-18)
+1. **Amendement de plan** : l'utilisateur a fourni 2 PDF de référence (`docs/test impression.pdf`, `docs/bon de réparation.pdf`, issus de l'ancien template `izigsm_app/frontend/app/Views/pages/reparations/print-prise-en-charge.php`, POS 80mm/A4, 3 exemplaires découpés). Décision : garder le format thermique 72mm déjà validé pour Task 5 (pas le format A4 3-copies de l'ancien template), reprendre le CONTENU (IMEI/N° série/adresse/acompte), sans signature.
+2. **Système visuel A4 conservé** (indigo, classes partagées avec factures/devis) plutôt que le bandeau bleu marine du modèle — à rediscuter avec l'utilisateur si un vrai restyle est souhaité plus tard (pas encore tranché explicitement).
+3. **Texte légal acompte** volontairement différent du vieux modèle PDF (déduction/avoir automatiques déjà implémentés vs process manuel jamais implémenté par ce système) — ne pas promettre un comportement inexistant.
+4. **Incident process** : un sous-agent (Task 5) a écrasé `.superpowers/sdd/task-5-report.md` (contenu d'un chantier précédent déjà terminé/documenté ailleurs, non tracké git) sans proposer avant — violation de la règle CLAUDE.md "jamais écraser sans proposer". Cause : naming générique `task-N-brief/report.md` réutilisé sans namespace entre chantiers différents partageant la même numérotation. **Non récupérable** (fichier git-ignoré, pas de sauvegarde système/cloud disponible), mais aucune information unique perdue. **À corriger pour la suite** : namespacer les futurs fichiers ad-hoc (ex. `impression-ticket-task-N-*.md`) avant de dispatcher d'autres sous-agents sur des tâches hors plan écrit.
+
+## Bugs préexistants trouvés et corrigés pendant ce chantier (sans lien avec le chantier lui-même)
+- `panne` vide sur les fiches (corrigé, voir ci-dessus)
+- marque/modèle lisaient les mauvaises clés API dans `_fetchTicketPrintData()` (corrigé en Task 4b)
+- Commentaire JSDoc obsolète référençant l'ancien nom de fonction (corrigé en Task 4)
+
+## Bugs connus non corrigés (mineurs, notés par les reviewers, hors scope)
+- Nom de boutique sur la fiche imprimée : lit la 1ère boutique de `GET /api/boutiques` (non filtrée), pas forcément celle du ticket — signalé par l'implémenteur Task 5, pas encore corrigé
+- Ambiguïté HT/TTC non explicitée sur le montant "Acompte versé" affiché (le champ source est `total_ttc`)
+- LEFT JOIN `facture_acompte` dans `getTicketById()` sans `ORDER BY`/`LIMIT 1` — comportement non défini si un ticket avait un jour plusieurs factures d'acompte (anomalie de données théorique)
+- Check unicité acompte non atomique (déjà documenté depuis le chantier acompte structuré)
+
+## Prochaines étapes recommandées
+1. **Task 6** (étiquette technicien 72mm à coller sur l'appareil) — à revalider le contenu exact avec l'utilisateur avant de dispatcher (la copie "atelier" de l'ancien template — appareil+panne+QR standalone, sans infos client — est un bon point de départ conceptuel, pas encore décidé formellement)
+2. **Task 7** (3 boutons d'impression + dispatch `printTicket(id, format)`) — dépend de Task 6
+3. **Task 8** (deep-link technicien `tickets.html?open=<token>`) — dernière tâche du plan
+4. Décider si un vrai restyle visuel A4 (bandeau bleu marine façon `bon de réparation.pdf`) est souhaité, séparément du contenu déjà ajouté
+5. Corriger si prioritaire : nom de boutique sur fiche imprimée (bug mineur non bloquant)
+6. Rien de ce chantier n'est encore déployé en prod (seul l'acompte structuré l'est) — déploiement groupé à prévoir après Task 8, sur confirmation explicite
+
+## État git à la fin de cette session
+Tout commité sur `main` local. **Pas encore pushé au moment de l'écriture de ce recovery prompt** — à vérifier au prochain `git status`/`git push`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-16 (checkpoint 28, plan d'implémentation acompte écrit — RIEN CODÉ)
 
 ## Vue d'ensemble (checkpoint 28)
