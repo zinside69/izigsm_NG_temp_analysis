@@ -793,6 +793,99 @@ function _buildTicketA4HTML(d) {
     </div>`;
 }
 
+/**
+ * Construit le HTML du ticket client au format thermique 72mm (à emporter par
+ * le client à la prise en charge) — réutilise les classes .print-ticket* de
+ * print.css. Contenu inspiré de l'ancien template izigsm_app (exemplaire
+ * client du bon de prise en charge), adapté au schéma actuel : pas de zone de
+ * signature (papier trop étroit, remplacée par la signature électronique déjà
+ * captée ailleurs dans l'app — voir docs/superpowers/specs/2026-07-17-impression-ticket-design.md
+ * et la décision utilisateur du 2026-07-18 dans .superpowers/sdd/progress.md).
+ * @param {object} d - Données normalisées retournées par _fetchTicketPrintData
+ * @returns {string} HTML complet prêt à être injecté dans #print-root
+ */
+function _buildTicketThermiqueHTML(d) {
+  const prixHTML = d.prix > 0 ? _money(d.prix) : 'Sur devis';
+  const qrDataUrl  = d.tracking ? _renderQrDataUrl(window.location.origin + '/suivi/' + d.tracking) : null;
+  const eanDataUrl = _renderEan13DataUrl(d.id);
+
+  // État constaté au dépôt — même logique de parsing que _buildTicketA4HTML
+  // (duplication volontaire entre builders de format différent, pattern déjà
+  // établi dans ce fichier plutôt qu'une abstraction prématurée).
+  const ETAT_LABELS = {
+    rayures: 'Rayures', ecran_fissure: 'Écran fissuré',
+    degats_eaux: 'Dégâts eaux', boitier_endommage: 'Boîtier endommagé',
+  };
+  let etatParsed = {};
+  try { etatParsed = d.etatAppareil ? JSON.parse(d.etatAppareil) : {}; } catch {}
+  const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
+
+  return `
+    <div id="print-root">
+      <link rel="stylesheet" href="/static/css/print.css">
+      <div class="print-ticket">
+        <div class="print-ticket-header">
+          <div class="shop-name">${esc(d.boutique.nom)}</div>
+          ${d.boutique.telephone ? `<div class="shop-sub">${esc(d.boutique.telephone)}</div>` : ''}
+        </div>
+
+        <table class="print-ticket-lines">
+          <tr><td>N° ticket</td><td class="txt-right"><strong>${esc(d.numero)}</strong></td></tr>
+          <tr><td>Date</td><td class="txt-right">${_fmtDateTime(d.dateEm)}</td></tr>
+        </table>
+
+        <hr class="print-ticket-sep">
+
+        <div style="font-size:8.5pt;">
+          <strong>${esc(d.client)}</strong><br>
+          ${d.tel     ? esc(d.tel)     + '<br>' : ''}
+          ${d.email   ? esc(d.email)   + '<br>' : ''}
+          ${d.adresse ? esc(d.adresse)          : ''}
+        </div>
+
+        <hr class="print-ticket-sep">
+
+        <div style="font-size:8.5pt;">
+          <strong>${esc(d.marque)} ${esc(d.modele)}</strong><br>
+          ${d.imei        ? 'IMEI : ' + esc(d.imei) + '<br>' : ''}
+          ${d.numeroSerie ? 'N° Série : ' + esc(d.numeroSerie) + '<br>' : ''}
+          ${etatLines.length ? 'État : ' + etatLines.map(esc).join(', ') : ''}
+        </div>
+
+        <hr class="print-ticket-sep">
+
+        <div style="font-size:8.5pt;">
+          <strong>Panne signalée :</strong><br>
+          ${esc(d.panne) || '<em>Non renseignée</em>'}
+        </div>
+
+        <div class="print-ticket-total">
+          <span>Estimation</span><span>${prixHTML}</span>
+        </div>
+        <div style="font-size:7pt;color:#555;text-align:right;">(sous réserve de diagnostic)</div>
+
+        ${d.acompteMontant > 0 ? `
+        <hr class="print-ticket-sep">
+        <div style="border:1px solid #000;padding:2mm;font-size:8pt;">
+          <strong>Acompte versé : ${_money(d.acompteMontant)}</strong><br>
+          Déduit automatiquement à la facturation finale.
+        </div>` : ''}
+
+        <hr class="print-ticket-sep">
+
+        <div style="text-align:center;">
+          ${qrDataUrl  ? `<img src="${qrDataUrl}" alt="QR suivi" style="width:26mm;height:26mm;">` : ''}
+          ${eanDataUrl ? `<img src="${eanDataUrl}" alt="Code-barre" style="width:60mm;margin-top:2mm;">` : ''}
+        </div>
+
+        <div class="print-ticket-footer">
+          ${d.tracking ? `Suivi : ${window.location.origin}/suivi/${esc(d.tracking)}<br>` : ''}
+          Merci de votre confiance !
+        </div>
+      </div>
+    </div>`;
+}
+
 // _fmtDateTime() (avec heure) est défini dans app.js (Principe P2 — centralisation)
 
 window.printTicket = printTicket;
