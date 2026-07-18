@@ -409,11 +409,18 @@ export async function getTicketById(
   // de 20%) à cause de l'arrondi déjà appliqué sur les totaux stockés. Exposé pour
   // que tickets.js n'ait plus à approximer un taux fixe 20% lors de la génération
   // de l'avoir sur annulation (changeStatus()).
+  // appareil_imei/appareil_numero_serie : LEFT JOIN (pas JOIN) — t.appareil_id est
+  // NULL quand le ticket a été créé avec marque/modèle en texte libre, sans
+  // appareil enregistré en base ; dans ce cas ces 2 champs restent null, ce qui
+  // est un comportement normal (pas une erreur). Task 4bis, voir
+  // .superpowers/sdd/task-4bis-brief.md — champs consommés par la fiche imprimable
+  // (Task 4b/5) pour afficher IMEI/N° série/adresse comme le modèle de référence.
   const ticket = await db.get<any>(`
     SELECT t.*,
            c.prenom || ' ' || c.nom   AS client_nom,
            c.email                    AS client_email,
            c.telephone                AS client_telephone,
+           c.adresse                  AS client_adresse,
            u.prenom || ' ' || u.nom   AS technicien_nom,
            d.id                       AS devis_id,
            d.statut                   AS devis_statut,
@@ -422,7 +429,9 @@ export async function getTicketById(
            fa.total_ttc               AS facture_acompte_montant,
            fa.total_ht                AS facture_acompte_ht,
            (SELECT tva_taux FROM lignes_document
-              WHERE document_type = 'facture' AND document_id = fa.id LIMIT 1) AS facture_acompte_tva_taux
+              WHERE document_type = 'facture' AND document_id = fa.id LIMIT 1) AS facture_acompte_tva_taux,
+           ap.imei                    AS appareil_imei,
+           ap.numero_serie            AS appareil_numero_serie
     FROM   tickets t
     JOIN   clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.technicien_id
@@ -430,6 +439,7 @@ export async function getTicketById(
       SELECT id FROM devis WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1
     )
     LEFT JOIN factures fa ON fa.type_facture = 'acompte' AND (fa.ticket_id = t.id OR fa.devis_id = d.id)
+    LEFT JOIN appareils ap ON ap.id = t.appareil_id
     WHERE  t.id = ? AND t.actif = 1
   `, [id])
 

@@ -544,7 +544,16 @@ async function _fetchTicketPrintData(id) {
     email:      t.client_email     || t.email      || '',
     marque:     t.marque    || t.deviceType  || '',
     modele:     t.modele    || t.deviceModel || '',
-    imei:       t.imei      || '',
+    // imei/numeroSerie : lus sur appareil_imei/appareil_numero_serie (jointure
+    // LEFT JOIN appareils côté getTicketById — l'ancienne ligne lisait t.imei,
+    // un champ qui n'a jamais existé sur `tickets`, donc toujours vide ; corrigé
+    // ici pour pointer vers la vraie source. Restent '' si le ticket n'a pas
+    // d'appareil enregistré (appareil_id NULL, marque/modèle texte libre) — cas
+    // normal, pas une erreur. adresse : ajoutée pour la fiche imprimable
+    // (Task 4b/5), voir .superpowers/sdd/task-4bis-brief.md.
+    imei:        t.appareil_imei         || '',
+    numeroSerie: t.appareil_numero_serie || '',
+    adresse:     t.client_adresse        || '',
     panne:      t.description      || t.panne_declaree || '',
     notes:      t.notes_internes   || t.notes          || '',
     prix:       parseFloat(t.prix_estime || t.prix_reparation || 0),
