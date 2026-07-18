@@ -10,7 +10,7 @@
  * Versioning : incrémenter CACHE_VERSION à chaque déploiement majeur
  */
 
-const CACHE_VERSION  = 'izigsm-v2.62'
+const CACHE_VERSION  = 'izigsm-v2.63'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`
@@ -26,7 +26,6 @@ const APP_SHELL = [
   '/stock',
   '/sav',
   '/settings',
-  '/login',
   '/static/css/main.css',
   '/static/css/print.css',
   '/static/js/app.js',
@@ -52,6 +51,16 @@ const API_CACHE_PATTERNS = [
   /\/api\/services/,
   /\/api\/produits/,
 ]
+
+// ─── Pages d'authentification : jamais en cache ──────────────────────────────
+// Un identifiant/mot de passe stocké dans le cache HTTP du navigateur (via
+// Cache First) risque de rester servi tel quel même après correction d'un bug
+// de soumission de formulaire — incident réel du 2026-07-18 (page /login mise
+// en cache signalée par un client comme responsable d'une soumission GET avec
+// identifiants visibles dans l'URL, alors que le code déployé était déjà
+// correct). Ces pages n'ont de toute façon aucune valeur hors-ligne (on ne
+// peut pas s'authentifier sans réseau) — toujours réseau, jamais de cache.
+const NETWORK_ONLY_PATHS = ['/login', '/register', '/reset-password']
 
 // ─── Install : précache App Shell ────────────────────────────────────────────
 self.addEventListener('install', event => {
@@ -100,6 +109,12 @@ self.addEventListener('fetch', event => {
   // ── 1. Requêtes API : Network First + cache court ──────────────────────────
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstApi(request, url))
+    return
+  }
+
+  // ── 1b. Pages d'authentification : toujours réseau, jamais de cache ────────
+  if (NETWORK_ONLY_PATHS.includes(url.pathname)) {
+    event.respondWith(fetch(request))
     return
   }
 
@@ -153,9 +168,10 @@ async function cacheFirst(request) {
     }
     return response
   } catch {
-    // Offline et pas en cache → retourner la page login comme fallback
-    const fallback = await caches.match('/login')
-    return fallback || new Response('Hors ligne', { status: 503 })
+    // Offline et pas en cache → 503 générique (/login n'est plus caché
+    // depuis 2026-07-18, voir NETWORK_ONLY_PATHS — une page d'auth hors
+    // ligne ne servirait de toute façon à rien, pas de fallback utile ici)
+    return new Response('Hors ligne', { status: 503 })
   }
 }
 
