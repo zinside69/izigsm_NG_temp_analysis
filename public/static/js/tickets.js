@@ -781,21 +781,24 @@ function _buildTicketA4HTML(d) {
         </tbody>
       </table>
 
-      <!-- Acompte versé (Task 4b) : n'apparaît que si une facture d'acompte existe
-           (chantier acompte structuré). Le texte décrit le fonctionnement RÉEL déjà
-           implémenté (déduction automatique à convertirDevis(), avoir automatique à
-           l'annulation — voir docs/superpowers/specs/2026-07-16-acompte-structure-design.md),
-           volontairement différent du vieux modèle PDF fourni comme référence : celui-ci
-           décrivait un processus manuel (conservation de l'acompte en cas de refus,
-           recyclage après 4 semaines) qui ne correspond à aucune règle réellement
-           implémentée dans ce système — le reproduire promettrait un comportement
-           inexistant. -->
+      <!-- Acompte versé (Task 4b, texte légal révisé le 2026-07-18 sur demande
+           explicite de l'utilisateur) : n'apparaît que si une facture d'acompte
+           existe (chantier acompte structuré). Les 2 premières mentions
+           reflètent un comportement réellement déjà vrai aujourd'hui même sans
+           code dédié : un devis refusé ne déclenche aucune reprise automatique
+           de l'acompte (vérifié dans devisService.ts), donc il reste de facto
+           acquis à l'atelier — la 3e mention (recyclage après 4 semaines) est
+           une politique commerciale/légale à appliquer manuellement, pas un
+           mécanisme automatisé dans ce système. Le cas d'annulation de prise
+           en charge (avoir automatique déjà implémenté) est volontairement
+           absent de ce texte sur demande explicite de l'utilisateur. -->
       ${d.acompteMontant > 0 ? `
       <div class="print-acompte-box print-no-break">
         <div class="print-acompte-title">Acompte versé : ${_money(d.acompteMontant)}</div>
         <ul class="print-acompte-mentions">
-          <li>Facture d'acompte n° ${esc(d.acompteNumero)} — déduit automatiquement du montant total à la facturation finale.</li>
-          <li>En cas d'annulation avec acompte perçu, un avoir est émis automatiquement (valable 60 jours).</li>
+          <li>Déduit du total si devis accepté.</li>
+          <li>Conservé par l'atelier si devis refusé par le client (frais diagnostic).</li>
+          <li>Si appareil non récupéré sous 4 semaines après notification → recyclage possible selon législation.</li>
         </ul>
       </div>` : ''}
 
@@ -884,8 +887,8 @@ function _buildTicketVoletClientHTML(d) {
 
         <div style="font-size:8.5pt;">
           <strong>${esc(d.marque)} ${esc(d.modele)}</strong><br>
-          ${d.imei        ? 'IMEI : ' + esc(d.imei) + '<br>' : ''}
-          ${d.numeroSerie ? 'N° Série : ' + esc(d.numeroSerie) + '<br>' : ''}
+          IMEI : ${d.imei ? esc(d.imei) : '—'}<br>
+          N° Série : ${d.numeroSerie ? esc(d.numeroSerie) : '—'}<br>
           ${etatLines.length ? 'État : ' + etatLines.map(esc).join(', ') : ''}
         </div>
 
@@ -903,9 +906,11 @@ function _buildTicketVoletClientHTML(d) {
 
         ${d.acompteMontant > 0 ? `
         <hr class="print-ticket-sep">
-        <div style="border:1px solid #000;padding:2mm;font-size:8pt;">
+        <div style="border:1px solid #000;padding:2mm;font-size:7.5pt;">
           <strong>Acompte versé : ${_money(d.acompteMontant)}</strong><br>
-          Déduit automatiquement à la facturation finale.
+          • Déduit du total si devis accepté.<br>
+          • Conservé par l'atelier si devis refusé (frais diagnostic).<br>
+          • Non récupéré sous 4 semaines → recyclage possible selon législation.
         </div>` : ''}
 
         <hr class="print-ticket-sep">
@@ -963,8 +968,8 @@ function _buildTicketVoletTechnicienHTML(d) {
 
         <div style="font-size:8.5pt;">
           <strong>${esc(d.marque)} ${esc(d.modele)}</strong><br>
-          ${d.imei        ? 'IMEI : ' + esc(d.imei) + '<br>' : ''}
-          ${d.numeroSerie ? 'N° Série : ' + esc(d.numeroSerie) + '<br>' : ''}
+          IMEI : ${d.imei ? esc(d.imei) : '—'}<br>
+          N° Série : ${d.numeroSerie ? esc(d.numeroSerie) : '—'}<br>
           ${etatLines.length ? 'État : ' + etatLines.map(esc).join(', ') : ''}
         </div>
 
