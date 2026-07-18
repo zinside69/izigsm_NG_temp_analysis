@@ -1,3 +1,33 @@
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 35 — chantier impression ticket 8/8 déployé, incident NoScript résolu, contenu amendé et déployé)
+
+## Vue d'ensemble (checkpoint 35)
+Suite des checkpoints 32-34. Trois événements majeurs depuis :
+
+**1. Chantier impression ticket terminé et déployé (8/8 tâches)** — Task 7 (2 boutons d'impression, dispatch `printTicket(id, format)`) et Task 8 (deep-link technicien `tickets.html?open=<token>`) terminées et approuvées après le checkpoint 32. Task 8 a révélé un vrai bug (pas juste un défaut de preuve cette fois) : le deep-link ne fonctionne jamais pour un compte admin (`boutique_id: null`) — `GET /api/tickets` exige `boutique_id` sans exception admin. Documenté dans `bugs.md`, non corrigé (fix nécessite de toucher la route partagée, hors scope, décision utilisateur de reporter). Déployé le 2026-07-18 (`CACHE_VERSION v2.62`, commit non pushé initialement puis rattrapé).
+
+**2. Incident client — /login cassé sur Chrome — VRAIE CAUSE : extension NoScript, pas l'app.** Utilisateur a signalé une connexion impossible + identifiants visibles dans l'URL sur `repairdesk.fr/login`, puis un dashboard vide après un premier correctif partiel. Fausse piste explorée d'abord (Service Worker servant `/login` en cache obsolète — fix appliqué quand même, `NETWORK_ONLY_PATHS` dans `sw.js`, légitime en soi mais pas la vraie cause). **Vraie cause trouvée en investiguant en direct sur le poste de l'utilisateur avec Claude in Chrome** : l'extension NoScript bloquait l'exécution JS sur des domaines non approuvés (`repairdesk.fr`, `jsdelivr.net`, `accounts.google.com`, `gstatic.com`). Résolu par l'utilisateur en les ajoutant aux domaines de confiance NoScript. Leçon méthodologique documentée dans `bugs.md` : un test qui "confirme" une hypothèse (navigation privée → ça marche) peut avoir une autre cause quand plusieurs facteurs changent simultanément (ici cache local ET extensions désactivées en navigation privée).
+
+**3. Amendement contenu ticket 3 volets + fiche A4 — DÉPLOYÉ.** Suite comparaison directe demandée par l'utilisateur avec `docs/bon de réparation.pdf` et `izigsm_app/frontend/app/Views/pages/reparations/print-prise-en-charge.php` (ancien système abandonné) :
+- IMEI/N° Série désormais **toujours affichés** (fallback "—" si vide) sur les 2 volets thermiques (client + technicien) — avant : ligne masquée si champ vide
+- Texte légal acompte remplacé par **3 mentions exactes fournies par l'utilisateur** : "Déduit du total si devis accepté." / "Conservé par l'atelier si devis refusé par le client (frais diagnostic)." / "Si appareil non récupéré sous 4 semaines après notification → recyclage possible selon législation." — appliqué à la fois sur la fiche A4 ET le ticket 3 volets (cohérence demandée explicitement)
+- Vérifié avec l'utilisateur avant implémentation : les 2 premiers cas (devis refusé → acompte conservé, annulation → avoir automatique) sont déjà le comportement réel du système, aucun nouveau développement métier nécessaire — seul le texte imprimé changeait
+- **Décisions confirmées de NE PAS changer** : pas de niveau de gravité sur l'état à l'entrée (resterait un chantier backend séparé, schema DB), format Marque+Modèle groupé conservé (pas de labels séparés comme le vieux modèle), volet technicien reste minimal (pas d'acompte, pas de signature), le cas d'annulation/avoir reste absent du texte légal (sur demande explicite)
+- Déployé (`CACHE_VERSION v2.64`, commits `fbc28c4`+`8aff690`), vérifié en prod (nouvelles chaînes confirmées présentes sur `repairdesk.fr/static/js/tickets.js`)
+
+## Limite de validation notée pour la suite
+L'extension NoScript de l'utilisateur interfère aussi avec `localhost` (pas seulement les domaines de prod), bloquant l'exécution JS de la page dans les sessions Claude in Chrome de test. Pour ce checkpoint, la validation du dernier amendement a été faite autrement (relecture de diff, `node --check`, simulation isolée en Node de la logique de fallback) plutôt qu'en navigateur réel. Si une future tâche nécessite une vraie validation navigateur locale, il faudra soit ajouter `localhost`/`127.0.0.1` aux domaines de confiance NoScript de l'utilisateur, soit accepter cette limite et documenter la validation alternative comme fait ici.
+
+## État git à la fin de ce checkpoint
+Tout commité et pushé sur `main`. Chantier impression ticket 8/8 tâches + tous les amendements et corrections associées sont en production sur `repairdesk.fr` (`CACHE_VERSION v2.64`). Seuls fichiers non trackés restants : PDF/docx de référence + archives ZIP de backup (intentionnellement hors git, non liés au code).
+
+## Prochaines étapes recommandées
+1. Décider si/quand corriger le bug deep-link admin (`bugs.md`) — nécessite de retravailler la route partagée `GET /api/tickets`
+2. Décider si un vrai restyle visuel A4 (bandeau bleu marine façon `bon de réparation.pdf`) reste souhaité (toujours en attente depuis checkpoint 31, système indigo actuel conservé pour l'instant)
+3. Namespacer les futurs fichiers `.superpowers/sdd/` créés hors plan écrit (convention déjà appliquée depuis l'incident du 2026-07-18, à poursuivre)
+4. Rien d'autre en attente identifié à ce jour pour le chantier impression ticket — chantier clos
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 32 — chantier impression ticket, Tasks 1-6/8 terminées et approuvées, Task 7 EN COURS)
 
 ## Vue d'ensemble (checkpoint 32)
