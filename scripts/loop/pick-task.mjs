@@ -37,7 +37,10 @@ const SOURCES = [
 
 function parseFile(relPath, weight) {
   if (!existsSync(relPath)) return []
-  const lines = readFileSync(relPath, 'utf8').split('\n')
+  // \r?\n : les checkouts Windows (core.autocrlf) laissent un \r traînant sur split('\n')
+  // seul, ce qui casse silencieusement les regex ^...(.*)$  (bug réel, trouvé par la
+  // loop elle-même le 2026-07-19 — voir bugs.md).
+  const lines = readFileSync(relPath, 'utf8').split(/\r?\n/)
   const tasks = []
   let currentHeading = ''
   let headingIsPriority = false

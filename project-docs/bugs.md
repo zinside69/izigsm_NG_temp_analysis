@@ -1,5 +1,17 @@
 # iziGSM — Bugs connus
 
+## `scripts/loop/pick-task.mjs` — CRLF Windows cassait le parsing (faux "backlog vide") — CORRIGÉ le 2026-07-19, trouvé par la loop elle-même
+
+Premier run réel de la loop sur Windows après résolution de tous les blocages précédents (encodage, permissions, confiance workspace) : `pick-task.mjs` retournait `{"empty":true}` alors que `project-docs/todo.md` contenait 54 tâches non cochées.
+
+**Détection** : la loop a refusé d'accepter le résultat "vide" à la lettre (règle `loop-policy.md` : "le silence ou une supposition optimiste n'est jamais une réponse acceptable"), a vérifié directement (`grep -c '- \[ \]'` → 54 tâches réelles, `git ls-files --eol` → working tree en CRLF sur ce checkout Windows), diagnostiqué la cause exacte, proposé un correctif d'une ligne, et **escaladé au lieu de s'auto-patcher** — conformément à la règle "proposer avant de modifier".
+
+**Cause** : `readFileSync(...).split('\n')` — sur un checkout Windows (`core.autocrlf`), chaque ligne garde un `\r` traînant ; les regex `^...(.*)$` du parseur ne le consomment pas, aucune ligne ne matche jamais, 0 tâche trouvée. Silencieux — pas d'erreur, juste un backlog qui semble vide en permanence sur Windows.
+
+**Fix** (validé par l'utilisateur) : `split('\n')` → `split(/\r?\n/)`. Vérifié par simulation directe (fichier `todo.md` converti en CRLF) : 0 tâche avant le fix, 54 après — cohérent avec le diagnostic de la loop.
+
+**Leçon** : ce repo est développé sur Mac ET Windows (voir `~/claude-projects/CLAUDE.md` workspace) — tout nouveau script de parsing texte doit être testé/écrit en tenant compte du CRLF, pas seulement du LF utilisé en développement Linux/Mac.
+
 ## Loop-engineering — gates (npm/node) refusés en session non-interactive fraîche — CORRIGÉ le 2026-07-19
 
 Premier run réel de `run-loop.ps1` sur Windows (après correction des bugs d'encodage/`-AsUTC`/`npx`/crédit API) : la loop a correctement escaladé (aucun commit, aucune tâche traitée), mais pour une mauvaise raison en plus de la bonne — le rapport de la session a indiqué que `node scripts/loop/check-quota.mjs` et, plus largement, tous les gates de l'Étape 5 (`vitest`/`tsc`/`build`/Playwright) étaient refusés : session `-p` non-interactive, aucun moyen d'accorder l'approbation Bash de première utilisation qu'un clone tout frais (aucune commande jamais approuvée) exige normalement.
