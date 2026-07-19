@@ -68,11 +68,19 @@ Ce rapport est écrit dans `.superpowers/sdd/loop-runs.md` (ledger, append-only)
 ## Routine actif (Claude Code Remote)
 
 - **Nom** : `iziGSM loop-engineering — quotidien`
-- **trigger_id** : `TRIGGER_ID_PLACEHOLDER`
+- **trigger_id** : `trig_01E1CviLdvvC19fKgqKpLKho`
+- **Créé le** : 2026-07-19, cron `0 6 * * *` (6h UTC quotidien)
 - **Cadence** : 1×/jour, session fraîche à chaque déclenchement, notifications
   push+email activées.
 - Pour retrouver/gérer ce Routine si l'id ci-dessus devient obsolète : lister les
   Routines du compte et chercher ce nom.
+- **⚠ Point non vérifié à la création** : l'outil de création a averti que les sessions
+  déclenchées par ce Routine tournent "sans outils connecteur (mcp__<serveur>__*)" —
+  ambiguïté non résolue sur si cela inclut les outils Claude_Code_Remote eux-mêmes
+  (`add_repo`, `register_repo_root`, `update_trigger`) dont le prompt du Routine dépend
+  pour cloner le repo et se désactiver lui-même en cas de dépassement de quota. À
+  vérifier au premier déclenchement réel (ou via un déclenchement de test manuel)
+  avant de faire confiance à ce Routine sans supervision.
 
 ## Quota du plan Claude — détection et pause (ajouté 2026-07-19)
 
