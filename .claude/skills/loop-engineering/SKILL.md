@@ -56,23 +56,31 @@ absolue du compte) et compare l'usage réel du bloc actif à une limite
 
 - **Code retour 0 (< 80 %)** → continuer normalement à l'étape 1.
 - **Code retour 1 (≥ 80 %)** → **s'arrêter immédiatement, ne rien implémenter.**
-  1. Retrouver le `trigger_id` du Routine loop-engineering (noté dans
-     `project-docs/loop-policy.md` § "Routine actif").
-  2. Appeler `update_trigger` avec `enabled: false` — désactive le Routine, il ne se
-     redéclenchera pas tout seul. **Pas de retry automatique au cycle suivant** (choix
-     explicite de l'utilisateur : reprise manuelle, pas de polling silencieux).
-  3. Terminer la réponse par un rapport clair : quota estimé, bloc actif, heure de fin
-     de bloc si pertinente, et l'action prise (Routine désactivé). C'est ce message qui
-     sert de notification à l'utilisateur.
+  1. **Si les outils `mcp__Claude_Code_Remote__*` sont disponibles dans cette session**
+     (run manuel/interactif, pas un déclenchement Routine en session fraîche — vérifier
+     avant d'appeler, ne pas supposer) : retrouver le `trigger_id` (noté dans
+     `project-docs/loop-policy.md` § "Routine actif") et appeler `update_trigger` avec
+     `enabled: false` — désactive réellement le Routine.
+  2. **Sinon** (cas normal d'un déclenchement Routine — ces sessions n'ont PAS accès à
+     `update_trigger`, vérifié le 2026-07-19) : impossible de se désactiver soi-même.
+     Se contenter d'arrêter proprement, sans tenter d'appeler l'outil quand même. La
+     désactivation réelle attend une action humaine (pause via l'interface claude.ai,
+     ou une future session qui a les outils).
+  3. Dans tous les cas, terminer la réponse par un rapport clair : quota estimé, bloc
+     actif, heure de fin de bloc si pertinente, et l'action prise (désactivé / pause
+     manuelle requise). C'est ce message qui sert de notification à l'utilisateur.
   4. Ajouter une entrée dans `.superpowers/sdd/loop-runs.md` (étape 7) même si aucune
      tâche n'a été traitée.
 - **Code retour 2 (données insuffisantes)** → pas assez d'historique pour estimer un
   pourcentage fiable. Continuer (fail-open, ne jamais bloquer sur une estimation
   absente), mais le signaler dans le rapport final.
 
-Pour réactiver après une pause quota : l'utilisateur relance manuellement
-(`update_trigger enabled: true`, ou en le demandant explicitement) — jamais une
-reprise automatique décidée par la loop elle-même.
+**Important** : comme les sessions déclenchées par le Routine n'ont pas `update_trigger`,
+un dépassement de quota ne coupe pas le cycle quotidien tout seul — le Routine se
+redéclenchera le lendemain, retombera sur le même gate, et re-signalera si le quota
+est toujours dépassé (coût minime : juste ce check, aucune tâche traitée). Réactivation/
+pause réelle : geste explicite de l'utilisateur (interface claude.ai, ou le demander à
+une session qui a les outils).
 
 ## Surveillance du context window (context-guardian)
 

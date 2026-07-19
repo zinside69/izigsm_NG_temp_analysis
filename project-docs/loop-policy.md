@@ -68,21 +68,28 @@ Ce rapport est écrit dans `.superpowers/sdd/loop-runs.md` (ledger, append-only)
 ## Routine actif (Claude Code Remote)
 
 - **Nom** : `iziGSM loop-engineering — quotidien`
-- **trigger_id** : `trig_01E1CviLdvvC19fKgqKpLKho`
+- **trigger_id** : `trig_01U6odpmpedD5EwSdgzs8Z9E`
 - **Créé le** : 2026-07-19, cron `0 6 * * *` (6h UTC quotidien)
 - **Cadence** : 1×/jour, session fraîche à chaque déclenchement, notifications
   push+email activées.
 - Pour retrouver/gérer ce Routine si l'id ci-dessus devient obsolète : lister les
   Routines du compte et chercher ce nom.
-- **⚠ Point non vérifié à la création** : l'outil de création a averti que les sessions
-  déclenchées par ce Routine tournent "sans outils connecteur (mcp__<serveur>__*)" —
-  ambiguïté non résolue sur si cela inclut les outils Claude_Code_Remote eux-mêmes
-  (`add_repo`, `register_repo_root`, `update_trigger`) dont le prompt du Routine dépend
-  pour cloner le repo et se désactiver lui-même en cas de dépassement de quota. À
-  vérifier au premier déclenchement réel (ou via un déclenchement de test manuel)
-  avant de faire confiance à ce Routine sans supervision.
+- **Limite confirmée le 2026-07-19** (vérifiée directement dans la config du trigger,
+  champ `session_context.allowed_tools`) : les sessions déclenchées par ce Routine
+  **n'ont accès à aucun outil `mcp__Claude_Code_Remote__*`** (`add_repo`,
+  `register_repo_root`, `update_trigger` absents) ni aux outils GitHub MCP. Conséquences
+  et contournements :
+  - **Récupération du code** : contournée — l'authentification GitHub est posée au
+    niveau de l'environnement (`~/.gitconfig`, proxy local), pas de la session. Le
+    prompt du Routine utilise `git clone`/`git pull` en Bash brut, sans `add_repo`.
+  - **Auto-désactivation au dépassement de quota** : **pas contournable** —
+    `update_trigger` est simplement absent de ces sessions, aucun moyen d'appeler
+    l'outil depuis là. Voir § "Quota" ci-dessous pour le comportement réel.
+  - Un premier trigger (`trig_01E1CviLdvvC19fKgqKpLKho`, supprimé) dépendait des 3
+    outils absents et aurait échoué en silence chaque jour — recréé avec ce prompt
+    corrigé avant toute mise en production du Routine.
 
-## Quota du plan Claude — détection et pause (ajouté 2026-07-19)
+## Quota du plan Claude — détection et pause (ajouté 2026-07-19, corrigé le même jour)
 
 Avant toute autre chose (étape 0bis de `SKILL.md`), la loop vérifie l'usage du plan
 via `scripts/loop/check-quota.mjs` (`ccusage`, lecture des logs locaux Claude Code de
@@ -94,11 +101,21 @@ quota réel côté Anthropic).
   `LOOP_TOKEN_LIMIT` — défaut `max`, heuristique ccusage basée sur le plus haut bloc de
   5h jamais observé localement ; à fixer explicitement si la limite réelle du plan est
   connue, plus fiable qu'un historique local encore court).
-- **Au-delà du seuil** : la loop désactive elle-même son Routine
-  (`update_trigger enabled: false`) et termine sur un rapport clair (usage estimé,
-  heure de fin du bloc actif). **Aucun retry automatique** — décision explicite de
-  l'utilisateur (2026-07-19) : reprise manuelle uniquement, à la prochaine ouverture de
-  session, jamais un polling silencieux qui retente à chaque cycle.
+- **Au-delà du seuil — comportement réel (pas celui souhaité initialement)** : le choix
+  utilisateur du 2026-07-19 était "pause automatique du Routine + notification
+  manuelle". Techniquement impossible tel quel : les sessions déclenchées par le
+  Routine n'ont pas `update_trigger` (voir § Routine actif), donc **la loop ne peut pas
+  se désactiver elle-même**. Comportement effectif :
+  - Le run s'arrête immédiatement, ne traite aucune tâche (coût quasi nul — juste le
+    check quota).
+  - Rapport clair en fin de run (notification push+email automatique, indépendante des
+    outils disponibles dans la session).
+  - Le Routine se redéclenchera le lendemain et re-signalera si le quota est toujours
+    dépassé — ce n'est **pas** un polling agressif (1×/jour, coût négligeable), mais ce
+    n'est pas non plus une vraie pause tant que l'utilisateur n'agit pas.
+  - **Pause réelle** = geste explicite de l'utilisateur : soit via l'interface Routines
+    de claude.ai, soit en demandant à une session outillée (comme celle-ci) de faire
+    `update_trigger enabled:false`.
 - **Données insuffisantes** (pas encore assez d'historique local) : fail-open, la loop
   continue mais le signale dans son rapport — ne jamais bloquer sur une estimation
   absente.
