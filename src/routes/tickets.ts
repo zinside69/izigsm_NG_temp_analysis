@@ -257,9 +257,16 @@ tickets.post('/', async (c) => {
  * @returns { success, message }
  */
 tickets.put('/:id', async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
+
+  // Isolation multi-tenant : voir commentaire identique sur GET /:id.
+  const existing = await getTicketById(dbPort, id)
+  if (!existing) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+  if (user.role !== 'admin' && existing.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
 
   // Même contrainte de format qu'à la création — voir POST / ci-dessus.
   if (body.signature_client) {
@@ -289,6 +296,13 @@ tickets.put('/:id/statut', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
   const { statut, commentaire } = body
+
+  // Isolation multi-tenant : voir commentaire identique sur GET /:id.
+  const existing = await getTicketById(dbPort, id)
+  if (!existing) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+  if (user.role !== 'admin' && existing.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
 
   try {
     const { statut_avant, statut_apres } = await updateStatutTicket(
@@ -350,8 +364,17 @@ tickets.put('/:id/statut', async (c) => {
  * @returns { success, message }
  */
 tickets.delete('/:id', requireRole('admin', 'manager'), async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : voir commentaire identique sur GET /:id. requireRole()
+  // limite déjà le rôle (admin/manager) mais pas la boutique — un manager pouvait
+  // soft-delete le ticket d'une autre boutique sans cette vérification.
+  const existing = await getTicketById(dbPort, id)
+  if (!existing) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+  if (user.role !== 'admin' && existing.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
 
   await deleteTicket(db, id, user.sub)
   return c.json({ success: true, message: 'Ticket supprimé.' })

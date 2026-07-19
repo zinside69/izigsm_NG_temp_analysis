@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — NON CORRIGÉ, découvert le 2026-07-19 (audit loop-engineering, même famille que `GET /:id`)
+## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — FIX PRÉPARÉ (branche, pas déployé), découvert le 2026-07-19 (audit loop-engineering, même famille que `GET /:id`)
 
 Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a escaladé la tâche d'audit des routes sœurs (risque élevé — isolation multi-tenant + paiement, jamais d'auto-fix) mais a fait un **audit statique read-only** pour rendre l'escalade actionnable, sans modifier de code. Résultat : **3 des 4 endpoints audités sont vulnérables**, même classe de bug.
 
@@ -12,6 +12,14 @@ Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a
 | `DELETE /api/tickets/:id` (`tickets.ts:352`) | ❌ **Vulnérable** | `requireRole('admin','manager')` limite le rôle mais pas la boutique — `deleteTicket` (`ticketService.ts:688`) soft-delete filtré par `id` seul |
 
 **Recommandation** (détail complet dans `.superpowers/sdd/loop-runs.md`, run du 2026-07-19) : réappliquer le patron déjà validé en prod sur `GET /:id` (`ae6795f`) — `getTicketById` + vérification `boutique_id` avant d'appeler le service — sur les 3 routes vulnérables, puis couvrir par `tests/e2e/isolation.spec.ts` et cocher `project-docs/todo.md`.
+
+**FIX PRÉPARÉ le 2026-07-19** sur la branche `fix/isolation-tickets-put-delete` — même patron exact que `ae6795f` (fetch `getTicketById(dbPort, id)` + `if (user.role !== 'admin' && existing.boutique_id !== user.boutique_id) → 403`) appliqué aux 3 routes vulnérables. Vérifié :
+- `tsc --noEmit` : 346 erreurs avant/après (identique, aucune nouvelle — 346 est le compte actuel sur `main`, pas seulement les 51 mentionnées dans un commit antérieur, dette pré-existante non liée)
+- `npx vitest run` : 826/826 inchangé
+- `tests/e2e/isolation.spec.ts` étendu (3 nouveaux tests, un par route) : 10/10 tests E2E verts, y compris la suite complète (auth/health/isolation)
+- Non-régression vérifiée manuellement : `manager@izigsm.fr` (boutique 1) peut toujours `PUT` son propre ticket 1 (200, inchangé)
+
+**Pas encore mergé sur `main` ni déployé** — en attente de relecture humaine (demande explicite de l'utilisateur : préparer le fix pour qu'il n'ait qu'à relire et déployer).
 
 ## `scripts/loop/pick-task.mjs` — CRLF Windows cassait le parsing (faux "backlog vide") — CORRIGÉ le 2026-07-19, trouvé par la loop elle-même
 
