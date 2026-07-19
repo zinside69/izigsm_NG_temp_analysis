@@ -17,8 +17,10 @@ Pour les instructions exactes que suit Claude à l'intérieur du run : voir
 ## 1. Le déclencheur — tâche planifiée Windows
 
 Une tâche du Planificateur de tâches Windows (`schtasks`/`Register-ScheduledTask`, nom
-`iziGSM Loop Engineering`) se déclenche **tous les jours à l'heure configurée** (13:20
-au moment de la mise en place — modifiable, voir § 7). Elle lance :
+`iziGSM Loop Engineering`) se déclenche **tous les jours à l'heure configurée** (09:30
+local depuis le 2026-07-19, modifiée une première fois — 13:20 à la création initiale.
+Voir § 7 pour changer et pour vérifier l'heure actuelle sans supposer qu'elle n'a pas
+bougé depuis la rédaction de ce document). Elle lance :
 
 ```
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Said\Downloads\claude-test\izigsm\webapp\scripts\loop\run-loop.ps1"
@@ -31,13 +33,17 @@ place, voir `bugs.md` "confusion de dossier" si besoin de contexte). Le nom du
 **repo GitHub** reste `izigsm_NG_temp_analysis` (`origin` de ce dossier) — seul le nom
 du **dossier local** diffère, ce qui a causé la confusion initiale.
 
-**⚠ Heure locale, pas GMT/UTC** : `13:20` est interprété selon le fuseau horaire
-configuré sur la machine Windows (le Planificateur de tâches n'a pas de notion
-explicite de GMT/UTC). **Fuseau confirmé** (`Get-TimeZone`, 2026-07-19) :
-`Romance Standard Time` — Europe/Paris, UTC+1 en hiver (CET) / UTC+2 en été (CEST,
-actuellement actif). **`13:20` local = `11:20` GMT/UTC en ce moment** (CEST) —
-deviendra `12:20` GMT/UTC au passage à l'heure d'hiver (le Planificateur garde
-l'heure locale fixe, c'est l'équivalent GMT qui glisse).
+**⚠ Heure locale, pas GMT/UTC** : l'heure configurée est interprétée selon le fuseau
+horaire de la machine Windows (le Planificateur de tâches n'a pas de notion explicite
+de GMT/UTC). **Fuseau confirmé** (`Get-TimeZone`, 2026-07-19) : `Romance Standard
+Time` — Europe/Paris, UTC+1 en hiver (CET) / UTC+2 en été (CEST, actuellement actif).
+Avec l'heure actuelle (09:30 local depuis le 2026-07-19) : **`09:30` local =
+`07:30` GMT/UTC** en ce moment (CEST) — deviendra `08:30` GMT/UTC au passage à l'heure
+d'hiver (le Planificateur garde l'heure locale fixe, c'est l'équivalent GMT qui
+glisse). Pour l'heure exacte à tout moment, ne pas se fier à ce document — vérifier :
+```powershell
+(Get-ScheduledTask -TaskName "iziGSM Loop Engineering").Triggers.StartBoundary
+```
 
 C'est un `powershell.exe` normal, dans un contexte non-interactif (pas de fenêtre
 visible, pas de personne pour cliquer "autoriser" quoi que ce soit) — c'est pour ça que
@@ -150,7 +156,7 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   ```powershell
   Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger (New-ScheduledTaskTrigger -Daily -At 06:00)
   ```
-  Remplacer `06:00` par l'heure locale voulue (ex. `13:20` = actuel au moment de la
+  Remplacer `06:00` par l'heure locale voulue (ex. `09:30` = actuel au moment de la
   rédaction).
 - **Changer le dossier/chemin du script** (si le dossier de travail change à nouveau) :
   ```powershell
