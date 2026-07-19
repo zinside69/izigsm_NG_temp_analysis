@@ -3,8 +3,15 @@
 ## 🔴 PRIORITÉ CRITIQUE — Faille isolation `GET /api/tickets/:id` (découvert 2026-07-19) — CORRIGÉE le 2026-07-19
 Voir `bugs.md` § "FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id`" pour le détail complet — n'importe quel compte authentifié (n'importe quelle boutique) peut lire l'intégralité d'un ticket d'une autre boutique (client, IMEI, diagnostic, facture d'acompte) en itérant sur l'ID numérique. Découvert par le gate Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), classé risque élevé par `loop-policy.md` — escaladé, pas d'auto-fix par la loop, corrigé manuellement par l'utilisateur.
 - [x] Corriger `GET /api/tickets/:id` (`src/routes/tickets.ts:160`) avec le même patron `getBoutiqueId(user, queryBoutiqueId)` + vérification `ticket.boutique_id !== boutiqueId → 403` déjà utilisé sur `/api/tickets/:id/photos` — commit `ae6795f`, déployé, validé en prod réelle
-- [ ] Auditer dans la foulée `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` (même service, même risque potentiel, pas encore vérifiés un par un)
+- [x] Auditer dans la foulée `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` — fait par la loop-engineering (audit statique read-only, sans modification de code) : `POST /:id/acompte` déjà sûr, **3 routes vulnérables trouvées**, voir item 🔴 juste en dessous
 - [x] Le test `tests/e2e/isolation.spec.ts` (gate `test:e2e`) passe intégralement — suite relancée par la loop-engineering après le fix, 7/7 verts
+
+## 🔴 PRIORITÉ CRITIQUE — Faille isolation `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` (découvert 2026-07-19, audit loop-engineering)
+Voir `bugs.md` § "FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id`" et `.superpowers/sdd/loop-runs.md` (run du 2026-07-19) pour le détail complet ligne par ligne. Même classe que la faille `GET /:id` déjà corrigée — escaladé par la loop (risque élevé : isolation multi-tenant + paiement), pas d'auto-fix.
+- [ ] `PUT /api/tickets/:id` (`src/routes/tickets.ts:259`) — aucun garde, `updateTicket` (`ticketService.ts:552`) filtre par `id` seul
+- [ ] `PUT /api/tickets/:id/statut` (`src/routes/tickets.ts:287`) — aucun garde, `updateStatutTicket` (`ticketService.ts:625`) filtre par `id` seul, déclenche aussi garantie + emails cross-boutique
+- [ ] `DELETE /api/tickets/:id` (`src/routes/tickets.ts:352`) — `requireRole` limite le rôle mais pas la boutique, `deleteTicket` (`ticketService.ts:688`) filtre par `id` seul
+- [ ] Une fois corrigé, étendre `tests/e2e/isolation.spec.ts` pour couvrir ces 3 routes (même gate qui a révélé `GET /:id`)
 
 ## 🔴 PRIORITÉ prochaine session — Cache-busting par hash de contenu (2026-07-18)
 Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduit le risque mais ne l'élimine pas structurellement.

@@ -1,5 +1,18 @@
 # iziGSM — Bugs connus
 
+## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — NON CORRIGÉ, découvert le 2026-07-19 (audit loop-engineering, même famille que `GET /:id`)
+
+Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a escaladé la tâche d'audit des routes sœurs (risque élevé — isolation multi-tenant + paiement, jamais d'auto-fix) mais a fait un **audit statique read-only** pour rendre l'escalade actionnable, sans modifier de code. Résultat : **3 des 4 endpoints audités sont vulnérables**, même classe de bug.
+
+| Endpoint | Statut | Détail |
+|---|---|---|
+| `POST /api/tickets/:id/acompte` (`tickets.ts:575`) | ✅ Sûr | Garde déjà présent (`getTicketById` + `role !== 'admin' && boutique_id !== user.boutique_id → 403`, lignes 581-583) |
+| `PUT /api/tickets/:id` (`tickets.ts:259`) | ❌ **Vulnérable** | Aucun garde — `updateTicket` (`ticketService.ts:552`) filtre uniquement par `id`. N'importe quel compte peut modifier un ticket d'une autre boutique (diagnostic, prix, notes, signature...) |
+| `PUT /api/tickets/:id/statut` (`tickets.ts:287`) | ❌ **Vulnérable** | Idem, `updateStatutTicket` (`ticketService.ts:625`) filtre par `id` seul — déclenche en plus garantie + emails client (`sendTicketTermine`/`sendTicketLivre`) sur un ticket d'une autre boutique |
+| `DELETE /api/tickets/:id` (`tickets.ts:352`) | ❌ **Vulnérable** | `requireRole('admin','manager')` limite le rôle mais pas la boutique — `deleteTicket` (`ticketService.ts:688`) soft-delete filtré par `id` seul |
+
+**Recommandation** (détail complet dans `.superpowers/sdd/loop-runs.md`, run du 2026-07-19) : réappliquer le patron déjà validé en prod sur `GET /:id` (`ae6795f`) — `getTicketById` + vérification `boutique_id` avant d'appeler le service — sur les 3 routes vulnérables, puis couvrir par `tests/e2e/isolation.spec.ts` et cocher `project-docs/todo.md`.
+
 ## `scripts/loop/pick-task.mjs` — CRLF Windows cassait le parsing (faux "backlog vide") — CORRIGÉ le 2026-07-19, trouvé par la loop elle-même
 
 Premier run réel de la loop sur Windows après résolution de tous les blocages précédents (encodage, permissions, confiance workspace) : `pick-task.mjs` retournait `{"empty":true}` alors que `project-docs/todo.md` contenait 54 tâches non cochées.
