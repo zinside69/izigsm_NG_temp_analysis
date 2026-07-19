@@ -41,3 +41,15 @@ blob-report/
 # browser-use (loop-engineering — validation exploratoire)
 .venv-loop/
 playwright/.cache/
+
+# Documents de référence / backups déposés localement — jamais suivis (cohérent avec
+# la convention workspace "*.pdf/*.docx/*.zip = fichiers générés, exclus sauf demande
+# explicite"). N'affecte pas les fichiers déjà trackés (docs/CDC_izigsm.pdf, etc.) —
+# gitignore ne désuit jamais un fichier déjà suivi, seulement les nouveaux.
+# Corrige un vrai blocage : run-loop.ps1 refusait de démarrer sur le dossier de dev
+# habituel (izigsm/webapp/) à cause de ces fichiers toujours non trackés (2026-07-19).
+*.pdf
+*.docx
+izigsm_v*.zip
+izigsm_*backup*.zip
+izigsm_*backup*.tar.gz
