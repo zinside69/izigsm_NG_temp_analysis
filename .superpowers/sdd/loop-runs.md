@@ -3,6 +3,12 @@
 _Append-only. Une entrée par exécution du skill `.claude/skills/loop-engineering/SKILL.md`.
 Jamais réécrit — nouvelle entrée ajoutée en dessous. Voir `project-docs/loop-policy.md`._
 
+_⚠ Chaque entrée est un instantané figé de ce qui était vrai **au moment de ce run
+précis** (bug non corrigé, blocage encore présent, etc.) — pas une trace vivante mise
+à jour. Un blocage mentionné dans une entrée ancienne peut être résolu depuis. Pour
+l'état **actuel** d'un bug ou d'une tâche, se référer à `project-docs/bugs.md` et
+`project-docs/todo.md`, jamais à ce fichier seul._
+
 ## Run 2026-07-19 (heure indisponible — session non-interactive) — tâche de tête : faille isolation `GET /api/tickets/:id`
 
 - Tâche : « Corriger `GET /api/tickets/:id` (`src/routes/tickets.ts:160`) avec le patron `getBoutiqueId(...)` + `403` » — `project-docs/todo.md:5` (section 🔴 PRIORITÉ CRITIQUE). Tête de file selon l'ordre déterministe de `pick-task.mjs` (priorité 🔴 d'abord).
