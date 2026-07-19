@@ -33,9 +33,11 @@ du **dossier local** diffère, ce qui a causé la confusion initiale.
 
 **⚠ Heure locale, pas GMT/UTC** : `13:20` est interprété selon le fuseau horaire
 configuré sur la machine Windows (le Planificateur de tâches n'a pas de notion
-explicite de GMT/UTC — `Get-TimeZone` en PowerShell donne le fuseau exact configuré).
-Si la machine est en Europe/Paris, `13:20` local ≈ `11:20` GMT/UTC en été (CEST,
-UTC+2) ou `12:20` GMT/UTC en hiver (CET, UTC+1) — à vérifier, ne pas supposer.
+explicite de GMT/UTC). **Fuseau confirmé** (`Get-TimeZone`, 2026-07-19) :
+`Romance Standard Time` — Europe/Paris, UTC+1 en hiver (CET) / UTC+2 en été (CEST,
+actuellement actif). **`13:20` local = `11:20` GMT/UTC en ce moment** (CEST) —
+deviendra `12:20` GMT/UTC au passage à l'heure d'hiver (le Planificateur garde
+l'heure locale fixe, c'est l'équivalent GMT qui glisse).
 
 C'est un `powershell.exe` normal, dans un contexte non-interactif (pas de fenêtre
 visible, pas de personne pour cliquer "autoriser" quoi que ce soit) — c'est pour ça que
