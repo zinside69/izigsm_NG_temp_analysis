@@ -31,7 +31,7 @@ $PermissionMode = if ($env:LOOP_PERMISSION_MODE) { $env:LOOP_PERMISSION_MODE } e
 
 Write-Host "[run-loop] Repo   : $RepoRoot"
 Write-Host "[run-loop] Mode   : $PermissionMode"
-Write-Host "[run-loop] Depart : $(Get-Date -AsUTC -Format o)"
+Write-Host "[run-loop] Depart : $((Get-Date).ToUniversalTime().ToString("o"))"
 
 $status = git status --porcelain
 if ($status) {
@@ -58,5 +58,5 @@ $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SK
 
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
 
-Write-Host "[run-loop] Fin : $(Get-Date -AsUTC -Format o)"
+Write-Host "[run-loop] Fin : $((Get-Date).ToUniversalTime().ToString("o"))"
 Write-Host "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le detail de ce run."
