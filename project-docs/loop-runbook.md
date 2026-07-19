@@ -16,13 +16,26 @@ Pour les instructions exactes que suit Claude à l'intérieur du run : voir
 
 ## 1. Le déclencheur — tâche planifiée Windows
 
-Une tâche du Planificateur de tâches Windows (`schtasks`, nom `iziGSM Loop
-Engineering`) se déclenche **tous les jours à l'heure configurée** (13:20 au moment de
-la mise en place — modifiable, voir § 7). Elle lance :
+Une tâche du Planificateur de tâches Windows (`schtasks`/`Register-ScheduledTask`, nom
+`iziGSM Loop Engineering`) se déclenche **tous les jours à l'heure configurée** (13:20
+au moment de la mise en place — modifiable, voir § 7). Elle lance :
 
 ```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "...\scripts\loop\run-loop.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Said\Downloads\claude-test\izigsm\webapp\scripts\loop\run-loop.ps1"
 ```
+
+**Dossier réel** : `C:\Users\Said\Downloads\claude-test\izigsm\webapp\` — c'est le
+dossier de dev habituel (celui avec tout l'historique de commits), **pas**
+`izigsm_NG_temp_analysis\` (un clone redondant créé puis supprimé pendant la mise en
+place, voir `bugs.md` "confusion de dossier" si besoin de contexte). Le nom du
+**repo GitHub** reste `izigsm_NG_temp_analysis` (`origin` de ce dossier) — seul le nom
+du **dossier local** diffère, ce qui a causé la confusion initiale.
+
+**⚠ Heure locale, pas GMT/UTC** : `13:20` est interprété selon le fuseau horaire
+configuré sur la machine Windows (le Planificateur de tâches n'a pas de notion
+explicite de GMT/UTC — `Get-TimeZone` en PowerShell donne le fuseau exact configuré).
+Si la machine est en Europe/Paris, `13:20` local ≈ `11:20` GMT/UTC en été (CEST,
+UTC+2) ou `12:20` GMT/UTC en hiver (CET, UTC+1) — à vérifier, ne pas supposer.
 
 C'est un `powershell.exe` normal, dans un contexte non-interactif (pas de fenêtre
 visible, pas de personne pour cliquer "autoriser" quoi que ce soit) — c'est pour ça que
@@ -126,9 +139,23 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   Disable-ScheduledTask -TaskName "iziGSM Loop Engineering"
   ```
   Reprendre : `Enable-ScheduledTask -TaskName "iziGSM Loop Engineering"`
-- **Changer l'heure** :
+- **Voir l'heure actuelle et le fuseau de la machine** :
+  ```powershell
+  (Get-ScheduledTask -TaskName "iziGSM Loop Engineering").Triggers
+  Get-TimeZone
+  ```
+- **Changer l'heure** (toujours en heure LOCALE de la machine, pas GMT/UTC — voir § 1) :
   ```powershell
   Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger (New-ScheduledTaskTrigger -Daily -At 06:00)
+  ```
+  Remplacer `06:00` par l'heure locale voulue (ex. `13:20` = actuel au moment de la
+  rédaction).
+- **Changer le dossier/chemin du script** (si le dossier de travail change à nouveau) :
+  ```powershell
+  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-NoProfile -ExecutionPolicy Bypass -File "<nouveau chemin complet>\scripts\loop\run-loop.ps1"'
+  Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Action $Action
+  # Vérifier :
+  (Get-ScheduledTask -TaskName "iziGSM Loop Engineering").Actions
   ```
 - **Lancer un run manuellement** (sans attendre l'heure planifiée) :
   ```powershell
@@ -146,6 +173,18 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
 
 ## 8. Limites connues (état actuel, pas un historique)
 
+- **⚠ Confiance du workspace (one-time setup par dossier)** — Claude Code refuse
+  d'honorer `.claude/settings.json` (donc tous les gates `npm`/`node`/`git`) tant que
+  le dossier exact n'a pas été "trusté" via une session interactive au moins une fois.
+  Symptôme si oublié : `Ignoring N permissions.allow entries from .claude/settings.json:
+  this workspace has not been trusted`, puis les gates échouent en silence. **Si le
+  chemin du dossier change un jour** (déplacement, nouveau clone, nouvelle machine),
+  refaire une fois avant de compter sur la tâche planifiée :
+  ```powershell
+  cd <chemin du dossier>
+  claude
+  # accepter le dialogue de confiance, puis /exit
+  ```
 - Le gate quota suppose un usage type abonnement claude.ai, pas des crédits API à la
   consommation (voir § 4) — surveille ton solde sur console.anthropic.com séparément
   tant que `ANTHROPIC_API_KEY` reste actif.
@@ -161,3 +200,8 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   manuellement plusieurs fois plutôt que d'augmenter la fréquence de la tâche planifiée
   sans réflexion (chaque run peut committer sur `main`, mieux vaut les espacer assez
   pour avoir le temps de relire).
+- `.gitignore` exclut désormais `*.pdf`/`*.docx`/`izigsm_v*.zip`/`izigsm_*backup*` —
+  nécessaire car ces fichiers de référence (CDC, backups) traînaient sans être suivis
+  dans le dossier de dev habituel, ce qui faisait échouer le check "working tree
+  propre" de l'Étape 0 en permanence. N'affecte aucun fichier déjà suivi
+  (`docs/CDC_izigsm.pdf` reste tracké normalement).
