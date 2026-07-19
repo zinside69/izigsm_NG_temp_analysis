@@ -37,4 +37,38 @@ test.describe('Isolation multi-tenant', () => {
 
     expect([403, 404]).toContain(res.status())
   })
+
+  // Régression : PUT /:id, PUT /:id/statut, DELETE /:id n'avaient aucune vérification
+  // boutique_id (trouvé par l'audit loop-engineering du 2026-07-19, voir bugs.md).
+  test('un admin d\'une autre boutique ne peut pas modifier un ticket qui ne lui appartient pas (PUT /:id)', async ({ request }) => {
+    const otherTenant = await createTenantAdmin(request)
+
+    const res = await request.put(`/api/tickets/${BOUTIQUE_1_TICKET_ID}`, {
+      headers: { Authorization: `Bearer ${otherTenant.accessToken}` },
+      data: { notes_internes: 'modifié par un tenant étranger — ne doit jamais passer' },
+    })
+
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un admin d\'une autre boutique ne peut pas changer le statut d\'un ticket qui ne lui appartient pas (PUT /:id/statut)', async ({ request }) => {
+    const otherTenant = await createTenantAdmin(request)
+
+    const res = await request.put(`/api/tickets/${BOUTIQUE_1_TICKET_ID}/statut`, {
+      headers: { Authorization: `Bearer ${otherTenant.accessToken}` },
+      data: { statut: 'annule' },
+    })
+
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un admin d\'une autre boutique ne peut pas supprimer un ticket qui ne lui appartient pas (DELETE /:id)', async ({ request }) => {
+    const otherTenant = await createTenantAdmin(request)
+
+    const res = await request.delete(`/api/tickets/${BOUTIQUE_1_TICKET_ID}`, {
+      headers: { Authorization: `Bearer ${otherTenant.accessToken}` },
+    })
+
+    expect([403, 404]).toContain(res.status())
+  })
 })
