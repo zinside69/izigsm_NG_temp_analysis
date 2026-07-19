@@ -1,3 +1,23 @@
+# Recovery Prompt — iziGSM — 2026-07-19 (checkpoint 37 — faille isolation GET /api/tickets/:id corrigée et déployée)
+
+## Vue d'ensemble (checkpoint 37)
+Suite du checkpoint 36. La loop-engineering (automatisation autonome introduite ce jour-là, `project-docs/loop-policy.md`) a détecté via son gate Playwright (`tests/e2e/isolation.spec.ts`) une faille critique d'isolation multi-tenant : `GET /api/tickets/:id` n'avait aucune vérification `boutique_id`, permettant à n'importe quel compte de lire l'intégralité de n'importe quel ticket, toutes boutiques confondues (client, IMEI, diagnostic, facture d'acompte). Classée risque élevé par la politique L2 → escaladée sans auto-fix (comportement attendu, pas un bug de la loop).
+
+**Fix traité en session interactive**, sur demande explicite de l'utilisateur : même patron déjà en place sur `GET /:id/photos`/`GET /:id/photos/:photoId/url` (`user.role !== 'admin' && data.boutique_id !== user.boutique_id → 403`) appliqué à `tickets.get('/:id', ...)` (`src/routes/tickets.ts:160`). `tsc --noEmit` et tests unitaires (824/826) inchangés — aucune régression.
+
+**Validation en prod réelle avant tout commit** : test navigateur direct via Claude in Chrome sur `repairdesk.fr`, connecté en `telnet@bbox.fr` (manager, boutique 2 réelle) — `GET /api/tickets/1` (boutique 1, étrangère) confirmé 200 avant fix puis 403 après ; `GET /api/tickets/12` (boutique 2, propre) resté 200. Séquence respectée : déploiement (`wrangler pages deploy`) → validation prod → commit (`ae6795f`) → push.
+
+**Doc mise à jour en parallèle par la loop-engineering** : pendant que `bugs.md`/`todo.md` étaient mis à jour côté session interactive, la loop a écrit sa propre doc sur les mêmes fichiers (confirmation via sa suite Playwright relancée, 7/7 verts) + un ledger d'escalade. Conflit de merge sur `bugs.md`/`todo.md` résolu par rebase, fusion manuelle des deux versions sans perte d'information (commit `6a4a4e0`).
+
+**Reste ouvert pour une prochaine session** : auditer `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` (même service `tickets.ts`, même risque potentiel d'isolation manquante, pas vérifiés un par un dans ce passage). Le chantier cache-busting du checkpoint 36 reste également en attente, non retouché ce checkpoint.
+
+**Note d'environnement (Windows)** : `git config core.fileMode false` appliqué localement sur ce poste — `scripts/loop/*` (`.ps1`/`.mjs`/`.py`) perdaient leur bit exécutable à chaque checkout NTFS, provoquant un diff de mode fantôme bloquant les rebases (`git pull --rebase` refuse tant que le working tree n'est pas propre). Config locale non commitée, à reproduire sur toute autre machine Windows de ce projet si le même symptôme apparaît.
+
+## État git à la fin de ce checkpoint
+Tout commité et pushé sur `main` (`ae6795f` fix de code, `6a4a4e0` doc post-merge avec la loop-engineering). Fix en prod. Aucun autre changement de code en attente.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 36 — incident propagation CDN corrigé, chantier cache-busting priorisé pour la prochaine session)
 
 ## Vue d'ensemble (checkpoint 36)
