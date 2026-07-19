@@ -24,13 +24,18 @@ import { execFileSync } from 'node:child_process'
 const THRESHOLD_PERCENT = Number(process.env.LOOP_QUOTA_THRESHOLD || 80)
 const TOKEN_LIMIT = process.env.LOOP_TOKEN_LIMIT || 'max'
 
+// Sur Windows, npx est un script .cmd — execFileSync ne résout pas cette extension
+// sans passer par un shell (ENOENT sinon, même quand npx fonctionne très bien en
+// invite de commandes). Sans effet sur Mac/Linux (npx est un binaire direct).
+const NPX_CMD = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+
 function main() {
   let raw
   try {
     raw = execFileSync(
-      'npx',
+      NPX_CMD,
       ['--yes', 'ccusage@latest', 'blocks', '--active', '--json', '--token-limit', TOKEN_LIMIT],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 }
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, shell: process.platform === 'win32' }
     )
   } catch (err) {
     console.log(JSON.stringify({

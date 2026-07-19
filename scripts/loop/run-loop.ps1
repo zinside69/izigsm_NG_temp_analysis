@@ -57,6 +57,13 @@ git pull origin main
 $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SKILL.md) pour traiter exactement UNE tache du backlog, de bout en bout, en respectant strictement project-docs/loop-policy.md. Termine ta reponse par le rapport de ledger (commit/escalade/backlog vide), meme en cas d'echec."
 
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
+$ClaudeExit = $LASTEXITCODE
 
-Write-Host "[run-loop] Fin : $((Get-Date).ToUniversalTime().ToString("o"))"
-Write-Host "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le detail de ce run."
+if ($ClaudeExit -ne 0) {
+    Write-Host "[run-loop] ECHEC : claude a quitte avec le code $ClaudeExit (voir la sortie ci-dessus pour la cause - ex. credit insuffisant, erreur reseau, etc.)."
+} else {
+    Write-Host "[run-loop] Fin : $((Get-Date).ToUniversalTime().ToString("o"))"
+    Write-Host "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le detail de ce run."
+}
+
+exit $ClaudeExit
