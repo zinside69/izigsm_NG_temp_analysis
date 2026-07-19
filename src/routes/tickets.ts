@@ -158,11 +158,16 @@ tickets.post('/:id/archiver', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, data }
  */
 tickets.get('/:id', async (c) => {
-  const { dbPort } = ctx(c)
+  const { dbPort, user } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
 
   const data = await getTicketById(dbPort, id)
   if (!data) return c.json({ success: false, error: 'Ticket introuvable.' }, 404)
+
+  // Isolation multi-tenant : voir commentaire identique sur GET /:id/photos.
+  if (user.role !== 'admin' && data.boutique_id !== user.boutique_id) {
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  }
 
   return c.json({ success: true, data })
 })
