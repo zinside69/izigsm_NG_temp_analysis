@@ -20,7 +20,7 @@ Découvert par l'utilisateur au premier test réel sur Windows (`.\scripts\loop\
 
 **Leçon** : tout script `.ps1` de ce repo doit rester en ASCII pur (pas d'accents, pas de tirets cadratins/guillemets typographiques) tant qu'il doit s'exécuter sous Windows PowerShell 5.1 sans garantie de BOM préservé par git/clone/éditeur.
 
-## 🔴 FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id` — NON CORRIGÉ, découvert le 2026-07-19 (gate Playwright loop-engineering)
+## 🔴 FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id` — CORRIGÉE et DÉPLOYÉE le 2026-07-19 (découverte le même jour, gate Playwright loop-engineering)
 
 Découvert en écrivant le gate de non-régression Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), en reproduisant systématiquement la classe de bug déjà vue 3 fois sur ce repo (photos tickets, isolation cross-boutique — voir plus bas dans ce fichier). Reproduction automatisée et confirmée : un admin fraîchement inscrit sur une boutique B reçoit un **200 avec les données complètes** d'un ticket appartenant à la boutique 1 (seed) en appelant simplement `GET /api/tickets/1` avec son propre token JWT valide.
 
@@ -29,6 +29,8 @@ Découvert en écrivant le gate de non-régression Playwright de la loop-enginee
 **Données exposées** : nom/email/téléphone/adresse client, IMEI/n° série appareil, diagnostic, prix, statut, historique, photos (métadonnées), et — depuis le chantier acompte structuré — montant et numéro de la facture d'acompte liée. Une simple itération sur l'ID numérique (`/api/tickets/1`, `/2`, `/3`...) permet à un compte de n'importe quelle boutique de lire l'intégralité des dossiers de toutes les autres boutiques.
 
 **Vérifié par test automatisé** (`npx playwright test tests/e2e/isolation.spec.ts`, gate `test:e2e` de la loop-engineering) : `GET /api/tickets/:id/photos` (même famille de route) est correctement isolé — confirme que ce n'est pas une régression globale mais un oubli isolé sur `GET /api/tickets/:id` spécifiquement.
+
+**CORRIGÉ le 2026-07-19 (commit `ae6795f`)** : même patron déjà utilisé sur `GET /:id/photos`/`GET /:id/photos/:photoId/url` appliqué à cette route. Corrigé manuellement par l'utilisateur (hors loop-engineering, qui avait correctement escaladé plutôt que d'auto-fixer une isolation multi-tenant — comportement attendu de `loop-policy.md`). Validé en prod réelle (`telnet@bbox.fr`, manager boutique 2) : `GET /api/tickets/1` (boutique étrangère) 200→403, `GET /api/tickets/12` (propre boutique) toujours 200 — pas de régression. Tests 824/826 (2 échecs pré-existants fuseau horaire, sans lien), `tsc --noEmit` sans nouvelle erreur. Déployé avant le commit.
 
 **Non corrigé dans le cadre de la mise en place de la loop-engineering** : classé risque élevé (isolation multi-tenant) par `project-docs/loop-policy.md` — escalade obligatoire, pas d'auto-fix. Recommandation : ajouter la même vérification `ticket.boutique_id !== boutiqueId → 403` déjà en place sur `/api/tickets/:id/photos`, probablement aussi nécessaire sur `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` — à auditer ensemble avant correction (patron `getBoutiqueId(user, queryBoutiqueId)` déjà établi ailleurs dans ce fichier).
 

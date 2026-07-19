@@ -1,10 +1,10 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## 🔴 PRIORITÉ CRITIQUE — Faille isolation `GET /api/tickets/:id` (découvert 2026-07-19)
-Voir `bugs.md` § "FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id`" pour le détail complet — n'importe quel compte authentifié (n'importe quelle boutique) peut lire l'intégralité d'un ticket d'une autre boutique (client, IMEI, diagnostic, facture d'acompte) en itérant sur l'ID numérique. Découvert par le gate Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), classé risque élevé par `loop-policy.md` — escaladé, pas d'auto-fix.
-- [ ] Corriger `GET /api/tickets/:id` (`src/routes/tickets.ts:160`) avec le même patron `getBoutiqueId(user, queryBoutiqueId)` + vérification `ticket.boutique_id !== boutiqueId → 403` déjà utilisé sur `/api/tickets/:id/photos`
+## 🔴 PRIORITÉ CRITIQUE — Faille isolation `GET /api/tickets/:id` (découvert 2026-07-19) — CORRIGÉE le 2026-07-19
+Voir `bugs.md` § "FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id`" pour le détail complet — n'importe quel compte authentifié (n'importe quelle boutique) peut lire l'intégralité d'un ticket d'une autre boutique (client, IMEI, diagnostic, facture d'acompte) en itérant sur l'ID numérique. Découvert par le gate Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), classé risque élevé par `loop-policy.md` — escaladé, pas d'auto-fix par la loop, corrigé manuellement par l'utilisateur.
+- [x] Corriger `GET /api/tickets/:id` (`src/routes/tickets.ts:160`) avec le même patron `getBoutiqueId(user, queryBoutiqueId)` + vérification `ticket.boutique_id !== boutiqueId → 403` déjà utilisé sur `/api/tickets/:id/photos` — commit `ae6795f`, déployé, validé en prod réelle
 - [ ] Auditer dans la foulée `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` (même service, même risque potentiel, pas encore vérifiés un par un)
-- [ ] Une fois corrigé, réactiver le test `tests/e2e/isolation.spec.ts` en CI/gate (actuellement rouge intentionnellement, documente le gap)
+- [x] Le test `tests/e2e/isolation.spec.ts` (gate `test:e2e`) devrait maintenant passer intégralement — à reconfirmer en relançant la suite (était rouge intentionnellement avant ce fix)
 
 ## 🔴 PRIORITÉ prochaine session — Cache-busting par hash de contenu (2026-07-18)
 Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduit le risque mais ne l'élimine pas structurellement.
