@@ -33,6 +33,18 @@ if ($status) {
     exit 1
 }
 
+# Gate quota (avant tout le reste — voir SKILL.md etape 0bis). Note : recommande
+# d'installer claude-hud (jarrodwatts/claude-hud) sur ce poste pour une visibilite
+# live du contexte/usage pendant ce run (statusline terminal, purement local — ne
+# remplace pas ce gate programmatique, complementaire).
+$QuotaJson = node scripts/loop/check-quota.mjs
+$QuotaExit = $LASTEXITCODE
+Write-Host "[run-loop] Quota : $QuotaJson"
+if ($QuotaExit -eq 1) {
+    Write-Error "[run-loop] ARRET : quota du plan >= seuil. Pas de run. Reessayer plus tard (pas de retry auto)."
+    exit 1
+}
+
 git checkout main
 git pull origin main
 

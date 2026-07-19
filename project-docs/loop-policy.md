@@ -65,6 +65,52 @@ Ce rapport est écrit dans `.superpowers/sdd/loop-runs.md` (ledger, append-only)
 - Ne supprime jamais de fichier dans `docs/` ou `project-docs/` — uniquement ajout/complément (cohérent avec la règle workspace "historiques de version toujours accumulés, jamais écrasés").
 - Ne touche jamais aux secrets (`.dev.vars`, `wrangler secret`).
 
+## Routine actif (Claude Code Remote)
+
+- **Nom** : `iziGSM loop-engineering — quotidien`
+- **trigger_id** : `TRIGGER_ID_PLACEHOLDER`
+- **Cadence** : 1×/jour, session fraîche à chaque déclenchement, notifications
+  push+email activées.
+- Pour retrouver/gérer ce Routine si l'id ci-dessus devient obsolète : lister les
+  Routines du compte et chercher ce nom.
+
+## Quota du plan Claude — détection et pause (ajouté 2026-07-19)
+
+Avant toute autre chose (étape 0bis de `SKILL.md`), la loop vérifie l'usage du plan
+via `scripts/loop/check-quota.mjs` (`ccusage`, lecture des logs locaux Claude Code de
+l'environnement d'exécution — **ne voit pas l'usage d'autres machines/sessions du même
+compte**, c'est une estimation locale par environnement, pas une lecture exacte du
+quota réel côté Anthropic).
+
+- **Seuil** : 80 % (variable `LOOP_QUOTA_THRESHOLD`, limite de référence
+  `LOOP_TOKEN_LIMIT` — défaut `max`, heuristique ccusage basée sur le plus haut bloc de
+  5h jamais observé localement ; à fixer explicitement si la limite réelle du plan est
+  connue, plus fiable qu'un historique local encore court).
+- **Au-delà du seuil** : la loop désactive elle-même son Routine
+  (`update_trigger enabled: false`) et termine sur un rapport clair (usage estimé,
+  heure de fin du bloc actif). **Aucun retry automatique** — décision explicite de
+  l'utilisateur (2026-07-19) : reprise manuelle uniquement, à la prochaine ouverture de
+  session, jamais un polling silencieux qui retente à chaque cycle.
+- **Données insuffisantes** (pas encore assez d'historique local) : fail-open, la loop
+  continue mais le signale dans son rapport — ne jamais bloquer sur une estimation
+  absente.
+- Visibilité complémentaire en local (runs manuels via `run-loop.sh`/`.ps1`) :
+  [claude-hud](https://github.com/jarrodwatts/claude-hud), statusline terminal
+  affichant le contexte/usage en direct — purement local à la machine de
+  l'utilisateur, ne couvre pas le Routine cloud (pas de terminal à regarder).
+
+## Context window — checkpoint à 80 % (ajouté 2026-07-19, protocole context-guardian)
+
+Repris de `~/claude-projects/context-guardian.md` (workspace), seuil resserré à 80 %
+pour la loop (protocole général : fourchette 70–85 %). Détail complet de la procédure
+dans `SKILL.md` § "Surveillance du context window". Résumé : dès qu'un run (typiquement
+un plan à plusieurs tâches, plusieurs sous-agents déjà dispatchés) approche 80 % du
+context window, la loop arrête de dispatcher de nouveaux sous-agents, écrit un
+checkpoint (`current-state.md` + `recovery-prompt.md`), committe le travail déjà
+vérifié, et traite le point d'arrêt comme une escalade — reprise par le run suivant
+(session neuve), jamais une tentative de continuer au-delà du seuil dans la même
+session.
+
 ## Évolution
 
 Ce document est la source de vérité du comportement de la loop. Toute modification de la politique (ex. passage à L3 sur un périmètre précis) doit être une décision explicite de l'utilisateur, documentée ici en ajoutant une nouvelle section datée en dessous — jamais en écrasant les règles ci-dessus.

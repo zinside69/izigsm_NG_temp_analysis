@@ -38,6 +38,65 @@ la skill elle-même.
   `project-docs/bugs.md` (bugs connus, pour ne pas les re-découvrir comme si c'était
   nouveau), `project-docs/decisions.md`.
 
+## Étape 0bis — Vérifier le quota du plan (avant tout le reste)
+
+**Premier geste de tout run, avant même Étape 1.** La loop ne doit jamais épuiser le
+quota d'usage du compte Claude sans que l'utilisateur ne le sache.
+
+```bash
+node scripts/loop/check-quota.mjs
+```
+
+Ce script exécute `npx ccusage@latest blocks --active --json` (lit les logs locaux
+Claude Code de **cet environnement uniquement** — ne voit pas l'usage d'autres
+machines/sessions de l'utilisateur, c'est une estimation locale, pas une vérité
+absolue du compte) et compare l'usage réel du bloc actif à une limite
+(`LOOP_TOKEN_LIMIT`, défaut `max` = plus haut bloc historique observé — voir
+`project-docs/loop-policy.md`).
+
+- **Code retour 0 (< 80 %)** → continuer normalement à l'étape 1.
+- **Code retour 1 (≥ 80 %)** → **s'arrêter immédiatement, ne rien implémenter.**
+  1. Retrouver le `trigger_id` du Routine loop-engineering (noté dans
+     `project-docs/loop-policy.md` § "Routine actif").
+  2. Appeler `update_trigger` avec `enabled: false` — désactive le Routine, il ne se
+     redéclenchera pas tout seul. **Pas de retry automatique au cycle suivant** (choix
+     explicite de l'utilisateur : reprise manuelle, pas de polling silencieux).
+  3. Terminer la réponse par un rapport clair : quota estimé, bloc actif, heure de fin
+     de bloc si pertinente, et l'action prise (Routine désactivé). C'est ce message qui
+     sert de notification à l'utilisateur.
+  4. Ajouter une entrée dans `.superpowers/sdd/loop-runs.md` (étape 7) même si aucune
+     tâche n'a été traitée.
+- **Code retour 2 (données insuffisantes)** → pas assez d'historique pour estimer un
+  pourcentage fiable. Continuer (fail-open, ne jamais bloquer sur une estimation
+  absente), mais le signaler dans le rapport final.
+
+Pour réactiver après une pause quota : l'utilisateur relance manuellement
+(`update_trigger enabled: true`, ou en le demandant explicitement) — jamais une
+reprise automatique décidée par la loop elle-même.
+
+## Surveillance du context window (context-guardian)
+
+Règle transversale, applicable à tout moment de l'exécution (pas seulement à la fin) —
+protocole `~/claude-projects/context-guardian.md` du workspace, seuil resserré à 80 %
+pour la loop (au lieu de la fourchette 70–85 % du protocole général) :
+
+- S'auto-évaluer régulièrement (nombre d'échanges, taille des sorties d'outils, nombre
+  de sous-agents déjà dispatchés dans ce run) — pas d'API exacte pour mesurer le
+  pourcentage, jugement du même ordre que `/context-guardian status`.
+- **Dès qu'on approche ~80 % du context window** (typiquement : plan à plusieurs tâches
+  avec plusieurs sous-agents implémenteur/reviewer déjà dispatchés dans le même run) :
+  1. Ne pas continuer à dispatcher de nouveaux sous-agents dans cette session.
+  2. Écrire un **checkpoint** : mettre à jour `project-docs/current-state.md` (état
+     exact — quelle tâche du plan, quelle étape, quels fichiers touchés, quels tests
+     passent) et régénérer `project-docs/recovery-prompt.md` (prompt clé-en-main pour
+     reprendre exactement où on s'arrête).
+  3. Committer le travail déjà vérifié (si les gates de l'étape 5 sont déjà passés pour
+     les tâches terminées) — ne jamais laisser du travail non commité perdu par
+     compaction/fin de session.
+  4. Traiter ce point d'arrêt comme une **escalade** (étape 7) : le prochain run de la
+     loop (nouvelle session, contexte neuf) reprend via `recovery-prompt.md`, pas de
+     tentative de continuer dans la même session au-delà de ce seuil.
+
 ## Étape 1 — Sélectionner la tâche
 
 ```bash

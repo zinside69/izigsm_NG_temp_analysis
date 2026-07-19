@@ -35,6 +35,18 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+# Gate quota (avant tout le reste — voir SKILL.md étape 0bis). Note : recommandé
+# d'installer claude-hud (jarrodwatts/claude-hud) sur ce poste pour une visibilité
+# live du contexte/usage pendant ce run (statusline terminal, purement local — ne
+# remplace pas ce gate programmatique, complémentaire).
+QUOTA_JSON="$(node scripts/loop/check-quota.mjs)"
+QUOTA_EXIT=$?
+echo "[run-loop] Quota : $QUOTA_JSON"
+if [[ $QUOTA_EXIT -eq 1 ]]; then
+  echo "[run-loop] ARRÊT : quota du plan ≥ seuil. Pas de run. Réessayer plus tard (pas de retry auto)." >&2
+  exit 1
+fi
+
 git checkout main
 git pull origin main
 

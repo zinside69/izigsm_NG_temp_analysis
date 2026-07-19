@@ -111,6 +111,16 @@ Playwright/browser-use → auto-commit si sûr, sinon escalade). Gouvernée par
 garde-fous). Lancement : Routine planifiée (Claude Code Remote) ou
 `scripts/loop/run-loop.sh` (Mac/Linux) / `scripts/loop/run-loop.ps1` (Windows).
 
+Deux gardes-fous transversaux : quota du plan Claude vérifié en premier
+(`scripts/loop/check-quota.mjs`, via `ccusage` — pause + désactivation du Routine
+au-delà de 80 %, réactivation manuelle uniquement) et surveillance du context window
+(protocole context-guardian, checkpoint `project-docs/current-state.md` +
+`recovery-prompt.md` à 80 %). Détail complet dans `loop-policy.md` et `SKILL.md`.
+Pour une visibilité live pendant un run local (`run-loop.sh`), installer
+[claude-hud](https://github.com/jarrodwatts/claude-hud) sur ce poste (statusline
+terminal, purement local, complémentaire au gate quota programmatique — ne fonctionne
+pas pour le Routine cloud, qui n'a pas de terminal).
+
 ## Déploiement
 
 **Jamais automatique.** `npm run build && wrangler pages deploy dist --project-name
