@@ -99,6 +99,14 @@ lettre. Dans l'ordre :
    `vitest` → `tsc --noEmit` → `npm run build` → Playwright (`npm run test:e2e`) →
    optionnellement browser-use si la tâche introduit un nouveau parcours utilisateur.
    Le premier rouge arrête tout, pas de commit partiel.
+   - `vitest`/`tsc`/`build` ne nécessitent aucun serveur — ils tournent directement sur
+     le code.
+   - **Playwright a besoin d'un serveur** : la loop lance elle-même `wrangler pages dev`
+     sur `localhost:3000`, avec une **base de données D1 locale** (créée/réinitialisée
+     sur la machine, pas la vraie base de production) avant de lancer la suite de
+     tests. **Rien ne touche jamais `repairdesk.fr` ni les vraies données clients**
+     pendant les tests — tout est confiné à cette copie locale jetable, même en cas de
+     test qui échoue ou se comporte mal.
 7. **Décision finale** :
    - **Tous les gates verts + risque faible** → commit + push direct sur `main` (même
      convention que ton usage manuel), case cochée dans `todo.md`, entrée ajoutée dans
