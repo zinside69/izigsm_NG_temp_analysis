@@ -1,5 +1,15 @@
 # iziGSM — Bugs connus
 
+## `scripts/loop/run-loop.ps1` — erreur de parsing PowerShell (`MissingEndCurlyBrace`) — CORRIGÉ le 2026-07-19
+
+Découvert par l'utilisateur au premier test réel sur Windows (`.\scripts\loop\run-loop.ps1` déclenchait `ParseException: MissingEndCurlyBrace` à la ligne du premier `if`, très loin de toute vraie erreur de syntaxe).
+
+**Cause** : le script contenait des tirets cadratins (`—`, U+2014) dans plusieurs commentaires/messages. Windows PowerShell 5.1 (`powershell.exe`, pas `pwsh`/PowerShell 7) lit un `.ps1` sans BOM UTF-8 avec l'encodage ANSI du système par défaut. Les 3 octets UTF-8 du tiret cadratin (`E2 80 94`) sont alors mal réinterprétés — notamment `0x94` qui correspond à `”` (guillemet droit fermant) en Windows-1252 — ce qui ferme prématurément une chaîne de caractères et désynchronise le comptage des guillemets/accolades pour le reste du fichier. L'erreur remonte donc à un endroit du code sans rapport avec la vraie cause.
+
+**Fix** : fichier réécrit en ASCII pur (tirets cadratins remplacés par des tirets simples `-`), vérifié par `grep -P "[^\x00-\x7F]"` — 0 caractère non-ASCII. Règle ajoutée en commentaire en tête du fichier pour éviter la régression.
+
+**Leçon** : tout script `.ps1` de ce repo doit rester en ASCII pur (pas d'accents, pas de tirets cadratins/guillemets typographiques) tant qu'il doit s'exécuter sous Windows PowerShell 5.1 sans garantie de BOM préservé par git/clone/éditeur.
+
 ## 🔴 FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id` — NON CORRIGÉ, découvert le 2026-07-19 (gate Playwright loop-engineering)
 
 Découvert en écrivant le gate de non-régression Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), en reproduisant systématiquement la classe de bug déjà vue 3 fois sur ce repo (photos tickets, isolation cross-boutique — voir plus bas dans ce fichier). Reproduction automatisée et confirmée : un admin fraîchement inscrit sur une boutique B reçoit un **200 avec les données complètes** d'un ticket appartenant à la boutique 1 (seed) en appelant simplement `GET /api/tickets/1` avec son propre token JWT valide.
