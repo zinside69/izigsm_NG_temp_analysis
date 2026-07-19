@@ -59,6 +59,24 @@ $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SK
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
 $ClaudeExit = $LASTEXITCODE
 
+# Auto-commit du ledger seul (jamais le reste) : le run peut escalader sans rien
+# committer via claude -p, ce qui laisse .superpowers/sdd/loop-runs.md non suivi/modifie
+# - sinon le PROCHAIN run refuse de demarrer (etape 0, working tree non propre),
+# obligeant une intervention manuelle a chaque fois. Ne touche a AUCUN autre fichier :
+# si claude -p a laisse un autre changement en suspens (ex. session interrompue en
+# cours d'implementation), le prochain run continuera de refuser de demarrer sur cet
+# etat sale - comportement volontaire, ne pas l'auto-committer aveuglement.
+$LedgerPath = ".superpowers/sdd/loop-runs.md"
+if (Test-Path $LedgerPath) {
+    $LedgerStatus = git status --porcelain -- $LedgerPath
+    if ($LedgerStatus) {
+        Write-Host "[run-loop] Ledger modifie - auto-commit ($LedgerPath uniquement)."
+        git add -- $LedgerPath
+        git commit -m "chore: ledger loop-engineering (run automatique)" | Out-Null
+        git push origin main
+    }
+}
+
 if ($ClaudeExit -ne 0) {
     Write-Host "[run-loop] ECHEC : claude a quitte avec le code $ClaudeExit (voir la sortie ci-dessus pour la cause - ex. credit insuffisant, erreur reseau, etc.)."
 } else {

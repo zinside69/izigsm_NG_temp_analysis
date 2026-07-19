@@ -52,9 +52,35 @@ git pull origin main
 
 PROMPT='Utilise la skill loop-engineering (.claude/skills/loop-engineering/SKILL.md) pour traiter exactement UNE tâche du backlog, de bout en bout, en respectant strictement project-docs/loop-policy.md. Termine ta réponse par le rapport de ledger (commit/escalade/backlog vide), même en cas d'\''échec.'
 
+# set +e temporaire : on veut capturer l'échec de claude sans que `set -e` ne coupe le
+# script avant l'auto-commit du ledger ci-dessous.
+set +e
 claude -p "$PROMPT" \
   --permission-mode "$PERMISSION_MODE" \
   --output-format text
+CLAUDE_EXIT=$?
+set -e
 
-echo "[run-loop] Fin : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le détail de ce run."
+# Auto-commit du ledger seul (jamais le reste) : le run peut escalader sans rien
+# committer via claude -p, ce qui laisse .superpowers/sdd/loop-runs.md non suivi/modifié
+# — sinon le PROCHAIN run refuse de démarrer (étape 0, working tree non propre),
+# obligeant une intervention manuelle à chaque fois. Ne touche à AUCUN autre fichier :
+# si claude -p a laissé un autre changement en suspens (ex. session interrompue en
+# cours d'implémentation), le prochain run continuera de refuser de démarrer sur cet
+# état sale — comportement volontaire, ne pas l'auto-committer aveuglément.
+LEDGER_PATH=".superpowers/sdd/loop-runs.md"
+if [[ -f "$LEDGER_PATH" ]] && [[ -n "$(git status --porcelain -- "$LEDGER_PATH")" ]]; then
+  echo "[run-loop] Ledger modifié — auto-commit ($LEDGER_PATH uniquement)."
+  git add -- "$LEDGER_PATH"
+  git commit -m "chore: ledger loop-engineering (run automatique)" >/dev/null
+  git push origin main
+fi
+
+if [[ $CLAUDE_EXIT -ne 0 ]]; then
+  echo "[run-loop] ÉCHEC : claude a quitté avec le code $CLAUDE_EXIT (voir la sortie ci-dessus pour la cause)." >&2
+else
+  echo "[run-loop] Fin : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le détail de ce run."
+fi
+
+exit $CLAUDE_EXIT

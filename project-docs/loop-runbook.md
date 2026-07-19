@@ -44,7 +44,12 @@ tout ce qui suit doit pouvoir tourner sans intervention humaine.
 5. **Lance Claude Code en mode non-interactif** (`claude -p ... --permission-mode
    acceptEdits`) avec un prompt qui pointe vers la skill `loop-engineering`. C'est à
    partir d'ici que la vraie logique métier prend le relais (§ 3).
-6. **Vérifie le code de sortie de Claude** et l'affiche clairement — succès ou échec,
+6. **Auto-commit du ledger** (`.superpowers/sdd/loop-runs.md` uniquement, jamais
+   d'autre fichier) — si Claude a écrit une entrée sans la committer (cas d'une
+   escalade, où rien d'autre n'est poussé), le script la committe/pousse lui-même
+   automatiquement. Garantit que le **prochain** run démarre toujours sur un working
+   tree propre, sans intervention manuelle à chaque fois qu'un run escalade.
+7. **Vérifie le code de sortie de Claude** et l'affiche clairement — succès ou échec,
    jamais un silence qui ressemblerait à un succès.
 
 ## 3. Ce qui se passe DANS la session Claude (skill `loop-engineering`)
