@@ -1,6 +1,6 @@
 ---
 name: loop-engineering
-description: "Use when triggered by a scheduled Routine or by a local runner script (scripts/loop/run-loop.sh|.ps1) to execute exactly one backlog item autonomously end-to-end: pick, plan (via superpowers), implement in an isolated worktree, verify (unit + typecheck + Playwright + browser-use), and either auto-commit/push (low risk, all gates green) or escalate to the human with a full report. Governed by project-docs/loop-policy.md (autonomy level L2)."
+description: "Use when triggered by a local scheduled task (cron/Task Scheduler calling scripts/loop/run-loop.sh|.ps1) or a manual run to execute exactly one backlog item autonomously end-to-end: pick, plan (via superpowers), implement in an isolated worktree, verify (unit + typecheck + Playwright + browser-use), and either auto-commit/push (low risk, all gates green) or escalate to the human with a full report. Governed by project-docs/loop-policy.md (autonomy level L2)."
 risk: high
 source: internal
 date_added: "2026-07-19"
@@ -24,8 +24,8 @@ secrets). Cette skill ne fait qu'exécuter cette politique — en cas de contrad
 apparente entre ce fichier et `loop-policy.md`, **`loop-policy.md` fait foi**.
 
 Traiter **une seule tâche du backlog par exécution de cette skill**, pas une rafale —
-la cadence est contrôlée par le déclencheur (Routine cron ou lancement manuel), pas par
-la skill elle-même.
+la cadence est contrôlée par le déclencheur (tâche planifiée locale cron/Planificateur,
+ou lancement manuel), pas par la skill elle-même.
 
 ## Étape 0 — Prérequis de session
 
@@ -54,32 +54,24 @@ absolue du compte) et compare l'usage réel du bloc actif à une limite
 (`LOOP_TOKEN_LIMIT`, défaut `max` = plus haut bloc historique observé — voir
 `project-docs/loop-policy.md`).
 
+Ce gate tourne dans une session Claude Code **locale normale** (lancée par
+`scripts/loop/run-loop.sh`/`.ps1`) — pas de restriction d'outils particulière ici,
+contrairement à une éventuelle session cloud. Décision finale du 2026-07-19 :
+planification via `cron`/Planificateur de tâches local plutôt qu'un Routine Claude Code
+Remote (abandonné — voir `project-docs/loop-policy.md` § "Exécution automatisée").
+
 - **Code retour 0 (< 80 %)** → continuer normalement à l'étape 1.
-- **Code retour 1 (≥ 80 %)** → **s'arrêter immédiatement, ne rien implémenter.**
-  1. **Si les outils `mcp__Claude_Code_Remote__*` sont disponibles dans cette session**
-     (run manuel/interactif, pas un déclenchement Routine en session fraîche — vérifier
-     avant d'appeler, ne pas supposer) : retrouver le `trigger_id` (noté dans
-     `project-docs/loop-policy.md` § "Routine actif") et appeler `update_trigger` avec
-     `enabled: false` — désactive réellement le Routine.
-  2. **Sinon** (cas normal d'un déclenchement Routine — ces sessions n'ont PAS accès à
-     `update_trigger`, vérifié le 2026-07-19) : impossible de se désactiver soi-même.
-     Se contenter d'arrêter proprement, sans tenter d'appeler l'outil quand même. La
-     désactivation réelle attend une action humaine (pause via l'interface claude.ai,
-     ou une future session qui a les outils).
-  3. Dans tous les cas, terminer la réponse par un rapport clair : quota estimé, bloc
-     actif, heure de fin de bloc si pertinente, et l'action prise (désactivé / pause
-     manuelle requise). C'est ce message qui sert de notification à l'utilisateur.
-  4. Ajouter une entrée dans `.superpowers/sdd/loop-runs.md` (étape 7) même si aucune
+- **Code retour 1 (≥ 80 %)** → **s'arrêter immédiatement, ne rien implémenter.** En
+  pratique, avec la planification locale, `check-quota.mjs` fait déjà sortir
+  `run-loop.sh`/`.ps1` en erreur AVANT même de lancer cette session — ce cas ne devrait
+  se produire dans le skill que sur un lancement manuel direct. Si ça arrive quand même :
+  1. Terminer la réponse par un rapport clair : quota estimé, bloc actif, heure de fin
+     de bloc si pertinente.
+  2. Ajouter une entrée dans `.superpowers/sdd/loop-runs.md` (étape 7) même si aucune
      tâche n'a été traitée.
 - **Code retour 2 (données insuffisantes)** → pas assez d'historique pour estimer un
   pourcentage fiable. Continuer (fail-open, ne jamais bloquer sur une estimation
   absente), mais le signaler dans le rapport final.
-
-**Important** : comme les sessions déclenchées par le Routine n'ont pas `update_trigger`,
-un dépassement de quota ne coupe pas le cycle quotidien tout seul — le Routine se
-redéclenchera le lendemain, retombera sur le même gate, et re-signalera si le quota
-est toujours dépassé (coût minime : juste ce check, aucune tâche traitée). Réactivation/
-pause réelle : geste explicite de l'utilisateur (interface claude.ai, ou le demander à
 une session qui a les outils).
 
 ## Surveillance du context window (context-guardian)
@@ -233,10 +225,9 @@ en-tête si absent — append-only, jamais réécrit) :
 - Détail / recommandation : <1-3 phrases>
 ```
 
-Si escaladé et que la loop tourne via une Routine Claude Code Remote : terminer la
-réponse de ce firing par ce rapport (pas de silence) — c'est ce que l'utilisateur verra
-comme notification. Si lancée via un script local, afficher le même rapport en sortie
-console.
+Afficher ce rapport en sortie console (capturé par les logs du planificateur local
+cron/Planificateur de tâches) — c'est le seul endroit où l'utilisateur verra le
+résultat, pas de silence en fin de run.
 
 ## Garde-fous globaux (rappel — détail complet dans `loop-policy.md`)
 

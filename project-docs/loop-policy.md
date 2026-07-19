@@ -65,29 +65,23 @@ Ce rapport est écrit dans `.superpowers/sdd/loop-runs.md` (ledger, append-only)
 - Ne supprime jamais de fichier dans `docs/` ou `project-docs/` — uniquement ajout/complément (cohérent avec la règle workspace "historiques de version toujours accumulés, jamais écrasés").
 - Ne touche jamais aux secrets (`.dev.vars`, `wrangler secret`).
 
-## Routine actif (Claude Code Remote)
+## Exécution automatisée — décision finale : planification locale (pas de Routine cloud)
 
-- **Nom** : `iziGSM loop-engineering — quotidien`
-- **trigger_id** : `trig_01U6odpmpedD5EwSdgzs8Z9E`
-- **Créé le** : 2026-07-19, cron `0 6 * * *` (6h UTC quotidien)
-- **Cadence** : 1×/jour, session fraîche à chaque déclenchement, notifications
-  push+email activées.
-- Pour retrouver/gérer ce Routine si l'id ci-dessus devient obsolète : lister les
-  Routines du compte et chercher ce nom.
-- **Limite confirmée le 2026-07-19** (vérifiée directement dans la config du trigger,
-  champ `session_context.allowed_tools`) : les sessions déclenchées par ce Routine
-  **n'ont accès à aucun outil `mcp__Claude_Code_Remote__*`** (`add_repo`,
-  `register_repo_root`, `update_trigger` absents) ni aux outils GitHub MCP. Conséquences
-  et contournements :
-  - **Récupération du code** : contournée — l'authentification GitHub est posée au
-    niveau de l'environnement (`~/.gitconfig`, proxy local), pas de la session. Le
-    prompt du Routine utilise `git clone`/`git pull` en Bash brut, sans `add_repo`.
-  - **Auto-désactivation au dépassement de quota** : **pas contournable** —
-    `update_trigger` est simplement absent de ces sessions, aucun moyen d'appeler
-    l'outil depuis là. Voir § "Quota" ci-dessous pour le comportement réel.
-  - Un premier trigger (`trig_01E1CviLdvvC19fKgqKpLKho`, supprimé) dépendait des 3
-    outils absents et aurait échoué en silence chaque jour — recréé avec ce prompt
-    corrigé avant toute mise en production du Routine.
+**Essayé puis abandonné le 2026-07-19** : un Routine Claude Code Remote (cron cloud,
+trigger `trig_01U6odpmpedD5EwSdgzs8Z9E`, supprimé) — écarté car l'utilisateur travaille
+exclusivement via la CLI Claude Code locale (Mac/Windows), pas via Claude Code sur le
+web. Le Routine tournait dans un environnement cloud séparé, sans les outils
+`mcp__Claude_Code_Remote__*` (`add_repo`, `register_repo_root`, `update_trigger`
+absents des sessions déclenchées — confirmé dans `session_context.allowed_tools`), sans
+canal de notification exploitable par l'utilisateur, et sans aucun moyen de vérifier
+son exécution depuis une session normale. Détail complet de l'investigation conservé
+dans l'historique de session — non reproduit ici (règle : pas de duplication inutile).
+
+**Mécanisme retenu** : planification native de l'OS de l'utilisateur (`cron`/`launchd`
+sur Mac, Planificateur de tâches sur Windows) qui invoque `scripts/loop/run-loop.sh` /
+`run-loop.ps1` avec la CLI Claude Code locale normale — aucune restriction d'outils
+(c'est une session Claude Code standard), cohérent avec l'infra déjà en place dans le
+workspace (`sync.ps1`/`sync`). Configuration à faire par l'utilisateur (voir todo.md).
 
 ## Quota du plan Claude — détection et pause (ajouté 2026-07-19, corrigé le même jour)
 
@@ -101,21 +95,14 @@ quota réel côté Anthropic).
   `LOOP_TOKEN_LIMIT` — défaut `max`, heuristique ccusage basée sur le plus haut bloc de
   5h jamais observé localement ; à fixer explicitement si la limite réelle du plan est
   connue, plus fiable qu'un historique local encore court).
-- **Au-delà du seuil — comportement réel (pas celui souhaité initialement)** : le choix
-  utilisateur du 2026-07-19 était "pause automatique du Routine + notification
-  manuelle". Techniquement impossible tel quel : les sessions déclenchées par le
-  Routine n'ont pas `update_trigger` (voir § Routine actif), donc **la loop ne peut pas
-  se désactiver elle-même**. Comportement effectif :
-  - Le run s'arrête immédiatement, ne traite aucune tâche (coût quasi nul — juste le
-    check quota).
-  - Rapport clair en fin de run (notification push+email automatique, indépendante des
-    outils disponibles dans la session).
-  - Le Routine se redéclenchera le lendemain et re-signalera si le quota est toujours
-    dépassé — ce n'est **pas** un polling agressif (1×/jour, coût négligeable), mais ce
-    n'est pas non plus une vraie pause tant que l'utilisateur n'agit pas.
-  - **Pause réelle** = geste explicite de l'utilisateur : soit via l'interface Routines
-    de claude.ai, soit en demandant à une session outillée (comme celle-ci) de faire
-    `update_trigger enabled:false`.
+- **Au-delà du seuil, avec la planification locale (`run-loop.sh`/`.ps1`)** :
+  `check-quota.mjs` fait sortir le script en erreur **avant** d'invoquer `claude -p` —
+  aucune session Claude n'est même démarrée ce jour-là. C'est une vraie pause, sans
+  action de l'utilisateur nécessaire : la tâche planifiée (cron/Planificateur) retentera
+  simplement au prochain cycle prévu (le lendemain), avec un coût nul ce jour-là. Le
+  message est visible dans la sortie terminal / les logs du planificateur — pas de
+  notification push/email dans ce mode (pas de canal équivalent en local), l'utilisateur
+  consulte les logs s'il veut confirmer qu'un jour a été sauté pour cause de quota.
 - **Données insuffisantes** (pas encore assez d'historique local) : fail-open, la loop
   continue mais le signale dans son rapport — ne jamais bloquer sur une estimation
   absente.

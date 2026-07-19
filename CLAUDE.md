@@ -108,18 +108,20 @@ Règles déjà établies sur ce repo, à respecter :
 (pick → plan via superpowers → implémentation en worktree isolé → gates vitest/tsc/build/
 Playwright/browser-use → auto-commit si sûr, sinon escalade). Gouvernée par
 `project-docs/loop-policy.md` (niveau d'autonomie L2, classification du risque,
-garde-fous). Lancement : Routine planifiée (Claude Code Remote) ou
-`scripts/loop/run-loop.sh` (Mac/Linux) / `scripts/loop/run-loop.ps1` (Windows).
+garde-fous). Lancement : `scripts/loop/run-loop.sh` (Mac/Linux) /
+`scripts/loop/run-loop.ps1` (Windows), à programmer via `cron`/`launchd` (Mac) ou le
+Planificateur de tâches (Windows) — CLI Claude Code locale normale, pas de Routine
+Claude Code Remote (essayé le 2026-07-19, abandonné : ne correspond pas à un usage en
+CLI locale, voir `loop-policy.md` pour le détail).
 
 Deux gardes-fous transversaux : quota du plan Claude vérifié en premier
-(`scripts/loop/check-quota.mjs`, via `ccusage` — pause + désactivation du Routine
-au-delà de 80 %, réactivation manuelle uniquement) et surveillance du context window
-(protocole context-guardian, checkpoint `project-docs/current-state.md` +
-`recovery-prompt.md` à 80 %). Détail complet dans `loop-policy.md` et `SKILL.md`.
-Pour une visibilité live pendant un run local (`run-loop.sh`), installer
+(`scripts/loop/check-quota.mjs`, via `ccusage` — le script de lancement s'arrête avant
+même de démarrer Claude si le seuil de 80 % est dépassé, retente au cycle planifié
+suivant) et surveillance du context window (protocole context-guardian, checkpoint
+`project-docs/current-state.md` + `recovery-prompt.md` à 80 %). Détail complet dans
+`loop-policy.md` et `SKILL.md`. Pour une visibilité live pendant un run, installer
 [claude-hud](https://github.com/jarrodwatts/claude-hud) sur ce poste (statusline
-terminal, purement local, complémentaire au gate quota programmatique — ne fonctionne
-pas pour le Routine cloud, qui n'a pas de terminal).
+terminal, purement local, complémentaire au gate quota programmatique).
 
 ## Déploiement
 
