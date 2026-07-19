@@ -68,7 +68,7 @@ RESEND_API_KEY=re_xxxxxxxxxxxx
 ### Étape 4 — Initialiser la base de données locale
 
 ```bash
-npx wrangler d1 migrations apply webapp-production --local
+npx wrangler d1 migrations apply DB --local
 ```
 
 Cette commande crée une base SQLite locale dans `.wrangler/state/v3/d1/` et applique les 25 migrations dans l'ordre.
@@ -82,10 +82,18 @@ npm run build
 ### Étape 6 — Lancer le serveur de développement
 
 ```bash
-npx wrangler pages dev dist --d1=DB --local --port 3000
+npx wrangler pages dev dist --local --port 3000
 ```
 
 Ouvrir dans le navigateur : **http://localhost:3000**
+
+> **Ne pas ajouter `--d1=DB` à `wrangler pages dev`** : ce flag crée une base D1 locale
+> distincte (persistance indexée par le nom du flag, pas par `database_id`), différente
+> de celle utilisée par `wrangler d1 migrations apply`/`wrangler d1 execute` — symptôme :
+> `no such table: users` alors que les migrations viennent d'être appliquées avec succès.
+> `wrangler.jsonc` déclare déjà le binding `DB`, `wrangler pages dev` le lit automatiquement
+> sans qu'il soit nécessaire de le repasser en CLI. Vérifié le 2026-07-19 en mettant en
+> place le gate Playwright de la loop-engineering (`.claude/skills/loop-engineering/`).
 
 ---
 
@@ -97,9 +105,9 @@ cd izigsm_NG_temp_analysis
 npm install
 echo 'JWT_SECRET=dev-secret-local-minimum-32-caracteres' > .dev.vars
 echo 'RESEND_API_KEY=' >> .dev.vars
-npx wrangler d1 migrations apply webapp-production --local
+npx wrangler d1 migrations apply DB --local
 npm run build
-npx wrangler pages dev dist --d1=DB --local --port 3000
+npx wrangler pages dev dist --local --port 3000
 ```
 
 ---
@@ -109,9 +117,9 @@ npx wrangler pages dev dist --d1=DB --local --port 3000
 ```bash
 git pull origin main
 npm install                                                    # si nouvelles dépendances
-npx wrangler d1 migrations apply webapp-production --local    # si nouvelles migrations
+npx wrangler d1 migrations apply DB --local    # si nouvelles migrations
 npm run build
-npx wrangler pages dev dist --d1=DB --local --port 3000
+npx wrangler pages dev dist --local --port 3000
 ```
 
 ---
@@ -163,14 +171,14 @@ Ou directement depuis la page **http://localhost:3000/register.html**.
 npm test
 
 # Voir les logs wrangler
-npx wrangler pages dev dist --d1=DB --local --port 3000
+npx wrangler pages dev dist --local --port 3000
 
 # Réinitialiser la base de données locale
 rm -rf .wrangler/state/v3/d1
-npx wrangler d1 migrations apply webapp-production --local
+npx wrangler d1 migrations apply DB --local
 
 # Consulter la base locale en ligne de commande
-npx wrangler d1 execute webapp-production --local --command="SELECT * FROM boutiques"
+npx wrangler d1 execute DB --local --command="SELECT * FROM boutiques"
 
 # Builder sans lancer
 npm run build
@@ -196,7 +204,7 @@ taskkill /PID <PID> /F
 Les migrations n'ont pas été appliquées. Relancer :
 
 ```bash
-npx wrangler d1 migrations apply webapp-production --local
+npx wrangler d1 migrations apply DB --local
 ```
 
 ### Erreur JWT / 401 Unauthorized

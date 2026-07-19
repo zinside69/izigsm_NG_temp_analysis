@@ -32,3 +32,12 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+# Playwright (loop-engineering — gate E2E)
+test-results/
+playwright-report/
+blob-report/
+
+# browser-use (loop-engineering — validation exploratoire)
+.venv-loop/
+playwright/.cache/

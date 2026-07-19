@@ -9,7 +9,10 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "loop:pick": "node scripts/loop/pick-task.mjs"
   },
   "dependencies": {
     "hono": "^4.12.12"
@@ -17,6 +20,7 @@
   "devDependencies": {
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.18.2",
+    "@playwright/test": "^1.61.1",
     "@vitest/coverage-v8": "^4.1.9",
     "vite": "^6.3.5",
     "vitest": "^4.1.9",

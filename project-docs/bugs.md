@@ -1,5 +1,17 @@
 # iziGSM — Bugs connus
 
+## 🔴 FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id` — NON CORRIGÉ, découvert le 2026-07-19 (gate Playwright loop-engineering)
+
+Découvert en écrivant le gate de non-régression Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), en reproduisant systématiquement la classe de bug déjà vue 3 fois sur ce repo (photos tickets, isolation cross-boutique — voir plus bas dans ce fichier). Reproduction automatisée et confirmée : un admin fraîchement inscrit sur une boutique B reçoit un **200 avec les données complètes** d'un ticket appartenant à la boutique 1 (seed) en appelant simplement `GET /api/tickets/1` avec son propre token JWT valide.
+
+**Cause** : `tickets.get('/:id', ...)` (`src/routes/tickets.ts:160`) appelle `getTicketById(dbPort, id)` sans jamais passer ni vérifier `boutique_id`. `getTicketById()` (`src/services/ticketService.ts:395`) fait `WHERE t.id = ? AND t.actif = 1` — aucun filtre boutique dans la requête SQL, aucune vérification post-lecture dans la route. Contrairement à `GET /api/tickets` (liste) qui exige `boutique_id`, l'accès par ID direct est intégralement ouvert à tout utilisateur authentifié, de n'importe quelle boutique.
+
+**Données exposées** : nom/email/téléphone/adresse client, IMEI/n° série appareil, diagnostic, prix, statut, historique, photos (métadonnées), et — depuis le chantier acompte structuré — montant et numéro de la facture d'acompte liée. Une simple itération sur l'ID numérique (`/api/tickets/1`, `/2`, `/3`...) permet à un compte de n'importe quelle boutique de lire l'intégralité des dossiers de toutes les autres boutiques.
+
+**Vérifié par test automatisé** (`npx playwright test tests/e2e/isolation.spec.ts`, gate `test:e2e` de la loop-engineering) : `GET /api/tickets/:id/photos` (même famille de route) est correctement isolé — confirme que ce n'est pas une régression globale mais un oubli isolé sur `GET /api/tickets/:id` spécifiquement.
+
+**Non corrigé dans le cadre de la mise en place de la loop-engineering** : classé risque élevé (isolation multi-tenant) par `project-docs/loop-policy.md` — escalade obligatoire, pas d'auto-fix. Recommandation : ajouter la même vérification `ticket.boutique_id !== boutiqueId → 403` déjà en place sur `/api/tickets/:id/photos`, probablement aussi nécessaire sur `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` — à auditer ensemble avant correction (patron `getBoutiqueId(user, queryBoutiqueId)` déjà établi ailleurs dans ce fichier).
+
 ## Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour — CORRIGÉ le 2026-07-18 (fenêtre de propagation CDN figée dans le précache SW)
 
 Signalé par l'utilisateur juste après le déploiement de l'amendement contenu ticket 3 volets/A4 (`v2.64`) : `sw.js` confirmait bien `CACHE_VERSION izigsm-v2.64`, mais le nouveau texte acompte était absent et `GET /api/health` semblait KO côté utilisateur alors que le contrôleur le voyait OK par fetch direct.

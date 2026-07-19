@@ -1,0 +1,14 @@
+# Dépendances pour la validation exploratoire browser-use (loop-engineering,
+# étape 5 de .claude/skills/loop-engineering/SKILL.md).
+#
+# Installation :
+#   python3 -m venv .venv-loop && source .venv-loop/bin/activate
+#   pip install -r scripts/loop/requirements.txt
+#   playwright install chromium   # browser-use pilote via Playwright, distinct
+#                                  # du Chromium pré-installé utilisé par @playwright/test Node
+#
+# Nécessite une clé API (voir browser_use_explore.py --help) — ANTHROPIC_API_KEY
+# ou OPENAI_API_KEY selon le modèle configuré. Jamais commitée, à poser en
+# variable d'environnement locale ou secret CI, jamais dans ce repo.
+
+browser-use>=0.2
