@@ -1,4 +1,17 @@
-# iziGSM — État courant (MàJ : 2026-07-18, checkpoint 36 — incident propagation CDN corrigé, chantier cache-busting priorisé)
+# iziGSM — État courant (MàJ : 2026-07-19, checkpoint 37 — loop-engineering mise en place + 2 failles isolation multi-tenant corrigées et déployées)
+
+## Checkpoint 37 — Mise en place loop-engineering + isolation multi-tenant `tickets.ts` (2026-07-19)
+
+**Loop-engineering** : infrastructure d'automatisation mise en place (`.claude/skills/loop-engineering/SKILL.md`, `project-docs/loop-policy.md`, `project-docs/loop-runbook.md`, `scripts/loop/*`) — autonomie L2, un sous-agent implémenteur+reviewer par tâche pour le code, escalade obligatoire sur risque élevé (auth/isolation/NF525/RGPD/paiement/migration/périmètre large). Exécution : tâche planifiée Windows (`schtasks`/Planificateur, quotidienne, heure locale — voir `loop-runbook.md` pour la conversion GMT) qui lance `scripts/loop/run-loop.ps1` depuis `izigsm/webapp/` (le vrai dossier de dev — un clone redondant `izigsm_NG_temp_analysis/` créé pendant la mise en place a été identifié et supprimé). Un Routine Claude Code Remote (cloud) a été essayé puis abandonné (utilisateur en CLI locale exclusivement, pas de canal de notification exploitable).
+
+**2 failles d'isolation multi-tenant trouvées et corrigées sur `src/routes/tickets.ts`** (même classe de bug qu'à chaque fois sur ce repo — aucune vérification `boutique_id` sur un accès par ID) :
+- `GET /api/tickets/:id` — trouvée par le gate Playwright de la loop-engineering, corrigée manuellement par l'utilisateur (commit `ae6795f`), déployée, validée en prod (`telnet@bbox.fr`).
+- `PUT /api/tickets/:id`, `PUT /api/tickets/:id/statut`, `DELETE /api/tickets/:id` — trouvées par un audit statique de la loop-engineering (escaladée, pas d'auto-fix — risque élevé), fix préparé sur branche par la session, relu par l'utilisateur, mergé (`22b3071`), déployé, validé en prod (même compte, `PUT /:id` boutique étrangère → 403 confirmé).
+- `POST /:id/acompte` et les routes photos étaient déjà protégées — chantier isolation `tickets.ts` intégralement traité.
+
+**Autres corrections faites pendant la mise en place** (détail complet dans `bugs.md`) : bug d'installation locale (`--d1=DB` cassait `wrangler pages dev`), `pick-task.mjs` cassé par CRLF Windows, `.claude/settings.json` ajouté (permissions pré-approuvées pour la loop), confiance workspace Claude Code (prérequis one-time par dossier), `.gitignore` étendu (pdf/docx/zip de référence bloquaient le gate "working tree propre").
+
+**Reste ouvert** (voir `todo.md`) : chantier cache-busting (checkpoint 36, priorité 🔴, escaladé par la loop comme périmètre architectural — nécessite le pipeline superpowers complet en session humaine, pas la loop autonome).
 
 ## Incident propagation CDN figée dans le précache SW — CORRIGÉ le 2026-07-18
 Utilisateur a signalé le nouveau contenu (v2.64) absent malgré `CACHE_VERSION` à jour dans son navigateur. Root cause confirmée en direct (Claude in Chrome) : le précache du Service Worker a fetché `tickets.js` pendant la fenêtre de propagation du cache CDN Cloudflare juste après le déploiement, figeant une version transitoire encore ancienne sous le nouveau `CACHE_VERSION`. Fix immédiat appliqué sur le poste de l'utilisateur (désinscription SW + purge cache). Fix structurel déployé : `cache.add()` → `cache: 'reload'` au précache (`CACHE_VERSION v2.65`, commit `796be8d`) — réduit le risque sans l'éliminer totalement (limite du edge CDN hors de notre contrôle).

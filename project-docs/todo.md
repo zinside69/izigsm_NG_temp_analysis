@@ -6,13 +6,14 @@ Voir `bugs.md` § "FAILLE — `GET /api/tickets/:id` sans aucune isolation `bout
 - [x] Auditer dans la foulée `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`, `POST /:id/acompte` — fait par la loop-engineering (audit statique read-only, sans modification de code) : `POST /:id/acompte` déjà sûr, **3 routes vulnérables trouvées**, voir item 🔴 juste en dessous
 - [x] Le test `tests/e2e/isolation.spec.ts` (gate `test:e2e`) passe intégralement — suite relancée par la loop-engineering après le fix, 7/7 verts
 
-## 🔴 PRIORITÉ CRITIQUE — Faille isolation `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` (découvert 2026-07-19, audit loop-engineering) — FIX PRÉPARÉ, en attente de relecture/déploiement
-Voir `bugs.md` § "FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id`" et `.superpowers/sdd/loop-runs.md` (run du 2026-07-19) pour le détail complet ligne par ligne. Même classe que la faille `GET /:id` déjà corrigée — escaladé par la loop (risque élevé : isolation multi-tenant + paiement), pas d'auto-fix. Correctif préparé sur la branche `fix/isolation-tickets-put-delete` (même patron que `ae6795f`), **pas encore mergé sur `main` ni déployé** — relecture humaine requise avant.
-- [x] `PUT /api/tickets/:id` (`src/routes/tickets.ts:259`) — aucun garde, `updateTicket` (`ticketService.ts:552`) filtre par `id` seul → fix préparé, branche `fix/isolation-tickets-put-delete`
-- [x] `PUT /api/tickets/:id/statut` (`src/routes/tickets.ts:287`) — aucun garde, `updateStatutTicket` (`ticketService.ts:625`) filtre par `id` seul, déclenche aussi garantie + emails cross-boutique → fix préparé, même branche
-- [x] `DELETE /api/tickets/:id` (`src/routes/tickets.ts:352`) — `requireRole` limite le rôle mais pas la boutique, `deleteTicket` (`ticketService.ts:688`) filtre par `id` seul → fix préparé, même branche
+## 🔴 PRIORITÉ CRITIQUE — Faille isolation `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` (découvert 2026-07-19, audit loop-engineering) — CORRIGÉE, DÉPLOYÉE ET VALIDÉE le 2026-07-19
+Voir `bugs.md` § "FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id`" et `.superpowers/sdd/loop-runs.md` (run du 2026-07-19) pour le détail complet ligne par ligne. Même classe que la faille `GET /:id` déjà corrigée — escaladé par la loop (risque élevé : isolation multi-tenant + paiement), pas d'auto-fix. Correctif préparé sur la branche `fix/isolation-tickets-put-delete` (même patron que `ae6795f`), relu, mergé sur `main` (`22b3071`) et déployé en prod.
+- [x] `PUT /api/tickets/:id` (`src/routes/tickets.ts:259`) — aucun garde, `updateTicket` (`ticketService.ts:552`) filtre par `id` seul → corrigé, déployé
+- [x] `PUT /api/tickets/:id/statut` (`src/routes/tickets.ts:287`) — aucun garde, `updateStatutTicket` (`ticketService.ts:625`) filtre par `id` seul, déclenche aussi garantie + emails cross-boutique → corrigé, déployé
+- [x] `DELETE /api/tickets/:id` (`src/routes/tickets.ts:352`) — `requireRole` limite le rôle mais pas la boutique, `deleteTicket` (`ticketService.ts:688`) filtre par `id` seul → corrigé, déployé
 - [x] `tests/e2e/isolation.spec.ts` étendu pour couvrir ces 3 routes — 10/10 tests verts (suite complète), vérifié aussi en non-régression (PUT légitime même boutique → 200 inchangé)
-- [ ] Relire le diff (`git diff main fix/isolation-tickets-put-delete`), merger sur `main`, puis déployer (`npm run build && wrangler pages deploy`)
+- [x] Relire le diff, merger sur `main` (`22b3071` via `a517bae`), déployer (`npx wrangler pages deploy`)
+- [x] **Validé en prod réelle** (`telnet@bbox.fr`, manager boutique 2, 2026-07-19) : `PUT /api/tickets/1` (boutique étrangère) → 403 confirmé (avant fix : 200)
 
 ## 🔴 PRIORITÉ prochaine session — Cache-busting par hash de contenu (2026-07-18)
 Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduit le risque mais ne l'élimine pas structurellement.

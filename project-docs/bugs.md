@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — FIX PRÉPARÉ (branche, pas déployé), découvert le 2026-07-19 (audit loop-engineering, même famille que `GET /:id`)
+## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — CORRIGÉE, DÉPLOYÉE et VALIDÉE EN PROD le 2026-07-19, découverte le même jour (audit loop-engineering, même famille que `GET /:id`)
 
 Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a escaladé la tâche d'audit des routes sœurs (risque élevé — isolation multi-tenant + paiement, jamais d'auto-fix) mais a fait un **audit statique read-only** pour rendre l'escalade actionnable, sans modifier de code. Résultat : **3 des 4 endpoints audités sont vulnérables**, même classe de bug.
 
@@ -19,7 +19,11 @@ Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a
 - `tests/e2e/isolation.spec.ts` étendu (3 nouveaux tests, un par route) : 10/10 tests E2E verts, y compris la suite complète (auth/health/isolation)
 - Non-régression vérifiée manuellement : `manager@izigsm.fr` (boutique 1) peut toujours `PUT` son propre ticket 1 (200, inchangé)
 
-**Pas encore mergé sur `main` ni déployé** — en attente de relecture humaine (demande explicite de l'utilisateur : préparer le fix pour qu'il n'ait qu'à relire et déployer).
+**Mergé sur `main` le 2026-07-19** (commit `22b3071` via merge `a517bae`), relu par l'utilisateur, **déployé en prod** (`npx wrangler pages deploy`, https://e03ab24b.izigsm.pages.dev → `repairdesk.fr`) et **validé en conditions réelles** (`telnet@bbox.fr`, manager boutique 2) :
+- `PUT /api/tickets/1` (boutique 1, étrangère) : **403 confirmé** (avant fix : 200)
+- `GET /api/health` → 200 après déploiement
+
+Chantier isolation multi-tenant sur `tickets.ts` (4 endpoints audités le 2026-07-19) intégralement traité : `GET /:id` (`ae6795f`), `PUT /:id`/`PUT /:id/statut`/`DELETE /:id` (`22b3071`), `POST /:id/acompte` (déjà sûr). `GET /:id/photos`/`GET /:id/photos/:photoId/url` déjà protégés depuis le checkpoint 22 (2026-07-16).
 
 ## `scripts/loop/pick-task.mjs` — CRLF Windows cassait le parsing (faux "backlog vide") — CORRIGÉ le 2026-07-19, trouvé par la loop elle-même
 
