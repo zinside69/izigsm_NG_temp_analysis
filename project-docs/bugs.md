@@ -1,5 +1,15 @@
 # iziGSM — Bugs connus
 
+## Loop-engineering — gates (npm/node) refusés en session non-interactive fraîche — CORRIGÉ le 2026-07-19
+
+Premier run réel de `run-loop.ps1` sur Windows (après correction des bugs d'encodage/`-AsUTC`/`npx`/crédit API) : la loop a correctement escaladé (aucun commit, aucune tâche traitée), mais pour une mauvaise raison en plus de la bonne — le rapport de la session a indiqué que `node scripts/loop/check-quota.mjs` et, plus largement, tous les gates de l'Étape 5 (`vitest`/`tsc`/`build`/Playwright) étaient refusés : session `-p` non-interactive, aucun moyen d'accorder l'approbation Bash de première utilisation qu'un clone tout frais (aucune commande jamais approuvée) exige normalement.
+
+**Cause** : `--permission-mode acceptEdits` couvre l'auto-approbation des éditions de fichiers, pas l'exécution de commandes Bash inédites — celles-ci suivent le flux normal d'approbation (via `.claude/settings.local.json`, propre à chaque poste, jamais committé), invisible/impossible à satisfaire sans terminal interactif.
+
+**Fix** : `.claude/settings.json` (committé, partagé avec tout clone) ajouté avec une liste `permissions.allow` couvrant précisément les commandes utilisées par `SKILL.md`/`scripts/loop/*` (git, npm, npx tsc/vitest/playwright/wrangler/ccusage, node scripts/loop) — et une liste `permissions.deny` en garde-fou technique redondant avec les règles textuelles de `loop-policy.md` (force-push, `git reset --hard`, `wrangler pages deploy`, lecture de `.dev.vars`/`.env`).
+
+**Non vérifié en conditions réelles identiques** (impossible de reproduire un clone Windows totalement vierge depuis cet environnement) — à confirmer via un nouveau run réel après ce fix, même démarche itérative que pour les bugs précédents de cette session.
+
 ## `scripts/loop/run-loop.ps1` — erreur de parsing PowerShell (`MissingEndCurlyBrace`) — CORRIGÉ le 2026-07-19
 
 Découvert par l'utilisateur au premier test réel sur Windows (`.\scripts\loop\run-loop.ps1` déclenchait `ParseException: MissingEndCurlyBrace` à la ligne du premier `if`, très loin de toute vraie erreur de syntaxe).
