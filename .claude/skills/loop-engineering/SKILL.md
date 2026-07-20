@@ -237,6 +237,12 @@ résultat, pas de silence en fin de run.
   `superpowers:brainstorming`.
 - Jamais de suppression de fichier sous `docs/` ou `project-docs/`.
 - Jamais de lecture/écriture de secrets (`.dev.vars`, `wrangler secret`).
+- **Jamais de fichier de dump/debug laissé dans le repo** (ex. `pick-task.mjs --all >
+  fichier.json` pour inspecter le backlog en entier) — rediriger vers un fichier hors
+  du repo (dossier temp système) ou supprimer le fichier avant la fin du run. Un
+  fichier non suivi qui traîne dans `izigsm/webapp/` fait échouer le **prochain** run
+  planifié dès l'Étape 0 (précondition working tree propre) — incident réel rencontré
+  le 2026-07-20 (`alltasks.tmp.json`, voir `bugs.md`).
 - En cas de doute non couvert explicitement par ce document ou par
   `project-docs/loop-policy.md` → escalader. Le silence ou une supposition optimiste
   n'est jamais une réponse acceptable pour cette skill.

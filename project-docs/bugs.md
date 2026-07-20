@@ -526,3 +526,11 @@ Régression introduite par la livraison de `populateTechniciens()` le même jour
 **Root cause** : `Get-ScheduledTaskInfo | Select-Object ... | ConvertTo-Json` sérialise les objets `DateTime` PowerShell dans l'ancien format JSON .NET (`/Date(epoch_ms)/`), pas en ISO 8601 — `ConvertTo-Json` ne fait pas de conversion de type automatique pour les dates.
 
 **Fix** (`scripts/loop/telegram-listener.mjs`, `cmdStatus()`) : conversion explicite en chaîne côté PowerShell avant `ConvertTo-Json` (`$i.LastRunTime.ToString('yyyy-MM-dd HH:mm')`) plutôt que de laisser Node parser le format `/Date(...)/`. Vérifié en standalone avant de re-tester via Telegram.
+
+## Fichier de dump `alltasks.tmp.json` laissé dans le repo par une investigation loop-engineering — CORRIGÉ le 2026-07-20
+
+**Symptôme** : `alltasks.tmp.json` (29 Ko, dump de `node scripts/loop/pick-task.mjs --all`) trouvé non suivi dans le working tree d'`izigsm/webapp`, en dehors de tout run actif. Aucune perte de travail — c'est un fichier de lecture seule (liste du backlog complet avec `riskHint`), pas un artefact de progression — mais un fichier non suivi bloque le **prochain** run planifié dès l'Étape 0 (précondition « working tree propre »), même incident que celui rencontré avec les fichiers temporaires de Graphify le même jour.
+
+**Root cause probable** : une session `claude -p` d'un run planifié (ou une investigation manuelle) a redirigé la sortie de `pick-task.mjs --all` vers un fichier dans le repo pour consulter le backlog en entier, sans le supprimer ni le rediriger hors du repo.
+
+**Fix** : fichier supprimé (régénérable à la demande), pattern `*.tmp.json` ajouté à `.gitignore`, et règle ajoutée dans `SKILL.md` § Garde-fous globaux — toute investigation ponctuelle doit rediriger hors du repo ou nettoyer avant la fin du run.
