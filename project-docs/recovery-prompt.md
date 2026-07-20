@@ -1,3 +1,32 @@
+# Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 39 — loop-engineering pilotable à distance : Telegram + cadence horaire)
+
+## Vue d'ensemble (checkpoint 39)
+Suite du checkpoint 38 (loop-engineering mise en place au 37, premier commit auto réussi au 38). Session consacrée à rendre la loop **observable et pilotable sans session Claude Code ouverte** : bot Telegram (`iziGSM Loop Bot`), 3 tâches planifiées Windows tournant en parallèle.
+
+**Ce qui a été construit** :
+1. **Notifications** (`run-loop.ps1`) : message au démarrage (checkpoint backlog + tête de file visée) et à la fin (actions faites via `git log`, prochaine tâche) de chaque run — voir `loop-runbook.md` §9-10.
+2. **Watchdog** (`scripts/loop/watchdog.ps1`, tâche « iziGSM Loop Watchdog », 30 min) : alerte si `.loop-lock` a plus de 60 min — silencieux sinon.
+3. **Cadence horaire** : `iziGSM Loop Engineering` passée de 1x/jour à toutes les heures (`MultipleInstances=IgnoreNew`). Budget « 1 tâche/run » de `loop-policy.md` inchangé.
+4. **Commandes Telegram** (`scripts/loop/telegram-listener.mjs`, tâche « iziGSM Loop Telegram Listener », polling 5 min) : `/status`, `/digest` (tâches complexes, purement informatif), `/run`, `/approve <id>` (tag `[loop-safe]` + commit/push), `/help`. Set fixe décidé explicitement — pas de prompt libre transmis à `claude -p` (voir `decisions.md` 2026-07-20).
+
+**3 bugs trouvés et corrigés en route** (détail complet `bugs.md`) :
+- Working tree sale (diff résiduel oublié) bloquait le run planifié du 09:30
+- **Confiance workspace jamais acceptée** (`hasTrustDialogAccepted: false` pour `izigsm/webapp`) — bloquait tous les gates `node`/`npm` en session non-interactive, faisait escalader des runs pour de mauvaises raisons. Fix one-time : session interactive `claude` + accepter le dialogue.
+- Dates PowerShell brutes (`/Date(...)/`) dans `/status` — corrigé (`.ToString()` avant `ConvertTo-Json`)
+
+**2 runs réels validés de bout en bout** après le fix de confiance workspace : 1 escalade légitime (isolation multi-tenant, deep-link admin) + 1 commit réussi (réconciliation `todo.md` pattern `r.success`/`r.data`, checkpoint 38). Notifications Telegram confirmées reçues par l'utilisateur sur les deux, plus `/status` testé en conditions réelles.
+
+**Reste ouvert pour une prochaine session** :
+- `/digest` et `/approve <id>` **pas encore testés en conditions réelles** (seul `/status` confirmé fonctionnel) — à valider dès que possible
+- Watchdog jamais déclenché sur un vrai run bloqué (testé uniquement à vide, comportement silencieux confirmé correct)
+- 48 tâches ouvertes dans `todo.md`, majoritairement à risque élevé (isolation/NF525/paiement/migrations/architecture) — continueront d'escalader vers une session humaine quelle que soit la cadence de la loop ; chantier cache-busting (checkpoint 36) et deep-link admin (isolation) restent les 2 plus gros items en attente de décision humaine
+- Si le dossier de travail change à nouveau (nouvelle machine/clone) : refaire le fix de confiance workspace avant de compter sur la tâche planifiée
+
+## État git à la fin de ce checkpoint
+Tout commité et pushé sur `main` (`d13976c`/`d87de2a` checkpoint 38, `6051332`, `a480f5d`, `7fb2436` — infra notifications/commandes Telegram de ce checkpoint). Aucun changement de code applicatif — uniquement infra loop-engineering + documentation.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-19 (checkpoint 37 — faille isolation GET /api/tickets/:id corrigée et déployée)
 
 ## Vue d'ensemble (checkpoint 37)

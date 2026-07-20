@@ -151,3 +151,15 @@ Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attach
 **Constat** : le skill `subagent-driven-development` nomme les briefs/rapports de tâches `task-N-brief.md`/`task-N-report.md` de façon générique dans `.superpowers/sdd/`, sans namespace par chantier/plan. Deux chantiers différents (acompte structuré, impression ticket) numérotent chacun leurs tâches à partir de 1 — collision inévitable. Un sous-agent a écrasé `task-5-report.md` (contenu d'un chantier terminé, sans lien) sans proposer d'abord, violant la règle CLAUDE.md de non-écrasement. Fichier non récupérable (git-ignoré), mais aucune information unique perdue (contenu dupliqué ailleurs).
 
 **Décision** : pour toute future tâche ad-hoc de ce type (hors plan écrit, comme les Tasks 4bis/4b de ce chantier), namespacer les fichiers créés dans `.superpowers/sdd/` avec le nom du chantier (ex. `impression-ticket-task-N-*.md`) plutôt que la convention générique du skill. Voir `bugs.md` pour le détail complet de l'incident.
+
+## 2026-07-20 — Pilotage loop-engineering : cadence horaire + commandes Telegram fixes (pas de prompt libre)
+
+**Décision 1 — cadence** : tâche planifiée `iziGSM Loop Engineering` passée de 1x/jour à une répétition **toutes les heures** (`MultipleInstances=IgnoreNew`). Le budget « 1 tâche/déclenchement » de `loop-policy.md` reste inchangé — c'est la fréquence du déclencheur qui augmente, pas la taille d'un run.
+
+**Pourquoi** : l'utilisateur veut accélérer le débit sur la queue de tâches mécaniques à faible risque de `todo.md`. Alternative écartée : faire boucler `run-loop.ps1` sur plusieurs tâches dans un seul run (rejetée — casserait la lisibilité "un commit à la fois" déjà actée au checkpoint 37/`loop-policy.md`).
+
+**Décision 2 — commandes Telegram** : set fixe (`/status`, `/digest`, `/run`, `/approve <id>`, `/help`) plutôt que transmission d'un prompt libre à `claude -p`. **Rejeté explicitement** : laisser l'utilisateur taper une instruction en langage naturel dans Telegram et l'exécuter directement — trop de surface de risque pour un canal mobile (n'importe quelle instruction serait exécutée avec les gates `loop-policy.md` mais sans le niveau de vigilance qu'une session Claude Code interactive permet).
+
+**Décision 3 — `/digest` reste purement informatif** : pas de mécanisme `/focus <id>` ou de hand-off automatique vers une session Claude Code. L'utilisateur consulte la liste des tâches complexes détectées (heuristique mots-clés) et décide lui-même quand ouvrir une session pour les traiter avec le pipeline humain (`brainstorming`/`writing-plans`). Rejeté : automatiser le "prochain focus" — jugé prématuré tant que le digest lui-même n'est pas encore testé en usage réel.
+
+**Décision 4 — écoute par polling (5 min), pas de processus permanent** : cohérent avec le choix déjà fait pour le watchdog (30 min) — pas de webhook ni de daemon à maintenir en vie sur la machine Windows de l'utilisateur. Latence acceptée jusqu'à 5 min entre une commande Telegram et son exécution.

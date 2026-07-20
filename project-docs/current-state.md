@@ -1,4 +1,30 @@
-# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 38 — loop-engineering : réconciliation backlog r.success/r.data déjà corrigé)
+# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 39 — loop-engineering : notifications Telegram + pilotage à distance)
+
+## Checkpoint 39 — Loop-engineering : notifications Telegram, cadence horaire, commandes à distance (2026-07-20)
+
+**Objectif de session** : rendre la loop-engineering (mise en place au checkpoint 37) observable et pilotable sans avoir à ouvrir une session Claude Code — bot Telegram (`iziGSM Loop Bot`) + accélération de la cadence.
+
+**Notifications (`run-loop.ps1`)** : message Telegram au **démarrage** (permissions/quota OK, volume backlog `todo.md`/`TODO.md`, tête de file visée — style checkpoint) et à la **fin** de chaque run (actions faites = commits réels du run via `git log $PreRunHead..$PostRunHead`, prochaine tâche en tête de backlog) — plus un message court sur chaque cas d'abandon (tree sale, quota dépassé) ou d'échec (`claude -p` code ≠ 0). Toujours best-effort : une notif ratée ne bloque jamais le run.
+
+**Watchdog (`scripts/loop/watchdog.ps1`, tâche planifiée « iziGSM Loop Watchdog », 30 min)** : alerte Telegram si `.loop-lock` (écrit par `run-loop.ps1` avant `claude -p`, supprimé après) date de plus de 60 min — silencieux sinon, jamais de "tout va bien" répété. N'arrête jamais un processus, alerte uniquement.
+
+**Cadence** : tâche planifiée `iziGSM Loop Engineering` passée de 1x/jour (09:30) à **toutes les heures** (`MultipleInstances=IgnoreNew`, jamais 2 runs concurrents) — décision explicite de l'utilisateur pour accélérer le débit sur le backlog. Le budget « 1 tâche/déclenchement » de `loop-policy.md` n'a **pas changé** : c'est la fréquence du trigger qui augmente, pas la taille d'un run. Rappel documenté : la plupart des 48 tâches ouvertes de `todo.md` restent à risque élevé (isolation/NF525/paiement/migrations/architecture) et continueront d'escalader vers une session humaine quelle que soit la cadence — la loop ne vide que la queue mécanique à faible risque.
+
+**Commandes Telegram (`scripts/loop/telegram-listener.mjs`, tâche planifiée « iziGSM Loop Telegram Listener », polling 5 min)** : set fixe de commandes sûres, décision explicite de ne **pas** transmettre de prompt libre à `claude -p` — `/status` (état des tâches planifiées + backlog), `/digest` (liste des tâches complexes détectées par heuristique `riskHint` de `pick-task.mjs --all`, **purement informatif**, pas de hand-off automatique vers une session Claude Code), `/run` (force un run si aucun en cours), `/approve <id>` (tag `[loop-safe]` sur une tâche + commit/push immédiat — override explicite de la classification automatique, à la discrétion de l'utilisateur), `/help`. Sécurité : toute commande d'un `chat_id` non autorisé est ignorée silencieusement ; tous les appels `git`/`node`/`powershell` passent par `execFileSync` (tableaux d'arguments, pas d'interpolation shell).
+
+**3 tâches planifiées Windows actives** : `iziGSM Loop Engineering` (horaire), `iziGSM Loop Watchdog` (30 min), `iziGSM Loop Telegram Listener` (5 min) — les trois tournent en parallèle et indépendamment d'une session Claude Code interactive.
+
+**Bugs trouvés et corrigés pendant la mise en place** :
+1. Run planifié du 09:30 échoué (code 1) — working tree non propre (diff résiduel oublié dans `loop-runbook.md`, une ligne d'exemple 06:00→09:30). Corrigé, folded dans le premier commit de session.
+2. Blocage confiance workspace (`hasTrustDialogAccepted: false` pour `izigsm/webapp` dans `~/.claude.json`) — empêchait `node`/`npm`/`npx` en session non-interactive (`claude -p`), faisait échouer tous les gates silencieusement. Résolu par une session interactive one-time (`cd` + `claude` + accepter le dialogue).
+3. Dates PowerShell brutes (`/Date(1784...)/ `) dans le message `/status` — `Get-ScheduledTaskInfo` sérialisé en JSON sans conversion. Corrigé (`.ToString('yyyy-MM-dd HH:mm')` avant `ConvertTo-Json`).
+4. (Découvert, pas un bug de cette session) Le ledger `.superpowers/sdd/loop-runs.md` contenait des entrées obsolètes suggérant que le fix CRLF `pick-task.mjs` n'était pas appliqué — en réalité déjà corrigé et commité (`49d4ffe`, 2026-07-19). Rappel : le ledger est un instantané figé par run, pas un état vivant (déjà documenté en tête du fichier).
+
+**2 runs réels validés de bout en bout aujourd'hui** : 1 escalade légitime (isolation multi-tenant sur le deep-link admin, gates inexécutables en session non-interactive avant le fix de confiance workspace) + 1 commit réussi après le fix (réconciliation `todo.md` § pattern `r.success`/`r.data`, déjà corrigé par `c281411` — voir checkpoint 38 ci-dessous). Notification Telegram confirmée reçue par l'utilisateur sur les deux.
+
+**Commits de cette session** : `d13976c`/`d87de2a` (checkpoint 38, réconciliation), `6051332` (notifs Telegram fin de run), `a480f5d` (notif démarrage + cadence horaire), `7fb2436` (commandes Telegram).
+
+**Reste ouvert** : `/digest` et `/approve` pas encore testés en conditions réelles par l'utilisateur (seul `/status` confirmé) ; watchdog testé uniquement à vide (jamais déclenché sur un vrai run bloqué) ; 48 tâches `todo.md` toujours ouvertes, majoritairement à risque élevé (voir `todo.md` pour le détail).
 
 ## Checkpoint 38 — Loop-engineering : réconciliation backlog « pattern r.success/r.data » (2026-07-20)
 

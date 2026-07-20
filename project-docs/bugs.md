@@ -508,3 +508,21 @@ Régression introduite par la livraison de `populateTechniciens()` le même jour
 **Fix appliqué et validé** (même jour, migration `migrations/0034_numero_unique_par_boutique.sql`) : les 5 tables recréées avec `UNIQUE(boutique_id, numero)` au lieu de `UNIQUE(numero)` global — pattern SQLite standard (create table corrigée → copie explicite des colonnes → drop → rename → recréation des index). Découverte favorable en cours d'investigation : `devis`/`factures`/`avoirs`/`rachats` étaient **vides en production** (0 ligne), seule `tickets` avait des données réelles (10 lignes, aucun doublon `boutique_id+numero` préexistant) — risque NF525 sur données existantes finalement nul.
 
 **Validation** : testé en local (`wrangler d1 migrations apply --local`) avant toute application prod — même `numero` sur 2 boutiques différentes accepté, même `numero` sur la même boutique toujours rejeté (`UNIQUE constraint failed: tickets.boutique_id, tickets.numero`), AUTOINCREMENT et contraintes FK confirmés intacts. Appliqué en prod (`wrangler d1 migrations apply izigsm-production --remote`, 52 commandes, aucune erreur), puis **revalidé en live** : `POST /api/tickets` pour Desk1 (boutique_id=3) → 201, `numero: TKT-2026-00007` (exactement le numero qui collisionnait avant avec la boutique 1). Ticket et client de test supprimés après coup.
+
+## Confiance workspace `izigsm/webapp` jamais acceptée — bloquait tous les gates en session non-interactive — CORRIGÉ le 2026-07-20
+
+**Symptôme** : run planifié `iziGSM Loop Engineering` du 2026-07-20 09:30 (après correction du diff `loop-runbook.md` qui bloquait le run précédent) se termine avec `Ignoring 30 permissions.allow entries from .claude/settings.json: this workspace has not been trusted`. Conséquence : `node`/`npm`/`npx` tous refusés dans la session `claude -p` non-interactive → `pick-task.mjs` inexécutable → la skill suppose à tort (sur la base du ledger périmé) que le bug CRLF n'est toujours pas corrigé → sélection manuelle dégradée → escalade sur la première tâche isolation trouvée, alors que le vrai blocage était structurel (permissions), pas la tâche elle-même.
+
+**Root cause** : `~/.claude.json` → `projects["C:/Users/Said/Downloads/claude-test/izigsm/webapp"].hasTrustDialogAccepted` était à `false` — ce dossier n'avait jamais été ouvert en session interactive `claude` pour accepter le dialogue de confiance (contrairement à deux autres dossiers izigsm sur la même machine, déjà trustés). Déjà documenté comme limite connue dans `loop-runbook.md` §8 avant ce jour, mais jamais rencontré concrètement jusqu'à ce run.
+
+**Fix** : session interactive one-time (`cd C:\Users\Said\Downloads\claude-test\izigsm\webapp && claude`, accepter le dialogue de confiance, `/exit`) — `hasTrustDialogAccepted` repassé à `true`, vérifié directement dans `~/.claude.json`. Run réel relancé manuellement après le fix : `pick-task.mjs` fonctionnel, gates (`vitest`/`tsc`/`build`) tous exécutables, commit+push réussi (checkpoint 38).
+
+**À surveiller** : si le dossier de travail change à nouveau (nouveau clone, nouvelle machine), refaire cette étape avant de compter sur la tâche planifiée — déjà noté dans `loop-runbook.md` §8, confirmé ici comme un vrai piège rencontré en pratique.
+
+## Dates PowerShell brutes (`/Date(...)/`) dans la réponse `/status` Telegram — CORRIGÉ le 2026-07-20
+
+**Symptôme** : première commande `/status` testée en réel affiche `Dernier run : /Date(1784532630000)/ (code 1)` au lieu d'une date lisible.
+
+**Root cause** : `Get-ScheduledTaskInfo | Select-Object ... | ConvertTo-Json` sérialise les objets `DateTime` PowerShell dans l'ancien format JSON .NET (`/Date(epoch_ms)/`), pas en ISO 8601 — `ConvertTo-Json` ne fait pas de conversion de type automatique pour les dates.
+
+**Fix** (`scripts/loop/telegram-listener.mjs`, `cmdStatus()`) : conversion explicite en chaîne côté PowerShell avant `ConvertTo-Json` (`$i.LastRunTime.ToString('yyyy-MM-dd HH:mm')`) plutôt que de laisser Node parser le format `/Date(...)/`. Vérifié en standalone avant de re-tester via Telegram.
