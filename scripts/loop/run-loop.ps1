@@ -65,6 +65,30 @@ if ($QuotaExit -eq 1) {
 git checkout main
 git pull origin main
 
+# Notification de demarrage (2026-07-20) - checkpoint style context-guardian : confirme
+# que le script tourne, montre la tete de backlog visee et le volume restant. Purement
+# informatif - pick-task.mjs ne tient pas compte des skips que peut appliquer la skill
+# (tache deja escaladee sans decision humaine, etc.), donc la tache reellement traitee
+# peut differer de celle annoncee ici. Best-effort, jamais bloquant.
+try {
+    $StartJson = node scripts/loop/pick-task.mjs 2>$null
+    $StartTaskText = "n/a"
+    if ($StartJson) {
+        $StartObj = $StartJson | ConvertFrom-Json
+        if ($StartObj.empty) {
+            $StartTaskText = "backlog vide (todo.md/TODO.md sans case non cochee)"
+        } elseif ($StartObj.text) {
+            $StartTaskText = $StartObj.text
+            if ($StartTaskText.Length -gt 200) { $StartTaskText = $StartTaskText.Substring(0,200) + "..." }
+        }
+    }
+    $OpenTodo = (Select-String -Path "project-docs/todo.md" -Pattern "^\s*-\s*\[ \]" -AllMatches -ErrorAction SilentlyContinue).Count
+    $OpenLegacy = (Select-String -Path "docs/TODO.md" -Pattern "^\s*-\s*\[ \]" -AllMatches -ErrorAction SilentlyContinue).Count
+    Notify "iziGSM Loop : DEMARRAGE (run OK, permissions/quota valides).`n`nBacklog ouvert : $OpenTodo taches (project-docs/todo.md) + $OpenLegacy taches (docs/TODO.md, legacy).`n`nTete de file visee : $StartTaskText`n`n(Info seule - la skill peut skipper cette tache si deja escaladee sans decision humaine depuis. Rapport complet a la fin du run.)"
+} catch {
+    Notify "iziGSM Loop : DEMARRAGE (run OK, permissions/quota valides). Resume backlog indisponible ce coup-ci."
+}
+
 $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SKILL.md) pour traiter exactement UNE tache du backlog, de bout en bout, en respectant strictement project-docs/loop-policy.md. Termine ta reponse par le rapport de ledger (commit/escalade/backlog vide), meme en cas d'echec."
 
 # Lock pour le watchdog (scripts/loop/watchdog.ps1, tache planifiee separee toutes les

@@ -17,10 +17,16 @@ Pour les instructions exactes que suit Claude à l'intérieur du run : voir
 ## 1. Le déclencheur — tâche planifiée Windows
 
 Une tâche du Planificateur de tâches Windows (`schtasks`/`Register-ScheduledTask`, nom
-`iziGSM Loop Engineering`) se déclenche **tous les jours à l'heure configurée** (09:30
-local depuis le 2026-07-19, modifiée une première fois — 13:20 à la création initiale.
-Voir § 7 pour changer et pour vérifier l'heure actuelle sans supposer qu'elle n'a pas
-bougé depuis la rédaction de ce document). Elle lance :
+`iziGSM Loop Engineering`) se déclenche **toutes les heures depuis le 2026-07-20**
+(historique : 13:20 à la création initiale le 2026-07-19, puis 1x/jour à 09:30 le même
+jour, puis passage à une répétition horaire le 2026-07-20 — décision explicite de
+l'utilisateur pour accélérer le traitement du backlog `todo.md`, tout en gardant le
+budget « 1 tâche/déclenchement » de `loop-policy.md` inchangé : c'est la fréquence du
+trigger qui augmente, pas la taille d'un run). `MultipleInstances` réglé sur
+`IgnoreNew` : si un run est encore en cours au déclenchement suivant, le nouveau
+déclenchement est ignoré (jamais deux runs en parallèle sur le même repo).
+Voir § 7 pour changer et pour vérifier la configuration actuelle sans supposer qu'elle
+n'a pas bougé depuis la rédaction de ce document. Elle lance :
 
 ```
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Said\Downloads\claude-test\izigsm\webapp\scripts\loop\run-loop.ps1"
@@ -160,12 +166,18 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   (Get-ScheduledTask -TaskName "iziGSM Loop Engineering").Triggers
   Get-TimeZone
   ```
-- **Changer l'heure** (toujours en heure LOCALE de la machine, pas GMT/UTC — voir § 1) :
+- **Changer la fréquence** (depuis le 2026-07-20 : répétition horaire, pas un
+  déclenchement quotidien à heure fixe — voir § 1) :
+  ```powershell
+  $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650)
+  Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger $Trigger -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable)
+  ```
+  Remplacer `-Hours 1` par l'intervalle voulu (ex. `-Minutes 30`, `-Hours 2`). Toujours
+  garder `-MultipleInstances IgnoreNew` pour éviter deux runs concurrents si un run
+  dépasse l'intervalle. Pour revenir à un déclenchement quotidien à heure fixe :
   ```powershell
   Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger (New-ScheduledTaskTrigger -Daily -At 09:30)
   ```
-  Remplacer `06:00` par l'heure locale voulue (ex. `09:30` = actuel au moment de la
-  rédaction).
 - **Changer le dossier/chemin du script** (si le dossier de travail change à nouveau) :
   ```powershell
   $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-NoProfile -ExecutionPolicy Bypass -File "<nouveau chemin complet>\scripts\loop\run-loop.ps1"'
@@ -284,6 +296,42 @@ succès, code 0) ne se contente plus de renvoyer vers le ledger — il inclut di
   après le run pour afficher la tête de file actuelle (texte tronqué à 200 caractères).
   **Indicatif seulement** — ne préjuge pas de ce que fera réellement le run suivant
   (une tâche peut être skippée pour risque déjà escaladé, voir Étape 1 de `SKILL.md`).
+
+## 10. Notification de démarrage + fréquence horaire (ajouté le 2026-07-20)
+
+**Pourquoi** : avec un seul run/jour, l'utilisateur a demandé à accélérer le traitement
+du backlog `todo.md` (48 tâches ouvertes à cette date) et à savoir, dès le lancement,
+que le script tourne correctement et ce qu'il vise — plutôt que d'attendre la fin pour
+le découvrir (façon `/context-guardian status` : un checkpoint immédiat de ce qui reste
+à faire).
+
+**Fréquence** : tâche planifiée `iziGSM Loop Engineering` passée de 1x/jour (09:30) à
+une répétition **toutes les heures**, `MultipleInstances = IgnoreNew` (jamais deux runs
+concurrents — voir § 1 et § 7). Le budget « 1 tâche/déclenchement » de
+`loop-policy.md` **n'a pas changé** : c'est le déclencheur qui tourne plus souvent, pas
+la loop qui traite plusieurs tâches par run. Un run qui trouve immédiatement une tâche
+déjà escaladée ou un backlog vide se termine en 1-2 minutes, sans impact notable même à
+cadence horaire.
+
+**Notification de démarrage** : juste après le gate quota et le `git pull`, avant
+l'appel `claude -p`, `run-loop.ps1` relance `pick-task.mjs` (à titre informatif
+uniquement — la skill à l'intérieur de `claude -p` peut décider de skipper cette tâche,
+voir Étape 1 de `SKILL.md`) et envoie un message Telegram avec :
+- Confirmation que le run démarre (permissions/quota valides)
+- Nombre de tâches ouvertes dans `project-docs/todo.md` et `docs/TODO.md`
+- Le texte de la tâche en tête de file visée
+
+Best-effort comme le résumé de fin (§9) : toute erreur retombe sur un message court
+générique, ne bloque jamais le run.
+
+**Important — limite structurelle à garder en tête** : accélérer la cadence ne change
+pas la nature des tâches. La majorité des 48 items de `todo.md` touchent isolation
+multi-tenant / NF525 / paiement / migrations / périmètre architectural large —
+catégories interdites à l'auto-commit par `loop-policy.md` quelle que soit la fréquence
+du trigger. La loop autonome ne vide que la queue mécanique à faible risque ; les gros
+chantiers (cache-busting, multi-boutiques, rebranding...) restent du ressort du
+pipeline humain (`brainstorming` → `writing-plans` → `subagent-driven-development`).
+Une cadence horaire accélère le débit sur cette queue-là, pas sur l'ensemble du backlog.
 
 Best-effort : toute erreur dans la construction de ce résumé (ex. `pick-task.mjs`
 indisponible) retombe silencieusement sur le message générique d'origine — ne bloque
