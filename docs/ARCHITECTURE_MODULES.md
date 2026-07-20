@@ -124,12 +124,12 @@
 | 0001 | `users`, `roles`, `user_roles` | 1.0 |
 | 0002 | `boutiques`, `boutique_settings` | 1.0 |
 | 0003 | `clients`, `appareils` | 1.0 |
-| 0004 | `tickets`, `statuts_historique` | 1.0 |
+| 0004 | `tickets`, `tickets_statuts_historique` | 1.0 |
 | 0005 | `categories`, `produits`, `mouvements_stock` | 1.0 |
-| 0006 | `devis`, `factures`, `lignes_facture`, `paiements` | 1.0 |
+| 0006 | `devis`, `factures`, `lignes_document`, `paiements` | 1.0 |
 | 0007 | `employes`, `pointages` | 1.0 |
-| 0008 | `journal_nf525`, `sessions_caisse`, `lignes_caisse` | 1.0/2.12 |
-| 0009 | `otp_codes`, `audit_logs` | 2.3 |
+| 0008 | `journal_nf525`, `clotures_journalieres` | 1.0/2.12 |
+| 0009 | `otp_tokens`, `audit_logs` | 2.3 |
 | 0010 | `avoirs`, `lignes_avoir` + colonnes factures | 2.1 |
 | 0011 | `rachats` (30 colonnes) | 2.2 |
 | 0012 | `permissions` + colonnes PIN sur users | 2.3 |
@@ -139,7 +139,7 @@
 | 0016 | colonnes vitrine sur `boutiques` | 2.7 |
 | 0017 | `priorite`, `date_commande_pieces`, `date_reception_pieces` sur tickets | 2.8 |
 | 0018 | colonnes numérotation + settings sur `boutique_settings` | 2.9 |
-| 0019 | `garanties`, `tickets_sav` | 2.10 |
+| 0019 | `garanties`, `sav_dossiers` | 2.10 |
 | 0020 | `email_logs` | 2.11 |
 | 0021 | `ordres_reconditionnement`, `bons_achat` | 2.16 |
 | 0022 | UPDATE slug boutiques existantes | 2.18 |

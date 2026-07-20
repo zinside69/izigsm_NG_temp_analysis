@@ -160,7 +160,7 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 
 ## Dette technique découverte pendant la migration (voir bugs.md pour le détail)
 - [x] `/register` cassé — **CORRIGÉ et VALIDÉ le 2026-07-10** (commits `e6b75b9`, `3129836`, déployé `8bcbb1d4`) — flow email OTP réel, testé bout-en-bout par l'utilisateur (inscription → email reçu → code vérifié → dashboard), voir bugs.md
-- [ ] `docs/ARCHITECTURE_MODULES.md` §2 obsolète (noms de tables)
+- [x] `docs/ARCHITECTURE_MODULES.md` §2 — noms de tables obsolètes corrigés par la loop-engineering (2026-07-20, risque faible, auto-commit) : `statuts_historique`→`tickets_statuts_historique` (0004), `lignes_facture`→`lignes_document` (0006), `sessions_caisse`/`lignes_caisse`→`clotures_journalieres` (0008), `otp_codes`→`otp_tokens` (0009), `tickets_sav`→`sav_dossiers` (0019) — chaque nom vérifié contre les `CREATE TABLE` réels de `migrations/*.sql`
 - [ ] 3 tests unitaires sensibles au fuseau horaire (non-bloquant)
 - [ ] `escapeHtml()` manquant sur `client_prenom` dans 5 templates email (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) — même faille corrigée sur l'email OTP, préexistante ailleurs
 

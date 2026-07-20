@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 40 — graphe de connaissance Graphify + validation commandes Telegram en conditions réelles)
+# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 41 — loop-engineering : correction doc noms de tables §2, premier auto-commit de contenu réussi)
+
+## Checkpoint 41 — Loop-engineering : `docs/ARCHITECTURE_MODULES.md` §2 noms de tables corrigés (auto-commit risque faible) (2026-07-20)
+
+**Contexte** : run de la loop-engineering (skill `.claude/skills/loop-engineering/SKILL.md`, gouverné par `loop-policy.md`). Environnement opérant (`node`/`npm`/`npx` exécutables, `pick-task.mjs` fonctionnel). Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open** conforme à `loop-policy.md`, signalé).
+
+**Sélection** : tête de file `pick-task.mjs` = chantier cache-busting (🔴, 6 items) **déjà escaladé** au run `61fc30924e` (périmètre architectural), aucune décision actée depuis → passé (`--skip`, règle Étape 1). Écartés en ordre déterministe : L40 déploiement (la loop ne déploie jamais), deep-link admin (déjà escaladé, isolation), décisions produit (L37/L135/L136), convention nommage (L38), `nom boutique fiche imprimée` + `escapeHtml` (risque élevé), `assignation technicien` (feature à construire). Première tâche **risque faible implémentable** en aval → `3a01544d33` (`todo.md:163`, documentation).
+
+**Travail** : correction de 5 noms de tables obsolètes dans le tableau §2 « Schéma de base de données », chacun vérifié contre les `CREATE TABLE` réels de `migrations/*.sql` : `statuts_historique`→`tickets_statuts_historique` (0004), `lignes_facture`→`lignes_document` (0006), `sessions_caisse`/`lignes_caisse`→`clotures_journalieres` (0008, les deux premiers noms n'existent dans aucune migration), `otp_codes`→`otp_tokens` (0009), `tickets_sav`→`sav_dossiers` (0019). Portée volontairement limitée aux **noms erronés** (pas d'ajout de complétude type `commissions`/`sequences`/migrations 0032-0036 — hors scope « noms obsolètes », éviterait le scope creep).
+
+**Gates** : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants `computeFin()`/`updateRendezVous` inchangés — baseline stable) · tsc ✅ (0 nouvelle erreur ; markdown hors compilation TS, delta nul vs `main` — les erreurs restantes sur `servicesService.ts`/`stockService.ts`/`tests/e2e/*`/`setup.ts` sont pré-existantes) · build ✅ (`vite build` 1.93s) · playwright **n·a** · browser-use **n·a** (delta code nul, un changement markdown ne peut pas régresser le runtime ni introduire de parcours utilisateur — même raisonnement que le run docs-only `eabf928d00`).
+
+**Déviation Étape 3 (transparence)** : pas de worktree isolé — le périmètre d'écriture de la session est restreint à `izigsm/webapp`, un worktree frère `../izigsm-loop-*` est non-inscriptible (même contrainte que le run `eabf928d00`). Pour ce changement docs-only à delta code nul, édition faite sur le checkout `main` directement, cohérent avec les commits docs sur `main` déjà présents (`d13976c`).
 
 ## Checkpoint 40 — Graphe de connaissance `/graphify` sur tout le repo + `/approve` Telegram validé (2026-07-20)
 
