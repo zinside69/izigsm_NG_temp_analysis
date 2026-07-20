@@ -1,4 +1,14 @@
-# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 39 — loop-engineering : notifications Telegram + pilotage à distance)
+# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 40 — graphe de connaissance Graphify + validation commandes Telegram en conditions réelles)
+
+## Checkpoint 40 — Graphe de connaissance `/graphify` sur tout le repo + `/approve` Telegram validé (2026-07-20)
+
+**Graphe construit** : `/graphify` lancé sur `izigsm/webapp` en entier (255 fichiers, ~1.63M mots) — **1867 nœuds, 2643 relations, 418 communautés**, réduction ~533x en coût de requête vs relire le corpus brut. Sorties dans `izigsm/webapp/graphify-out/` (gitignoré, non suivi par git — voir `.gitignore`) : `graph.json`, `graph.html`, `GRAPH_REPORT.md`, vault Obsidian (2282 notes + `graph.canvas`), et `MODE-OPERATOIRE.md` (procédure complète de relecture/mise à jour).
+
+**Incident en cours de route (résolu)** : la limite de dépense mensuelle du compte a coupé 24 sous-agents d'extraction parallèles en plein run — 23/24 chunks ont quand même écrit leur fichier avant la coupure (l'erreur API n'annule pas les écritures disque déjà faites), seul 1 chunk (config racine + migrations 0001-0005) a été refait manuellement, sans sous-agent. Deuxième incident en cascade : les fichiers temporaires de graphify (non gitignorés au départ) ont sali le working tree et fait échouer le run planifié `iziGSM Loop Engineering` de 16:00 (code 1) — corrigé en ajoutant `.graphify_*`/`graphify-out/` au `.gitignore` (voir `bugs.md` si détail nécessaire, sinon `graphify-out/MODE-OPERATOIRE.md` §5 pour le récit complet des pièges).
+
+**Commande `/approve` validée en conditions réelles** (commit `ee9a2e6`, hors de cette session — usage autonome du bot par l'utilisateur) : tâche `73e011907f` ("Déploiement groupé du chantier impression ticket") taguée `[loop-safe]` via Telegram. **Note** : cette tâche particulière concerne un déploiement — même taguée `loop-safe`, `loop-policy.md` interdit categoriquement tout `wrangler pages deploy` automatique, donc le tag n'a pas d'effet pratique ici au-delà de rendre la tâche éligible à la sélection ; le prochain run qui la sélectionne devrait simplement constater qu'il ne peut rien déployer et escalader. Les 4 commandes Telegram (`/status`, `/digest` informatif, `/run`, `/approve`) sont désormais toutes confirmées en usage réel au moins une fois.
+
+**Nettoyage** : fichier `alltasks.tmp.json` (dump `pick-task.mjs --all`, généré par un run automatique d'investigation du backlog) supprimé + pattern `*.tmp.json` ajouté au `.gitignore` pour éviter la récidive.
 
 ## Checkpoint 39 — Loop-engineering : notifications Telegram, cadence horaire, commandes à distance (2026-07-20)
 
