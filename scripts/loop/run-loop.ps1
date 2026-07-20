@@ -29,13 +29,23 @@ Set-Location $RepoRoot
 #   de ce flag. Utiliser "plan" pour observer sans rien laisser executer/committer.
 $PermissionMode = if ($env:LOOP_PERMISSION_MODE) { $env:LOOP_PERMISSION_MODE } else { "acceptEdits" }
 
+# Notification Telegram (2026-07-20, voir project-docs/loop-runbook.md § Notifications).
+# NotifyScript echoue toujours en silencieux (exit 0) - jamais bloquant pour la loop.
+$NotifyScript = Join-Path $ScriptDir "notify-telegram.mjs"
+$LockPath     = Join-Path $ScriptDir ".loop-lock"
+function Notify($Msg) {
+    node $NotifyScript $Msg | Out-Null
+}
+
 Write-Host "[run-loop] Repo   : $RepoRoot"
 Write-Host "[run-loop] Mode   : $PermissionMode"
 Write-Host "[run-loop] Depart : $((Get-Date).ToUniversalTime().ToString("o"))"
 
 $status = git status --porcelain
 if ($status) {
-    Write-Error "[run-loop] ERREUR : working tree non propre sur $(git branch --show-current). La loop ne demarre jamais sur un etat sale - commit/stash d'abord."
+    $Branch = git branch --show-current
+    Write-Error "[run-loop] ERREUR : working tree non propre sur $Branch. La loop ne demarre jamais sur un etat sale - commit/stash d'abord."
+    Notify "iziGSM Loop : ABANDON - working tree non propre sur $Branch. Rien execute. Commit/stash requis avant le prochain run."
     exit 1
 }
 
@@ -48,6 +58,7 @@ $QuotaExit = $LASTEXITCODE
 Write-Host "[run-loop] Quota : $QuotaJson"
 if ($QuotaExit -eq 1) {
     Write-Error "[run-loop] ARRET : quota du plan >= seuil. Pas de run. Reessayer plus tard (pas de retry auto)."
+    Notify "iziGSM Loop : ABANDON - quota du plan >= seuil ($QuotaJson). Pas de run aujourd'hui, reessai automatique demain."
     exit 1
 }
 
@@ -56,8 +67,14 @@ git pull origin main
 
 $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SKILL.md) pour traiter exactement UNE tache du backlog, de bout en bout, en respectant strictement project-docs/loop-policy.md. Termine ta reponse par le rapport de ledger (commit/escalade/backlog vide), meme en cas d'echec."
 
+# Lock pour le watchdog (scripts/loop/watchdog.ps1, tache planifiee separee toutes les
+# 30 min) - horodatage UTC round-trippable, supprime des la fin de claude -p ci-dessous.
+(Get-Date).ToUniversalTime().ToString("o") | Set-Content $LockPath
+
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
 $ClaudeExit = $LASTEXITCODE
+
+Remove-Item $LockPath -ErrorAction SilentlyContinue
 
 # Auto-commit du ledger seul (jamais le reste) : le run peut escalader sans rien
 # committer via claude -p, ce qui laisse .superpowers/sdd/loop-runs.md non suivi/modifie
@@ -79,9 +96,11 @@ if (Test-Path $LedgerPath) {
 
 if ($ClaudeExit -ne 0) {
     Write-Host "[run-loop] ECHEC : claude a quitte avec le code $ClaudeExit (voir la sortie ci-dessus pour la cause - ex. credit insuffisant, erreur reseau, etc.)."
+    Notify "iziGSM Loop : ECHEC - claude a quitte avec le code $ClaudeExit. Voir la sortie du run / .superpowers/sdd/loop-runs.md."
 } else {
     Write-Host "[run-loop] Fin : $((Get-Date).ToUniversalTime().ToString("o"))"
     Write-Host "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le detail de ce run."
+    Notify "iziGSM Loop : run termine (code 0). Voir .superpowers/sdd/loop-runs.md pour le detail (commit/escalade/backlog vide)."
 }
 
 exit $ClaudeExit

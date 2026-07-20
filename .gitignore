@@ -53,3 +53,8 @@ playwright/.cache/
 izigsm_v*.zip
 izigsm_*backup*.zip
 izigsm_*backup*.tar.gz
+
+# Notifications Telegram loop-engineering (2026-07-20) — secret local + lock file de
+# run, jamais suivis (voir project-docs/loop-runbook.md § Notifications).
+scripts/loop/telegram.local.json
+scripts/loop/.loop-lock

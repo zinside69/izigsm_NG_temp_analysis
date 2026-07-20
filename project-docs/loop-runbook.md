@@ -162,7 +162,7 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   ```
 - **Changer l'heure** (toujours en heure LOCALE de la machine, pas GMT/UTC — voir § 1) :
   ```powershell
-  Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger (New-ScheduledTaskTrigger -Daily -At 06:00)
+  Set-ScheduledTask -TaskName "iziGSM Loop Engineering" -Trigger (New-ScheduledTaskTrigger -Daily -At 09:30)
   ```
   Remplacer `06:00` par l'heure locale voulue (ex. `09:30` = actuel au moment de la
   rédaction).
@@ -221,3 +221,56 @@ ne remplace pas une vraie alerte de solde côté console.anthropic.com.
   dans le dossier de dev habituel, ce qui faisait échouer le check "working tree
   propre" de l'Étape 0 en permanence. N'affecte aucun fichier déjà suivi
   (`docs/CDC_izigsm.pdf` reste tracké normalement).
+
+## 9. Notifications Telegram (ajouté le 2026-07-20)
+
+Avant cette date, aucune notification n'existait (§8 ci-dessus le disait explicitement)
+— seule trace = terminal/ledger/git log, à consulter activement. Un bot Telegram
+(`iziGSM Loop Bot`) a été mis en place pour recevoir un message à chaque run et une
+alerte si un run reste bloqué anormalement longtemps.
+
+**Config** : `scripts/loop/telegram.local.json` (`botToken`/`chatId`) — fichier local,
+**jamais commité** (`.gitignore`), propre à cette machine. À recréer manuellement sur
+toute autre machine qui exécuterait la loop (voir procédure BotFather ci-dessous si
+besoin de recréer le bot, sinon juste recopier le fichier avec le token existant).
+
+**`scripts/loop/notify-telegram.mjs`** : envoie un message au bot via l'API Telegram
+(`sendMessage`). Volontairement **non bloquant** — toute erreur (config absente, réseau,
+API Telegram indisponible) est loggée sur stderr et le script sort en 0, pour ne jamais
+faire échouer `run-loop.ps1`/`watchdog.ps1` à cause d'une notification.
+
+**`run-loop.ps1`** envoie désormais une notification Telegram sur **chaque** issue du
+run, pas seulement en cas de succès :
+- Working tree non propre → abandon, notifié (avec la branche concernée)
+- Quota du plan ≥ seuil → abandon, notifié (avec le JSON du quota)
+- `claude -p` terminé (code 0 ou non) → notifié, avec renvoi vers
+  `.superpowers/sdd/loop-runs.md` pour le détail (commit/escalade/backlog vide)
+
+**Lock + watchdog (`scripts/loop/watchdog.ps1`, tâche planifiée séparée "iziGSM Loop
+Watchdog", toutes les 30 min)** : `run-loop.ps1` écrit `scripts/loop/.loop-lock`
+(horodatage UTC) juste avant de lancer `claude -p`, le supprime juste après (succès ou
+échec). Le watchdog vérifie ce fichier :
+- Absent → aucun run en cours, sortie silencieuse (**pas** de notification "tout va
+  bien" à chaque passage de 30 min — uniquement des alertes réelles, pour ne pas noyer
+  le canal Telegram).
+- Présent depuis plus de 60 min (`LOOP_WATCHDOG_THRESHOLD_MIN`, ajustable en variable
+  d'environnement) → notification "run probablement bloqué". Le watchdog **n'arrête
+  jamais** un processus et **ne touche jamais** au code/git — il alerte, la décision
+  reste humaine (cohérent avec le reste de la politique L2, `loop-policy.md`).
+
+**Recréer le bot Telegram (si besoin, autre machine ou token perdu)** :
+1. Telegram → chercher `@BotFather` → `/newbot` → nom + username se terminant par `bot`
+2. Récupérer le token donné par BotFather
+3. Envoyer un message au nouveau bot (n'importe quoi)
+4. Ouvrir `https://api.telegram.org/bot<TOKEN>/getUpdates` → repérer `"chat":{"id":...}`
+   → c'est le `chatId`
+5. Écrire les deux valeurs dans `scripts/loop/telegram.local.json`
+
+**Tâche planifiée watchdog** (créée le 2026-07-20, indépendante de "iziGSM Loop
+Engineering") :
+```powershell
+Get-ScheduledTaskInfo -TaskName "iziGSM Loop Watchdog"   # dernier check / statut
+Disable-ScheduledTask -TaskName "iziGSM Loop Watchdog"   # mettre en pause
+Enable-ScheduledTask  -TaskName "iziGSM Loop Watchdog"   # reprendre
+Unregister-ScheduledTask -TaskName "iziGSM Loop Watchdog" -Confirm:$false  # supprimer
+```
