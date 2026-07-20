@@ -59,3 +59,9 @@ izigsm_*backup*.tar.gz
 scripts/loop/telegram.local.json
 scripts/loop/.loop-lock
 scripts/loop/.telegram-offset
+
+# graphify (2026-07-20) — fichiers temporaires/sortie de /graphify, jamais suivis.
+# Un run précédent a laissé ces fichiers non trackés dans le working tree, ce qui a
+# fait échouer le run planifié loop-engineering de 16:00 (précondition "tree propre").
+.graphify_*
+graphify-out/
