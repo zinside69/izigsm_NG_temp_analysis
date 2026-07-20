@@ -297,6 +297,12 @@ succès, code 0) ne se contente plus de renvoyer vers le ledger — il inclut di
   **Indicatif seulement** — ne préjuge pas de ce que fera réellement le run suivant
   (une tâche peut être skippée pour risque déjà escaladé, voir Étape 1 de `SKILL.md`).
 
+Best-effort : toute erreur dans la construction de ce résumé (ex. `pick-task.mjs`
+indisponible) retombe silencieusement sur le message générique d'origine — ne bloque
+jamais la fin du script. Les cas d'abandon (tree sale, quota dépassé) et d'échec
+(`claude -p` code ≠ 0) gardent un message court, sans résumé enrichi (rien à résumer,
+aucun run n'a eu lieu).
+
 ## 10. Notification de démarrage + fréquence horaire (ajouté le 2026-07-20)
 
 **Pourquoi** : avec un seul run/jour, l'utilisateur a demandé à accélérer le traitement
@@ -333,8 +339,47 @@ chantiers (cache-busting, multi-boutiques, rebranding...) restent du ressort du
 pipeline humain (`brainstorming` → `writing-plans` → `subagent-driven-development`).
 Une cadence horaire accélère le débit sur cette queue-là, pas sur l'ensemble du backlog.
 
-Best-effort : toute erreur dans la construction de ce résumé (ex. `pick-task.mjs`
-indisponible) retombe silencieusement sur le message générique d'origine — ne bloque
-jamais la fin du script. Les cas d'abandon (tree sale, quota dépassé) et d'échec
-(`claude -p` code ≠ 0) gardent un message court, sans résumé enrichi (rien à résumer,
-aucun run n'a eu lieu).
+## 11. Commandes Telegram (ajouté le 2026-07-20)
+
+**Pourquoi** : au-delà des notifications passives, l'utilisateur voulait pouvoir
+interroger/piloter la loop directement depuis Telegram, sans ouvrir une session
+Claude Code. Décision explicite (2026-07-20) : **set fixe de commandes sûres**, pas de
+prompt libre transmis à `claude -p` — chaque commande fait une action précise et
+prévisible, les gardes-fous `loop-policy.md` s'appliquent toujours intégralement, quelle
+que soit la source du déclenchement (planifié ou Telegram).
+
+**Mécanisme d'écoute** : `scripts/loop/telegram-listener.mjs` (+ wrapper
+`telegram-listener.ps1`), tâche planifiée séparée **"iziGSM Loop Telegram Listener"**,
+polling toutes les 5 min (`getUpdates`, pas de webhook — cohérent avec le choix
+"pas de processus permanent" déjà fait pour le reste de l'infra). Offset des messages
+déjà traités persisté dans `scripts/loop/.telegram-offset` (gitignore, local).
+
+**Sécurité** : toute commande reçue d'un `chat_id` différent de celui configuré dans
+`telegram.local.json` est **ignorée silencieusement** (loggée sur stderr, jamais
+exécutée) — seul le compte Telegram de l'utilisateur peut piloter quoi que ce soit.
+
+**Commandes disponibles** :
+- `/status` — état des tâches planifiées (dernier run, code retour, prochain run) +
+  volume de backlog ouvert (`todo.md`/`TODO.md`) + indique si un run est en cours
+  (`.loop-lock`)
+- `/digest` — liste les tâches **complexes** du backlog (heuristique `riskHint` de
+  `pick-task.mjs --all` : mots-clés auth/isolation/NF525/RGPD/paiement/migration/
+  sécurité détectés dans le texte de la tâche), par opposition aux tâches simples que
+  la loop traite déjà seule. **Purement informatif** — l'utilisateur décide quand ouvrir
+  une session Claude Code pour travailler dessus, aucun déclenchement automatique
+  (décision explicite, pas de commande `/focus` ou équivalent)
+- `/run` — force un run immédiat (`run-loop.ps1` en arrière-plan, détaché), refusé si
+  un run est déjà en cours (`.loop-lock` présent) ou si le working tree n'est pas propre
+- `/approve <id>` — ajoute le tag `[loop-safe]` à la tâche `<id>` (donné par `/digest`)
+  directement dans `todo.md`/`TODO.md`, commit + push immédiat. **Override explicite de
+  la classification automatique** — le `riskHint` détecté est ignoré au run suivant pour
+  cette tâche précise (cohérent avec `loop-policy.md` § Risque faible, qui reconnaît déjà
+  le tag `[loop-safe]` comme éligible à l'auto-commit). À n'utiliser que si l'utilisateur
+  a lui-même vérifié que la tâche est sûre malgré le mot-clé détecté — l'écriture du
+  fichier préserve les fins de ligne d'origine (pas de churn CRLF/LF, voir
+  `appendTagToLine()` dans le script)
+- `/help` (ou `/start`) — rappelle cette liste
+
+**Limite connue** : latence jusqu'à 5 min entre l'envoi d'une commande et son
+traitement (polling, pas de webhook). Acceptable pour ce cas d'usage (aucune commande
+n'est urgente à la seconde près).

@@ -58,3 +58,4 @@ izigsm_*backup*.tar.gz
 # run, jamais suivis (voir project-docs/loop-runbook.md § Notifications).
 scripts/loop/telegram.local.json
 scripts/loop/.loop-lock
+scripts/loop/.telegram-offset
