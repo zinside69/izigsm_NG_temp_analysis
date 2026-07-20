@@ -1,4 +1,14 @@
-# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 41 — loop-engineering : correction doc noms de tables §2, premier auto-commit de contenu réussi)
+# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 42 — garde-fou dump/debug loop-engineering + collision git évitée avec un run planifié actif)
+
+## Checkpoint 42 — Garde-fou anti-dump SKILL.md + collision git évitée avec un run planifié en cours (2026-07-20)
+
+**Incident `alltasks.tmp.json`** : fichier de dump (29 Ko, sortie de `node scripts/loop/pick-task.mjs --all`) trouvé non suivi dans le working tree, généré par une investigation automatique du backlog lors d'un run précédent. Purement un fichier de lecture — aucune tâche/checkpoint/commit perdu — mais un fichier non suivi bloque le **prochain** run planifié dès l'Étape 0 (précondition « working tree propre »), même classe d'incident que les fichiers temporaires Graphify du même jour. Supprimé, pattern `*.tmp.json` ajouté au `.gitignore` (commit `40fb393`).
+
+**Garde-fou ajouté** dans `.claude/skills/loop-engineering/SKILL.md` § Garde-fous globaux : toute investigation ponctuelle (dump/debug) doit rediriger hors du repo (dossier temp système) ou être nettoyée avant la fin du run — pour empêcher la récidive de cette classe d'incident sur de futurs runs. Documenté aussi dans `bugs.md` (commit `9305d0b`).
+
+**Collision git évitée** : avant de committer ce garde-fou, `git status` a révélé des changements déjà indexés (`git add`, pas encore `git commit`) sur `docs/ARCHITECTURE_MODULES.md`/`current-state.md`/`todo.md` — signe qu'un run planifié tournait activement (`scripts/loop/.loop-lock` présent, horodaté 20:00:19 UTC, démarré ~13 min plus tôt, dans la fenêtre normale). Plutôt que de committer par-dessus un run en cours (risque de collision/corruption), attente explicite de la disparition du lock (`until [ ! -f scripts/loop/.loop-lock ]; do sleep 20; done`) avant de procéder. Le run planifié a terminé proprement de son côté (checkpoint 41 ci-dessous, commits `2e6da16`/`112d925`), confirmant que l'attente était justifiée et suffisante — aucune intervention manuelle nécessaire au-delà d'attendre.
+
+**Commande `/approve` reconfirmée** en usage réel entre-temps (tâche `73e011907f`, voir checkpoint 40) — les 4 commandes Telegram restent toutes validées.
 
 ## Checkpoint 41 — Loop-engineering : `docs/ARCHITECTURE_MODULES.md` §2 noms de tables corrigés (auto-commit risque faible) (2026-07-20)
 
