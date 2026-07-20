@@ -71,6 +71,10 @@ $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SK
 # 30 min) - horodatage UTC round-trippable, supprime des la fin de claude -p ci-dessous.
 (Get-Date).ToUniversalTime().ToString("o") | Set-Content $LockPath
 
+# HEAD avant l'appel Claude - sert a extraire les commits reellement faits par CE run
+# (2026-07-20, pour le resume Telegram "actions faites").
+$PreRunHead = git rev-parse HEAD
+
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
 $ClaudeExit = $LASTEXITCODE
 
@@ -100,7 +104,39 @@ if ($ClaudeExit -ne 0) {
 } else {
     Write-Host "[run-loop] Fin : $((Get-Date).ToUniversalTime().ToString("o"))"
     Write-Host "[run-loop] Voir .superpowers/sdd/loop-runs.md pour le detail de ce run."
-    Notify "iziGSM Loop : run termine (code 0). Voir .superpowers/sdd/loop-runs.md pour le detail (commit/escalade/backlog vide)."
+
+    # Resume enrichi (2026-07-20) : actions faites (commits reels de ce run, hors
+    # ledger auto-commit ci-dessus) + prochaine tache en tete de backlog. Best-effort -
+    # toute erreur ici tombe dans le catch et retombe sur un message generique, jamais
+    # bloquant pour la fin du script.
+    try {
+        $PostRunHead = git rev-parse HEAD
+        if ($PostRunHead -ne $PreRunHead) {
+            $DoneLines = git log --format="- %s" "$PreRunHead..$PostRunHead"
+            $DoneText = ($DoneLines -join "`n")
+        } else {
+            $DoneText = "(aucun commit ce run - escalade ou backlog vide, voir ledger)"
+        }
+
+        $NextJson = node scripts/loop/pick-task.mjs 2>$null
+        $NextText = "n/a"
+        if ($NextJson) {
+            try {
+                $NextObj = $NextJson | ConvertFrom-Json
+                if ($NextObj.empty) {
+                    $NextText = "backlog vide"
+                } elseif ($NextObj.text) {
+                    $NextText = $NextObj.text
+                    if ($NextText.Length -gt 200) { $NextText = $NextText.Substring(0,200) + "..." }
+                }
+            } catch { $NextText = "n/a (pick-task.mjs illisible)" }
+        }
+
+        $Summary = "iziGSM Loop : run termine (code 0).`n`nActions faites :`n$DoneText`n`nProchaine tache en tete de backlog :`n$NextText`n`nDetail : .superpowers/sdd/loop-runs.md"
+        Notify $Summary
+    } catch {
+        Notify "iziGSM Loop : run termine (code 0). Voir .superpowers/sdd/loop-runs.md pour le detail (commit/escalade/backlog vide)."
+    }
 }
 
 exit $ClaudeExit

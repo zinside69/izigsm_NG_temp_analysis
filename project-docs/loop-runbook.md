@@ -274,3 +274,19 @@ Disable-ScheduledTask -TaskName "iziGSM Loop Watchdog"   # mettre en pause
 Enable-ScheduledTask  -TaskName "iziGSM Loop Watchdog"   # reprendre
 Unregister-ScheduledTask -TaskName "iziGSM Loop Watchdog" -Confirm:$false  # supprimer
 ```
+
+**Résumé enrichi (ajouté le 2026-07-20)** : le message Telegram de fin de run (cas
+succès, code 0) ne se contente plus de renvoyer vers le ledger — il inclut directement :
+- **Actions faites** : `git log --format="- %s" "$PreRunHead..$PostRunHead"` — les
+  commits réellement créés par ce run précis (capturé avant l'appel `claude -p`, donc
+  inclut aussi bien le commit de tâche que l'auto-commit du ledger qui suit).
+- **Prochaine tâche en tête de backlog** : relance `node scripts/loop/pick-task.mjs`
+  après le run pour afficher la tête de file actuelle (texte tronqué à 200 caractères).
+  **Indicatif seulement** — ne préjuge pas de ce que fera réellement le run suivant
+  (une tâche peut être skippée pour risque déjà escaladé, voir Étape 1 de `SKILL.md`).
+
+Best-effort : toute erreur dans la construction de ce résumé (ex. `pick-task.mjs`
+indisponible) retombe silencieusement sur le message générique d'origine — ne bloque
+jamais la fin du script. Les cas d'abandon (tree sale, quota dépassé) et d'échec
+(`claude -p` code ≠ 0) gardent un message court, sans résumé enrichi (rien à résumer,
+aucun run n'a eu lieu).
