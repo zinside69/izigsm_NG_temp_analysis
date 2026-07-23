@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 44 — loop-engineering : réconciliation case obsolète `/robots.txt` 500 Genspark)
+# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 45 — loop-engineering : rebranding `register.js` → MyDesk, escaladé sur gate Playwright)
+
+## Checkpoint 45 — Loop-engineering : rebranding `register.js` « Mon Atelier » → « MyDesk » (escaladé, branche `loop/rebrand-register-js-mydesk`) (2026-07-23)
+
+**Contexte** : run de la loop-engineering (skill `.claude/skills/loop-engineering/SKILL.md`, gouverné par `loop-policy.md`). Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open** conforme, signalé). Graphe : `verify` OK (1867 nœuds), mais rafraîchissement sémantique **différé** (`plan` → `update_no_semantic`, 15 fichiers non-code > cap 5, `/graphify --update` tout-ou-rien non lancé) — `record-result success`, 0 échec consécutif.
+
+**Sélection** : tête de file cache-busting (🔴, 6 items L22-27) **déjà escaladée** run `61fc30924e` (architectural), aucune décision actée depuis (`decisions.md` sans entrée cache-busting/Vite, texte inchangé) → `--skip`. Écartés en ordre déterministe : déploiement L40 `[loop-safe]` (la loop ne déploie jamais), deep-link admin L36 (isolation + reporté), décisions produit L37/L135/L136, convention L38, `nom boutique fiche` L39 (multi-tenant → risque élevé), technicien L134 (feature), tests fuseau L164 (DST/baseline, ambigu), `escapeHtml` L165 (sécurité), `www 521` L170 (infra), RGPD L177, multi-sites L182, marketing L186-189, clarification L207, **rebranding `app.js` L225 (`7af1ae2590`, déjà escaladé run 10:14:07, branche `loop/rebrand-app-js-mydesk` `94efe76` non mergée) → `--skip`**. Première tâche **risque faible non escaladée implémentable** → `b28fb68f88` (`todo.md:226`).
+
+**Travail** : `public/static/js/register.js:230-231` — fallback session après inscription email/OTP `company_name || 'Mon Atelier'` → `'MyDesk'` (champs `boutique_name`/`company` de la session localStorage, littéral d'affichage). Contrôle OTP, tokens et `boutique_id` intacts. Bump `CACHE_VERSION` v2.65→v2.66 (`sw.js`, cohérence règle frontend — fonctionnellement optionnel ici : `/register` ∈ `NETWORK_ONLY_PATHS`, `register.js` ∉ `APP_SHELL`). Classification vérifiée sur le code réel + signal graphe `sensitiveMatch:false`. **Commit `f029415` sur branche `loop/rebrand-register-js-mydesk`, NON mergé** (escalade).
+
+**Gates** : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants `agendaService.test.ts` inchangés — baseline stable) · tsc ✅ (0 nouvelle erreur ; `register.js`/`sw.js` hors compilation TS, delta nul) · build ✅ (`vite build` 1.08s) · **playwright ❌ inexécutable** (`@playwright/test` non provisionné, config chemin Linux CI — condition dure L2 → pas d'auto-commit) · browser-use **n·a**.
+
+**Escalade** : gate Playwright inexécutable = condition dure L2 non satisfaite → aucun merge sur `main`, travail conservé sur branche. **2 branches rebranding en attente de merge humain** (`loop/rebrand-app-js-mydesk` `94efe76` app.js + `loop/rebrand-register-js-mydesk` `f029415` register.js). Reste du chantier : `login.html` L227, `register.html` L228, `auth.ts` L229 (**risque élevé auth**), autres pages L230. Case `todo.md:226` laissée **décochée** (escalade). Détail complet : ledger `.superpowers/sdd/loop-runs.md` (run 12:09).
 
 ## Checkpoint 44 — Loop-engineering : case obsolète `/robots.txt` 500 Genspark réconciliée (auto-commit risque faible) (2026-07-23)
 
