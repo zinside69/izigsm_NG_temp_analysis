@@ -139,9 +139,10 @@ extrait un signal de risque + un brief d'implémentation, via
 
 **Plafond de mise à jour sémantique** : `GRAPH_UPDATE_MAX_SEMANTIC_FILES` (variable
 d'environnement, défaut `5`) — au-delà de ce nombre de fichiers non-code modifiés
-depuis le dernier graphe, l'update se limite à l'extraction AST (gratuite) pour ce
-run ; le reste attend le prochain passage. Pas un échec, juste une dégradation
-signalée dans le rapport.
+depuis le dernier graphe, aucune mise à jour n'est lancée ce run (le pipeline
+`--update` de `/graphify` est tout-ou-rien, pas de mode AST-only partiel invocable
+de l'extérieur) ; le rafraîchissement complet est différé au prochain passage.
+Pas un échec, juste une dégradation signalée dans le rapport.
 
 **Fichiers ancres par catégorie de risque** (utilisés par
 `graphify-refresh.mjs risk` pour détecter une relation directe dans le graphe, en
