@@ -65,6 +65,7 @@ scripts/loop/.telegram-offset
 # fait échouer le run planifié loop-engineering de 16:00 (précondition "tree propre").
 .graphify_*
 graphify-out/
+scripts/loop/.graph-update-failures
 
 # Fichiers de travail temporaires (ex. pick-task.mjs --all redirige vers ce nom
 # pendant une investigation manuelle du backlog) — jamais suivis, regenerables.
