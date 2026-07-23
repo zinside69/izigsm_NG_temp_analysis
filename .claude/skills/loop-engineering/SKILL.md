@@ -115,6 +115,45 @@ purement indicatif — la classification faisant foi est celle de l'étape 2).
   la passer avec `--skip <id>` et reprendre la suivante. Ne jamais re-tenter en boucle
   une tâche déjà refusée par les gates sans changement de contexte.
 
+## Étape 1bis — Rafraîchir et consulter le graphe de connaissance
+
+Exécutée dans le checkout principal, **avant** toute création de worktree (voir
+`docs/superpowers/specs/2026-07-23-graphify-loop-integration-design.md` pour le
+design complet — `git worktree add` ne copie jamais `graphify-out/`, gitignoré).
+
+1. **Recommandation de rafraîchissement** :
+   ```bash
+   node scripts/loop/graphify-refresh.mjs plan
+   ```
+   - `{"action":"skip",...}` → rien à faire, passer directement au point 3.
+   - `{"action":"update",...}` → invoquer `/graphify . --update --obsidian --obsidian-dir graphify-out/obsidian` (skill graphify, dans cette même session).
+   - `{"action":"update_no_semantic",...}` → invoquer `/graphify . --update --no-semantic` (extraction AST seule, gratuite — l'extraction sémantique différée attendra un prochain run).
+2. **Enregistrer le résultat** (best-effort, ne bloque jamais) :
+   ```bash
+   node scripts/loop/graphify-refresh.mjs record-result success   # si l'update (ou le skip) a réussi
+   node scripts/loop/graphify-refresh.mjs record-result failure   # si /graphify --update a échoué
+   ```
+   Si la sortie contient `"alertThresholdReached":true` → envoyer une alerte dédiée :
+   ```bash
+   node scripts/loop/notify-telegram.mjs "iziGSM Loop : graphe non rafraichi depuis 3 runs consecutifs - verifier manuellement (voir loop-runs.md)."
+   ```
+3. **Vérifier la lisibilité du graphe (gate dur)** :
+   ```bash
+   node scripts/loop/graphify-refresh.mjs verify
+   ```
+   - Exit 0 → continuer normalement à l'Étape 2.
+   - Exit 1 → **escalader immédiatement (Étape 7)**, catégorie `Risque : graphe indisponible`. Aucun sous-agent dispatché, worktree jamais créé. C'est le seul cas où l'indisponibilité du graphe bloque le run — un échec de l'étape 1 ci-dessus (update) est volontairement non bloquant tant que le graphe existant reste lisible.
+4. **Signal de risque** pour le(s) fichier(s) que la tâche va probablement toucher —
+   identifiés en lisant le texte de la tâche et, si nécessaire, en explorant
+   brièvement le code concerné (même logique déjà en place à l'Étape 2 pour la
+   classification par mots-clés — ne pas se fier uniquement au texte brut de la
+   tâche) :
+   ```bash
+   node scripts/loop/graphify-refresh.mjs risk <fichier1> [fichier2...]
+   ```
+   `sensitiveMatch: true` → traiter comme un signal supplémentaire à l'Étape 2, en complément (jamais en remplacement) de la classification par mots-clés. Voir `project-docs/loop-policy.md` § 2026-07-23 pour la table des catégories.
+5. **Brief d'implémentation** — généré à l'Étape 3 (voir ci-dessous), pas ici (il doit être écrit directement dans le worktree qui n'existe pas encore à ce stade).
+
 ## Étape 2 — Classifier le risque
 
 Appliquer les règles de `project-docs/loop-policy.md` § "Classification du risque" au
@@ -134,9 +173,15 @@ garantit rien, ex. "corriger l'autocomplete marque" peut sembler anodin mais tou
 
 ```bash
 git worktree add ../izigsm-loop-<slug-tache> -b loop/<slug-tache> main
+node scripts/loop/graphify-refresh.mjs brief <fichier1> [fichier2...] > ../izigsm-loop-<slug-tache>/.superpowers/sdd/<slug-tache>-graph-context.md
 cd ../izigsm-loop-<slug-tache>
 npm install
 ```
+
+Le brief est généré **avant** le `cd` (depuis le checkout principal, seul endroit où
+`graphify-out/` existe) et redirigé directement dans le worktree fraîchement créé —
+convention de namespacing `<slug-tache>-graph-context.md` déjà en place depuis
+l'incident du 2026-07-18 (éviter toute collision entre chantiers).
 
 Tout le travail de cette exécution se fait dans ce worktree, jamais directement sur le
 checkout principal. `<slug-tache>` : dérivé du texte de la tâche, court, kebab-case.
@@ -160,6 +205,11 @@ dans `project-docs/current-state.md`) :
     interprétations valables, pas juste un détail technique) → **escalader avant
     d'écrire le spec**, ne pas deviner. C'est le hard-gate déjà en place manuellement
     sur ce repo (voir checkpoint 26-27 dans `current-state.md`).
+
+Le fichier `.superpowers/sdd/<slug-tache>-graph-context.md` (créé à l'Étape 3) est
+disponible dans le worktree — le sous-agent implémenteur/reviewer le lit comme
+n'importe quel autre fichier du worktree, aucun accès à `graphify-out/` n'est
+nécessaire ni possible depuis le worktree (gitignoré, non copié par `git worktree add`).
 
 Chaque sous-tâche se termine par `npx vitest run` vert avant de passer à la suivante
 (convention déjà documentée dans les plans existants, ex.
@@ -220,6 +270,7 @@ en-tête si absent — append-only, jamais réécrit) :
 - Tâche : <texte, fichier:ligne>
 - Issue : commit `<hash>` | escaladé | backlog vide
 - Risque : faible | élevé (<catégorie>)
+- Graphe : rafraîchi | périmé (<raison>, <N> échecs consécutifs) | illisible (escalade)
 - Gates : vitest <✅/❌> · tsc <✅/❌> · build <✅/❌> · playwright <✅/❌> · browser-use <✅/❌/n·a>
 - Worktree : <chemin, conservé si escaladé, supprimé si commité>
 - Détail / recommandation : <1-3 phrases>
