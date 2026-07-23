@@ -79,22 +79,40 @@ python -c "from graphify.detect import detect_incremental; from pathlib import P
   (gratuite, illimitée) pour ce run ; le reste attend le prochain passage. Ce n'est
   **pas** un échec — dégradation silencieuse, notée dans le rapport de l'Étape 7.
 
-### 2. Signal de proximité aux communautés sensibles
+### 2. Signal de proximité aux fichiers/nœuds sensibles
+
+**Révisé après vérification empirique (2026-07-23, pendant l'écriture du plan
+d'implémentation)** : l'idée initiale d'un mapping par nom de communauté a été
+testée directement contre `graph.json` et rejetée — les communautés du graphe
+n'ont pas de granularité par feature. La plus grosse contient à elle seule 170
+nœuds sur 1867 (9% du graphe), et un fichier totalement sans rapport
+(`public/static/js/rachats.js`) partageait une communauté avec les fichiers auth —
+un signal basé sur le partage de communauté aurait été un faux-positif quasi
+systématique. `graph.json` n'expose d'ailleurs aucun nom de communauté lisible (ce
+mapping n'existe que dans les fichiers `_COMMUNITY_*.md` du vault Obsidian,
+inaccessibles depuis un signal programmatique simple).
+
+**Mécanisme retenu : relation directe (1 saut) dans le graphe**, entre un nœud du
+fichier ciblé par la tâche et un nœud d'un fichier ancre, via le champ
+`source_file` des nœuds et les entrées `links` (`_src`/`_tgt`). Testé et validé
+(2026-07-23) : `src/lib/nf525.ts` → matche `nf525`+`paiement` uniquement (cohérent),
+`src/routes/clients.ts` → aucun match (pas de faux-positif).
 
 Nouvelle sous-section ajoutée dans `project-docs/loop-policy.md` §
 "Classification du risque" (ajout sous la table existante, jamais d'écrasement) :
 
-| Catégorie (table mots-clés existante) | Communauté(s) graphe correspondante(s) |
+| Catégorie (table mots-clés existante) | Fichier(s) ancre(s) |
 |---|---|
-| Auth / sessions | `Auth & JWT Cryptography (authService)` |
-| NF525 / comptabilité | `NF525 Hash Chain Integrity`, `Caisse POS & NF525 (caisse.js)` |
-| Paiement / acompte | `Acompte Structure - Plan & Bugs` |
-| Isolation multi-tenant | pas de communauté dédiée — signal = arête directe vers le God Node `getBoutiqueId()` |
+| Auth / sessions | `src/services/authService.ts`, `src/routes/auth.ts`, `src/lib/middleware.ts` |
+| Isolation multi-tenant | `src/lib/middleware.ts` (héberge `getBoutiqueId()`) |
+| NF525 / comptabilité | `src/lib/nf525.ts`, `migrations/0008_nf525.sql` |
+| Paiement / acompte | `migrations/0036_acompte_structure.sql`, `src/services/factureService.ts` |
+| RGPD | `src/services/clientService.ts` |
 
 Ce mapping est un **signal secondaire**, jamais un remplacement de la table
-mots-clés. En cas de contradiction (mots-clés = risque faible, graphe = connexion à
-1-2 sauts d'une communauté sensible) → la règle déjà en place prévaut : **en cas de
-doute, risque élevé**.
+mots-clés. En cas de contradiction (mots-clés = risque faible, graphe = relation
+directe vers un fichier ancre sensible) → la règle déjà en place prévaut : **en cas
+de doute, risque élevé**.
 
 ### 3. Brief d'implémentation
 
