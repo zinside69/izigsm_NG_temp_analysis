@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 43 — loop-engineering : réconciliation case obsolète `tests/phoneCatalogService.test.ts`)
+# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 44 — loop-engineering : réconciliation case obsolète `/robots.txt` 500 Genspark)
+
+## Checkpoint 44 — Loop-engineering : case obsolète `/robots.txt` 500 Genspark réconciliée (auto-commit risque faible) (2026-07-23)
+
+**Contexte** : run de la loop-engineering (skill `.claude/skills/loop-engineering/SKILL.md`, gouverné par `loop-policy.md`). Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open** conforme, signalé).
+
+**Sélection** : tête de file `pick-task.mjs` = chantier cache-busting (🔴, 6 items L22-27) **déjà escaladé** au run `61fc30924e` (architectural), aucune décision actée depuis (vérifié : `decisions.md` sans entrée cache-busting, dernier commit = checkpoint 39 ; texte de tâche inchangé) → `--skip` des 6 ids. Écartés ensuite en ordre déterministe : L40 déploiement `[loop-safe]` (la loop ne déploie jamais — garde-fou absolu), deep-link admin L36 (isolation + reporté utilisateur), décisions produit L37/L135/L136, convention nommage L38, `nom boutique fiche imprimée` L39 (multi-tenant → doute → risque élevé, code lu : `_fetchTicketPrintData` lit `GET /api/boutiques[0]`, fix toucherait la sélection de boutique + potentiellement la route isolation-sensible `GET /api/tickets/:id`), `assignation technicien` L134 (feature à construire), `3 tests fuseau horaire` L164 (touche DST/baseline vitest, non mécanique), `escapeHtml` L165 (sécurité XSS, risque élevé), **rebranding `app.js` L225** (`90109e0aad` du run précédent — **déjà escaladé au run 2026-07-23T10:14:07, branche `loop/rebrand-app-js-mydesk` commit `94efe76` non mergée**, gate Playwright inexécutable, aucune décision humaine depuis → `--skip`). Première tâche **risque faible réellement implémentable et complétable dans cet environnement** (docs-only) → `47f3736449` (`todo.md:169`).
+
+**Constat durable confirmé (ledger run 10:14:07)** : dans cet environnement Windows, la loop **ne peut auto-commiter aucun vrai changement de code** — le gate e2e Playwright (condition dure L2) exige `@playwright/test` + navigateur non provisionnés (`playwright.config.ts` cible un chemin chromium Linux CI). Seules les réconciliations docs-only (playwright n·a) restent auto-committables. Le backlog risque-faible docs-only est quasi épuisé (r.success, noms de tables, phoneCatalogService déjà faits aux checkpoints 38/41/43).
+
+**Travail** : investigation complète de `/robots.txt`. Genspark abandonné le 2026-07-10 (migration Cloudflare terminée) → le 500 spécifique à cet hébergeur est **sans objet**. Sur Cloudflare, `/robots.txt` renvoie **200** : servi comme asset statique (`public/robots.txt`, exclu des Pages Functions par `public/_routes.json:11`), doublé d'une route Hono de redondance (`src/index.tsx:242`, `c.text(ROBOTS_TXT, 200, ...)` — réponse statique, aucun 500 possible). Action : cocher la case `todo.md:169` avec note de vérification. **Delta code nul.** L170 (`www.repairdesk.fr` 521, infra DNS Gandi hors repo) laissée décochée — non actionnable dans le repo.
+
+**Gates** : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants `agendaService.test.ts` `createRendezVous`/`updateRendezVous` — offset UTC/Paris DST — inchangés, baseline stable) · tsc ✅ (0 nouvelle erreur ; markdown hors compilation TS, delta nul vs `main` — erreurs restantes `factureService`/`photosService`/`rachatService`/`servicesService`/`stockService`/`tests/e2e/*`/`setup.ts`/`stockService.test.ts` pré-existantes) · build ✅ (`vite build` 1.12s) · playwright **n·a** · browser-use **n·a** (delta code nul).
+
+**Déviation Étape 3 (transparence)** : pas de worktree isolé — périmètre d'écriture restreint à `izigsm/webapp`, worktree frère `../izigsm-loop-*` non-inscriptible (même contrainte que runs `eabf928d00`/`3a01544d33`/checkpoints 41/43). Changement docs-only à delta code nul → édité sur `main` directement.
+
+## Checkpoint 43 — Loop-engineering : case obsolète `tests/phoneCatalogService.test.ts` réconciliée (auto-commit risque faible) (2026-07-23)
 
 ## Checkpoint 43 — Loop-engineering : case obsolète `tests/phoneCatalogService.test.ts` réconciliée (auto-commit risque faible) (2026-07-23)
 
