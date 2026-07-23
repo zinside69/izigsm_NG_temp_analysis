@@ -4,12 +4,12 @@
  * connaissance graphify (voir .claude/skills/loop-engineering/SKILL.md, Étape 1bis, et
  * docs/superpowers/specs/2026-07-23-graphify-loop-integration-design.md).
  *
- * Sous-commandes (ajoutées progressivement, voir project-docs/loop-policy.md) :
+ * Sous-commandes (voir project-docs/loop-policy.md) :
  *   verify                  → graphify-out/graph.json est-il lisible et bien formé ?
- *   plan                    → recommande skip/update/update_no_semantic (à venir)
- *   record-result <status>  → compteur d'échecs consécutifs (à venir)
- *   risk <file...>          → signal de proximité (lien direct) aux fichiers sensibles (à venir)
- *   brief <file...>         → mini-contexte texte pour l'Étape 4 (à venir)
+ *   plan                    → recommande skip/update/update_no_semantic
+ *   record-result <status>  → compteur d'échecs consécutifs
+ *   risk <file...>          → signal de proximité (lien direct) aux fichiers sensibles
+ *   brief <file...>         → mini-contexte texte pour l'Étape 4
  *
  * N'appelle jamais /graphify --update lui-même (c'est un skill Claude invoqué dans la
  * session claude -p, pas un exécutable) — fournit seulement les données/recommandations
@@ -50,6 +50,49 @@ function loadGraph() {
 
 function nodesForFile(graph, file) {
   return graph.nodes.filter(n => normPath(n.source_file) === file)
+}
+
+function degree(graph, nodeId) {
+  return graph.links.filter(l => l._src === nodeId || l._tgt === nodeId).length
+}
+
+function cmdBrief(files) {
+  const graph = loadGraph()
+  if (!graph) {
+    console.log(`Graphe indisponible (${GRAPH_PATH} absent ou invalide) - pas de brief.`)
+    return
+  }
+  const lines = ['### Contexte du graphe de connaissance', '']
+  for (const file of files) {
+    const nodes = nodesForFile(graph, file)
+    if (nodes.length === 0) {
+      lines.push(`- \`${file}\` : aucun nœud trouvé dans le graphe (fichier absent au dernier run, ou hors périmètre).`)
+      continue
+    }
+    lines.push(`#### \`${file}\``)
+    const communities = [...new Set(nodes.map(n => n.community))]
+    lines.push(`- Communauté(s) (numéro interne, voir graphify-out/obsidian pour un nom lisible si disponible) : ${communities.join(', ')}`)
+
+    const neighborIds = new Set()
+    for (const n of nodes) {
+      for (const l of graph.links) {
+        if (l._src === n.id) neighborIds.add(l._tgt)
+        if (l._tgt === n.id) neighborIds.add(l._src)
+      }
+    }
+    const neighborNodes = graph.nodes.filter(n => neighborIds.has(n.id))
+    const ranked = neighborNodes
+      .map(n => ({ id: n.id, label: n.label, degree: degree(graph, n.id) }))
+      .sort((a, b) => b.degree - a.degree)
+      .slice(0, 8)
+
+    lines.push('- Relations directes les plus connectées :')
+    for (const r of ranked) {
+      lines.push(`  - \`${r.label}\` (${r.degree} relations, id \`${r.id}\`)`)
+    }
+    lines.push('')
+  }
+  console.log(lines.join('\n'))
 }
 
 function cmdRisk(files) {
@@ -143,6 +186,7 @@ function main() {
   if (cmd === 'plan') return cmdPlan()
   if (cmd === 'record-result') return cmdRecordResult(rest[0])
   if (cmd === 'risk') return cmdRisk(rest)
+  if (cmd === 'brief') return cmdBrief(rest)
   console.error('Usage: node graphify-refresh.mjs <verify|plan|record-result|risk|brief> [args...]')
   process.exit(2)
 }
