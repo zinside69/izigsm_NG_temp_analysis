@@ -27,6 +27,18 @@ const CAP = Number(process.env.GRAPH_UPDATE_MAX_SEMANTIC_FILES || 5)
 // documenté dans graphify-out/MODE-OPERATOIRE.md et scripts/loop/check-quota.mjs).
 const PYTHON_CMD = 'python'
 
+const ANCHORS = {
+  auth: ['src/services/authService.ts', 'src/routes/auth.ts', 'src/lib/middleware.ts'],
+  isolation: ['src/lib/middleware.ts'],
+  nf525: ['src/lib/nf525.ts', 'migrations/0008_nf525.sql'],
+  paiement: ['migrations/0036_acompte_structure.sql', 'src/services/factureService.ts'],
+  rgpd: ['src/services/clientService.ts'],
+}
+
+function normPath(p) {
+  return (p || '').replace(/\\/g, '/')
+}
+
 function loadGraph() {
   if (!existsSync(GRAPH_PATH)) return null
   try {
@@ -34,6 +46,37 @@ function loadGraph() {
   } catch {
     return null
   }
+}
+
+function nodesForFile(graph, file) {
+  return graph.nodes.filter(n => normPath(n.source_file) === file)
+}
+
+function cmdRisk(files) {
+  const graph = loadGraph()
+  if (!graph) {
+    console.log(JSON.stringify({ available: false, reason: `${GRAPH_PATH} absent ou invalide` }))
+    return
+  }
+  const targetNodes = files.flatMap(f => nodesForFile(graph, f))
+  const targetIds = new Set(targetNodes.map(n => n.id))
+
+  const matches = []
+  for (const [category, anchorFiles] of Object.entries(ANCHORS)) {
+    const anchorNodes = anchorFiles.flatMap(f => nodesForFile(graph, f))
+    const anchorIds = new Set(anchorNodes.map(n => n.id))
+    // Signal = lien direct (1 saut) uniquement. Le partage de communauté a été
+    // testé et rejeté (2026-07-23) : la plus grosse communauté du graphe contient
+    // à elle seule 170 nœuds sur 1867 (9%), un signal par communauté déclenche un
+    // faux-positif sur quasiment n'importe quel fichier — voir loop-policy.md.
+    const directLink = graph.links.some(l =>
+      (targetIds.has(l._src) && anchorIds.has(l._tgt)) ||
+      (targetIds.has(l._tgt) && anchorIds.has(l._src))
+    )
+    if (directLink) matches.push({ category })
+  }
+
+  console.log(JSON.stringify({ available: true, files, sensitiveMatch: matches.length > 0, matches }, null, 2))
 }
 
 function runDetectIncremental() {
@@ -99,6 +142,7 @@ function main() {
   if (cmd === 'verify') return cmdVerify()
   if (cmd === 'plan') return cmdPlan()
   if (cmd === 'record-result') return cmdRecordResult(rest[0])
+  if (cmd === 'risk') return cmdRisk(rest)
   console.error('Usage: node graphify-refresh.mjs <verify|plan|record-result|risk|brief> [args...]')
   process.exit(2)
 }
