@@ -126,3 +126,51 @@ session.
 ## Évolution
 
 Ce document est la source de vérité du comportement de la loop. Toute modification de la politique (ex. passage à L3 sur un périmètre précis) doit être une décision explicite de l'utilisateur, documentée ici en ajoutant une nouvelle section datée en dessous — jamais en écrasant les règles ci-dessus.
+
+### 2026-07-23 — Intégration du graphe de connaissance (graphify)
+
+Voir `docs/superpowers/specs/2026-07-23-graphify-loop-integration-design.md` pour le
+design complet. Résumé opérationnel :
+
+**Nouvelle Étape 1bis** (entre sélection de tâche et classification du risque, voir
+`SKILL.md`) : rafraîchit le graphe de connaissance (`graphify-out/graph.json`) et en
+extrait un signal de risque + un brief d'implémentation, via
+`scripts/loop/graphify-refresh.mjs`.
+
+**Plafond de mise à jour sémantique** : `GRAPH_UPDATE_MAX_SEMANTIC_FILES` (variable
+d'environnement, défaut `5`) — au-delà de ce nombre de fichiers non-code modifiés
+depuis le dernier graphe, l'update se limite à l'extraction AST (gratuite) pour ce
+run ; le reste attend le prochain passage. Pas un échec, juste une dégradation
+signalée dans le rapport.
+
+**Fichiers ancres par catégorie de risque** (utilisés par
+`graphify-refresh.mjs risk` pour détecter une relation directe dans le graphe, en
+complément — jamais en remplacement — de la table de mots-clés ci-dessus) :
+
+| Catégorie | Fichier(s) ancre(s) |
+|---|---|
+| Auth / sessions | `src/services/authService.ts`, `src/routes/auth.ts`, `src/lib/middleware.ts` |
+| Isolation multi-tenant | `src/lib/middleware.ts` (héberge `getBoutiqueId()`) |
+| NF525 / comptabilité | `src/lib/nf525.ts`, `migrations/0008_nf525.sql` |
+| Paiement / acompte | `migrations/0036_acompte_structure.sql`, `src/services/factureService.ts` |
+| RGPD | `src/services/clientService.ts` |
+
+Le signal se déclenche uniquement sur une **relation directe (1 saut) dans le
+graphe** entre un nœud du fichier ciblé et un nœud d'un fichier ancre — jamais sur le
+simple partage d'une communauté (testé le 2026-07-23 : la communauté la plus grosse
+contient 170 nœuds sur 1867, un signal par communauté serait un faux-positif quasi
+systématique). En cas de contradiction avec la classification par mots-clés → la
+règle « en cas de doute, risque élevé » prévaut toujours.
+
+**Gestion d'erreur** (asymétrique, volontairement) :
+- Échec de la mise à jour incrémentale (`graphify-refresh.mjs plan` ne peut pas
+  appeler `detect_incremental()`, ou `/graphify --update` échoue) → **non bloquant**,
+  la loop continue avec le `graph.json` existant (même périmé). Compteur
+  `scripts/loop/.graph-update-failures` incrémenté (fichier local, gitignored) via
+  `graphify-refresh.mjs record-result failure`.
+- `graph.json` absent ou JSON invalide, même après tentative de rafraîchissement →
+  **escalade** (gate rouge standard de l'Étape 7), aucun repli possible —
+  `graphify-refresh.mjs verify` sort en code 1.
+- `graphUpdateFailures ≥ 3` consécutifs → message Telegram dédié en plus du message de
+  fin de run habituel, via `scripts/loop/notify-telegram.mjs`. Remis à 0 dès qu'une
+  mise à jour réussit ou qu'aucune n'était nécessaire (`record-result success`).
