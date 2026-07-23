@@ -1,4 +1,16 @@
-# iziGSM — État courant (MàJ : 2026-07-20, checkpoint 42 — garde-fou dump/debug loop-engineering + collision git évitée avec un run planifié actif)
+# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 43 — loop-engineering : réconciliation case obsolète `tests/phoneCatalogService.test.ts`)
+
+## Checkpoint 43 — Loop-engineering : case obsolète `tests/phoneCatalogService.test.ts` réconciliée (auto-commit risque faible) (2026-07-23)
+
+**Contexte** : run de la loop-engineering (skill `.claude/skills/loop-engineering/SKILL.md`, gouverné par `loop-policy.md`). Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open** conforme, signalé).
+
+**Sélection** : tête de file `pick-task.mjs` = chantier cache-busting (🔴, 6 items lignes 22-27) **déjà escaladé** au run `61fc30924e` (périmètre architectural, non isolable), aucune décision actée depuis (vérifié : `decisions.md` sans entrée cache-busting, texte de tâche inchangé) → passé (`--skip`, règle Étape 1). Écartés ensuite en ordre déterministe (mêmes raisons que checkpoint 41) : L40 déploiement `[loop-safe]` (la loop ne déploie jamais, garde-fou absolu), deep-link admin (isolation + reporté par l'utilisateur), décisions produit (L37/L135/L136), convention nommage (L38), `nom boutique fiche imprimée` (multi-tenant → doute → risque élevé), `escapeHtml` L165 (sécurité, risque élevé), `assignation technicien` L134 (feature à construire), `3 tests fuseau horaire` L164 (baseline connue). Première tâche **risque faible implémentable** → `96222a31f3` (`todo.md:168`, création de test) — exactement le candidat recommandé par les runs `eabf928d00` et `3a01544d33`.
+
+**Travail** : le fichier `tests/phoneCatalogService.test.ts` **existe déjà** (créé lors de la migration Ports & Adapters, checkpoint 14, 2026-07-15) — 209 lignes, 11 tests couvrant les 5 fonctions exportées de `phoneCatalogService.ts` (`syncBrands`, `syncModelesByBrand`, `syncSelectedBrands`, `getLastSyncStatus`, `getCatalogStats`) via `fetch` mocké en échec → chemin de repli dataset statique. La tâche « à créer » était donc une **case obsolète** (même classe de décalage documentation/code que la case slug `92f0db8` et la réconciliation r.success du 2026-07-20). Action : cocher la case `todo.md:168` avec note de vérification. Aucun code produit modifié (delta code nul). Scope tenu : pas d'ajout de couverture supplémentaire (le sous-item `docs/TODO.md:225`, formulé « 0 test sur ~1500 lignes du fallback catalogue », vise une exhaustivité plus large **non revendiquée ici** → laissé décoché, signalé au ledger).
+
+**Gates** : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants `computeFin()`/`updateRendezVous` inchangés — baseline stable ; `tests/phoneCatalogService.test.ts` 11/11 vert isolément) · tsc ✅ (0 nouvelle erreur ; markdown hors compilation TS, delta nul vs `main` — erreurs restantes `servicesService.ts`/`stockService.ts`/`tests/e2e/*`/`setup.ts`/`stockService.test.ts` pré-existantes) · build ✅ (`vite build` 856ms) · playwright **n·a** · browser-use **n·a** (delta code nul).
+
+**Déviation Étape 3 (transparence)** : pas de worktree isolé — périmètre d'écriture restreint à `izigsm/webapp`, worktree frère `../izigsm-loop-*` non-inscriptible (même contrainte que runs `eabf928d00`/`3a01544d33`). Changement docs-only à delta code nul → édité sur `main` directement.
 
 ## Checkpoint 42 — Garde-fou anti-dump SKILL.md + collision git évitée avec un run planifié en cours (2026-07-20)
 

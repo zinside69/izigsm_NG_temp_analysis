@@ -165,7 +165,7 @@ Spec : `docs/superpowers/specs/2026-07-09-migration-cloudflare-design.md`.
 - [ ] `escapeHtml()` manquant sur `client_prenom` dans 5 templates email (`sendTicketCree`, `sendTicketTermine`, `sendTicketLivre`, `sendSavOuvert`, `sendRelance`, `sendRelanceDevis`) — même faille corrigée sur l'email OTP, préexistante ailleurs
 
 ## Dette technique héritée (préexistante, voir bugs.md)
-- [ ] `tests/phoneCatalogService.test.ts` à créer
+- [x] `tests/phoneCatalogService.test.ts` — **déjà créé** (migration Ports & Adapters, checkpoint 14, 2026-07-15) ; case obsolète réconciliée par la loop-engineering le 2026-07-23 (risque faible, docs seulement). Le fichier existe (209 lignes, 11 tests) et couvre les 5 fonctions exportées de `src/services/phoneCatalogService.ts` (`syncBrands`, `syncModelesByBrand`, `syncSelectedBrands`, `getLastSyncStatus`, `getCatalogStats`) via `fetch` mocké en échec → chemin de repli dataset statique. Vérifié vert par la loop : `npx vitest run tests/phoneCatalogService.test.ts` → 11/11. Décalage documentation/code (même classe que la case slug `92f0db8` et la réconciliation r.success 2026-07-20).
 - [ ] Investiguer `/robots.txt` 500 sur Genspark (sans objet une fois Genspark abandonné)
 - [ ] `www.repairdesk.fr` → Error 521 (service redirection Gandi injoignable, apex OK)
 
