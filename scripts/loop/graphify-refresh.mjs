@@ -133,7 +133,7 @@ function cmdPlan() {
   try {
     detected = runDetectIncremental()
   } catch (err) {
-    console.log(JSON.stringify({ action: 'skip', reason: `detect_incremental en échec : ${err.message}` }))
+    console.log(JSON.stringify({ action: 'update_failed', reason: `detect_incremental en échec : ${err.message}` }))
     return
   }
   const newFiles = detected.new_files || {}
