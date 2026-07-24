@@ -22,6 +22,7 @@
     "@hono/vite-dev-server": "^0.18.2",
     "@playwright/test": "^1.61.1",
     "@vitest/coverage-v8": "^4.1.9",
+    "typescript": "^7.0.2",
     "vite": "^6.3.5",
     "vitest": "^4.1.9",
     "wrangler": "^4.4.0"

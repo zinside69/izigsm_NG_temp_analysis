@@ -29,9 +29,14 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-        },
+        // Pas de executablePath par défaut : Playwright résout lui-même le
+        // Chromium qu'il a installé (`npx playwright install`), quel que soit
+        // l'OS (`%LOCALAPPDATA%\ms-playwright` sous Windows, `~/.cache/ms-playwright`
+        // sous Linux/Mac). PLAYWRIGHT_CHROMIUM_PATH reste disponible pour cibler
+        // un binaire précis (ex. CI avec un chemin pinné).
+        launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH
+          ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+          : {},
       },
     },
   ],
