@@ -125,6 +125,14 @@ terminal, purement local, complémentaire au gate quota programmatique).
 
 ## Déploiement
 
-**Jamais automatique.** `npm run build && wrangler pages deploy dist --project-name
-izigsm` — toujours sur confirmation explicite de l'utilisateur, y compris pour la loop
-d'automatisation (voir `loop-policy.md`).
+**Jamais automatique.** Toujours sur confirmation explicite de l'utilisateur, y compris
+pour la loop d'automatisation (voir `loop-policy.md`).
+
+**Commande à utiliser : `npm run deploy`** (= `npm run build && wrangler pages deploy`,
+script défini dans `package.json`). Constaté le 2026-07-24 : l'appel direct `npx
+wrangler pages deploy dist --project-name izigsm` est bloqué par une règle de
+permission (`deny`) dont la source exacte n'a pas été localisée dans les fichiers
+`settings.json` accessibles (probablement une politique gérée à un niveau non
+inspectable) — `npm run deploy` n'est pas concerné par cette règle et fonctionne
+normalement. Vérifié en prod après déploiement via cette commande : `GET
+/api/health` 200, `sw.js` `CACHE_VERSION` à jour, contenu réellement changé.
