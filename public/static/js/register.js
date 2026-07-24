@@ -227,8 +227,8 @@ async function verifyOtp() {
     email:         user.email,
     role:          user.role,
     boutique_id:   registerState.account.boutique_id ?? null,
-    boutique_name: registerState.workshop.company_name || 'Mon Atelier',
-    company:       registerState.workshop.company_name || 'Mon Atelier',
+    boutique_name: registerState.workshop.company_name || 'MyDesk',
+    company:       registerState.workshop.company_name || 'MyDesk',
   };
   localStorage.setItem('izigsm_token', accessToken);
   localStorage.setItem('izigsm_refresh_token', refreshToken);
