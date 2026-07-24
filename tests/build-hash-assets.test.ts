@@ -3,13 +3,13 @@ import { hashContent, rewriteStaticReferences } from '../scripts/build-hash-asse
 
 describe('hashContent', () => {
   it('retourne les 8 premiers caractères hex du SHA-256 du contenu', () => {
-    const result = hashContent(Buffer.from('hello'))
+    const result = hashContent(new TextEncoder().encode('hello'))
     expect(result).toBe('2cf24dba')
   })
 
   it('retourne un hash différent pour un contenu différent', () => {
-    const a = hashContent(Buffer.from('hello'))
-    const b = hashContent(Buffer.from('hello world'))
+    const a = hashContent(new TextEncoder().encode('hello'))
+    const b = hashContent(new TextEncoder().encode('hello world'))
     expect(a).not.toBe(b)
   })
 })
