@@ -1,0 +1,9 @@
+# Force LF sur les fichiers .mjs, quel que soit core.autocrlf local. Bug reel
+# constate le 2026-07-24 : sur Windows avec core.autocrlf=true, un checkout
+# frais de scripts/build-hash-assets.mjs convertit LF -> CRLF, ce qui fait
+# echouer silencieusement le transform Vite/esbuild d'un import ESM dynamique
+# ("SyntaxError: Invalid or unexpected token", sans numero de ligne, aucune
+# trace dans le blob git lui-meme puisque le contenu commite reste en LF) -
+# reproductible sur tout nouveau checkout (clone, worktree, CI) tant que ce
+# fichier n'existe pas.
+*.mjs text eol=lf
