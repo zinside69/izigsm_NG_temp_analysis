@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join, extname, basename } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export function hashContent(buffer) {
   return createHash('sha256').update(buffer).digest('hex').slice(0, 8)
@@ -63,4 +64,35 @@ const HEADERS_CONTENT = `/static/js/*
 
 export function writeHeadersFile(distDir) {
   writeFileSync(join(distDir, '_headers'), HEADERS_CONTENT)
+}
+
+function main() {
+  const distDir = join(process.cwd(), 'dist')
+
+  const manifest = hashAndRenameAssets(distDir)
+  writeFileSync(
+    join(distDir, 'static', 'manifest.json'),
+    JSON.stringify(manifest, null, 2)
+  )
+
+  const htmlFiles = readdirSync(distDir).filter(f => extname(f) === '.html')
+  for (const file of htmlFiles) {
+    const absPath = join(distDir, file)
+    const html = readFileSync(absPath, 'utf8')
+    writeFileSync(absPath, rewriteStaticReferences(html, manifest))
+  }
+
+  const swPath = join(distDir, 'sw.js')
+  const swContent = readFileSync(swPath, 'utf8')
+  writeFileSync(swPath, rewriteStaticReferences(swContent, manifest))
+
+  writeHeadersFile(distDir)
+
+  console.log(
+    `[build-hash-assets] ${Object.keys(manifest).length} fichiers hashés, ${htmlFiles.length} pages HTML réécrites.`
+  )
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main()
 }
