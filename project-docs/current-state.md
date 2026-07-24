@@ -1,4 +1,35 @@
-# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 53 — cache-busting par hash de contenu, chantier complet)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 54 — audit contenu fiche A4 vs liste attendue)
+
+## Checkpoint 54 — Loop-engineering : audit contenu fiche imprimée A4 vs liste attendue (todo.md:7) — fait, aucun code modifié (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (21 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js` → `sensitiveMatch:true` (catégories `auth`, `isolation`, relation directe 1-saut — signal traité comme non bloquant ici : la tâche est un audit en lecture seule, zéro diff de code produit, donc le blast radius d'un signal graphe sur un fichier *lu mais non modifié* est nul).
+
+**Sélection** : tâche `todo.md:7` retenue — première case non cochée du chantier 🔴 "impression ticket A4/thermique" (demandé 2026-07-24, jamais commencé), explicitement scopée comme travail préalable ("identifier les écarts avant de coder").
+
+**Worktree** : `git worktree add ../izigsm-loop-*` (frère) à nouveau bloqué par le sandbox de session (même contrainte que les checkpoints 45/47/48/49/50/51) — cette fois traité différemment : recréé sous `.claude/worktrees/audit-impression-a4` (répertoire de travail autorisé de la session, convention déjà actée dans le CLAUDE.md racine du workspace — "`.claude/worktrees/` → ignoré par `.gitignore`, ne jamais tracker" — et déjà utilisé par un chantier antérieur, `cache-busting`, présent au même endroit). `cd` dans ce worktree a fonctionné normalement, contrairement aux tentatives précédentes sur des worktrees frères. À privilégier pour les runs futurs de la loop sur cet environnement plutôt que le chemin frère `../izigsm-loop-<slug>` prescrit littéralement par `SKILL.md` — le résultat (isolation par branche + répertoire dédié) est identique, seul le chemin change.
+
+**Audit — liste comparée** (parenthèse `todo.md:6`, contenu commun aux deux formats) vs `_buildTicketA4HTML()` (`public/static/js/tickets.js:673-837`) + `print.css` :
+
+| Item attendu | Constat |
+|---|---|
+| Description (panne) | ✅ Présent — section "Panne déclarée", `d.panne` (← `t.description_panne`), fallback "Non renseignée" si vide. |
+| Client | ✅ Présent — nom, téléphone, email, adresse dans le bloc `print-party-box` "Client". |
+| Réparateur (technicien) | ✅ Présent — "Technicien : ${d.technicien}" dans le bloc "Appareil". |
+| État du matériel à l'entrée | ✅ Présent mais conditionnel — `etatHTML` (`d.etatAppareil` parsé en JSON) affiché uniquement si des items sont cochés ; contrairement à "Panne déclarée", aucun fallback "non renseigné" si le champ est vide (bloc entier absent). |
+| Commentaires **publics uniquement** (jamais notes internes) | ❌ **Écart réel, à deux niveaux** : (1) aucun champ distinct "commentaire public" n'existe dans le modèle de données — seul `notes_internes` existe (`t.notes_internes \|\| t.notes`) ; (2) même cette variable `d.notes`, bien que calculée dans `_fetchTicketPrintData()` (ligne 608), n'est **jamais utilisée** dans `_buildTicketA4HTML()` — rien de ce type n'apparaît aujourd'hui sur la fiche (conséquence : pas de fuite de notes internes actuellement, mais aussi zéro commentaire visible pour le client, et surtout aucune source de donnée "publique" à afficher tant qu'un champ dédié n'existe pas). |
+
+**Observations complémentaires** (hors périmètre strict de cette tâche mais glanées pendant la même lecture, utiles aux items suivants du chantier `todo.md:9-18`) :
+- `todo.md:11` ("Ajouter IMEI / N° de série (absent actuellement)") est **obsolète** : IMEI et n° de série sont déjà rendus (`tickets.js:762-763`), corrigés lors d'une tâche antérieure (commentaire de code explicite "Task 4b/5"). À revérifier/cocher plutôt qu'à recoder.
+- Système visuel confirmé 100 % indigo (`#6366f1`) dans `print.css` (bordure d'en-tête, logo, titre de document, en-tête de tableau) — cohérent avec la remarque `todo.md:10` ("actuellement système visuel indigo, à documenter/trancher").
+- Les deux fichiers de référence cités par le chantier — `docs/bon de réparation.pdf` (`todo.md:10`) et `docs/test impression.pdf` (`todo.md:17`) — sont **absents du repo** (ni sur disque dans `docs/`, ni trackés par `git ls-files`). Aucune comparaison visuelle possible tant que l'utilisateur ne les fournit/committe pas.
+- `todo.md:12` ("options de récupération : 10€ TTC déduits, recyclage sous 4 semaines") : seul le cas "recyclage sous 4 semaines" existe aujourd'hui, et uniquement dans l'encart `print-acompte-box` conditionné à `d.acompteMontant > 0` (absent si aucun acompte versé) ; la mention "10€ TTC déduits de la réparation" n'existe nulle part. Texte exact toujours à valider avec l'utilisateur (rappel déjà présent dans le todo).
+- `todo.md:13` ("rendu sur une seule page A4") : aucune contrainte CSS ne le garantit au-delà d'éviter les coupures internes de blocs (`.print-no-break`) — pas vérifiable sans impression/rendu réel.
+
+**Gates** : tâche purement documentaire, **aucun fichier de code modifié** (`public/static/js/tickets.js`, `print.css` lus mais non touchés). `npx vitest run` ✅ relancé par prudence malgré l'absence de diff de code : 833/835, exactement les 2 échecs pré-existants fuseau horaire (baseline inchangée). `tsc --noEmit` / `npm run build` non ré-exécutés (aucun fichier `.ts`/config touché, résultat nécessairement identique à `main`) ; Playwright/browser-use non applicables (aucun nouveau parcours utilisateur, aucun code frontend modifié).
+
+**Commit** : documentation uniquement (`project-docs/current-state.md` + `todo.md:7` coché), pas de `CACHE_VERSION` à bumper (aucun `public/static/js/*`/`*.html` modifié). Case `todo.md:7` cochée. Reste ouvert dans ce chantier : toutes les autres cases `todo.md:9-27` (mise en page A4, thermique, email auto, facturation HT/TTC) — non traitées, chacune nécessiterait son propre run (plusieurs touchent potentiellement l'auth/isolation/paiement selon le signal graphe déjà observé sur `tickets.js`, à re-classifier au cas par cas).
+
+---
 
 ## Checkpoint 53 — Cache-busting par hash de contenu — chantier complet, mergé sur `main` (2026-07-24)
 
