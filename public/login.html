@@ -78,7 +78,7 @@
             <div class="flash-stack" id="onboarding-flash" style="display:none;padding:0;margin-bottom:16px;"></div>
             <div class="field" style="margin-bottom:22px;position:relative;">
               <label for="onboarding-workshop-name">Nom de l'atelier *</label>
-              <input type="text" id="onboarding-workshop-name" placeholder="Mon Atelier" required autocomplete="off" oninput="onOnboardingSearchInput()">
+              <input type="text" id="onboarding-workshop-name" placeholder="MyDesk" required autocomplete="off" oninput="onOnboardingSearchInput()">
               <!-- Résultats recherche SIRENE — rempli par searchEntrepriseOnboarding() -->
               <div id="onboarding-search-results" class="hidden" style="position:absolute;z-index:20;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.08);margin-top:4px;max-height:220px;overflow-y:auto;"></div>
             </div>
@@ -153,8 +153,8 @@
             email:        user.email,
             role:         user.role,
             boutique_id:  boutiqueId,
-            boutique_name: boutiqueName || 'Mon Atelier',
-            company:      boutiqueName  || 'Mon Atelier',
+            boutique_name: boutiqueName || 'MyDesk',
+            company:      boutiqueName  || 'MyDesk',
           };
           localStorage.setItem('izigsm_token',         data.accessToken);
           localStorage.setItem('izigsm_refresh_token', data.refreshToken);
@@ -264,8 +264,8 @@
         email:         user.email,
         role:          user.role,
         boutique_id:   user.boutique_id ?? null,
-        boutique_name: 'Mon Atelier',
-        company:       'Mon Atelier',
+        boutique_name: 'MyDesk',
+        company:       'MyDesk',
       }));
     }
 
