@@ -1,4 +1,23 @@
-# iziGSM — État courant (MàJ : 2026-07-23, checkpoint 45 — loop-engineering : rebranding `register.js` → MyDesk, escaladé sur gate Playwright)
+# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 46 — graphify : réparation graphe de connaissance + dédup + trace QualiRépar↔ecosystem)
+
+## Checkpoint 46 — Graphify : chunks stale réparés, doublons fusionnés, graphe régénéré, lien QualiRépar↔ecosystem tracé (2026-07-24)
+
+**Contexte** : suite du graphe de connaissance construit au checkpoint 40 (`/graphify` sur tout le repo, 1867 nœuds/2643 relations/418 communautés). Un relance `/graphify --update` en session interactive le 2026-07-23 avait laissé le graphe dans un état incohérent (`docs/superpowers/specs/2026-07-23-graphify-loop-integration-design.md:19` : "cache/semantic/ vide malgré 24 chunks déjà produits").
+
+**Audit des 24 chunks sémantiques** (`graphify-out/.graphify_chunk_NN.json`) :
+- **Chunk 11 (index)** : réellement tronqué — ne couvrait que 1/8 PDF (`test impression.pdf`) suite à la coupure de quota du checkpoint 40. Retraité intégralement : `CDC_izigsm.pdf`, `260115000258.PDF` (paiement Ecologic réel SOTELI), `bon de réparation.pdf`, `fiche réparation.pdf` (dossier réel `TELNET-SARL SOTELI` REPGSM2026-8530), 3 PDF `ecosystem` (RGPD/purge, PIEC, Guide API Fonds Réparation). 49 nœuds, 56 relations, 3 hyperedges.
+- **12 chunks (index 12-23)** : vérifiés à tort suspectés stale (~300 octets chacun) — en réalité corrects, contenu légitimement minimal (favicon + 11 icônes PWA, un fichier SVG par chunk). 2 vrais bugs schema trouvés et corrigés : `chunk_13.json` (clé `"type"` au lieu de `"relation"`, `"confidence"` manquant), `chunk_23.json` (BOM UTF-8 en tête de fichier, piège déjà documenté dans `graphify-out/MODE-OPERATOIRE.md` §5).
+- **Chunk 10 (index)** : découverte a posteriori — contenait 11 nœuds doublons (IDs génériques `pdf_bon_reparation`, `cdc_mod01_tickets`, `ecosystem_piec_doc`...) décrivant les **mêmes** documents que le chunk 11 retraité, formant une communauté 27 isolée (15 nœuds) dans le premier graphe régénéré. Fusion (pas suppression) : les 11 doublons retirés, leurs 38 relations + 3 hyperedges redirigés vers les IDs canoniques détaillés du chunk 11 — préserve les mappings uniques du chunk 10 (`tickets.html --implements--> CDC MOD-01`, 3 écarts spec/code déjà flaggés AMBIGUOUS, nœud `ecosystem_org`, 2 relations QualiRépar).
+
+**`.graphify_detect.json` avait aussi un BOM** (même piège que chunk_23) — corrigé au passage (lecture `utf-8-sig`).
+
+**Regénération complète du graphe** (2 passes, avant/après fusion chunk 10) : merge 24 chunks sémantiques + AST (`graphify.build`/`cluster`/`report`/`export`), relabeling manuel des 20 plus grosses communautés sur 407 (`to_json(..., force=True)` nécessaire — garde-fou légitimement déclenché par la réduction volontaire 1947→1937 nœuds). Sorties régénérées : `graph.json`, `graph.html`, `GRAPH_REPORT.md`, `obsidian/` (2344 notes + `graph.canvas`). Réduction ~745x vs relecture du corpus brut (benchmark `graphify.benchmark`).
+
+**Découverte annexe non touchée** : un `cdc_izigsm_doc` distinct subsiste (chunk 07, source `graphify-out/converted/CDC_izigsm_54850a26.md`) — pas un doublon, membre d'une famille de 3 CDC divergents (izigsm/Manus/sections) déjà repérée par ce chunk, légitimement séparée du `docs/CDC_izigsm.pdf` que j'ai traité.
+
+**Lien QualiRépar ↔ API ecosystem Fonds Réparation tracé** (surprising connection remontée par le graphe, vérifiée dans le code) : `public/qualirepar.js` est une **simulation UI 100% locale** (`getDB`/`addToDB`/`updateInDB`, zéro `fetch()` vers ecosystem, confirmé par grep sur `src/routes`/`src/services`) du workflow réel décrit dans `Guide d'utilisation des APIs Partenaires Fonds Réparation`. Statuts identiques en substance (Brouillon/Soumis/En instruction/Validé/Refusé ≈ En cours de création/Envoyé-vérification/ARCHIVED), formule de bonus locale et statique (`Math.min(amount*0.25, maxBonus)` avec `maxBonus` codé en dur dans le HTML) au lieu d'interroger `GET /catalog`. Gap actionnable identifié : brancher réellement le module sur l'API (`login` → `catalog` → `new-claim`/`upload-file`/`confirm-claim`) remplacerait la saisie manuelle par le flux réel avec montants de bonus authentiques.
+
+**Rien commité côté code applicatif** — tout le travail vit dans `graphify-out/` (gitignoré). Ce checkpoint documente le travail dans `project-docs/` uniquement.
 
 ## Checkpoint 45 — Loop-engineering : rebranding `register.js` « Mon Atelier » → « MyDesk » (escaladé, branche `loop/rebrand-register-js-mydesk`) (2026-07-23)
 

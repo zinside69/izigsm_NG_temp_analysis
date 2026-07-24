@@ -1,5 +1,13 @@
 # iziGSM — Bugs connus
 
+## `graphify-out/` — 3 défauts trouvés en vérifiant les chunks sémantiques stale — CORRIGÉS le 2026-07-24 (checkpoint 46)
+
+Pas des bugs applicatifs izigsm, mais des défauts dans les artefacts du graphe de connaissance (`graphify-out/`, gitignoré) qui referont surface au prochain `/graphify --update` si non gardés en tête :
+
+1. **Edge schema invalide** (`.graphify_chunk_13.json`) : `"type"` utilisé au lieu de `"relation"`, `"confidence"` (enum EXTRACTED/INFERRED/AMBIGUOUS) absent. Un parseur strict du schema graphify aurait silencieusement ignoré cette relation.
+2. **BOM UTF-8** (`.graphify_chunk_23.json` et `.graphify_detect.json`) : `json.loads()` Python refuse un BOM sans `encoding='utf-8-sig'` explicite — déjà documenté dans `graphify-out/MODE-OPERATOIRE.md` §5 mais reproduit deux fois cette session. **Réflexe** : toujours lire les fichiers `.graphify_*.json` avec `encoding='utf-8-sig'` (jamais `'utf-8'` seul) tant que la source (PowerShell `>`) n'est pas fiabilisée.
+3. **IDs dupliqués entre chunks** : deux chunks différents (index 10 et 11) ont indépendamment extrait les mêmes 7 PDF avec des conventions de nommage différentes (`pdf_bon_reparation` vs `bon_reparation_template`), créant 11 nœuds fantômes et une communauté isolée triviale au clustering. Cause probable : chunking qui a réparti les mêmes fichiers source sur deux runs différents (avant/après la coupure de quota du checkpoint 40) sans déduplication a posteriori. **Réflexe** : après toute réparation manuelle d'un chunk stale, `grep -l "<nouveau_id>"` sur tous les `.graphify_chunk_*.json` pour détecter une extraction concurrente du même fichier source avant de considérer le travail terminé.
+
 ## 🔴 FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans isolation `boutique_id` — CORRIGÉE, DÉPLOYÉE et VALIDÉE EN PROD le 2026-07-19, découverte le même jour (audit loop-engineering, même famille que `GET /:id`)
 
 Suite au fix de `GET /api/tickets/:id` (commit `ae6795f`), la loop-engineering a escaladé la tâche d'audit des routes sœurs (risque élevé — isolation multi-tenant + paiement, jamais d'auto-fix) mais a fait un **audit statique read-only** pour rendre l'escalade actionnable, sans modifier de code. Résultat : **3 des 4 endpoints audités sont vulnérables**, même classe de bug.
