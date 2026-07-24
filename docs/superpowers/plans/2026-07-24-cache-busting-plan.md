@@ -159,8 +159,10 @@ git commit -m "feat: fonctions hashContent/rewriteStaticReferences (cache-bustin
 - Modify: `tests/build-hash-assets.test.ts`
 
 **Interfaces:**
-- Consumes: `hashContent(buffer: Buffer): string` (Task 1).
+- Consumes: `hashContent(buffer: Uint8Array): string` (Task 1 — retypé en `Uint8Array` lors de la revue de Task 1, voir Note ci-dessous).
 - Produces: `hashAndRenameAssets(distDir: string): Record<string, string>` — scanne `distDir/static/js/*.js` et `distDir/static/css/*.css`, hash + renomme chaque fichier en place, retourne le manifest `{ 'static/js/app.js': 'static/js/app.a1b2c3d4.js', ... }`.
+
+**Note (mise à jour post-Task 1) :** l'implémentation réelle de `hashContent` accepte `Uint8Array` (pas `Buffer`) pour éviter une dépendance à `@types/node` qui causait une régression `tsc` (32→235 erreurs, voir revue Task 1). Toute référence à `Buffer` ci-dessous dans les tests doit utiliser `new TextEncoder().encode(...)` à la place — `readFileSync()` sans encodage retourne un `Buffer`, qui reste structurellement compatible avec `Uint8Array` (aucun changement nécessaire côté implémentation `hashAndRenameAssets`, uniquement côté tests).
 - Produces: `writeHeadersFile(distDir: string): void` — écrit `distDir/_headers`.
 
 - [ ] **Step 1: Écrire les tests qui échouent**
@@ -197,8 +199,8 @@ describe('hashAndRenameAssets', () => {
   })
 
   it('renomme les fichiers JS/CSS avec leur hash de contenu', () => {
-    const jsHash = hashContent(Buffer.from("console.log('a')"))
-    const cssHash = hashContent(Buffer.from('body{color:red}'))
+    const jsHash = hashContent(new TextEncoder().encode("console.log('a')"))
+    const cssHash = hashContent(new TextEncoder().encode('body{color:red}'))
 
     const manifest = hashAndRenameAssets(distDir)
 
@@ -209,7 +211,7 @@ describe('hashAndRenameAssets', () => {
   })
 
   it('supprime le fichier original et crée le fichier hashé avec le même contenu', () => {
-    const jsHash = hashContent(Buffer.from("console.log('a')"))
+    const jsHash = hashContent(new TextEncoder().encode("console.log('a')"))
     hashAndRenameAssets(distDir)
 
     expect(existsSync(join(distDir, 'static', 'js', 'app.js'))).toBe(false)
@@ -254,7 +256,7 @@ Expected: FAIL — `hashAndRenameAssets is not a function` / `writeHeadersFile i
 Remplacer le contenu de `scripts/build-hash-assets.d.mts` par :
 
 ```ts
-export declare function hashContent(buffer: Buffer): string
+export declare function hashContent(buffer: Uint8Array): string
 export declare function rewriteStaticReferences(
   content: string,
   manifest: Record<string, string>
