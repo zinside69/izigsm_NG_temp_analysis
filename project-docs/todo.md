@@ -222,7 +222,7 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 
 ## Rebranding — retirer "Mon Atelier" / "monatelier", remplacer par "MyDesk" (demandé 2026-07-10)
 "Mon Atelier" est utilisé comme nom de boutique par défaut/placeholder à plusieurs endroits du code — à remplacer par "MyDesk" pour ne pas rappeler la marque du concurrent monatelier.net. Occurrences trouvées (recherche `mon atelier|monatelier`, insensible à la casse) :
-- [ ] `public/static/js/app.js:27,385,386` — fallback `session.company`/`user.boutique_name` dans le wrapper ApiService partagé (impacte tout le dashboard)
+- [x] `public/static/js/app.js:27,385,386` — fallback `session.company`/`user.boutique_name` dans le wrapper ApiService partagé (impacte tout le dashboard) — commit `283c8c5`, mergé sur `main` le 2026-07-24 (loop-engineering, réimplémenté proprement sur branche fraîche depuis `main` à jour, l'ancienne branche `loop/rebrand-app-js-mydesk` étant stale de 26 commits)
 - [x] `public/static/js/register.js:230,231` — fallback session après inscription email/OTP — commit `5506b73`, mergé sur `main` le 2026-07-24 (loop-engineering, gate Playwright désormais exécutable sur Windows depuis `d7c5ed1`)
 - [ ] `public/login.html:81,156,157,267,268` — placeholder input onboarding Google + fallback session (×2 occurrences : handleGoogleCredential et submitOnboarding)
 - [ ] `public/register.html:158,201,326,447,448` — placeholder `company_name`, lien "🇧🇪 Mon atelier est en Belgique" (formulation générique, à reformuler aussi), placeholder onboarding Google, fallback session
