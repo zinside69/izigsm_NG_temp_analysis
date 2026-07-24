@@ -21,6 +21,7 @@
     "@hono/vite-build": "^1.2.0",
     "@hono/vite-dev-server": "^0.18.2",
     "@playwright/test": "^1.61.1",
+    "@types/node": "^20.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "typescript": "^7.0.2",
     "vite": "^6.3.5",
