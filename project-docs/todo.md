@@ -15,16 +15,16 @@ Voir `bugs.md` § "FAILLE — `PUT /:id`, `PUT /:id/statut`, `DELETE /:id` sans 
 - [x] Relire le diff, merger sur `main` (`22b3071` via `a517bae`), déployer (`npx wrangler pages deploy`)
 - [x] **Validé en prod réelle** (`telnet@bbox.fr`, manager boutique 2, 2026-07-19) : `PUT /api/tickets/1` (boutique étrangère) → 403 confirmé (avant fix : 200)
 
-## 🔴 PRIORITÉ prochaine session — Cache-busting par hash de contenu (2026-07-18)
-Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduit le risque mais ne l'élimine pas structurellement.
+## ✅ Cache-busting par hash de contenu — TERMINÉ et mergé sur `main` (checkpoint 53, 2026-07-24)
+Suite à l'incident du 2026-07-18 (contenu déployé figé par le Service Worker pendant une fenêtre de propagation CDN, voir `bugs.md` § "Contenu déployé absent chez un utilisateur malgré CACHE_VERSION à jour") — le fix déployé (`cache:'reload'` au précache) réduisait le risque sans l'éliminer structurellement.
 
-**Chantier** : hasher le contenu des fichiers statiques dans leur nom (`tickets.a3f8e1.js` au lieu de `tickets.js`) — élimine la classe de bug à la source, une URL hashée ne peut jamais être servie périmée sous ce nom.
-- [ ] Configurer Vite pour hasher les assets `public/static/js/*.js`/`*.css` (actuellement copiés tels quels, hors du pipeline de build Vite qui gère déjà le hachage pour d'autres assets)
-- [ ] Générer un manifeste de build (mapping nom logique → nom hashé)
-- [ ] Adapter les balises `<script src="...">`/`<link href="...">` dans les pages HTML pour référencer les noms hashés (via le manifeste, pas en dur)
-- [ ] Régénérer dynamiquement la liste de précache `APP_SHELL` du Service Worker (`public/sw.js`) à partir du manifeste, plutôt que la liste statique actuelle
-- [ ] Une fois en place : passer les fichiers hashés en cache long + immutable (`Cache-Control: public, max-age=31536000, immutable`) — sûr uniquement parce que le contenu ne peut plus changer sous un même nom
-- [ ] Garder `sw.js` lui-même et les pages HTML d'entrée en network-first/no-cache (elles référencent les noms hashés, doivent toujours être à jour)
+**Chantier** : hasher le contenu des fichiers statiques dans leur nom (`tickets.a3f8e1.js` au lieu de `tickets.js`) — élimine la classe de bug à la source, une URL hashée ne peut jamais être servie périmée sous ce nom. Voir checkpoint 53 pour le détail complet (script `scripts/build-hash-assets.mjs`, spec/plan `docs/superpowers/specs|plans/2026-07-24-cache-busting-*`).
+- [x] Configurer le build pour hasher les assets `public/static/js/*.js`/`*.css` — script post-build isolé (`scripts/build-hash-assets.mjs`), pas d'intégration Rollup native (décision de design, voir spec)
+- [x] Générer un manifeste de build (`dist/static/manifest.json`, mapping nom logique → nom hashé)
+- [x] Adapter les balises `<script src="...">`/`<link href="...">` dans les pages HTML pour référencer les noms hashés (via le manifeste)
+- [x] Régénérer dynamiquement la liste de précache `APP_SHELL` du Service Worker (`public/sw.js`) à partir du manifeste
+- [x] Fichiers hashés en cache long + immutable (`Cache-Control: public, max-age=31536000, immutable`) — `dist/_headers`, vérifié fonctionnel sous le worker Hono avancé
+- [x] `sw.js` et les pages HTML en no-cache (`dist/_headers`) — vérifié fonctionnel
 
 ## Chantier impression ticket — 8/8 tâches terminées, approuvées et DÉPLOYÉES (checkpoint 33, 2026-07-18)
 

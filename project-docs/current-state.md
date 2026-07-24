@@ -1,4 +1,27 @@
-# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 52 — loop-engineering : escalade devis.js acompte)
+# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 53 — cache-busting par hash de contenu, chantier complet)
+
+## Checkpoint 53 — Cache-busting par hash de contenu — chantier complet, mergé sur `main` (2026-07-24)
+
+Chantier escaladé à répétition par la loop-engineering (architectural, todo.md:22-27), traité en session humaine via le pipeline complet `superpowers` : `brainstorming` → `writing-plans` → `subagent-driven-development`.
+
+**Résultat** : `public/static/js/*.js` et `public/static/css/*.css` sont désormais hashés par contenu au build (`scripts/build-hash-assets.mjs`, 4 fonctions pures testées + orchestration `main()`), éliminant à la source l'incident du 2026-07-18 (contenu figé pendant une fenêtre de propagation CDN). `dist/_headers` généré avec cache long+immutable sur les assets hashés, no-cache sur `sw.js`/HTML.
+
+**5 tâches du plan, chacune implémenteur+reviewer, toutes approuvées.** Trois régressions attrapées et corrigées avant merge (aucune n'a atteint `main` non corrigée) :
+- Task 1 : `@types/node` ajouté pour typer `Buffer` → régression tsc 32→235 erreurs (déclarations globales Node en conflit avec les globals Workers/web-standard). Corrigé : `Uint8Array`/`TextEncoder`, aucune dépendance Node.
+- Task 4 (validation manuelle) : 2 bugs latents pré-existants révélés par le nouveau garde-fou "échec bruyant" (`caisse.html`/`services.html` → `/static/css/style.css` inexistant ; `personnel.html` → `/static/css/app.css` inexistant) + découverte que `vite build` ne vide jamais `dist/` entre deux runs (contredit l'hypothèse d'idempotence du plan) — corrigé par un nettoyage `dist/` avant `vite build`.
+- Post-merge (revue finale, avant push) : bug CRLF spécifique à `scripts/build-hash-assets.mjs` sur checkout Windows frais (`core.autocrlf=true` convertit LF→CRLF, casse le transform Vite/esbuild d'un import ESM dynamique) — invisible dans le worktree (jamais re-checkouté), découvert en mergeant dans le checkout principal. `.gitattributes` ajouté (`*.mjs text eol=lf`) pour empêcher toute récidive sur un futur clone/checkout/CI.
+
+**Revue finale de branche (opus)** : Ready to merge = Yes, 2 points Important soulevés et résolus avant push — `_headers` vérifié fonctionnel sous le worker Hono avancé (`curl -I` : assets hashés `immutable`, `sw.js`/`*.html` littéral `no-cache`, confirmé empiriquement), `/static/style.css` (5 pages, hors scope initial) déplacé dans `static/css/` sur décision utilisateur pour cohérence.
+
+**Validation navigateur réelle** (Claude in Chrome, une fois l'extension connectée) : login → dashboard → `/tickets`, rendu correct, aucune erreur console applicative.
+
+**Gates finaux sur `main`** : vitest 833/835 (824 baseline + 9 nouveaux, 2 échecs pré-existants fuseau horaire inchangés) · tsc 32 (baseline inchangée) · Playwright 10/10 · build idempotent vérifié (2 runs consécutifs, 23 fichiers hashés à chaque fois).
+
+**Commits** (`0b0f793`→`021c19d`, 10 commits) : spec, plan, 3 tâches d'implémentation, 1 fix régression, 1 correction de plan mi-course, 1 fix découvertes Task 4, 1 fix scope style.css, 1 fix `.gitattributes`, 1 JSDoc. Rien déployé — `npm run deploy` reste un geste humain explicite hors de ce chantier.
+
+**Reste ouvert** : `auth.ts:659` (JSDoc cosmétique, todo.md:229) et le reste du backlog loop-engineering — voir checkpoint 52. Backlog loop quasi épuisé, tâches planifiées désactivées en attendant réapprovisionnement (décision utilisateur, 2026-07-24).
+
+---
 
 ## Checkpoint 52 — Loop-engineering : `devis.js` `demanderAcompte()` refresh manquant — escaladé, aucune implémentation (2026-07-24)
 
