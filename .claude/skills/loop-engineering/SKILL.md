@@ -172,10 +172,18 @@ garantit rien, ex. "corriger l'autocomplete marque" peut sembler anodin mais tou
 
 ## Étape 3 — Isoler le travail dans un worktree
 
+**Chemin du worktree : `.claude/worktrees/<slug-tache>`, pas un chemin frère.**
+Constaté à répétition sur cet environnement (checkpoints 45/47/48/49/50/51/54) : un
+worktree frère (`../izigsm-loop-<slug-tache>`) échoue systématiquement à l'écriture
+(sandbox de session restreint aux répertoires de travail autorisés), forçant à chaque
+fois un repli vers le checkout principal — contraire à l'isolation voulue par cette
+étape. `.claude/worktrees/<slug-tache>` fonctionne intégralement (déjà exclu du suivi
+git, confirmé `git status` clean avant/après) et reste dans le périmètre autorisé.
+
 ```bash
-git worktree add ../izigsm-loop-<slug-tache> -b loop/<slug-tache> main
-node scripts/loop/graphify-refresh.mjs brief <fichier1> [fichier2...] > ../izigsm-loop-<slug-tache>/.superpowers/sdd/<slug-tache>-graph-context.md
-cd ../izigsm-loop-<slug-tache>
+git worktree add .claude/worktrees/<slug-tache> -b loop/<slug-tache> main
+node scripts/loop/graphify-refresh.mjs brief <fichier1> [fichier2...] > .claude/worktrees/<slug-tache>/.superpowers/sdd/<slug-tache>-graph-context.md
+cd .claude/worktrees/<slug-tache>
 npm install
 ```
 
@@ -186,6 +194,9 @@ l'incident du 2026-07-18 (éviter toute collision entre chantiers).
 
 Tout le travail de cette exécution se fait dans ce worktree, jamais directement sur le
 checkout principal. `<slug-tache>` : dérivé du texte de la tâche, court, kebab-case.
+Si `.claude/worktrees/<slug-tache>` échoue aussi à l'écriture (nouvel environnement,
+contrainte différente) → replier sur le checkout principal comme avant, en le
+signalant explicitement dans le rapport (Étape 7), ne pas insister sur le chemin frère.
 
 ## Étape 4 — Planifier et implémenter via superpowers
 
@@ -257,7 +268,7 @@ séquence et déclenche l'escalade (étape 7) — jamais de commit partiel.
   - Ajouter une entrée de checkpoint dans `project-docs/current-state.md` (même format
     que les checkpoints existants : quoi, pourquoi, comment validé, commit hash) —
     **ajouter en haut, jamais écraser l'historique**.
-  - Supprimer le worktree (`git worktree remove ../izigsm-loop-<slug-tache>`).
+  - Supprimer le worktree (`git worktree remove .claude/worktrees/<slug-tache>`).
 - **Sinon** → ne rien pousser. Passer à l'étape 7.
 
 ## Étape 7 — Escalade / ledger (toujours exécuté, succès ou échec)
