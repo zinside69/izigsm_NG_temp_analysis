@@ -126,11 +126,39 @@ lettre. Dans l'ordre :
 
 Utilise `ccusage` pour estimer l'usage du **bloc de 5h actif** par rapport à une limite
 de référence (`max` par défaut = plus haut bloc jamais observé sur cette machine).
-**Point important dans ta config actuelle** : tu factures via une clé API
-(`ANTHROPIC_API_KEY`), pas via ton abonnement claude.ai — ce gate suit un modèle pensé
-pour un abonnement à quota glissant, pas des crédits prépayés à la consommation. Il
-reste utile (fail-open s'il ne comprend pas la situation, ne bloque jamais à tort) mais
-ne remplace pas une vraie alerte de solde côté console.anthropic.com.
+
+**Mise à jour 2026-07-24** : `run-loop.ps1` efface désormais `ANTHROPIC_API_KEY` avant
+d'appeler `claude -p` (voir commit `c69c813`) — l'appel utilise donc la session
+`claude.ai` (`claude /login`), pas une clé API à la consommation. `ANTHROPIC_API_KEY`
+reste positionnée au niveau utilisateur Windows pour d'autres usages du poste
+(`elearning-factory`, `scripts/loop/browser_use_explore.py`) mais n'influence plus la
+loop elle-même. Ce gate suit donc maintenant un modèle cohérent avec ce qu'il mesure
+(quota d'abonnement claude.ai à fenêtre glissante). Il reste fail-open s'il ne comprend
+pas la situation (données locales insuffisantes) — ne bloque jamais un run à tort, mais
+ne remplace pas une vraie alerte de solde/limite côté claude.ai/settings/usage.
+
+### Pourquoi un run consomme autant (observé le 2026-07-24, ~7-16M tokens/run)
+
+Chaque run n'est pas un script léger : c'est une session Claude Code complète imbriquée
+(`claude -p`) qui repasse par tout le pipeline `superpowers` à chaque tâche traitée :
+
+1. Sélection (`pick-task.mjs` + relecture de la chaîne de skips déjà actée)
+2. Vérification/rafraîchissement du graphe Graphify (~1937 nœuds/2752 liens)
+3. Planification via `superpowers:brainstorming`/`writing-plans` (hard-gate — pas de
+   code avant un plan écrit)
+4. Implémentation via `subagent-driven-development` — **un sous-agent implémenteur +
+   un sous-agent reviewer séparés**, chacun avec son propre contexte complet du repo
+5. 4 gates séquentiels : `vitest` (826 tests), `tsc --noEmit`, `build`, **Playwright
+   e2e** (démarrage serveur local + migrations D1 + tests navigateur réels)
+6. Documentation : `todo.md`, nouveau checkpoint `current-state.md`, entrée `ledger`
+
+Chaque étape relit des fichiers volumineux (code source, specs, graphe). C'est le prix
+d'un pipeline qui vérifie réellement avant de committer, pas un gaspillage anormal —
+mais ça veut dire qu'enchaîner plusieurs runs consécutifs peut faire consommer
+plusieurs dizaines de millions de tokens dans la même fenêtre de 5h, et donc atteindre
+une limite de dépense mensuelle du compte claude.ai après quelques runs seulement (vu
+en pratique : bloqué après le 6e run consécutif le 2026-07-24, repris après reset du
+bloc actif ccusage).
 
 ## 5. Ce que TU dois faire selon ce qui s'est passé
 
