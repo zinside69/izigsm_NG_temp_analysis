@@ -1,5 +1,55 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 Chantier impression ticket A4/thermique — refonte + email auto (demandé 2026-07-24, PAS commencé)
+Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir plus bas) — ne le remplace pas.
+
+**Contenu commun aux deux formats** (description, client, réparateur, état du matériel à l'entrée, commentaires **publics uniquement** — jamais les notes internes) :
+- [ ] Auditer le contenu actuel de la fiche imprimée A4 vs cette liste — identifier les écarts avant de coder
+
+**Format A4** :
+- [ ] Revoir la mise en page sur le modèle `docs/bon de réparation.pdf` (bandeau, structure) — actuellement système visuel indigo, à documenter/trancher si on garde ou si on aligne sur le PDF
+- [ ] Ajouter IMEI / N° de série (absent actuellement)
+- [ ] Ajouter le détail des options de récupération (ex. 10€ TTC déduits de la réparation, recyclage sous 4 semaines) — texte exact à valider avec l'utilisateur, pas à inventer
+- [ ] Garantir le rendu sur **une seule page A4** (contrainte à vérifier après ajout des éléments ci-dessus)
+
+**Format thermique (nouveau)** :
+- [ ] Contenu réduit : nom client, description, entête réparateur, date de prise en charge, QR code ou code-barre (retrouver le ticket dans le logiciel), lien vitrine de suivi client
+- [ ] Se servir du modèle `docs/test impression.pdf`
+- [ ] **Solution technique d'impression pas encore choisie** (QZ Tray envisagé au départ, mais à explorer/valider — voir décision utilisateur 2026-07-24, aucune techno arrêtée)
+
+**Email automatique à l'impression** (A4 ou thermique) :
+- [ ] Envoyer un email de confirmation de prise en charge au client au moment de l'impression (décision utilisateur 2026-07-24) — vérifier s'il existe déjà un template proche (`sendTicketCree` ?) à réutiliser ou s'il faut un nouveau template dédié
+
+**Facturation — 2 chantiers séparés mais liés à l'impression/documents** :
+- [ ] Configurer l'affichage des prix en HT ou TTC **au moment de la création/configuration de la boutique** (montants réparation + facturation d'articles) — nouveau champ de config boutique
+- [ ] Facture : toujours 2 chiffres après la virgule, s'inspirer de `docs/modele-facture.pdf`
+- [ ] Mentions légales + CGV + CGR à ajouter dans devis/avoir/facture — à récupérer sur www.telnet-beynost.fr (ne pas inventer le texte)
+- [ ] Workflow facturation auto : ticket passé "réparation terminée" → génère une facture en mode **brouillon** automatiquement ; le technicien peut ensuite la passer en **acquittée** (= client a payé) → déclenche le chaînage NF525 + enregistrement comptabilité
+
+## 🔴 Sélection modèle smartphone cassée (2026-07-24, PAS traité)
+- [ ] Le filtre par constructeur ne restreint pas la liste des modèles — doit n'afficher que les modèles du constructeur sélectionné
+
+## 🔴 Devis — durée de vie 15 jours (2026-07-24, PAS traité)
+- [ ] Un devis devient caduc (désactivé) 15 jours après sa création
+- [ ] Le technicien ou l'admin doit pouvoir le rouvrir et le modifier après péremption
+
+## 🟡 Détection automatique du nom de société par ville (2026-07-24, PAS traité, priorité à confirmer)
+- [ ] À l'inscription/configuration boutique : proposer automatiquement un nom de société à partir de la ville renseignée — mécanisme exact à définir (API SIRENE déjà utilisée ailleurs dans le projet pour la recherche entreprise, cf. § "Fonctionnalité manquante — recherche entreprise à l'inscription")
+
+## 🔴 Prise en charge — infos client non reportées + email non conservé (2026-07-24, PAS traité)
+- [ ] Les informations saisies à la création d'un client ne sont pas reportées automatiquement dans le formulaire de prise en charge
+- [ ] L'email saisi dans la prise en charge n'est pas conservé — conséquence : le devis est marqué "envoyé" alors qu'il ne l'a jamais été réellement (email manquant au moment de l'envoi). Bug à investiguer en priorité, impact silencieux sur la relation client.
+
+## 🔴 Page Clients (`/clients`) — 3 bugs (2026-07-24, PAS traité)
+- [ ] Import client (fichier) non fonctionnel
+- [ ] Recherche client non fonctionnelle
+- [ ] Bouton "Actions" sur une fiche client : icône non visible
+
+## 🟡 État de l'appareil à l'entrée — checklist à cocher + nouveaux items (2026-07-24, PAS traité)
+Actuellement saisie libre (texte) — remplacer par des cases à cocher pour le technicien (plus rapide, évite les erreurs/oublis).
+- [ ] Passer d'une saisie texte à une checklist d'états prédéfinis
+- [ ] Items à ajouter (liste non exhaustive, à compléter avec le technicien) : façade arrière fissurée/rayée/cassée, connecteur de charge cassé, batterie gonflée ou HS, bouton power HS, bouton volume HS
+
 ## 🔴 PRIORITÉ CRITIQUE — Faille isolation `GET /api/tickets/:id` (découvert 2026-07-19) — CORRIGÉE le 2026-07-19
 Voir `bugs.md` § "FAILLE — `GET /api/tickets/:id` sans aucune isolation `boutique_id`" pour le détail complet — n'importe quel compte authentifié (n'importe quelle boutique) peut lire l'intégralité d'un ticket d'une autre boutique (client, IMEI, diagnostic, facture d'acompte) en itérant sur l'ID numérique. Découvert par le gate Playwright de la loop-engineering (`tests/e2e/isolation.spec.ts`), classé risque élevé par `loop-policy.md` — escaladé, pas d'auto-fix par la loop, corrigé manuellement par l'utilisateur.
 - [x] Corriger `GET /api/tickets/:id` (`src/routes/tickets.ts:160`) avec le même patron `getBoutiqueId(user, queryBoutiqueId)` + vérification `ticket.boutique_id !== boutiqueId → 403` déjà utilisé sur `/api/tickets/:id/photos` — commit `ae6795f`, déployé, validé en prod réelle
