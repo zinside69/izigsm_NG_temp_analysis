@@ -24,7 +24,7 @@ function buildSidebar(activePage) {
   if (!session) return;
 
   const initials = ((session.name || 'JD').split(' ').map(w => w[0]).join('').toUpperCase()).slice(0,2);
-  const company = session.company || 'Mon Atelier';
+  const company = session.company || 'MyDesk';
 
   const pages = [
     { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard', section:'principal', badge: null },
@@ -421,8 +421,8 @@ function storeSession(token, refreshToken, user, remember = true) {
     email:        user.email,
     role:         user.role,
     boutique_id:  user.boutique_id,
-    boutique_name: user.boutique_name || 'Mon Atelier',
-    company:      user.boutique_name || 'Mon Atelier',
+    boutique_name: user.boutique_name || 'MyDesk',
+    company:      user.boutique_name || 'MyDesk',
   };
 
   if (remember) {
