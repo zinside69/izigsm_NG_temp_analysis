@@ -36,7 +36,7 @@ Voir `recovery-prompt.md` (checkpoint 32) pour le détail complet, notamment la 
 - [ ] Corriger le bug deep-link admin (voir `bugs.md`) — nécessite de modifier la route partagée `GET /api/tickets`, hors périmètre de Task 8, décision utilisateur : reporté à plus tard
 - [ ] Décider si un restyle visuel complet de la fiche A4 (bandeau bleu marine façon `bon de réparation.pdf`) est souhaité, séparément du contenu déjà ajouté (décision actuelle : système visuel indigo existant conservé)
 - [ ] Namespacer les futurs fichiers `.superpowers/sdd/task-N-*.md` créés hors plan écrit (ex. `impression-ticket-task-N-*.md`) — collision de naming générique a causé l'écrasement d'un rapport d'un chantier précédent (non récupérable, mais sans perte d'information unique)
-- [ ] Bug mineur non bloquant : nom de boutique sur fiche imprimée lit la 1ère boutique de `GET /api/boutiques` non filtrée, pas forcément celle du ticket
+- [x] Bug mineur non bloquant : nom de boutique sur fiche imprimée lit la 1ère boutique de `GET /api/boutiques` non filtrée, pas forcément celle du ticket — corrigé par la loop-engineering le 2026-07-24, commit `ece114d` (`_fetchTicketPrintData` utilise désormais `GET /api/boutiques/:id` avec le `boutique_id` du ticket)
 - [ ] Déploiement groupé du chantier impression ticket à prévoir après Task 8 (rien déployé pour l'instant, seul l'acompte structuré l'est) [loop-safe]
 
 ## Bug étendu — pattern `r.success`/`r.data` cassé, ampleur à confirmer (découvert le 2026-07-16, PAS traité) — RÉSOLU par `c281411` le 2026-07-17, checkboxes réconciliées par la loop-engineering le 2026-07-20

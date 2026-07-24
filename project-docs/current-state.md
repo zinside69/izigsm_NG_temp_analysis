@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 47 — loop-engineering : rebranding register.js MyDesk mergé, gate Playwright réparé)
+# iziGSM — État courant (MàJ : 2026-07-24, checkpoint 48 — loop-engineering : fix boutique fiche imprimée)
+
+## Checkpoint 48 — Loop-engineering : fiche imprimée utilise la boutique du ticket, pas la 1ère de la liste (2026-07-24)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé).
+
+**Déviation procédurale à signaler** : l'Étape 1bis (rafraîchissement/vérification du graphe) a été exécutée **après** l'implémentation et le commit au lieu d'avant, par omission — le run a directement enchaîné Étape 0bis → sélection de tâche sans passer par `graphify-refresh.mjs plan/record-result/verify`. Rattrapé a posteriori dans ce même run : `plan` → `update_no_semantic` (10 fichiers non-code > cap 5, différé), `record-result success`, `verify` → `valid:true` (1937 nœuds/2752 liens, graphe sain). Aucun impact constaté sur la classification de risque (faite par mots-clés + lecture directe du code, cf. ci-dessous), mais **à corriger dans le prochain run** : respecter l'ordre Étape 0bis → 1 → 1bis → 2 avant toute implémentation.
+
+**Sélection** : chantier cache-busting (🔴, 6 sous-tâches, même chantier architectural déjà classé risque élevé — `> ~8 fichiers`, 29 pages HTML + 20 JS + service worker) → toutes écartées sans implémentation. Déploiement groupé impression ticket `[loop-safe]` écarté (la loop ne déploie jamais, aucune exception). Deep-link admin et restyle A4 écartés (explicitement reportés/en attente de décision utilisateur dans `todo.md`). Convention nommage `.superpowers/sdd/` écartée (pas une tâche de code). Tâche retenue : **nom de boutique sur fiche imprimée** (`project-docs/todo.md:39`, bug mineur non bloquant, aucun mot-clé à risque, périmètre 1 fichier).
+
+**Déviation Étape 3** : travail fait **directement sur le checkout principal** (`main`), pas dans un worktree isolé — omission, pas un choix délibéré (contrairement au checkpoint 47 où le worktree était bloqué par le sandbox). Le diff était trivial (1 fichier, 7 lignes) et tous les gates sont passés avant commit, donc pas de risque matériel constaté, mais **à corriger dans le prochain run** : créer le worktree à l'Étape 3 avant toute édition.
+
+**Travail** : `public/static/js/tickets.js` (`_fetchTicketPrintData`) — le fetch du profil boutique prenait systématiquement `(GET /api/boutiques)[0]`, qui pour un compte admin retourne **toutes** les boutiques dans un ordre non garanti (pour un non-admin la route ne renvoie déjà que sa propre boutique, donc le bug ne se manifestait qu'en admin). Corrigé pour utiliser `GET /api/boutiques/:id` avec le `boutique_id` du ticket (`t.boutique_id`, présent via `SELECT t.*` dans `ticketService.ts:419`) — même patron déjà utilisé dans `settings.html`, isolation déjà en place côté route (`boutiques.ts:106`, 403 si non-admin hors de sa boutique).
+
+**Gates** : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants inchangés) · tsc ✅ (mêmes erreurs pré-existantes, aucune sur `tickets.js` qui est hors périmètre tsc — fichier JS pur) · build ✅ (`vite build` 967ms) · playwright ✅ 10/10 · browser-use n·a (correction de bug sur parcours existant, pas de nouveau parcours — validation exploratoire optionnelle non exécutée, écriture hors repo bloquée par permission en session autonome).
+
+**Commit `ece114d` poussé directement sur `main`** (pas de merge --ff-only, le commit a été fait directement sur le checkout principal — cf. déviation Étape 3 ci-dessus). `CACHE_VERSION` v2.66→v2.67 oublié dans ce commit puis rattrapé en commit séparé `ba3f81f` (règle CLAUDE.md, tâche frontend touchant `public/static/js/*.js`). Case `todo.md:39` cochée.
 
 ## Checkpoint 47 — Loop-engineering : rebranding `register.js` « Mon Atelier » → « MyDesk » — mergé sur `main` (2026-07-24)
 
