@@ -99,6 +99,15 @@ $Prompt = "Utilise la skill loop-engineering (.claude/skills/loop-engineering/SK
 # (2026-07-20, pour le resume Telegram "actions faites").
 $PreRunHead = git rev-parse HEAD
 
+# ANTHROPIC_API_KEY (niveau utilisateur Windows) sert a d'autres usages sur ce poste
+# (elearning-factory, scripts/loop/browser_use_explore.py - voir loop-runbook.md S4) et
+# facture a la consommation API, pas via l'abonnement claude.ai. Efface uniquement pour
+# ce process enfant afin que claude -p utilise la session claude.ai (claude /login) au
+# lieu d'une cle API qui peut etre a sa limite independamment du compte claude.ai - ne
+# touche jamais au reglage utilisateur Windows persistant. Bug reel rencontre le
+# 2026-07-24 : run bloque par "API usage limits" alors que claude.ai etait connecte.
+$env:ANTHROPIC_API_KEY = $null
+
 claude -p $Prompt --permission-mode $PermissionMode --output-format text
 $ClaudeExit = $LASTEXITCODE
 
