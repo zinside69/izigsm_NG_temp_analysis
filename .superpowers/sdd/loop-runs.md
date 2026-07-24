@@ -205,3 +205,13 @@ l'état **actuel** d'un bug ou d'une tâche, se référer à `project-docs/bugs.
   2. **Deux déviations procédurales dans ce run, aucune n'a compromis le résultat mais toutes deux à corriger** : (a) Étape 1bis (graphe) exécutée après l'implémentation/commit au lieu d'avant — rattrapée dans ce même run, graphe confirmé sain a posteriori ; (b) Étape 3 (worktree) omise entièrement — travail fait directement sur `main`. Recommandation : au prochain run, dérouler strictement 0 → 0bis → 1 → 1bis → 2 → 3 → 4 → 5 → 6 → 7 sans sauter d'étape, même quand la tâche semble triviale.
   3. **`CACHE_VERSION` oublié dans le commit initial** (`ece114d`), rattrapé en commit de suivi (`ba3f81f`) après relecture de la règle CLAUDE.md — à vérifier systématiquement *avant* de committer, pas après, pour tout diff touchant `public/static/js/*.js`/`public/*.html`.
   4. **Chantier cache-busting** (`todo.md:22-27`) reste entièrement à faire, toujours classé risque élevé (architectural) — nécessite `superpowers:brainstorming`/`writing-plans` en session humaine, hors périmètre de cette skill en l'état.
+
+## Run 2026-07-24T14:26Z — tâche 7af1ae2590 (rebranding app.js MyDesk)
+
+- Tâche : `public/static/js/app.js:27,385,386` — fallback `session.company`/`user.boutique_name` « Mon Atelier » → « MyDesk » — `project-docs/todo.md:225`
+- Issue : commit `283c8c5` (branche `loop/rebrand-app-js-mydesk-v2`), mergé `--ff-only` sur `main` (`ec0a038` pour le checkpoint docs associé)
+- Risque : faible (littéral d'affichage seul, `sensitiveMatch:false`, `boutique_id`/tokens intacts)
+- Graphe : rafraîchi (verify OK, 1937 nœuds/2752 liens) — extraction sémantique différée (`update_no_semantic`, 10 fichiers non-code > cap 5), 0 échec consécutif
+- Gates : vitest ✅ (824/826, 2 échecs fuseau horaire pré-existants) · tsc ✅ (32 erreurs, baseline `d7c5ed1` inchangé) · build ✅ · playwright ✅ 10/10 · browser-use n·a
+- Worktree : `../izigsm-loop-rebrand-app-js-mydesk` créé puis supprimé immédiatement (inaccessible en `cd`, sandbox restreint à `izigsm/webapp` — même contrainte que checkpoints 45/47) ; travail refait sur branche fraîche sur le checkout principal
+- Détail / recommandation : ancienne branche `loop/rebrand-app-js-mydesk` (`94efe76`, stale de 26 commits) désormais supersédée par ce commit, à nettoyer en session humaine si souhaité. Reste du chantier rebranding : `login.html` L227, `register.html` L228, `auth.ts` L229 (JSDoc seul, fichier auth sensible).
