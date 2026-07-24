@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest'
-import { hashContent, rewriteStaticReferences } from '../scripts/build-hash-assets.mjs'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+// @ts-ignore node:fs types not available without @types/node
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+// @ts-ignore node:os types not available without @types/node
+import { tmpdir } from 'node:os'
+// @ts-ignore node:path types not available without @types/node
+import { join } from 'node:path'
+import {
+  hashContent,
+  rewriteStaticReferences,
+  hashAndRenameAssets,
+  writeHeadersFile,
+} from '../scripts/build-hash-assets.mjs'
 
 describe('hashContent', () => {
   it('retourne les 8 premiers caractères hex du SHA-256 du contenu', () => {
@@ -42,5 +53,67 @@ describe('rewriteStaticReferences', () => {
     expect(() => rewriteStaticReferences(html, manifest)).toThrow(
       /manquant\.js/
     )
+  })
+})
+
+describe('hashAndRenameAssets', () => {
+  let distDir: string
+
+  beforeEach(() => {
+    distDir = mkdtempSync(join(tmpdir(), 'izigsm-hash-test-'))
+    mkdirSync(join(distDir, 'static', 'js'), { recursive: true })
+    mkdirSync(join(distDir, 'static', 'css'), { recursive: true })
+    writeFileSync(join(distDir, 'static', 'js', 'app.js'), "console.log('a')")
+    writeFileSync(join(distDir, 'static', 'css', 'main.css'), 'body{color:red}')
+  })
+
+  afterEach(() => {
+    rmSync(distDir, { recursive: true, force: true })
+  })
+
+  it('renomme les fichiers JS/CSS avec leur hash de contenu', () => {
+    const jsHash = hashContent(new TextEncoder().encode("console.log('a')"))
+    const cssHash = hashContent(new TextEncoder().encode('body{color:red}'))
+
+    const manifest = hashAndRenameAssets(distDir)
+
+    expect(manifest).toEqual({
+      'static/js/app.js': `static/js/app.${jsHash}.js`,
+      'static/css/main.css': `static/css/main.${cssHash}.css`,
+    })
+  })
+
+  it('supprime le fichier original et crée le fichier hashé avec le même contenu', () => {
+    const jsHash = hashContent(new TextEncoder().encode("console.log('a')"))
+    hashAndRenameAssets(distDir)
+
+    expect(existsSync(join(distDir, 'static', 'js', 'app.js'))).toBe(false)
+    const hashedPath = join(distDir, 'static', 'js', `app.${jsHash}.js`)
+    expect(existsSync(hashedPath)).toBe(true)
+    expect(readFileSync(hashedPath, 'utf8')).toBe("console.log('a')")
+  })
+})
+
+describe('writeHeadersFile', () => {
+  let distDir: string
+
+  beforeEach(() => {
+    distDir = mkdtempSync(join(tmpdir(), 'izigsm-headers-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(distDir, { recursive: true, force: true })
+  })
+
+  it('écrit un fichier _headers avec les règles de cache attendues', () => {
+    writeHeadersFile(distDir)
+    const content = readFileSync(join(distDir, '_headers'), 'utf8')
+
+    expect(content).toContain('/static/js/*')
+    expect(content).toContain('/static/css/*')
+    expect(content).toContain('Cache-Control: public, max-age=31536000, immutable')
+    expect(content).toContain('/sw.js')
+    expect(content).toContain('/*.html')
+    expect(content).toContain('Cache-Control: no-cache')
   })
 })
