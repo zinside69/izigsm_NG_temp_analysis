@@ -15,7 +15,7 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 - [x] Auditer le contenu actuel de la fiche imprimée A4 vs cette liste — identifier les écarts avant de coder — fait par la loop-engineering (audit lecture seule, aucun code modifié), résultat détaillé dans `current-state.md` checkpoint 54 : description/client/réparateur/état matériel déjà présents, **commentaires publics manquants** (aucun champ dédié dans le modèle, `notes_internes` jamais affiché) — écart réel à corriger lors de la mise en page
 
 **Format A4** :
-- [ ] Revoir la mise en page sur le modèle `docs/bon de réparation.pdf` (bandeau, structure) — actuellement système visuel indigo, à documenter/trancher si on garde ou si on aligne sur le PDF
+- [x] Revoir la mise en page sur le modèle `docs/bon de réparation.pdf` (bandeau, structure) — tranché le 2026-07-25 (brainstorming + plan + subagent-driven-development, `docs/superpowers/specs|plans/2026-07-25-refonte-fiche-a4-*.md`) : ni l'indigo actuel ni le bleu marine/ambre du PDF, accent gris ardoise unique inspiré de `docs/modele-facture.pdf` (aucun aplat de couleur). Voir `decisions.md` pour le détail. **Code mergé sur `main`, non déployé — validation visuelle réelle en navigateur (ticket A4 + facture/devis/caisse, nom de boutique long) requise avant `npm run deploy`.**
 - [ ] Ajouter IMEI / N° de série (absent actuellement)
 - [ ] Ajouter le détail des options de récupération (ex. 10€ TTC déduits de la réparation, recyclage sous 4 semaines) — texte exact à valider avec l'utilisateur, pas à inventer
 - [ ] Garantir le rendu sur **une seule page A4** (contrainte à vérifier après ajout des éléments ci-dessus)
