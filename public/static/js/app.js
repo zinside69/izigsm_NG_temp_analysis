@@ -307,6 +307,39 @@ function _fmtDateTime(iso) {
 }
 
 /**
+ * Résout un chemin logique (ex. "static/css/print.css") vers son nom hashé
+ * réel via le manifeste de build (dist/static/manifest.json, généré par
+ * scripts/build-hash-assets.mjs — chantier cache-busting checkpoint 53).
+ *
+ * Nécessaire car ce script rewrite ne réécrit que les pages .html et sw.js
+ * (voir rewriteStaticReferences()) — une référence codée en dur dans un
+ * template JS comme celle-ci ne serait jamais mise à jour et pointerait vers
+ * un fichier absent de `dist/` en production (seul le nom hashé y existe),
+ * ce qui tombe silencieusement dans le catch-all applicatif au lieu de 404 —
+ * bug réel trouvé lors de la validation visuelle de la refonte fiche A4
+ * (2026-07-25) : la fiche imprimée n'avait plus aucun style depuis le
+ * déploiement du cache-busting.
+ *
+ * Résultat mis en cache après le premier appel (le manifeste ne change pas
+ * en cours de session). Retombe sur le chemin logique tel quel si le
+ * manifeste est indisponible (dev sans build, ou fetch en échec) — c'est le
+ * comportement d'avant ce fix, pas une régression supplémentaire.
+ *
+ * @param {string} logicalPath - Chemin logique sans slash initial (ex. "static/css/print.css")
+ * @returns {Promise<string>} URL absolue à utiliser (ex. "/static/css/print.8142382e.css")
+ */
+let _staticManifestPromise = null;
+async function _resolveStaticHref(logicalPath) {
+  if (!_staticManifestPromise) {
+    _staticManifestPromise = fetch('/static/manifest.json')
+      .then(r => r.ok ? r.json() : {})
+      .catch(() => ({}));
+  }
+  const manifest = await _staticManifestPromise;
+  return '/' + (manifest[logicalPath] || logicalPath);
+}
+
+/**
  * Injecte le HTML dans le DOM, masque le layout app, déclenche window.print(),
  * puis nettoie le DOM après impression. Centralisé (Principe P2) — partagé par
  * tous les modules d'impression (factures, tickets, ...).

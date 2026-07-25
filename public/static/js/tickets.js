@@ -525,9 +525,10 @@ async function printTicket(id, format) {
   try {
     const data = await _fetchTicketPrintData(id);
     if (!data) return;
+    const printCssHref = await _resolveStaticHref('static/css/print.css');
     const html = format === '3volets'
-      ? _buildTicketThermique3VoletsHTML(data)
-      : _buildTicketA4HTML(data);  // défaut = 'a4'
+      ? _buildTicketThermique3VoletsHTML(data, printCssHref)
+      : _buildTicketA4HTML(data, printCssHref);  // défaut = 'a4'
     _triggerPrint(html);
   } catch (err) {
     console.error('[printTicket]', err);
@@ -669,9 +670,10 @@ function _renderEan13DataUrl(ticketId) {
  * Inclut zones de signature client/technicien et lien de suivi si token présent.
  *
  * @param {object} d - Données normalisées retournées par `_fetchTicketPrintData`
+ * @param {string} printCssHref - URL résolue (hashée) de print.css, voir `_resolveStaticHref()`
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
-function _buildTicketA4HTML(d) {
+function _buildTicketA4HTML(d, printCssHref) {
   const STATUT_LABELS = {
     recu:           'Reçu',
     en_diagnostic:  'En diagnostic',
@@ -719,7 +721,7 @@ function _buildTicketA4HTML(d) {
 
   return `
     <div id="print-root">
-      <link rel="stylesheet" href="/static/css/print.css">
+      <link rel="stylesheet" href="${printCssHref}">
       <div class="print-header print-no-break">
         <div class="print-logo">
           ${d.boutique.logoUrl
@@ -1009,13 +1011,14 @@ function _buildTicketVoletTechnicienHTML(d) {
  * la structure de l'ancien template izigsm_app (3 exemplaires découpés),
  * adaptée au schéma actuel.
  * @param {object} d - Données normalisées retournées par _fetchTicketPrintData
+ * @param {string} printCssHref - URL résolue (hashée) de print.css, voir `_resolveStaticHref()`
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
-function _buildTicketThermique3VoletsHTML(d) {
+function _buildTicketThermique3VoletsHTML(d, printCssHref) {
   const cutLine = '<div class="print-cut-line">✂ ─ ─ ─ ─ ─ ─ ─ DÉCOUPER ICI ─ ─ ─ ─ ─ ─ ─ ✂</div>';
   return `
     <div id="print-root">
-      <link rel="stylesheet" href="/static/css/print.css">
+      <link rel="stylesheet" href="${printCssHref}">
       ${_buildTicketVoletClientHTML(d)}
       ${cutLine}
       ${_buildTicketVoletClientHTML(d)}

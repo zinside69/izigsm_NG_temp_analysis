@@ -952,7 +952,8 @@ async function printFacture(id) {
   try {
     const data = await _fetchFacturePrintData(id);
     if (!data) return;
-    const html = _buildFactureHTML(data);
+    const printCssHref = await _resolveStaticHref('static/css/print.css');
+    const html = _buildFactureHTML(data, printCssHref);
     _triggerPrint(html);
   } catch (err) {
     console.error('[printFacture]', err);
@@ -1026,9 +1027,10 @@ async function _fetchFacturePrintData(id) {
  * Utilise print.css via lien relatif (injecté dans le DOM au moment du print).
  *
  * @param {object} d - Données normalisées retournées par `_fetchFacturePrintData`
+ * @param {string} printCssHref - URL résolue (hashée) de print.css, voir `_resolveStaticHref()` (app.js)
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
-function _buildFactureHTML(d) {
+function _buildFactureHTML(d, printCssHref) {
   const badgeCls = {
     payee:    'print-badge-paid',
     brouillon:'print-badge-draft',
@@ -1067,7 +1069,7 @@ function _buildFactureHTML(d) {
 
   return `
     <div id="print-root">
-      <link rel="stylesheet" href="/static/css/print.css">
+      <link rel="stylesheet" href="${printCssHref}">
 
       <div class="print-header print-no-break">
         <div class="print-logo">
