@@ -1,3 +1,39 @@
+# Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 61 — audit rétroactif protocole checkpoint + clôture session refonte A4)
+
+## Vue d'ensemble (checkpoint 61)
+Suite directe du checkpoint 57 (refonte A4 déployée + fix débordement 2 pages + spec logo boutique, voir entrée ci-dessous). Cette entrée couvre uniquement l'audit rétroactif du protocole checkpoint lui-même, demandé par l'utilisateur après vérification que le checkpoint 57 était incomplet.
+
+## Ce qui a été fait
+- Audit de `CLAUDE.md` vs `decisions.md`/`bugs.md` : 4 invariants manquants ajoutés (DNS `repairdesk.fr`, 2 docs obsolètes à ignorer — `ARCHITECTURAL_PRINCIPLES.md`/`ARCHITECTURE_MODULES.md` §2 —, portabilité SQL du port `Database`)
+- Mémoire persistante (`project_izigsm_migration.md`) : trou de 10 jours comblé (checkpoints ~16-56 synthétisés)
+- Nouveau fichier mémoire `feedback_checkpoint_protocol.md` : enregistre la règle "checkpoint = protocole complet, jamais partiel"
+- `todo.md` : trou `recovery-prompt.md` (checkpoints 29-30, 33-34, 38, 40-56 manquants) tracé pour backfill futur, décision explicite de ne pas le faire maintenant (coût contexte)
+
+## Décisions prises
+- Ne pas backfiller les ~17 checkpoints manquants de `recovery-prompt.md` dans cette session (contexte déjà très chargé en fin de session dense) → tracé dans `todo.md`, session dédiée recommandée
+- Règle actée : tout futur `/context-guardian checkpoint` sur ce projet doit toucher systématiquement current-state.md + recovery-prompt.md + CLAUDE.md (si nouvel invariant) + mémoire persistante (si changement d'état significatif), jamais un sous-ensemble présenté comme complet
+
+## État courant
+Chantier refonte A4 intégralement clos (déployé, validé). Chantier logo boutique + impression devis au stade spec approuvée. Aucun bug ouvert nouveau. Working tree propre, tout poussé sur origin/main.
+
+## Tâches en attente
+- [ ] `superpowers:writing-plans` sur `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md` — priorité haute (prochain chantier)
+- [ ] Backfill `recovery-prompt.md` (checkpoints 29-30, 33-34, 38, 40-56) — priorité moyenne, session dédiée
+- [ ] `todo.md` § impression A4/thermique : options de récupération (texte utilisateur), format thermique (techno), email auto, facturation HT/TTC — priorité moyenne
+
+## Bugs connus
+Aucun nouveau depuis checkpoint 57 (voir `bugs.md` pour l'historique complet — print.css cassé par cache-busting et débordement 2 pages, tous deux corrigés et validés le 2026-07-25).
+
+## Contraintes
+Voir checkpoint 21 ci-dessous (contraintes générales toujours valables : DNS mail Gandi, pas de secret en clair, commenter le code ajouté, jamais de `Co-Authored-By: Claude`, proposer avant modif/suppression, migrations NF525 = validation explicite).
+
+## Prochaines étapes recommandées
+1. `superpowers:writing-plans` sur la spec logo boutique/devis, puis implémentation
+2. Quand le contexte le permet : session dédiée backfill `recovery-prompt.md`
+3. Reste du chantier impression A4/thermique (voir `todo.md`)
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 57 — refonte A4 déployée + fix débordement 2 pages + spec logo boutique)
 
 ## Vue d'ensemble (checkpoint 57)

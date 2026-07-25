@@ -1,4 +1,25 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 60 — loop-engineering : modèle PDF format thermique escaladé, même ambiguïté que checkpoint 59)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 61 — audit rétroactif checkpoints + clôture session refonte A4)
+
+## Checkpoint 61 — Session humaine : audit rétroactif du protocole checkpoint + clôture (2026-07-25)
+
+**Contexte** : suite au checkpoint 57 (refonte A4 déployée + fix débordement 2 pages), l'utilisateur a demandé confirmation que le checkpoint avait bien mis à jour tous les fichiers nécessaires. Réponse honnête : non — `recovery-prompt.md` et `CLAUDE.md` et la mémoire persistante n'avaient pas été touchés. Corrigé immédiatement pour le checkpoint 57 lui-même, puis l'utilisateur a demandé un **audit rétroactif de tous les checkpoints précédents**.
+
+**Résultat de l'audit** :
+- **Mémoire persistante** : trou de 10 jours (checkpoints ~16 à 56 jamais reflétés dans `project_izigsm_migration.md`) comblé par une section de synthèse + description mise à jour.
+- **`CLAUDE.md`** : 4 invariants trouvés dans `decisions.md`/`bugs.md` mais jamais remontés, ajoutés : records DNS `repairdesk.fr` à ne jamais toucher (2026-07-09), `docs/ARCHITECTURAL_PRINCIPLES.md` obsolète/à ne pas suivre (2026-07-12), `docs/ARCHITECTURE_MODULES.md` §2 obsolète, portabilité SQL du port `Database` (dialecte SQLite non abstrait, pertinent pour une future bascule Postgres).
+- **`recovery-prompt.md`** : confirmé non régénéré à chaque checkpoint comme il le devrait. Présents : 21-28, 31-32, 35-37, 39, 57. **Manquants : 29-30, 33-34, 38, 40-56** (17 d'affilée). Décision utilisateur : ne pas backfiller maintenant (coût contexte trop élevé en fin de session dense), tracé dans `todo.md` pour une session dédiée future.
+
+**Feedback utilisateur important, enregistré en mémoire persistante** (`feedback_checkpoint_protocol.md`) : "checkpoint" dans la convention de ce projet signifie le protocole `/context-guardian checkpoint` **complet** (current-state + recovery-prompt + CLAUDE.md si nouvel invariant + mémoire persistante), jamais une mise à jour partielle de `current-state.md` seule — ce qui s'était produit à répétition sans être remarqué. Règle à appliquer systématiquement à partir de maintenant, y compris sous pression de contexte élevé (le cas de cette session même).
+
+**État git** : tout commité et poussé sur `main`/origin. Dernier commit avant ce checkpoint : `25c546b`. Le chantier "refonte fiche A4" est intégralement clos (déployé, validé par l'utilisateur). Le chantier "logo boutique multi-tenant + impression devis" reste au stade spec approuvée, pas encore planifié.
+
+## Reste ouvert
+- `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md` : prochaine étape `superpowers:writing-plans`
+- Backfill `recovery-prompt.md` (checkpoints 29-30, 33-34, 38, 40-56) — session dédiée, voir `todo.md`
+- `todo.md` § chantier impression A4/thermique : options de récupération (texte à valider), format thermique (techno non tranchée, escaladé 2 fois par la loop — checkpoints 59/60), email auto, facturation HT/TTC
+
+---
+
 
 ## Checkpoint 60 — Loop-engineering : "se servir du modèle docs/test impression.pdf" (todo.md:25) — escaladée, aucune implémentation (2026-07-25)
 
