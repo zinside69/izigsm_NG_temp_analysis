@@ -1,4 +1,23 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 58 — loop-engineering : options de récupération A4 escaladées, ambiguïté texte)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 59 — loop-engineering : contenu format thermique réduit escaladé, ambiguïté périmètre)
+
+## Checkpoint 59 — Loop-engineering : "contenu réduit format thermique" (todo.md:24) — escaladée, aucune implémentation (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). `pick-task.mjs` a d'abord retourné `cd5abbd9ab` (`todo.md:20`, options de récupération) — déjà escaladée au run précédent (checkpoint 58) sans décision humaine actée depuis (texte de la tâche inchangé, aucune nouvelle entrée `decisions.md`) → passée avec `--skip`, conforme `SKILL.md` § Étape 1. Tâche suivante retournée : `19e82f7a47` — `todo.md:24` (« Contenu réduit : nom client, description, entête réparateur, date de prise en charge, QR code ou code-barre, lien vitrine de suivi client »), section « Format thermique (nouveau) » du même chantier 🔴 impression A4/thermique.
+
+**Pourquoi escaladé (ambiguïté de périmètre, pas une classification par mot-clé)** : deux éléments de contexte rendent cette tâche non implémentable sans arbitrage humain :
+1. `todo.md:26` note explicitement, dans la même section, que « la solution technique d'impression n'est pas encore choisie » (QZ Tray envisagé, non tranché) — implémenter un contenu HTML sans savoir s'il sera rendu via le pipeline navigateur existant (`_triggerPrint()`/`print.css`) ou via une intégration imprimante différente (ESC/POS raw) est prématuré.
+2. Un format thermique 72mm existe déjà en production (`_buildTicketThermique3VoletsHTML`, `tickets.js:1017`, décision `decisions.md` § 2026-07-18 — IMEI/N° série/adresse/acompte, sans signature, 1 copie). Le contenu demandé ici (« réduit » : nom client, description, entête réparateur, date, QR/code-barre, lien vitrine) est nettement plus pauvre et référence un PDF modèle différent (`docs/test impression.pdf`) sans préciser si ce format remplace, complète ou coexiste avec l'existant. Deviner l'une ou l'autre interprétation risquerait soit de dupliquer un format déjà validé, soit de remplacer silencieusement un format en production sans validation.
+
+**Aucun commit de code, aucun worktree créé** (arrêt avant l'Étape 3 — ambiguïté tranchée dès la lecture du texte de tâche + du code existant). `todo.md:24` reste décochée.
+
+**Recommandation pour la décision humaine** :
+1. Trancher la relation entre le format thermique existant (`_buildTicketThermique3VoletsHTML`) et ce « format réduit (nouveau) » — remplacement, variante additionnelle (ex. sélectionnée par l'utilisateur au moment de l'impression), ou fusion de contenu.
+2. Trancher (au moins provisoirement) le mécanisme d'impression cible (`todo.md:26`) avant d'écrire le contenu — même une réponse simple ("on reste sur le pipeline navigateur existant pour l'instant, QZ Tray reporté") débloquerait ce point sans attendre la décision finale sur QZ Tray.
+Une fois ces deux points actés dans `decisions.md`, le prochain run pourra implémenter directement sans re-escalade.
+
+**Reste ouvert dans ce chantier** : `todo.md:20` (options de récupération, texte à valider), `todo.md:24-26` (contenu + techno format thermique), `todo.md:29` (email auto à l'impression), `todo.md:32-35` (facturation HT/TTC, mentions légales, workflow facture auto).
+
+---
 
 ## Checkpoint 58 — Loop-engineering : "options de récupération" fiche A4 (todo.md:20) — escaladée, aucune implémentation (2026-07-25)
 
