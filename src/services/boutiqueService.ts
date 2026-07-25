@@ -53,6 +53,7 @@ export interface Boutique {
   email:        string | null
   site_web:     string | null
   description:  string | null
+  logo_url:     string | null
   actif:        number
 }
 
