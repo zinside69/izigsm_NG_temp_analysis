@@ -702,11 +702,11 @@ function _buildTicketA4HTML(d) {
   let etatParsed = {};
   try { etatParsed = d.etatAppareil ? JSON.parse(d.etatAppareil) : {}; } catch {}
   const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
-  const etatHTML = etatLines.length ? `
+  const etatHTML = `
       <div style="margin-bottom:6mm;" class="print-no-break">
         <div class="print-notes-label" style="margin-bottom:2mm;">État constaté au dépôt</div>
-        <div class="print-notes">${etatLines.map(esc).join(' · ')}</div>
-      </div>` : '';
+        <div class="print-notes">${etatLines.length ? etatLines.map(esc).join(' · ') : '<em style="color:#aaa;">Non renseigné</em>'}</div>
+      </div>`;
 
   // Signature client : image réelle si capturée (et de format valide — voir
   // isValidSignatureDataUrl()), sinon case blanche pour signature manuscrite
@@ -720,18 +720,18 @@ function _buildTicketA4HTML(d) {
   return `
     <div id="print-root">
       <link rel="stylesheet" href="/static/css/print.css">
-
       <div class="print-header print-no-break">
         <div class="print-logo">
-          <div class="print-logo-mark">i</div>
-          <div class="print-logo-name">iziGSM</div>
+          ${d.boutique.logoUrl
+            ? `<img src="${esc(d.boutique.logoUrl)}" alt="${esc(d.boutique.nom)}" class="print-logo-img">`
+            : `<div class="print-logo-name">${esc(d.boutique.nom)}</div>`}
         </div>
         <div class="print-boutique-info">
-          <strong>${esc(d.boutique.nom)}</strong><br>
           ${d.boutique.adresse   ? esc(d.boutique.adresse)   + '<br>' : ''}
           ${d.boutique.telephone ? esc(d.boutique.telephone) + '<br>' : ''}
           ${d.boutique.email     ? esc(d.boutique.email)             : ''}
         </div>
+      </div>
       </div>
 
       <div class="print-doc-title print-no-break">
@@ -831,8 +831,12 @@ function _buildTicketA4HTML(d) {
 
       <div class="print-footer">
         <div>${esc(d.boutique.nom)}</div>
-        <div class="print-footer-legal">Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
+        <div class="print-footer-legal">
+          En signant, le client accepte les conditions générales de service de l'atelier.<br>
+          Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}
+        </div>
         <div>${esc(d.numero)}</div>
+      </div>
       </div>
     </div>`;
 }
