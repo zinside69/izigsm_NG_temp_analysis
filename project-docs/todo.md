@@ -1,5 +1,13 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 Logo boutique multi-tenant (identifié 2026-07-25, brainstorming refonte A4, PAS commencé)
+Colonne `boutiques.logo_url` existe déjà en base (migration `0002_boutiques.sql`) mais totalement morte : aucune UI dans `settings.html` pour la renseigner, non exposée par `GET /api/boutiques/:id`. Partiellement plombée côté devis (`devisService.ts` sélectionne déjà `logo_url AS boutique_logo`) mais jamais rendue dans `devis.js`. Décision utilisateur (brainstorming `docs/superpowers/specs/2026-07-25-refonte-fiche-a4-design.md`) : upload fichier vers R2 (même pattern que les photos de tickets), branché sur les 3 documents imprimables (fiche A4 ticket, devis, factures). Fallback si absent : nom de la boutique en texte seul (pas de mark générique "iziGSM"). La fiche A4 ticket est déjà préparée côté template pour consommer `logoUrl` dès que ce chantier livre (voir spec) — nécessite son propre `superpowers:brainstorming` (validation format/taille image, cadrage, endpoint d'upload dédié ou réutilisation du pattern photos).
+- [ ] Brainstorming dédié (hors périmètre de la spec A4 du 2026-07-25)
+- [ ] Champ upload logo dans l'onglet Boutique de `settings.html`
+- [ ] Endpoint upload R2 (nouveau ou réutilisation pattern photos tickets)
+- [ ] Exposer `logo_url` sur `GET /api/boutiques/:id`
+- [ ] Brancher sur `devis.js`/factures (le A4 ticket sera déjà prêt via le chantier ci-dessous)
+
 ## 🔴 Chantier impression ticket A4/thermique — refonte + email auto (demandé 2026-07-24, PAS commencé)
 Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir plus bas) — ne le remplace pas.
 
