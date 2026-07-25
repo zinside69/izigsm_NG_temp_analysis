@@ -732,7 +732,6 @@ function _buildTicketA4HTML(d) {
           ${d.boutique.email     ? esc(d.boutique.email)             : ''}
         </div>
       </div>
-      </div>
 
       <div class="print-doc-title print-no-break">
         <div>
@@ -836,7 +835,6 @@ function _buildTicketA4HTML(d) {
           Fiche générée par iziGSM le ${new Date().toLocaleDateString('fr-FR')}
         </div>
         <div>${esc(d.numero)}</div>
-      </div>
       </div>
     </div>`;
 }
