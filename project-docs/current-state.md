@@ -1,4 +1,21 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 59 — loop-engineering : contenu format thermique réduit escaladé, ambiguïté périmètre)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 60 — loop-engineering : modèle PDF format thermique escaladé, même ambiguïté que checkpoint 59)
+
+## Checkpoint 60 — Loop-engineering : "se servir du modèle docs/test impression.pdf" (todo.md:25) — escaladée, aucune implémentation (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). `pick-task.mjs` a d'abord retourné `cd5abbd9ab` (`todo.md:20`, options de récupération) puis `19e82f7a47` (`todo.md:24`, contenu réduit format thermique) — les deux déjà escaladées lors de runs précédents (checkpoints 58 et 59) sans décision humaine actée depuis → passées avec `--skip cd5abbd9ab,19e82f7a47`, conforme `SKILL.md` § Étape 1. Tâche suivante retournée : `f334ce0909` — `todo.md:25` (« Se servir du modèle `docs/test impression.pdf` »), même section « Format thermique (nouveau) » du chantier 🔴 impression A4/thermique.
+
+**Pourquoi escaladé (même ambiguïté de périmètre que checkpoint 59, pas une nouvelle classification par mot-clé)** : cette case ne peut pas être traitée indépendamment des deux voisines de la même section (`todo.md:23-26`) :
+1. Le contenu à faire tenir dans ce modèle (`todo.md:24`) vient d'être escaladé au run précédent (checkpoint 59) — ambiguïté non résolue sur la relation avec le format thermique 72mm déjà en production (`_buildTicketThermique3VoletsHTML`, `tickets.js:1017`).
+2. `todo.md:26` note toujours explicitement que la solution technique d'impression n'est pas choisie (QZ Tray envisagé, non tranché) — utiliser `docs/test impression.pdf` comme modèle de mise en page suppose de savoir s'il sera rendu par le pipeline navigateur existant (`_triggerPrint()`/`print.css`) ou par une intégration imprimante différente ; deviner l'un ou l'autre serait prématuré et pourrait produire un template à refaire entièrement selon la réponse.
+Reprendre la mise en page sur ce PDF sans ces deux réponses reviendrait à deviner à la fois le contenu et le mécanisme de rendu — même hard-gate `SKILL.md` § Étape 4.
+
+**Aucun commit de code, aucun worktree créé** (arrêt avant l'Étape 3). `todo.md:25` reste décochée.
+
+**Recommandation pour la décision humaine** : identique à celle du checkpoint 59 — trancher (1) la relation entre le format 72mm existant et ce nouveau format réduit, et (2) au moins provisoirement le mécanisme d'impression cible. Une fois actées dans `decisions.md`, `todo.md:24-26` (dont cette case) pourront être traitées en un seul chantier cohérent par un futur run.
+
+**Reste ouvert dans ce chantier** : `todo.md:20` (options de récupération, texte à valider), `todo.md:24-26` (contenu + modèle + techno format thermique — bloc lié), `todo.md:29` (email de confirmation à l'impression — investigation partielle faite dans ce run : `sendTicketCree()` (`src/services/emailService.ts:399`) existe déjà et est actuellement déclenché à la **création** du ticket (`src/routes/tickets.ts:226`), pas à l'impression ; ambiguïté similaire à prévoir : appeler ce même envoi une seconde fois à l'impression risquerait un email en double au client si impression juste après création, sans règle de dédoublonnage définie — à investiguer/trancher lors d'un prochain run dédié), `todo.md:32-35` (facturation HT/TTC, mentions légales, workflow facture auto).
+
+---
 
 ## Checkpoint 59 — Loop-engineering : "contenu réduit format thermique" (todo.md:24) — escaladée, aucune implémentation (2026-07-25)
 
