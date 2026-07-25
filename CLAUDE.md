@@ -102,6 +102,34 @@ Règles déjà établies sur ce repo, à respecter :
 - `CACHE_VERSION` dans `public/sw.js` : à incrémenter sur la dernière tâche frontend
   d'un chantier qui touche `public/static/js/*` ou `public/*.html`
 
+## DNS `repairdesk.fr` — records à ne jamais toucher (depuis 2026-07-09)
+
+Mail Gandi actif sur ce domaine, indépendant de l'hébergement Cloudflare de l'app :
+MX (`spool.mail.gandi.net`/`fb.mail.gandi.net`), SPF (`TXT`, `include:_mailcust.gandi.net`),
+CNAME `webmail.repairdesk.fr`. Seul le record A/CNAME racine (pointant vers Cloudflare
+Pages) doit être manipulé. Toute mutation DNS sur ce domaine nécessite confirmation
+explicite utilisateur avant exécution (pas seulement pour ces records — pour tout
+enregistrement).
+
+## Docs obsolètes — ne pas suivre comme référence technique
+
+- `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +
+  microservices Node.js + communication API stricte entre modules. **Ne reflète pas le
+  code réel** (monolithe Hono/TypeScript, 0% PHP, services qui lisent D1 directement)
+  et n'a jamais été suivi. Jugé aspirationnel/obsolète par l'utilisateur (décision
+  explicite, `decisions.md` 2026-07-12) — l'architecture réelle et à respecter est
+  Ports & Adapters, voir § Architecture ci-dessus.
+- `docs/ARCHITECTURE_MODULES.md` §2 (tableau des migrations) : obsolète, voir `bugs.md`.
+
+## Port `Database` — portabilité driver uniquement, pas dialecte SQL
+
+Le port `Database` (SQL brut, `all/get/run`) abstrait le driver de connexion (D1 →
+Postgres à terme) mais **pas le dialecte SQL**. Le SQL existant contient des
+constructions SQLite-only (`julianday()`, `datetime('now', '-N days')`, `||`,
+`INSERT ... RETURNING`, booléens 0/1) qui devront être traduites service par service
+au moment d'une bascule VPS/Postgres — pas juste un changement d'adaptateur de
+connexion. Précision ajoutée en revue le 2026-07-12, pas un bug actuel.
+
 ## Documents imprimables (tickets, factures, devis) — invariants (depuis 2026-07-25)
 
 - **Jamais de référence `/static/js|css/...` codée en dur** dans un template JS
