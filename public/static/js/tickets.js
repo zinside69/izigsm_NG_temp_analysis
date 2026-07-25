@@ -556,7 +556,7 @@ async function _fetchTicketPrintData(id) {
   // Toujours celle du ticket (t.boutique_id), jamais la 1ère boutique retournée par
   // /api/boutiques — pour un admin cette liste contient toutes les boutiques et son
   // ordre ne correspond pas forcément à celle du ticket imprimé.
-  let boutique = { nom: 'iziGSM', adresse: '', telephone: '', email: '' };
+  let boutique = { nom: 'iziGSM', adresse: '', telephone: '', email: '', logoUrl: null };
   try {
     const bs = t.boutique_id
       ? await apiGet(`/api/boutiques/${t.boutique_id}`)
@@ -569,6 +569,7 @@ async function _fetchTicketPrintData(id) {
       adresse:   b.adresse   || '',
       telephone: b.telephone || '',
       email:     b.email     || '',
+      logoUrl:   b.logo_url  || null,
     };
   } catch {}
 
