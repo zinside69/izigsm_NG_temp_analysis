@@ -1,5 +1,17 @@
 # iziGSM — Bugs connus
 
+## 🔴 Fiches imprimées (ticket A4/thermique, factures) sans aucun style depuis le cache-busting — CORRIGÉ le 2026-07-25
+
+`_buildTicketA4HTML()`/`_buildTicketThermique3VoletsHTML()` (`tickets.js`) et `_buildFactureHTML()` (`factures.js`) référençaient `<link rel="stylesheet" href="/static/css/print.css">` avec le nom **non hashé** en dur. `rewriteStaticReferences()` (`scripts/build-hash-assets.mjs`, chantier cache-busting checkpoint 53) ne réécrit que les pages `.html` et `sw.js` — jamais une chaîne codée en dur à l'intérieur d'un fichier `.js`. En production, seul le nom hashé (`print.8142382e.css` par ex.) existe dans `dist/` ; la requête vers le nom non hashé tombait dans le catch-all applicatif Hono et renvoyait **200 avec le HTML de la page d'accueil** au lieu du CSS (pas de 404, donc invisible aux checks superficiels) — le navigateur refuse silencieusement d'appliquer une feuille de style dont le `Content-Type` ne correspond pas.
+
+**Impact réel** : toute fiche imprimée (ticket A4, ticket 3 volets, facture) générée depuis le déploiement du cache-busting (2026-07-24) était rendue **sans aucune mise en forme** — texte brut empilé, aucune bordure, aucune couleur, aucun tableau visuel. Pas remarqué avant car aucun test automatisé ne couvre le rendu visuel de ces templates (contrôle manuel en navigateur non fait après ce déploiement précis).
+
+**Trouvé pendant la validation visuelle réelle** de la refonte fiche A4 du 2026-07-25 (Claude in Chrome + injection directe des fonctions de build en console pour contourner le blocage de `window.print()` sur l'automatisation) — sans cette étape de validation, le bug serait resté invisible indéfiniment.
+
+**Fix** : `_resolveStaticHref(logicalPath)` (nouvelle fonction centralisée dans `app.js`, à côté de `_triggerPrint()`) résout le nom hashé réel via `fetch('/static/manifest.json')` (mis en cache après le premier appel), avec repli sur le chemin logique si le manifeste est indisponible. Les 3 fonctions de construction HTML acceptent désormais `printCssHref` en paramètre au lieu de la chaîne en dur. Vérifié en navigateur réel après fix : la feuille de style se charge (`link.sheet` non nul) et applique le nouvel accent gris ardoise de la refonte du jour (`getComputedStyle` confirmé `rgb(51, 65, 85)`).
+
+**Leçon** : toute référence `/static/js|css/...` codée en dur dans un template JS (pas dans une page `.html` statique) échappe silencieusement au mécanisme de cache-busting — à vérifier explicitement si un futur chantier ajoute un nouveau document imprimable ou une nouvelle référence d'asset générée dynamiquement.
+
 ## `graphify-out/` — 3 défauts trouvés en vérifiant les chunks sémantiques stale — CORRIGÉS le 2026-07-24 (checkpoint 46)
 
 Pas des bugs applicatifs izigsm, mais des défauts dans les artefacts du graphe de connaissance (`graphify-out/`, gitignoré) qui referont surface au prochain `/graphify --update` si non gardés en tête :
