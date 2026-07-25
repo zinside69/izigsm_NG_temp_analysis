@@ -1,4 +1,18 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 57 — refonte A4 déployée + fix débordement 2 pages + spec logo boutique)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 58 — loop-engineering : options de récupération A4 escaladées, ambiguïté texte)
+
+## Checkpoint 58 — Loop-engineering : "options de récupération" fiche A4 (todo.md:20) — escaladée, aucune implémentation (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (28 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js` → `sensitiveMatch:true` (catégories `auth`, `isolation`).
+
+**Sélection** : `pick-task.mjs` → `cd5abbd9ab` — `todo.md:20` (« Ajouter le détail des options de récupération (ex. 10€ TTC déduits de la réparation, recyclage sous 4 semaines) — texte exact à valider avec l'utilisateur, pas à inventer »), chantier 🔴 impression A4/thermique. Aucune escalade antérieure trouvée pour cet id précis dans `.superpowers/sdd/loop-runs.md`.
+
+**Pourquoi escaladé (ambiguïté explicite, pas une classification par mot-clé)** : le texte de la tâche interdit lui-même d'inventer le contenu (« texte exact à valider avec l'utilisateur, pas à inventer ») — c'est un contenu métier/légal, pas un détail d'implémentation. Recoupé avec `decisions.md` § 2026-07-18 « Texte légal "Acompte versé" volontairement différent du vieux modèle PDF » : décision explicite de ne **pas** reproduire tel quel le texte de l'ancien modèle (« acompte conservé si refus devis, recyclage après 4 semaines ») car il ne reflète pas le fonctionnement réel du système — un précédent direct qui interdit d'improviser un texte similaire ici. Conforme au hard-gate `SKILL.md` § Étape 4 (« ambiguïté qu'un humain doit trancher → escalader avant d'écrire le spec, ne pas deviner »). Signal graphe (`sensitiveMatch:true`, auth/isolation sur `tickets.js`) traité comme signal complémentaire, pas la cause de l'escalade.
+
+**Aucun commit de code, aucun worktree créé** (arrêt avant l'Étape 3 — ambiguïté tranchée dès la lecture du texte de tâche). `todo.md:20` reste décochée. Seuls `current-state.md` (ce checkpoint) et `.superpowers/sdd/loop-runs.md` sont modifiés, commit documentaire séparé.
+
+**Recommandation pour la décision humaine** : fournir le texte exact des options de récupération à afficher sur la fiche A4 (ex. montant précis de la déduction si appareil récupéré via pièce détachée, délai exact avant recyclage, conditions) — une fois fourni/tranché, documenter dans `decisions.md` pour que le prochain run de la loop puisse l'implémenter directement sans re-escalade. Reste ouvert dans ce chantier : format thermique (techno non tranchée), email auto à l'impression, facturation HT/TTC par boutique.
+
+---
 
 ## Checkpoint 57 — Session humaine : refonte visuelle fiche A4 livrée + incident production corrigé + spec logo boutique/impression devis (2026-07-25)
 
