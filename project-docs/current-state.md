@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 56 — todo.md:19 IMEI/N° série revérifié obsolète)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 57 — refonte A4 déployée + fix débordement 2 pages + spec logo boutique)
+
+## Checkpoint 57 — Session humaine : refonte visuelle fiche A4 livrée + incident production corrigé + spec logo boutique/impression devis (2026-07-25)
+
+**Chantier A4 (brainstorming → plan → subagent-driven-development)** : système visuel sans aplat noir/indigo/bleu (accent gris ardoise `#334155`, inspiré de `modele-facture.pdf`), en-tête prêt pour logo boutique multi-tenant, fallback "Non renseigné" état à l'entrée, mention CGV footer. Bug sécurité `esc()` (échappement guillemets) trouvé en revue finale et corrigé avant merge. Mergé sur `main` (`e63bce0`), `todo.md:10` clos, décision de branding documentée dans `decisions.md`.
+
+**Collision loop-engineering (10:00)** : run planifié a lu la spec/plan fraîchement poussés et tenté d'implémenter directement sur `main` (hors worktree), a échoué (exit 1) en laissant `tickets.js` modifié non commité — mis en sécurité par `git stash`, root cause documentée dans `decisions.md` (recommandation : marqueur "en cours de traitement humain" pour `pick-task.mjs`, non implémenté).
+
+**Bug production trouvé en validation** : `_buildTicketA4HTML()`/`_buildTicketThermique3VoletsHTML()`/`_buildFactureHTML()` référençaient `/static/css/print.css` en dur — cassé par le cache-busting (checkpoint 53, seul le nom hashé existe en prod). Fiches imprimées sans aucun style depuis le 2026-07-24. Fix : `_resolveStaticHref()` (app.js, résout via `manifest.json` au runtime). Documenté `bugs.md`.
+
+**Premier déploiement** (`repairdesk.fr`, `v2.72`) suivi d'un **incident signalé par capture d'écran utilisateur** : fiche A4 débordait sur 2 pages (ticket réel dense : panne longue, état 4 items, acompte, signature). Root cause (`systematic-debugging`) : marges jamais validées sur contenu dense + absence de règle `@page` (marges navigateur non neutralisées). Fix à deux niveaux : resserrage statique + `@page{margin:0}` + **garde-fou dynamique** (`_triggerPrint()` mesure la hauteur réelle avant impression, bascule en `.print-compact` si nécessaire — garantie valable pour tout contenu futur). Cadres retirés sur les encarts (demande utilisateur, économie d'encre). Vérifié : contenu identique à la capture réelle mesure 283.5mm/297mm (13.5mm de marge). **Redéployé (`v2.73`), validation OK confirmée par l'utilisateur.**
+
+**Spec écrite (non planifiée/implémentée)** : `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md` — upload logo boutique vers R2 (URL publique stable, `GET /api/public/logo/:boutiqueId`), UI `settings.html` onglet Boutique, **+ nouvelle fonctionnalité impression devis** (`_buildDevisHTML()`, `devis.js` n'avait aucune fonction d'impression admin avant ce chantier) — demande utilisateur ajoutée en cours de session ("imprimer un devis au même titre que les factures"). Prochaine étape : `writing-plans` puis implémentation.
+
+**État git** : tout commité et poussé sur `main`/origin (dernier commit spec `9a82bd3`). Code A4 + fix print.css + fix débordement 2 pages tous déployés et validés en prod. Spec logo boutique écrite mais pas encore implémentée.
+
+## Reste ouvert
+- Chantier "Logo boutique multi-tenant + impression devis" : spec approuvée par l'utilisateur, plan d'implémentation pas encore écrit — reprendre avec `superpowers:writing-plans` sur `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md`
+- `todo.md` § chantier impression A4/thermique : reste "options de récupération" (texte à valider), format thermique (techno non tranchée), email auto, facturation HT/TTC
+- Recommandation non implémentée : marqueur "en cours de traitement humain" pour éviter une future collision loop-engineering / session interactive (voir `decisions.md`)
+
+---
+
 
 ## Checkpoint 56 — Loop-engineering : IMEI/N° série sur fiche A4 (todo.md:19) — déjà implémenté, case cochée, aucun code modifié (2026-07-25)
 
