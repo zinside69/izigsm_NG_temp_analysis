@@ -6,6 +6,17 @@
  */
 
 /* ─── Reset impression ──────────────────────────────────────────────────────── */
+/* @page force les marges navigateur à 0 : sans cette règle, les marges par
+   défaut du navigateur (variables selon OS/navigateur/réglage utilisateur,
+   ~10-19mm de plus) s'ajoutaient par-dessus le padding interne de #print-root
+   (12mm/14mm) — contributeur réel non contrôlé au débordement 2 pages du
+   2026-07-25 (voir bugs.md). Le padding interne reste l'unique marge visible,
+   déterministe quel que soit le réglage d'impression de l'utilisateur. */
+@page {
+  size: A4;
+  margin: 0;
+}
+
 @media print {
   * {
     -webkit-print-color-adjust: exact !important;
@@ -64,8 +75,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 8mm;
-  padding-bottom: 5mm;
+  margin-bottom: 6mm;
+  padding-bottom: 4mm;
   border-bottom: 1.5px solid #334155;
 }
 
@@ -118,7 +129,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 7mm;
+  margin-bottom: 5mm;
 }
 
 .print-doc-type {
@@ -150,15 +161,14 @@
 .print-parties {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8mm;
-  margin-bottom: 7mm;
+  gap: 6mm;
+  margin-bottom: 5mm;
 }
 
 .print-party-box {
   background: #f9f9f9;
-  border: 1px solid #e5e7eb;
   border-radius: 6px;
-  padding: 4mm 5mm;
+  padding: 3mm 4mm;
 }
 
 .print-party-label {
@@ -187,7 +197,7 @@
 .print-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 6mm;
+  margin-bottom: 4mm;
   font-size: 9.5pt;
 }
 
@@ -304,10 +314,8 @@
 .print-notes {
   font-size: 9pt;
   color: #555;
-  border: 1px solid #e5e7eb;
   border-radius: 4px;
   padding: 3mm;
-  margin-bottom: 5mm;
   background: #fffbf0;
 }
 
@@ -325,10 +333,9 @@
    cohérence visuelle avec le reste de l'application plutôt qu'une nouvelle palette. */
 .print-acompte-box {
   background: #fffbf0;
-  border: 1px solid #ffe0a1;
   border-radius: 6px;
   padding: 4mm 5mm;
-  margin-bottom: 6mm;
+  margin-bottom: 5mm;
 }
 
 .print-acompte-title {
@@ -343,6 +350,90 @@
   color: #7a5a1a;
   line-height: 1.5;
   padding-left: 4mm;
+}
+
+/* ─── Blocs réutilisables (panne/état, signatures, tracking) ─────────────────── */
+/* Anciennement des styles inline dans tickets.js — extraits en classes pour que
+   le mode compact ci-dessous puisse les cibler (une règle CSS ne peut jamais
+   surclasser un style inline sans !important, voir bugs.md § débordement 2 pages). */
+.print-section-gap {
+  margin-bottom: 5mm;
+}
+
+.print-signature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  margin-top: 6mm;
+}
+
+.print-signature-box {
+  /* Ligne de signature plutôt qu'un cadre complet (retrait des cadres 2026-07-25,
+     demande utilisateur — allège le rendu, économise de l'encre). */
+  border-bottom: 1px solid #999;
+  padding: 3mm 3mm 2mm;
+  min-height: 26mm;
+}
+
+.print-tracking-block {
+  margin-top: 5mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8mm;
+}
+
+/* ─── Mode compact (garde-fou 1 page A4) ──────────────────────────────────────── */
+/* Appliqué dynamiquement par _triggerPrint() (app.js) quand le contenu réel
+   mesuré dépasse le budget utile d'une page A4 (297mm - 24mm de padding) —
+   incident du 2026-07-25 : un ticket avec panne longue + état complet + acompte
+   + signature débordait sur une 2e page (321mm mesurés pour 273mm de budget).
+   Ne modifie jamais le contenu, seulement l'espacement — dernier recours après
+   le resserrage des valeurs par défaut ci-dessus. */
+#print-root.print-compact .print-header {
+  margin-bottom: 5mm;
+  padding-bottom: 3mm;
+}
+#print-root.print-compact .print-doc-title {
+  margin-bottom: 4mm;
+}
+#print-root.print-compact .print-parties {
+  margin-bottom: 4mm;
+}
+#print-root.print-compact .print-party-box {
+  padding: 3mm 4mm;
+}
+#print-root.print-compact .print-notes {
+  padding: 2mm 3mm;
+}
+#print-root.print-compact .print-section-gap {
+  margin-bottom: 4mm;
+}
+#print-root.print-compact .print-table {
+  margin-bottom: 3mm;
+}
+#print-root.print-compact .print-acompte-box {
+  padding: 3mm 4mm;
+  margin-bottom: 4mm;
+}
+#print-root.print-compact .print-signature-grid {
+  margin-top: 5mm;
+  gap: 6mm;
+}
+#print-root.print-compact .print-signature-box {
+  padding: 3mm 3mm 2mm;
+  min-height: 20mm;
+}
+#print-root.print-compact .print-tracking-block {
+  margin-top: 4mm;
+  gap: 6mm;
+}
+#print-root.print-compact .print-qr-img {
+  width: 18mm !important;
+  height: 18mm !important;
+}
+#print-root.print-compact .print-barcode-img {
+  width: 28mm !important;
 }
 
 /* ─── Pied de page ───────────────────────────────────────────────────────────── */

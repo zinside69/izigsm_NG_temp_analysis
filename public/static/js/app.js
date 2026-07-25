@@ -344,10 +344,19 @@ async function _resolveStaticHref(logicalPath) {
  * puis nettoie le DOM après impression. Centralisé (Principe P2) — partagé par
  * tous les modules d'impression (factures, tickets, ...).
  *
+ * Garde-fou 1 page A4 (incident du 2026-07-25, voir bugs.md § débordement 2
+ * pages) : le contenu réel d'un document (panne libre, état à l'entrée
+ * variable, acompte optionnel...) peut dépasser le budget d'une page A4 selon
+ * les cas. Avant d'imprimer, on mesure la hauteur réellement rendue une fois
+ * la feuille de style chargée, et on bascule en mode compact (marges/tailles
+ * réduites, voir print.css `.print-compact`) si le contenu dépasse le budget
+ * utile — seule garantie fiable indépendante du contenu futur, un simple
+ * resserrage statique des marges ne fait que repousser le seuil.
+ *
  * @param {string} html - HTML complet du document à imprimer (contient #print-root)
- * @returns {void}
+ * @returns {Promise<void>}
  */
-function _triggerPrint(html) {
+async function _triggerPrint(html) {
   // Supprimer un éventuel print-root résiduel
   document.getElementById('print-root')?.remove();
   document.getElementById('_print_style_override')?.remove();
@@ -355,7 +364,43 @@ function _triggerPrint(html) {
   // Injecter le document à imprimer
   const wrapper = document.createElement('div');
   wrapper.innerHTML = html;
-  document.body.appendChild(wrapper.firstElementChild);
+  const printRoot = wrapper.firstElementChild;
+  document.body.appendChild(printRoot);
+
+  // Attendre le chargement réel de print.css (plutôt qu'un délai arbitraire)
+  // avant de mesurer — une mesure prise avant que les tailles/marges soient
+  // appliquées serait fausse et pourrait manquer un débordement réel.
+  const printLink = printRoot.querySelector('link[rel="stylesheet"]');
+  if (printLink) {
+    await new Promise((resolve) => {
+      if (printLink.sheet) return resolve();
+      printLink.addEventListener('load', resolve, { once: true });
+      printLink.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 1500); // filet de sécurité si le chargement traîne anormalement
+    });
+  }
+
+  // Mesurer hors contexte d'impression donne un box-sizing content-box par
+  // défaut (le reset `* { box-sizing: border-box }` de print.css est scopé à
+  // `@media print`, qui ne s'applique pas tant que window.print() n'a pas été
+  // déclenché) — ça fausserait la largeur de contenu réelle et donc la
+  // hauteur mesurée. On applique temporairement le même reset pour mesurer
+  // dans les conditions exactes de l'impression réelle.
+  const measureReset = document.createElement('style');
+  measureReset.textContent = '#print-root, #print-root * { box-sizing: border-box; }';
+  document.head.appendChild(measureReset);
+
+  const A4_HEIGHT_MM = 297;
+  const SAFETY_MARGIN_MM = 7; // marge pour variations mineures de rendu de police entre navigateurs/OS
+  const mmPerPx = 25.4 / 96;
+  const wasHidden = getComputedStyle(printRoot).display === 'none';
+  if (wasHidden) printRoot.style.display = 'block'; // rendre mesurable (hors @media print)
+  const heightMm = printRoot.scrollHeight * mmPerPx;
+  if (wasHidden) printRoot.style.display = ''; // laisser print.css reprendre la main
+  measureReset.remove();
+  if (heightMm > A4_HEIGHT_MM - SAFETY_MARGIN_MM) {
+    printRoot.classList.add('print-compact');
+  }
 
   // Masquer le layout app pendant l'impression uniquement
   const style = document.createElement('style');
@@ -367,14 +412,12 @@ function _triggerPrint(html) {
   `;
   document.head.appendChild(style);
 
-  // Déclencher après rendu CSS (200ms) puis nettoyer après fermeture dialogue (500ms)
+  window.print();
+  // Nettoyer après fermeture du dialogue
   setTimeout(() => {
-    window.print();
-    setTimeout(() => {
-      document.getElementById('print-root')?.remove();
-      document.getElementById('_print_style_override')?.remove();
-    }, 500);
-  }, 200);
+    document.getElementById('print-root')?.remove();
+    document.getElementById('_print_style_override')?.remove();
+  }, 500);
 }
 
 function statusBadge(status) {

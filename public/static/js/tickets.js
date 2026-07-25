@@ -705,7 +705,7 @@ function _buildTicketA4HTML(d, printCssHref) {
   try { etatParsed = d.etatAppareil ? JSON.parse(d.etatAppareil) : {}; } catch {}
   const etatLines = [...(etatParsed.items || []).map(k => ETAT_LABELS[k] || k), etatParsed.autre].filter(Boolean);
   const etatHTML = `
-      <div style="margin-bottom:6mm;" class="print-no-break">
+      <div class="print-no-break print-section-gap">
         <div class="print-notes-label" style="margin-bottom:2mm;">État constaté au dépôt</div>
         <div class="print-notes">${etatLines.length ? etatLines.map(esc).join(' · ') : '<em style="color:#aaa;">Non renseigné</em>'}</div>
       </div>`;
@@ -768,14 +768,14 @@ function _buildTicketA4HTML(d, printCssHref) {
         </div>
       </div>
 
-      <div style="margin-bottom:6mm;" class="print-no-break">
+      <div class="print-no-break print-section-gap">
         <div class="print-notes-label" style="margin-bottom:2mm;">Panne déclarée</div>
         <div class="print-notes">${esc(d.panne) || '<em style="color:#aaa;">Non renseignée</em>'}</div>
       </div>
 
       ${etatHTML}
 
-      <table class="print-table print-no-break" style="margin-bottom:4mm;">
+      <table class="print-table print-no-break">
         <thead>
           <tr>
             <th>Intervention</th>
@@ -811,20 +811,20 @@ function _buildTicketA4HTML(d, printCssHref) {
         </ul>
       </div>` : ''}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:8mm;" class="print-no-break">
-        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+      <div class="print-no-break print-signature-grid">
+        <div class="print-signature-box">
           <div class="print-notes-label" style="margin-bottom:2mm;">Signature du client</div>
           ${signatureBoxHTML}
         </div>
-        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:4mm;min-height:30mm;">
+        <div class="print-signature-box">
           <div class="print-notes-label" style="margin-bottom:2mm;">Signature du technicien</div>
         </div>
       </div>
 
       ${d.tracking ? `
-      <div style="margin-top:6mm;display:flex;align-items:center;justify-content:center;gap:8mm;" class="print-no-break">
-        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR suivi" style="width:24mm;height:24mm;">` : ''}
-        ${eanDataUrl ? `<img src="${eanDataUrl}" alt="Code-barre" style="width:38mm;">` : ''}
+      <div class="print-no-break print-tracking-block">
+        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR suivi" class="print-qr-img" style="width:24mm;height:24mm;">` : ''}
+        ${eanDataUrl ? `<img src="${eanDataUrl}" alt="Code-barre" class="print-barcode-img" style="width:38mm;">` : ''}
         <div style="font-size:8pt;color:#aaa;text-align:left;">
           Suivi en ligne :<br>${window.location.origin}/suivi/${esc(d.tracking)}
         </div>
