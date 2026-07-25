@@ -38,7 +38,7 @@ const BOUTIQUE_1: Boutique = {
   siret: '12345678900012', tva_numero: 'FR12345678901',
   adresse: '1 rue de la Paix', code_postal: '75001', ville: 'Paris',
   telephone: '0123456789', email: 'contact@izigsm.fr',
-  site_web: null, description: null, actif: 1,
+  site_web: null, description: null, logo_url: null, actif: 1,
 }
 
 const BOUTIQUE_2: Boutique = {
@@ -46,7 +46,7 @@ const BOUTIQUE_2: Boutique = {
   siret: null, tva_numero: null,
   adresse: null, code_postal: null, ville: 'Lyon',
   telephone: null, email: null,
-  site_web: null, description: null, actif: 1,
+  site_web: null, description: null, logo_url: null, actif: 1,
 }
 
 const SETTINGS_1: BoutiqueSettings = {

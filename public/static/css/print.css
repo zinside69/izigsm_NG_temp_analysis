@@ -66,7 +66,7 @@
   align-items: flex-start;
   margin-bottom: 8mm;
   padding-bottom: 5mm;
-  border-bottom: 2px solid #6366f1;
+  border-bottom: 1.5px solid #334155;
 }
 
 .print-logo {
@@ -78,8 +78,9 @@
 .print-logo-mark {
   width: 36px;
   height: 36px;
-  background: #6366f1;
-  color: #fff;
+  background: #fff;
+  color: #334155;
+  border: 1.5px solid #334155;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -91,7 +92,13 @@
 .print-logo-name {
   font-size: 18pt;
   font-weight: 800;
-  color: #1e1b4b;
+  color: #334155;
+}
+
+.print-logo-img {
+  max-height: 36px;
+  max-width: 60mm;
+  object-fit: contain;
 }
 
 .print-boutique-info {
@@ -117,7 +124,7 @@
 .print-doc-type {
   font-size: 20pt;
   font-weight: 800;
-  color: #6366f1;
+  color: #334155;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -166,7 +173,7 @@
 .print-party-name {
   font-size: 11pt;
   font-weight: 700;
-  color: #1e1b4b;
+  color: #334155;
 }
 
 .print-party-detail {
@@ -185,8 +192,9 @@
 }
 
 .print-table thead tr {
-  background: #6366f1;
-  color: #fff;
+  background: #fff;
+  color: #334155;
+  border-bottom: 1.5px solid #334155;
 }
 
 .print-table thead th {
@@ -253,8 +261,8 @@
 }
 
 .print-totaux-table .total-ttc td {
-  background: #6366f1;
-  color: #fff;
+  background: #f1f5f9;
+  color: #334155;
   font-size: 11pt;
   font-weight: 800;
   border-radius: 4px;
