@@ -181,3 +181,13 @@ Le plan prévoyait que Cloudflare auto-provisionne le CNAME racine après attach
 **Pourquoi c'est arrivé** : la classification de risque de la loop (checkpoint 55) était correcte au moment où elle a été faite, mais l'état du repo a changé sous elle entre deux runs (spec+plan ajoutés) sans qu'aucun signal explicite ("cette tâche est en cours de traitement humain, ne pas retenter") n'existe dans `todo.md`/`loop-policy.md`.
 
 **Comment appliquer / éviter la récidive** : quand une tâche escaladée par la loop est reprise en session interactive (brainstorming → plan → implémentation), éviter de pousser spec/plan sur `main` avant la fin du chantier si un run planifié peut s'intercaler — ou, si le push est nécessaire (comme ici, pour la base du worktree), fermer la case `todo.md` et documenter la décision ici le plus vite possible plutôt qu'en toute fin de chantier. Amélioration structurelle à envisager dans `loop-policy.md` (non faite ici, hors périmètre) : un marqueur explicite (ex. commentaire `<!-- EN COURS: session interactive -->` à côté de la case) que `pick-task.mjs` sait reconnaître et sauter.
+
+## 2026-07-25 — Politique confirmée : frais de diagnostic 10€ TTC + recyclage 4 semaines (todo.md:20)
+
+**Décision** : la loop-engineering avait escaladé `todo.md:20` (« options de récupération » sur la fiche A4 — texte légal explicitement interdit d'inventer) faute de politique confirmée par l'utilisateur. Politique validée le 2026-07-25 :
+- **Frais de diagnostic** : 10€ TTC conservés (non remboursés) uniquement si le client refuse le devis, ou si la réparation s'avère impossible (pièce indisponible/irréparable) — pas une pénalité de retard de récupération.
+- **Appareil non récupéré** : recyclage possible après notification et délai de 4 semaines, conformément à la législation en vigueur.
+
+**Constat** : ce texte exact existe déjà dans le code depuis le 2026-07-18 (`tickets.js:804-812`, encart "Acompte versé"), mais conditionné à `d.acompteMontant > 0` — logique conservée : on ne peut « conserver 10€ » que s'il y a effectivement un acompte versé à retenir ; sans acompte, la mention serait sans objet. `todo.md:20` est donc satisfait tel quel, aucun code modifié.
+
+**Comment appliquer** : si un jour la politique change (ex. facturation directe des 10€ sans acompte préalable), revoir la condition `d.acompteMontant > 0` en même temps que le texte — ne pas les découpler.
