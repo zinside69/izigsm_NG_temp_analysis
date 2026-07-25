@@ -102,6 +102,27 @@ Règles déjà établies sur ce repo, à respecter :
 - `CACHE_VERSION` dans `public/sw.js` : à incrémenter sur la dernière tâche frontend
   d'un chantier qui touche `public/static/js/*` ou `public/*.html`
 
+## Documents imprimables (tickets, factures, devis) — invariants (depuis 2026-07-25)
+
+- **Jamais de référence `/static/js|css/...` codée en dur** dans un template JS
+  (`_buildXxxHTML()` etc.) — `scripts/build-hash-assets.mjs` ne réécrit que les pages
+  `.html` et `sw.js`, jamais les chaînes à l'intérieur d'un `.js`. Utiliser
+  `_resolveStaticHref('static/css/print.css')` (`app.js`, résout via
+  `dist/static/manifest.json` au runtime). Incident réel : les fiches imprimées sont
+  restées sans aucun style plusieurs jours après le chantier cache-busting (checkpoint
+  53) à cause d'une référence en dur, voir `bugs.md`.
+- **Garantie 1 page A4 obligatoire** : tout document construit avec `_triggerPrint()`
+  (`app.js`, partagé tickets/factures/devis) bénéficie déjà d'un garde-fou automatique
+  — mesure de la hauteur réelle avant impression, bascule en classe CSS
+  `.print-compact` (`print.css`) si le contenu dépasse ~290mm. Ne jamais contourner ce
+  mécanisme ni le dupliquer par document ; l'étendre dans `print.css`/`_triggerPrint()`
+  si un nouveau document a des sections spécifiques à compacter.
+- Mesurer une hauteur de rendu impression **hors** appel réel de `window.print()`
+  (ex. pour du debug) donne un `box-sizing: content-box` par défaut — le reset
+  `@media print { * { box-sizing: border-box } }` de `print.css` ne s'applique qu'en
+  contexte d'impression réel. Toujours répliquer ce reset explicitement pour une
+  mesure fiable, sinon les chiffres sont trompeurs (incident vécu, voir `bugs.md`).
+
 ## Loop engineering (automatisation)
 
 `.claude/skills/loop-engineering/SKILL.md` — exécution autonome d'une tâche du backlog

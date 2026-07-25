@@ -1,3 +1,28 @@
+# Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 57 — refonte A4 déployée + fix débordement 2 pages + spec logo boutique)
+
+## Vue d'ensemble (checkpoint 57)
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant. Repo `izigsm/webapp/`, branche `main`. Session dédiée à la refonte visuelle de la fiche A4 ticket (brainstorming → plan → subagent-driven-development), avec deux incidents de production trouvés et corrigés en aval, et une nouvelle spec écrite pour la suite.
+
+**Chantier A4 livré et déployé** : système visuel sans aplat noir/indigo/bleu (accent gris ardoise `#334155`, inspiré de `docs/modele-facture.pdf`), en-tête prêt pour logo boutique multi-tenant (texte en fallback), fallback "Non renseigné" sur l'état à l'entrée, mention CGV en pied de page. `todo.md:10` clos, décision de branding dans `decisions.md`.
+
+**Bug 1 trouvé en validation** : `_buildTicketA4HTML()`/`_buildTicketThermique3VoletsHTML()`/`_buildFactureHTML()` référençaient `/static/css/print.css` en dur — cassé silencieusement par le chantier cache-busting (checkpoint 53, 2026-07-24) car `rewriteStaticReferences()` ne réécrit que les `.html`/`sw.js`, jamais les chaînes dans un `.js`. Fiches imprimées sans aucun style depuis le 2026-07-24. Fix : `_resolveStaticHref()` (nouvelle fonction centralisée dans `app.js`, résout le nom hashé via `dist/static/manifest.json` au runtime) — **pattern à réutiliser pour toute future référence `/static/...` codée en dur dans un template JS**, voir `CLAUDE.md` § invariants mis à jour ce checkpoint.
+
+**Bug 2 trouvé après le 1er déploiement** (`v2.72`) : capture d'écran utilisateur montrant la fiche A4 débordant sur 2 pages (ticket réel dense). Root cause (`systematic-debugging`) : marges jamais validées sur contenu dense + absence de règle `@page` (marges navigateur non neutralisées, s'ajoutaient au padding interne). Fix à deux niveaux : resserrage statique (marges/paddings réduits, cadres retirés sur les encarts) + **garde-fou dynamique** dans `_triggerPrint()` (`app.js`, partagé tickets+factures) qui mesure la hauteur réelle avant impression et bascule en `.print-compact` si le contenu dépasse 290mm — garantie "jamais 2 pages" valable pour tout contenu futur, pas seulement le cas observé. Redéployé (`v2.73`), **validation confirmée par l'utilisateur en prod réelle**.
+
+**Collision loop-engineering notée** : pousser spec+plan sur `main` avant la fin du chantier interactif a fait re-interpréter la tâche comme "implémentable" par le run planifié suivant (10:00), qui a échoué en laissant `main` temporairement sale (récupéré par `git stash`, aucune perte). Détail complet + recommandation non implémentée (marqueur "en cours de traitement humain" pour `pick-task.mjs`) dans `decisions.md`.
+
+**Spec écrite, pas encore implémentée** : `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md` — upload logo boutique vers R2 (URL publique stable `GET /api/public/logo/:boutiqueId`), UI `settings.html` onglet Boutique, **+ nouvelle fonctionnalité impression devis** (`_buildDevisHTML()` — `devis.js` n'avait aucune fonction d'impression admin avant ce chantier, ajouté en cours de session sur demande explicite de l'utilisateur).
+
+## État git à la fin de ce checkpoint
+Tout commité et poussé sur `main`/origin (dernier commit `81d5804`). Code A4 + les 2 fixs déployés et validés en prod (`repairdesk.fr`, `CACHE_VERSION izigsm-v2.73`). Spec logo boutique écrite/committée, pas encore planifiée ni implémentée.
+
+## Prochaines étapes recommandées
+1. `superpowers:writing-plans` sur `docs/superpowers/specs/2026-07-25-logo-boutique-multi-tenant-design.md`, puis `subagent-driven-development` pour l'implémentation
+2. `todo.md` § chantier impression A4/thermique : reste "options de récupération" (texte à valider avec l'utilisateur, pas à inventer), format thermique (techno d'impression non tranchée), email auto à l'impression, facturation HT/TTC par boutique
+3. Envisager le marqueur anti-collision loop-engineering (`decisions.md`, non fait ce checkpoint)
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 39 — loop-engineering pilotable à distance : Telegram + cadence horaire)
 
 ## Vue d'ensemble (checkpoint 39)
