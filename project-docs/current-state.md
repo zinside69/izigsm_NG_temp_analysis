@@ -1,6 +1,28 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 54 — audit contenu fiche A4 vs liste attendue)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 55 — escalade mise en page A4 vs PDF de référence)
 
-## Checkpoint 54 — Loop-engineering : audit contenu fiche imprimée A4 vs liste attendue (todo.md:7) — fait, aucun code modifié (2026-07-25)
+## Checkpoint 55 — Loop-engineering : mise en page A4 vs PDF de référence (todo.md:10) — escaladé, aucun code modifié (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (21 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js public/print.css` → `sensitiveMatch:true` (catégories `auth`, `isolation`).
+
+**Sélection** : `pick-task.mjs` a retourné `bf36f10238` — `todo.md:10` ("Revoir la mise en page sur le modèle `docs/bon de réparation.pdf` (bandeau, structure) — actuellement système visuel indigo, à documenter/trancher si on garde ou si on aligne sur le PDF"), première case non cochée du chantier 🔴 impression A4/thermique après `todo.md:7` (traité checkpoint 54). Aucune escalade antérieure trouvée pour cette tâche précise dans `.superpowers/sdd/loop-runs.md`.
+
+**Découverte majeure (corrige le checkpoint 54)** : `docs/bon de réparation.pdf` et `docs/test impression.pdf` existent en réalité sur disque (ajoutés entre le run du checkpoint 54 et celui-ci) — le checkpoint 54 les avait déclarés absents à tort car **ces deux fichiers sont exclus par `.gitignore` (règle générique `*.pdf` ligne 51)**, donc invisibles à `git status`/`git ls-files`, alors que présents et lisibles sur le système de fichiers. Les deux ont pu être ouverts et inspectés directement (outil `Read`, support PDF).
+
+**Contenu des deux références** :
+- `docs/bon de réparation.pdf` (format A4 cible) : en-tête bleu marine foncé (pas indigo `#6366f1` actuel) avec branding "izigsm", numéro de bon `REP-XXXXXXXX-XXXX` + horodatage en haut à droite, layout deux colonnes "Informations client" / "Appareil déposé" (IMEI, N° série, état à l'entrée déjà présents dans la maquette), encart ambre/orange distinct "Acompte versé" avec liste à puces (déduction, conservation si refus, recyclage à 4 semaines), blocs signature client/atelier, mention légale CGV en pied de page.
+- `docs/test impression.pdf` (probable référence format thermique/compact, todo.md:16-17) : mise en page 3 exemplaires détachables sur une page A4 ("EXEMPLAIRE CLIENT (1/2)" / "EXEMPLAIRE MAGASIN CLIENT (2/2)" / "EXEMPLAIRE ATELIER"), pointillés "DÉCOUPER ICI" entre chaque copie, QR code présent à côté du bloc client, contenu condensé une seule colonne — cohérent avec la demande `todo.md:16` (QR/code-barre, contenu réduit) mais garde un format A4 par page (pas un rouleau thermique continu), à clarifier avec `todo.md:18` (technologie d'impression thermique non tranchée).
+
+**Pourquoi escaladé (ambiguïté explicite, pas juste un détail technique)** : le texte même de la tâche pose une alternative à trancher — garder le système visuel indigo actuel (déjà en prod depuis le chantier impression checkpoint 33) ou aligner sur le bleu marine/ambre de la maquette PDF. C'est une décision de branding/produit qui affecte un composant déjà livré et potentiellement cohérente avec `todo.md:25` (facture, `docs/modele-facture.pdf`) — donc avec un rayon d'impact au-delà du seul ticket A4. Conforme au hard-gate de `SKILL.md` § Étape 4 ("ambiguïté qu'un humain doit trancher... escalader avant d'écrire le spec, ne pas deviner") et à `loop-policy.md` ("en cas de doute → risque élevé"). Signal graphe (`sensitiveMatch:true`, auth/isolation sur `tickets.js`) traité comme un signal supplémentaire cohérent avec cette prudence, pas la cause première de l'escalade.
+
+**Aucun commit de code, aucun worktree créé** (arrêt avant l'Étape 3 — la classification/ambiguïté a été tranchée dès l'Étape 2/4, avant toute implémentation). `todo.md:10` reste décochée. Seuls `project-docs/current-state.md` (ce checkpoint) et `.superpowers/sdd/loop-runs.md` (ledger) sont modifiés par ce run, commit documentaire séparé.
+
+**Recommandation pour la prochaine décision humaine** :
+- Option A — garder l'indigo actuel : fermer `todo.md:10` tel quel (« décidé : pas d'alignement visuel »), passer directement aux items de contenu (`todo.md:11-13`).
+- Option B — aligner sur la maquette : nécessite un mini-chantier dédié (`superpowers:brainstorming` → `writing-plans`, car > 1 fichier visuel : `print.css` + probablement `tickets.js`/`devis.js` templates + cohérence avec `modele-facture.pdf` pour la facture) plutôt qu'un correctif ponctuel de la loop.
+- Dans les deux cas, envisager de documenter dans `decisions.md` une fois tranché, pour que le prochain run de la loop ne re-escalade pas cette même case.
+- Note d'outillage : `docs/bon de réparation.pdf` et `docs/test impression.pdf` resteront invisibles à tout audit basé sur `git ls-files`/`git status` tant qu'ils sont sous la règle générique `*.pdf` du `.gitignore` — recommandation (à valider par l'utilisateur, pas fait ici) : les tracker explicitement (`git add -f`) comme fichiers de référence design, distincts des PDF générés, si on veut éviter une nouvelle confusion "absent du repo" dans un futur run.
+
+---
 
 **Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (21 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js` → `sensitiveMatch:true` (catégories `auth`, `isolation`, relation directe 1-saut — signal traité comme non bloquant ici : la tâche est un audit en lecture seule, zéro diff de code produit, donc le blast radius d'un signal graphe sur un fichier *lu mais non modifié* est nul).
 
