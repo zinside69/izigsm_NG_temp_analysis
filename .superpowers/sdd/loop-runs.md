@@ -304,3 +304,18 @@ l'état **actuel** d'un bug ou d'une tâche, se référer à `project-docs/bugs.
   1. **Gate quota** (`check-quota.mjs`) → code 2 (historique local insuffisant) → **fail-open** conforme `loop-policy.md`, signalé.
   2. `todo.md:19` cochée avec note explicative pointant vers les lignes de code concernées, pour éviter une nouvelle re-découverte future.
   3. Reste ouvert dans le chantier impression : `todo.md:20-35` (options de récupération — texte à valider avec l'utilisateur, contrainte une page A4, format thermique — techno non tranchée, email auto à l'impression, facturation HT/TTC par boutique) — chacune nécessitera son propre run et sa propre classification (plusieurs touchent potentiellement paiement/facturation, catégorie risque élevé de `loop-policy.md`).
+
+## Run 2026-07-25T00:00Z (approx.) — tâche cd5abbd9ab (options de récupération fiche A4, todo.md:20) — escaladée, aucune implémentation
+
+- Tâche : « Ajouter le détail des options de récupération (ex. 10€ TTC déduits de la réparation, recyclage sous 4 semaines) — texte exact à valider avec l'utilisateur, pas à inventer » — `project-docs/todo.md:20`, chantier 🔴 « impression ticket A4/thermique » (`todo.md:19` déjà traité checkpoint 56).
+- Sélection : `pick-task.mjs` → `cd5abbd9ab` directement (première case non cochée, `sourceWeight` 0). Aucune escalade antérieure trouvée pour cet id précis dans ce ledger.
+- Investigation (Étape 2, avant classification) : le texte de la tâche interdit lui-même d'inventer le contenu affiché — c'est un texte métier/légal à faire valider par l'utilisateur, pas un détail technique. Recoupé avec `decisions.md` § 2026-07-18 (« Texte légal "Acompte versé" volontairement différent du vieux modèle PDF ») : décision déjà actée de ne pas reproduire tel quel le texte de l'ancien modèle PDF (acompte conservé si refus, recyclage après 4 semaines) car il ne correspond à aucune règle réellement implémentée — précédent direct qui interdit d'improviser un texte équivalent pour cette case.
+- Issue : **escaladé** — aucun commit de code, aucun worktree créé, aucune modification de code applicatif (arrêt à l'Étape 2/4, avant Étape 3).
+- Risque : **élevé par ambiguïté explicite** (contenu métier/légal non fourni), pas par catégorie de mot-clé de `loop-policy.md` à proprement parler — mais signal graphe convergent : `graphify-refresh.mjs risk public/static/js/tickets.js` → `sensitiveMatch:true` (`auth`, `isolation`), traité comme signal complémentaire cohérent avec la prudence, pas la cause première.
+- Graphe : rafraîchi (`plan` → `update_no_semantic`, 28 fichiers non-code > cap 5, différé ; `record-result success`, 0 échec consécutif) — `verify` OK (1937 nœuds/2752 liens) ; `risk public/static/js/tickets.js` → `sensitiveMatch:true` (auth, isolation).
+- Gates : vitest n·a · tsc n·a · build n·a · playwright n·a · browser-use n·a (aucun gate exécuté — arrêt avant tout worktree/implémentation).
+- Worktree : aucun (arrêt avant l'Étape 3).
+- Détail / recommandation :
+  1. **Gate quota** (`check-quota.mjs`) → code 2 (historique local insuffisant) → **fail-open** conforme `loop-policy.md`, signalé.
+  2. Décision humaine nécessaire : fournir le texte exact des options de récupération (montant de déduction précis, délai exact, conditions) à afficher sur la fiche A4, puis le documenter dans `decisions.md` pour que le prochain run puisse l'implémenter sans re-escalade.
+  3. Reste ouvert dans le chantier impression : format thermique (techno d'impression non tranchée, `todo.md:23-26`), email auto à l'impression (`todo.md:29`), facturation HT/TTC par boutique (`todo.md:32`).
