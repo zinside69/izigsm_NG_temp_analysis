@@ -16,7 +16,7 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 
 **Format A4** :
 - [x] Revoir la mise en page sur le modèle `docs/bon de réparation.pdf` (bandeau, structure) — tranché le 2026-07-25 (brainstorming + plan + subagent-driven-development, `docs/superpowers/specs|plans/2026-07-25-refonte-fiche-a4-*.md`) : ni l'indigo actuel ni le bleu marine/ambre du PDF, accent gris ardoise unique inspiré de `docs/modele-facture.pdf` (aucun aplat de couleur). Voir `decisions.md` pour le détail. **Code mergé sur `main`, non déployé — validation visuelle réelle en navigateur (ticket A4 + facture/devis/caisse, nom de boutique long) requise avant `npm run deploy`.**
-- [ ] Ajouter IMEI / N° de série (absent actuellement)
+- [x] Ajouter IMEI / N° de série (absent actuellement) — obsolète, déjà implémenté : `_buildTicketA4HTML()` (`public/static/js/tickets.js:764-765`) affiche IMEI et N° Série dans le bloc "Appareil" (`d.imei`/`d.numeroSerie`, alimentés depuis la jointure `appareils` — voir `tickets.js:601-602`), confirmé toujours présent après la refonte visuelle A4 du 2026-07-25 (loop-engineering, aucun code modifié, revérification lecture seule)
 - [ ] Ajouter le détail des options de récupération (ex. 10€ TTC déduits de la réparation, recyclage sous 4 semaines) — texte exact à valider avec l'utilisateur, pas à inventer
 - [ ] Garantir le rendu sur **une seule page A4** (contrainte à vérifier après ajout des éléments ci-dessus)
 

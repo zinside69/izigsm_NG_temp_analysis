@@ -1,6 +1,22 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 55 — escalade mise en page A4 vs PDF de référence)
+# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 56 — todo.md:19 IMEI/N° série revérifié obsolète)
 
-## Checkpoint 55 — Loop-engineering : mise en page A4 vs PDF de référence (todo.md:10) — escaladé, aucun code modifié (2026-07-25)
+## Checkpoint 56 — Loop-engineering : IMEI/N° série sur fiche A4 (todo.md:19) — déjà implémenté, case cochée, aucun code modifié (2026-07-25)
+
+**Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (27 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js` → `sensitiveMatch:true` (catégories `auth`, `isolation`).
+
+**Sélection** : `pick-task.mjs` a retourné `79832225e6` — `todo.md:19` ("Ajouter IMEI / N° de série (absent actuellement)"), chantier 🔴 impression A4/thermique. Aucune escalade antérieure trouvée pour cette ligne précise dans `.superpowers/sdd/loop-runs.md`.
+
+**Investigation (Étape 2, lecture directe du code)** : confirmation que cette case est obsolète, déjà signalé en observation complémentaire au checkpoint 54 (avant la refonte visuelle A4) mais jamais coché depuis. Revérifié après le merge de la refonte A4 du 2026-07-25 (`decisions.md`, `docs/superpowers/plans/2026-07-25-refonte-fiche-a4-*.md`) pour s'assurer que le nouveau template n'avait pas régressé sur ce point : `_buildTicketA4HTML()` (`public/static/js/tickets.js:676-...`) affiche toujours IMEI et N° Série dans le bloc "Appareil" (`tickets.js:764-765`, conditionnels `d.imei`/`d.numeroSerie`), alimentés depuis la jointure `appareils` côté service (`tickets.js:601-602`, commentaire explicite "LEFT JOIN appareils côté getTicketById"). Même contenu présent dans les blocs exemplaires additionnels de la fiche (`tickets.js:902-903`, `983-984`).
+
+**Décision de risque** : signal graphe `sensitiveMatch:true` sur `tickets.js` (auth/isolation) noté mais non bloquant — **aucun code modifié**, fichier lu uniquement pour vérification, blast radius nul (même raisonnement déjà appliqué au checkpoint 54 pour un audit similaire en lecture seule). Correction de todo.md classée risque faible (catégorie "documentation").
+
+**Aucun worktree créé** (pas de diff de code, uniquement `project-docs/todo.md` + `project-docs/current-state.md`, cohérent avec le traitement du checkpoint 54 pour ce même type de constat).
+
+**Gates** : `npx vitest run` ✅ relancé par prudence malgré l'absence de diff de code : 833/835, exactement les 2 échecs pré-existants fuseau horaire (`agendaService.test.ts`, baseline inchangée). `tsc --noEmit`/`npm run build`/Playwright/browser-use non ré-exécutés (aucun fichier `.ts`/`.js`/config touché, résultat nécessairement identique à `main`).
+
+**Commit** : documentation uniquement (`todo.md:19` cochée + note explicative, `current-state.md` ce checkpoint), pas de `CACHE_VERSION` à bumper (aucun `public/static/js/*`/`*.html` modifié). Reste ouvert dans ce chantier : `todo.md:20-35` (options de récupération, contrainte 1 page A4, format thermique, email auto à l'impression, facturation HT/TTC) — chacune nécessiterait son propre run, plusieurs touchant potentiellement paiement/facturation selon la table de risque.
+
+---
 
 **Contexte** : run de la loop-engineering. Gate quota `check-quota.mjs` → code 2 (historique local insuffisant → **fail-open**, signalé). Graphe : `plan` → `update_no_semantic` (21 fichiers non-code > cap 5, différé), `record-result success` (0 échec consécutif), `verify` → `valid:true` (1937 nœuds/2752 liens), `risk public/static/js/tickets.js public/print.css` → `sensitiveMatch:true` (catégories `auth`, `isolation`).
 
