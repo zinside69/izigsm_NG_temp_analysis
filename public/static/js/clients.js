@@ -1,6 +1,7 @@
 /**
  * clients.js — Vue Clients (Sprint 2.15)
  * Rôle architectural : View (P2 — 100% via ApiService app.js, 0 fetch direct).
+ * (Ligne ajoutée le 2026-07-30 pour changer le hash de build — incident cache CDN, voir bugs.md.)
  *
  * Fonctionnalités :
  *   - Liste paginée + KPIs synthèse
