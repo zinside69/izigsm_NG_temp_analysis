@@ -1,5 +1,21 @@
 # Recovery Prompt — iziGSM — 2026-07-30 (checkpoint 64 — création manuelle de facture + socle facture électronique)
 
+## ⚠️ EN ATTENTE D'UNE ACTION HUMAINE — à traiter avant tout nouveau chantier
+
+Deux points bloquants hérités du checkpoint 64, tous deux non automatisables :
+
+1. **Vérifier par une impression réelle que la facture tient sur une seule page A4.**
+   Non vérifiable par un agent : `window.print()` et Ctrl+P ouvrent une modale navigateur qui fige toute session pilotée, et mesurer une hauteur hors contexte d'impression réelle donne des chiffres trompeurs (`CLAUDE.md` § Documents imprimables). Le garde-fou automatique `.print-compact` de `_triggerPrint()` (`app.js`, partagé tickets/factures/devis) est censé absorber le contenu ajouté au checkpoint 64 — ventilation TVA par taux, mentions légales, identités figées — mais personne ne l'a constaté sur une vraie impression. **À faire avant le déploiement.**
+
+2. **Décider et exécuter le déploiement — dans le bon ordre.**
+   Rien n'a été déployé au checkpoint 64. La migration `0037` doit être appliquée **à distance avant** le déploiement du Worker :
+   ```bash
+   npx wrangler d1 migrations apply DB --remote
+   npm run deploy
+   ```
+   L'ordre inverse fait échouer en production **toute** émission de facture (`no such column: vendeur_snapshot`) : `POST /factures/:id/emettre`, `POST /api/factures` en `emettre`/`emettre_encaisser`, la création en brouillon (`date_execution`) et la conversion de devis. Voir `CLAUDE.md` § Déploiement.
+   Rappel : le déploiement n'est **jamais** automatique sur ce projet, il exige une confirmation explicite de l'utilisateur.
+
 ## Vue d'ensemble (checkpoint 64)
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant, `izigsm/webapp/`, branche `main`. Deuxième et dernière « fonctionnalité entière hors service » de l'audit de persistance du 2026-07-30 : la création manuelle de facture. Chantier complet `superpowers:brainstorming` → `writing-plans` → `subagent-driven-development` (9 tâches, 28 commits, branche mergée sur `main` puis supprimée).
 
