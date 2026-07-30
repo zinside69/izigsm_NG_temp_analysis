@@ -943,6 +943,35 @@ async function printFacture(id) {
   }
 }
 
+/** Lit une colonne snapshot JSON. Retourne null si absente ou illisible (brouillon). */
+function _parseSnapshot(raw) {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw);
+    return (o && Object.keys(o).length) ? o : null;
+  } catch { return null; }
+}
+
+/**
+ * Ventile le total HT et la TVA par taux — donnée du socle réglementaire de la
+ * facture électronique ("montant total HT par taux de TVA").
+ * @returns {Array<{taux:number, ht:number, tva:number}>} trié par taux décroissant
+ */
+function _ventilationTVA(lignes) {
+  const round2 = v => Math.round(v * 100) / 100;
+  const parTaux = new Map();
+  (lignes || []).forEach(l => {
+    const taux = parseFloat(l.tva_taux) || 0;
+    const ht   = parseFloat(l.total_ht)  || 0;
+    const tva  = parseFloat(l.total_tva) || 0;
+    const acc  = parTaux.get(taux) || { taux, ht: 0, tva: 0 };
+    acc.ht  = round2(acc.ht  + ht);
+    acc.tva = round2(acc.tva + tva);
+    parTaux.set(taux, acc);
+  });
+  return [...parTaux.values()].sort((a, b) => b.taux - a.taux);
+}
+
 /**
  * Récupère et normalise les données nécessaires à l'impression d'une facture :
  * détail facture (lignes, paiements) + profil boutique.
@@ -965,14 +994,18 @@ async function _fetchFacturePrintData(id) {
   // Profil boutique (non bloquant — valeurs par défaut si API KO)
   let boutique = { nom: 'iziGSM', adresse: '', siret: '', telephone: '', email: '' };
   try {
-    const bs = await apiGet('/api/boutiques');
-    const b  = (bs.data?.data || bs.data || [])[0] || {};
+    // /api/boutiques/:id (et non la liste) : seul endpoint qui expose `settings`
+    // (tva_taux_defaut, mention_facture) — nécessaire pour la mention légale.
+    const bs = await apiGet(`/api/boutiques/${raw.boutique_id}`);
+    const b  = bs.data?.data || bs.data || {};
     boutique = {
       nom:       b.nom       || b.name   || 'iziGSM',
       adresse:   b.adresse   || b.address || '',
       siret:     b.siret     || '',
       telephone: b.telephone || b.phone  || '',
       email:     b.email     || '',
+      tva_taux_defaut: b.settings?.tva_taux_defaut ?? 20,
+      mention_facture: b.settings?.mention_facture  ?? null,
     };
   } catch {}
 
@@ -1001,6 +1034,21 @@ async function _fetchFacturePrintData(id) {
     clientTel:    raw.client_telephone || raw.client_tel || '',
     clientAdresse: raw.client_adresse  || '',
     hash_nf525:   raw.hash_nf525       || '',
+    dateExec:     raw.date_execution || '',
+    // Identités : le snapshot figé à l'émission fait foi. Une facture émise ne doit
+    // jamais être re-rendue depuis les fiches vivantes (elle est inaltérable, NF525).
+    // Un brouillon n'a pas de snapshot et retombe donc sur la jointure vivante.
+    vendeurFige:  _parseSnapshot(raw.vendeur_snapshot),
+    acheteurFige: _parseSnapshot(raw.acheteur_snapshot),
+    ventilation:  _ventilationTVA(lignes),
+    mentionBoutique: (() => {
+      const v = _parseSnapshot(raw.vendeur_snapshot);
+      // Facture émise : la mention suit le snapshot. Brouillon : paramétrage vivant.
+      const mention = v ? v.mention_facture : (boutique.mention_facture || null);
+      if (mention) return mention;
+      const taux = v ? v.tva_taux_defaut : boutique.tva_taux_defaut;
+      return Number(taux) === 0 ? 'TVA non applicable, article 293 B du CGI.' : null;
+    })(),
   };
 }
 
@@ -1013,6 +1061,18 @@ async function _fetchFacturePrintData(id) {
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
 function _buildFactureHTML(d, printCssHref) {
+  // Identités affichées : snapshot figé si la facture est émise, sinon jointure vivante.
+  const ach = d.acheteurFige;
+  const clientNomAffiche = ach
+    ? (ach.raison_sociale || [ach.prenom, ach.nom].filter(Boolean).join(' '))
+    : d.clientNom;
+  const clientIdent = ach && ach.siret
+    ? `SIRET ${esc(ach.siret)}${ach.tva_intracom ? ' · TVA ' + esc(ach.tva_intracom) : ''}`
+    : '';
+  const clientAdresseAffichee = ach
+    ? [ach.adresse, [ach.code_postal, ach.ville].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
+    : esc(d.clientAdresse || '');
+
   const badgeCls = {
     payee:    'print-badge-paid',
     brouillon:'print-badge-draft',
@@ -1075,6 +1135,7 @@ function _buildFactureHTML(d, printCssHref) {
         <div class="print-doc-meta">
           <strong>Date d'émission :</strong> ${_fmtDate(d.dateEm)}<br>
           ${d.dateEch   ? '<strong>Échéance :</strong> ' + _fmtDate(d.dateEch) + '<br>' : ''}
+          ${d.dateExec ? `<div>Date d'exécution : <strong>${esc(d.dateExec)}</strong></div>` : ''}
           ${d.hash_nf525 ? '<span style="font-size:7pt;color:#aaa;">NF525 ✓</span>' : ''}
         </div>
       </div>
@@ -1090,11 +1151,12 @@ function _buildFactureHTML(d, printCssHref) {
         </div>
         <div class="print-party-box">
           <div class="print-party-label">Facturé à</div>
-          <div class="print-party-name">${esc(d.clientNom)}</div>
+          <div class="print-party-name">${esc(clientNomAffiche)}</div>
           <div class="print-party-detail">
-            ${d.clientEmail   ? esc(d.clientEmail)   + '<br>' : ''}
-            ${d.clientTel     ? esc(d.clientTel)     + '<br>' : ''}
-            ${d.clientAdresse ? esc(d.clientAdresse)          : ''}
+            ${clientIdent     ? clientIdent            + '<br>' : ''}
+            ${d.clientEmail   ? esc(d.clientEmail)     + '<br>' : ''}
+            ${d.clientTel     ? esc(d.clientTel)       + '<br>' : ''}
+            ${clientAdresseAffichee ? clientAdresseAffichee : ''}
           </div>
         </div>
       </div>
@@ -1120,11 +1182,35 @@ function _buildFactureHTML(d, printCssHref) {
         </table>
       </div>
 
+      ${d.ventilation && d.ventilation.length ? `
+      <table class="print-tva-table" style="width:auto;margin-left:auto;margin-top:10px;border-collapse:collapse;font-size:0.82rem;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:4px 10px;border-bottom:1px solid #d1d5db;">Taux TVA</th>
+            <th style="text-align:right;padding:4px 10px;border-bottom:1px solid #d1d5db;">Base HT</th>
+            <th style="text-align:right;padding:4px 10px;border-bottom:1px solid #d1d5db;">Montant TVA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${d.ventilation.map(v => `
+          <tr>
+            <td style="padding:4px 10px;">${v.taux.toString().replace('.', ',')} %</td>
+            <td style="padding:4px 10px;text-align:right;">${formatMoney(v.ht)}</td>
+            <td style="padding:4px 10px;text-align:right;">${formatMoney(v.tva)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+
       ${paiementsHTML}
 
       ${d.notes ? `<div class="print-notes print-no-break"><div class="print-notes-label">Notes</div>${esc(d.notes)}</div>` : ''}
 
       <div class="print-footer">
+        <div class="print-mentions" style="margin-top:14px;font-size:0.72rem;color:#6b7280;line-height:1.5;">
+          ${d.mentionBoutique ? `<div>${esc(d.mentionBoutique)}</div>` : ''}
+          <div>En cas de retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de commerce).</div>
+          <div>Pas d'escompte pour paiement anticipé.</div>
+        </div>
         <div>${esc(d.boutique.nom)} ${d.boutique.siret ? '— SIRET : ' + esc(d.boutique.siret) : ''}</div>
         <div class="print-footer-legal">Document généré par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
         <div>Page 1</div>
