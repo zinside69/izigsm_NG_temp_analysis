@@ -1,5 +1,36 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 — Audit persistance des champs (2026-07-30, PAS traité)
+Détail complet, root cause exacte (fichier+ligne) et méthode dans `project-docs/audit-persistance-2026-07-30.md` — audit complet des 22 pages de repairdesk.fr (3 subagents en parallèle, lecture seule), déclenché par la découverte du bug `t-imei`.
+
+**Fonctionnalités entières hors service :**
+- [ ] `factures.html` — `POST /api/factures` n'existe pas côté backend : création manuelle de facture 100% cassée (toast d'erreur visible, rien n'est enregistré). Signature électronique triplement morte (endpoint inexistant + jamais lue du canvas + colonne absente). Statut sélectionné jamais lu (vient du bouton cliqué). Mode de paiement envoyé sous une clé qui ne correspond à rien côté service.
+- [ ] `personnel.html` — `app.js` non chargé sur cette page (seule page du site dans ce cas) → `apiGet`/`apiPost` undefined, `ReferenceError` systématique. Plus pattern `r.success`/`r.data` cassé. Aucune création employé/pointage possible. Édition employé + gestion PIN/permissions absentes de l'UI (backend déjà prêt).
+
+**Données perdues silencieusement (pas d'erreur visible) :**
+- [ ] `tickets.html` — `t-priority` en création : toujours enregistré `'normale'` quel que soit le choix Basse/Moyenne/Haute (fonctionne en édition)
+- [ ] `stock.html` — `stock-notes` : jamais persisté (ni interface TS, ni colonne SQL), création et édition
+- [ ] `stock.html` — `stock-qty` en édition : modification de quantité stock silencieusement ignorée — risque d'erreurs d'inventaire réel
+- [ ] `services.html` — `modele-marque-id` en édition : changement de marque d'un modèle existant ignoré
+- [ ] `caisse.html` — `remise_pct` : taux de remise saisi perdu (total correct, mais facture non réimprimable avec le détail réel — impact NF525-adjacent)
+- [ ] `settings.html` — `monnaie` : figée à EUR quoi que sélectionne l'utilisateur (mineur, sauf besoin multi-devise)
+- [ ] `agenda.html` — 5 champs impossibles à **vider** en édition (`rdv-description`, `rdv-nom-client`, `rdv-tel-client`, `rdv-client-id`, `rdv-ticket-id`) : `body.xxx ?? ancienneValeur` retombe sur l'ancienne valeur quand le frontend envoie `null` volontaire
+
+**Bug d'affichage transversal `r.success`/`r.data` — données enregistrées mais invisibles/signalées en échec (3 fichiers non couverts par le fix du 2026-07-16/17) :**
+- [ ] `reconditionnement.js` (11 fonctions) — **bloque l'ouverture des modals "Modifier un ordre" et "Terminer un ordre"**, vérification bon d'achat caisse toujours en échec
+- [ ] `fournisseurs.js` (12 fonctions) — listes/KPIs jamais affichés, risque de doublons si l'utilisateur re-soumet en croyant avoir échoué
+- [ ] `caisse.js` (9 fonctions) — ventes/encaissements réels affichés comme des échecs
+- [ ] `services.js` — marques/modèles/liaisons toujours vides à l'écran malgré des données réelles en base
+
+**Suspects mineurs (best-effort) :**
+- [ ] `services.html` `svc-duree`/`liaison-prix-specifique` + `rachats.html` `r-prix` : saisie `0` transformée en `null` (`parseFloat(...) || null`)
+- [ ] `stock.html` `stock-category` : impossible de retirer une catégorie déjà assignée (COALESCE)
+- [ ] `devis.html` `d-tva` : taux par défaut ne s'applique qu'aux nouvelles lignes, pas de perte de donnée
+
+**Décision produit à prendre séparément** : `qualirepar.html` — voir chantier dédié ci-dessous (branchement API réelle en cours de cadrage).
+
+**Pages vérifiées saines, rien à faire** : `clients.html`, `sav.html`.
+
 ## ✅ Backfill recovery-prompt.md — checkpoints manquants — TERMINÉ le 2026-07-30
 `recovery-prompt.md` doit être régénéré à **chaque** `/init checkpoint` (= `/context-guardian checkpoint` complet, pas une mise à jour partielle de `current-state.md` seule) — convention de nommage déjà actée, jamais suivie systématiquement jusqu'ici.
 - [x] Backfiller les 22 entrées manquantes (29-30, 33-34, 38, 40-56) — reconstruites depuis `current-state.md` + `git log` (croisement complet), session dédiée du 2026-07-30. `recovery-prompt.md` couvre maintenant en continu les checkpoints 21→61, aucun trou restant. Entrées marquées `*(reconstruite rétroactivement...)*` pour transparence (même convention que `docs/TODO.md`/`JOURNAL_MODIFICATIONS.md` pour le contenu documenté après coup).
