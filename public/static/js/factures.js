@@ -1073,6 +1073,15 @@ function _buildFactureHTML(d, printCssHref) {
     ? [esc(ach.adresse || ''), [esc(ach.code_postal || ''), esc(ach.ville || '')].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
     : esc(d.clientAdresse || '');
 
+  // Même garantie côté émetteur : snapshot vendeur figé à l'émission si présent
+  // (facture émise, inaltérable), sinon profil boutique vivant (brouillon).
+  const vend = d.vendeurFige;
+  const boutiqueNomAffiche = vend ? (vend.nom || d.boutique.nom) : d.boutique.nom;
+  const boutiqueSiretAffiche = vend ? (vend.siret || '') : (d.boutique.siret || '');
+  const boutiqueAdresseAffichee = vend
+    ? [esc(vend.adresse || ''), [esc(vend.code_postal || ''), esc(vend.ville || '')].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
+    : esc(d.boutique.adresse || '');
+
   const badgeCls = {
     payee:    'print-badge-paid',
     brouillon:'print-badge-draft',
@@ -1143,10 +1152,10 @@ function _buildFactureHTML(d, printCssHref) {
       <div class="print-parties print-no-break">
         <div class="print-party-box">
           <div class="print-party-label">Émetteur</div>
-          <div class="print-party-name">${esc(d.boutique.nom)}</div>
+          <div class="print-party-name">${esc(boutiqueNomAffiche)}</div>
           <div class="print-party-detail">
-            ${d.boutique.adresse ? esc(d.boutique.adresse) + '<br>' : ''}
-            ${d.boutique.siret   ? 'SIRET : ' + esc(d.boutique.siret) : ''}
+            ${boutiqueAdresseAffichee ? boutiqueAdresseAffichee + '<br>' : ''}
+            ${boutiqueSiretAffiche   ? 'SIRET : ' + esc(boutiqueSiretAffiche) : ''}
           </div>
         </div>
         <div class="print-party-box">
