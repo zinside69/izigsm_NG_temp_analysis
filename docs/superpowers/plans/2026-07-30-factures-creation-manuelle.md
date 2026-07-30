@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rendre la création manuelle de facture fonctionnelle en implémentant `POST /api/factures`, et supprimer du modal les éléments qui mentent à l'utilisateur.
+**Goal:** Rendre la création manuelle de facture fonctionnelle en implémentant `POST /api/factures`, supprimer du modal les éléments qui mentent à l'utilisateur, et capturer le socle de données exigé par la réforme française de la facturation électronique.
 
 **Architecture:** Une nouvelle fonction `createFacture()` dans `src/services/factureService.ts` réutilise le socle existant (`nextNumero()`, `calculLignes()`, `ajouterPaiement()`, `emettreFacture()`). La route `POST /api/factures` délègue à `convertirDevis()` quand un `devis_id` est fourni, sinon appelle `createFacture()`. Le frontend passe d'un formulaire à deux boutons muets à trois actions explicites.
 
@@ -19,10 +19,11 @@
 - Chaque tâche frontend se valide en local live (`wrangler pages dev` + vraies données), jamais par relecture de code seule.
 - `CACHE_VERSION` dans `public/sw.js` : v2.79 → v2.80, sur la **dernière** tâche frontend uniquement.
 - Taux de TVA autorisés : `0`, `5.5`, `10`, `20`.
+- **Aucun texte légal ne s'invente.** Les mentions obligatoires posées par ce plan sont des formulations statutaires citées avec leur article ; elles sont fournies mot pour mot dans la tâche 8 et ne doivent être ni reformulées ni complétées. Toute mention supplémentaire (CGV, CGR) est hors périmètre.
 - Commits en français, format `type: message`. **Ne jamais ajouter de `Co-Authored-By`.**
 - `npm run deploy` n'est **pas** lancé par ce plan — le déploiement est toujours une décision humaine explicite (`CLAUDE.md` § Déploiement).
 
-## Serveur local (nécessaire pour les tâches 3, 6, 7)
+## Serveur local (nécessaire pour les tâches 3, 4, 5, 8 et 9)
 
 ```bash
 npx wrangler d1 migrations apply DB --local
@@ -38,13 +39,14 @@ Compte de démo : `admin@izigsm.fr` / `Admin@2026!` (boutique 1).
 
 | Fichier | Responsabilité | Tâches |
 |---|---|---|
-| `src/services/factureService.ts` | Ajout de `CreateFactureInput` + `createFacture()` — toute la logique métier et le SQL | 1, 2 |
-| `tests/factureService.test.ts` | Tests unitaires du service (mocks D1) | 1, 2 |
-| `src/routes/facturation.ts` | Ajout de `POST /factures` (validation du body, isolation, délégation devis) + garde d'isolation sur `PUT /devis/:id/convertir` | 3, 4 |
-| `tests/e2e/isolation.spec.ts` | Gate de non-régression isolation — 2 cas ajoutés | 4 |
-| `public/factures.html` | Modal : suppression signature/statut/description, ajout TVA, 3 boutons | 5 |
-| `public/static/js/factures.js` | `saveFacture(action)`, suppression du fallback localStorage, TVA, devis en lecture seule | 6 |
-| `public/sw.js` | `CACHE_VERSION` | 7 |
+| `src/services/factureService.ts` | `CreateFactureInput` + `createFacture()` — logique métier et SQL ; snapshot des identités dans `emettreFacture()` | 1, 2, 3 |
+| `tests/factureService.test.ts` | Tests unitaires du service (mocks D1) | 1, 2, 3 |
+| `migrations/0037_facture_donnees_reglementaires.sql` | Socle facture électronique : date d'exécution, snapshots, régime de TVA de la boutique | 3 |
+| `src/routes/facturation.ts` | `POST /factures` (validation du body, isolation, délégation devis) + garde d'isolation sur `PUT /devis/:id/convertir` | 4, 5 |
+| `tests/e2e/isolation.spec.ts` | Gate de non-régression isolation — 2 cas ajoutés | 5 |
+| `public/factures.html` | Modal : suppression signature/statut/description, ajout TVA + date d'exécution, 3 boutons | 6 |
+| `public/static/js/factures.js` | `saveFacture(action)`, suppression du fallback localStorage, TVA, devis en lecture seule ; document imprimé (ventilation TVA, mentions légales, identités figées) | 7, 8 |
+| `public/sw.js` | `CACHE_VERSION` | 9 |
 
 ---
 
@@ -56,7 +58,7 @@ Compte de démo : `admin@izigsm.fr` / `Admin@2026!` (boutique 1).
 
 **Interfaces:**
 - Consumes: `nextNumero(db, boutiqueId, 'facture')` (`src/lib/db.ts:40`), `calculLignes(lignes)` (`src/lib/db.ts:210`), `auditLog(db, params)` (`src/lib/db.ts`), `StatutFacture` (déjà exporté).
-- Produces: `CreateFactureInput` (interface exportée) et `createFacture(db: D1Database, userId: number, input: CreateFactureInput): Promise<{ facture_id: number; facture_numero: string; statut: StatutFacture }>` — consommés par la tâche 2 (qui ajoute les actions d'émission) et la tâche 3 (route).
+- Produces: `CreateFactureInput` (interface exportée) et `createFacture(db: D1Database, userId: number, input: CreateFactureInput): Promise<{ facture_id: number; facture_numero: string; statut: StatutFacture }>` — consommés par la tâche 2 (qui ajoute les actions d'émission), la tâche 3 (socle réglementaire) et la tâche 4 (route).
 
 Cette tâche n'implémente que `action: 'brouillon'`. Les deux autres actions sont ajoutées en tâche 2 : elles ont leur propre cycle de test et un reviewer peut légitimement accepter celle-ci et refuser celle-là.
 
@@ -206,7 +208,7 @@ describe('createFacture()', () => {
   // voit donc pas. Même limite que createAvoir(), qui utilise déjà db.batch(). On
   // vérifie ici le nombre de statements ; l'exactitude des totaux par ligne est
   // couverte par les tests de calculLignes() et par la vérification en base réelle
-  // de la tâche 7 (SELECT sur lignes_document).
+  // de la tâche 9 (SELECT sur lignes_document).
   it('écrit une ligne par ligne saisie, en un seul batch', async () => {
     setupBrouillon(60)
 
@@ -424,7 +426,7 @@ git commit -m "feat: createFacture() - validation + creation en brouillon"
 
 **Interfaces:**
 - Consumes: `createFacture()` de la tâche 1 · `ajouterPaiement(db, factureId, userId, input: PaiementInput)` (`factureService.ts:152`) · `emettreFacture(db, factureId, userId)` (`factureService.ts:209`).
-- Produces: `createFacture()` retourne désormais `statut` valant `'brouillon'`, `'en_attente'` ou `'payee'` selon `input.action` — consommé par la route en tâche 3.
+- Produces: `createFacture()` retourne désormais `statut` valant `'brouillon'`, `'en_attente'` ou `'payee'` selon `input.action` — consommé par la route en tâche 4.
 
 Ordre imposé : `ajouterPaiement()` **avant** `emettreFacture()`, parce que le paiement exige `locked = 0`. C'est exactement la séquence de `createFactureAcompte()` (`factureService.ts:346-352`).
 
@@ -574,14 +576,214 @@ git commit -m "feat: createFacture() - actions emettre et emettre_encaisser"
 
 ---
 
-### Task 3: Route `POST /api/factures`
+### Task 3: Socle facture électronique — migration, date d'exécution, snapshot des identités
+
+**Files:**
+- Create: `migrations/0037_facture_donnees_reglementaires.sql`
+- Modify: `src/services/factureService.ts` (`CreateFactureInput`, l'INSERT de `createFacture()`, et `emettreFacture()`)
+- Test: `tests/factureService.test.ts`
+
+**Interfaces:**
+- Consumes: `createFacture()` et `emettreFacture()` (tâches 1-2) · `todayParis()` (`src/lib/timezone.ts`).
+- Produces: `CreateFactureInput.date_execution?: string` (date ISO `YYYY-MM-DD`) — envoyé par la route en tâche 4 et par le formulaire en tâches 6-7. Colonnes `factures.date_execution`, `factures.vendeur_snapshot`, `factures.acheteur_snapshot` (JSON) et `boutiques.franchise_tva` — lues par le document imprimé en tâche 8.
+
+Contexte : voir la spec § « Amendement 2026-07-30 — socle de données de la facture électronique ». Le snapshot est posé dans `emettreFacture()` et non dans `createFacture()` : c'est le moment où la facture devient inaltérable (`locked = 1`) et c'est le point de passage unique des trois chemins de création (manuelle, conversion de devis, acompte), qui en héritent donc tous sans duplication.
+
+- [ ] **Step 1: Écrire la migration**
+
+Créer `migrations/0037_facture_donnees_reglementaires.sql` :
+
+```sql
+-- Migration 0037 — Socle de données de la facture électronique (réforme française 2026)
+-- Voir docs/superpowers/specs/2026-07-30-factures-creation-manuelle-design.md
+--     § Amendement 2026-07-30.
+--
+-- Les identités vendeur/acheteur sont figées à l'émission : une facture verrouillée
+-- (locked=1, CGI art. 289) ne doit plus dépendre des fiches clients/boutiques vivantes,
+-- sinon modifier une adresse client réécrit rétroactivement un document déjà émis.
+
+ALTER TABLE factures ADD COLUMN date_execution    TEXT;  -- date de livraison ou d'exécution (socle du 01/09/2026)
+ALTER TABLE factures ADD COLUMN vendeur_snapshot  TEXT;  -- JSON figé par emettreFacture()
+ALTER TABLE factures ADD COLUMN acheteur_snapshot TEXT;  -- JSON figé par emettreFacture()
+
+-- Régime de TVA de la boutique : déclenche la mention "TVA non applicable, art. 293 B du CGI"
+ALTER TABLE boutiques ADD COLUMN franchise_tva INTEGER NOT NULL DEFAULT 0;
+```
+
+- [ ] **Step 2: Appliquer la migration en local et vérifier**
+
+```bash
+npx wrangler d1 migrations apply DB --local
+npx wrangler d1 execute DB --local --command "SELECT date_execution, vendeur_snapshot, acheteur_snapshot FROM factures LIMIT 1"
+npx wrangler d1 execute DB --local --command "SELECT franchise_tva FROM boutiques LIMIT 1"
+```
+
+Expected: les deux requêtes s'exécutent sans erreur (colonnes vides / `0`).
+
+- [ ] **Step 3: Écrire les tests qui échouent**
+
+Ajouter dans le `describe('createFacture()')` existant :
+
+```ts
+  it('enregistre la date d\'exécution fournie', async () => {
+    setupBrouillon(65)
+
+    await createFacture(db, 10, { ...BASE_INPUT, date_execution: '2026-07-15' })
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall!.params[9]).toBe('2026-07-15')
+  })
+
+  it('retombe sur la date du jour si aucune date d\'exécution n\'est fournie', async () => {
+    setupBrouillon(66)
+
+    await createFacture(db, 10, BASE_INPUT)
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall!.params[9]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+```
+
+Et un nouveau bloc dans le `describe('emettreFacture()')` existant :
+
+```ts
+  it('fige les identités vendeur et acheteur au moment de l\'émission', async () => {
+    db.__setResponse(n('SELECT * FROM factures WHERE id = ?'), {
+      id: 20, boutique_id: 1, client_id: 3, numero: 'FAC-2026-00001',
+      total_ht: 100, total_tva: 20, total_ttc: 120, locked: 0,
+    })
+    db.__setNotFound(n('SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1'))
+    db.__setResponse(
+      n(`SELECT nom, siret, tva_numero, adresse, code_postal, ville, franchise_tva FROM boutiques WHERE id = ?`),
+      { nom: 'iziGSM Paris 11', siret: '12345678901234', tva_numero: 'FR12345678901',
+        adresse: '5 avenue Montaigne', code_postal: '75011', ville: 'Paris', franchise_tva: 0 }
+    )
+    db.__setResponse(
+      n(`SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville FROM clients WHERE id = ?`),
+      { type_client: 'professionnel', raison_sociale: 'SOTELI', prenom: 'Marie', nom: 'Dupont',
+        siret: '98765432101234', tva_intracom: 'FR98987654321',
+        adresse: '10 rue de la Paix', code_postal: '75001', ville: 'Paris' }
+    )
+
+    await emettreFacture(db, 20, 10)
+
+    const lockCall = db.__getCalls().find(c => c.sql.includes('SET') && c.sql.includes('locked') && c.sql.includes('factures'))
+    expect(lockCall).toBeDefined()
+    const snapshots = lockCall!.params.filter(p => typeof p === 'string' && p.startsWith('{'))
+    expect(snapshots).toHaveLength(2)
+    expect(snapshots[0]).toContain('12345678901234')  // SIRET vendeur
+    expect(snapshots[1]).toContain('98765432101234')  // SIRET acheteur
+  })
+```
+
+- [ ] **Step 4: Lancer les tests pour vérifier qu'ils échouent**
+
+Run: `npx vitest run tests/factureService.test.ts -t "createFacture()"` puis `npx vitest run tests/factureService.test.ts -t "emettreFacture()"`
+Expected: FAIL — `params[9]` est `undefined` (la colonne n'est pas encore dans l'INSERT) et aucun snapshot JSON n'est présent dans l'UPDATE de verrouillage.
+
+- [ ] **Step 5: Ajouter `date_execution` à `createFacture()`**
+
+Dans `CreateFactureInput`, après `conditions?: string` :
+
+```ts
+  /**
+   * Date de livraison ou d'exécution de la prestation (ISO `YYYY-MM-DD`).
+   * Donnée du socle réglementaire de la facture électronique (01/09/2026).
+   * Absente = date du jour.
+   */
+  date_execution?: string
+```
+
+Importer `todayParis` en haut de `factureService.ts` s'il ne l'est pas déjà :
+
+```ts
+import { todayParis } from '../lib/timezone'
+```
+
+Puis remplacer l'INSERT de `createFacture()` par :
+
+```ts
+  const facture = await db.prepare(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, date_execution, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+    RETURNING id
+  `).bind(
+    input.boutique_id, numero, input.client_id, input.ticket_id ?? null,
+    totaux.total_ht, totaux.total_tva, totaux.total_ttc,
+    input.notes ?? null, input.conditions ?? null,
+    input.date_execution ?? todayParis(),
+  ).first<{ id: number }>()
+```
+
+Mettre à jour la constante `SQL_INSERT_FACTURE` du fichier de test pour refléter le nouveau SQL.
+
+- [ ] **Step 6: Figer les identités dans `emettreFacture()`**
+
+Dans `emettreFacture()`, juste après le calcul de `hashNf525` et avant l'UPDATE de verrouillage :
+
+```ts
+  // Socle facture électronique : figer les identités au moment exact où le document
+  // devient inaltérable. Passé ce point, plus aucune jointure vivante ne doit pouvoir
+  // réécrire une facture émise (voir la spec § Amendement 2026-07-30).
+  const vendeur = await db.prepare(`
+    SELECT nom, siret, tva_numero, adresse, code_postal, ville, franchise_tva
+    FROM boutiques WHERE id = ?
+  `).bind(facture.boutique_id).first<any>()
+
+  const acheteur = await db.prepare(`
+    SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville
+    FROM clients WHERE id = ?
+  `).bind(facture.client_id).first<any>()
+```
+
+Puis remplacer l'UPDATE de verrouillage par :
+
+```ts
+  await db.prepare(`
+    UPDATE factures
+    SET locked            = 1,
+        issued_at         = CURRENT_TIMESTAMP,
+        tracking_token    = ?,
+        hash_nf525        = ?,
+        vendeur_snapshot  = ?,
+        acheteur_snapshot = ?,
+        statut            = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
+    WHERE id = ?
+  `).bind(
+    trackingToken, hashNf525,
+    JSON.stringify(vendeur ?? {}), JSON.stringify(acheteur ?? {}),
+    factureId,
+  ).run()
+```
+
+- [ ] **Step 7: Lancer les tests**
+
+Run: `npx vitest run tests/factureService.test.ts`
+Expected: PASS — les nouveaux tests verts, et **tous les tests pré-existants d'`emettreFacture()`, `createFactureAcompte()` et `createAvoir()` toujours verts** (le changement est additif ; s'ils cassent, c'est une régression réelle à corriger, pas les tests à ajuster).
+
+- [ ] **Step 8: Suite complète et types**
+
+Run: `npx vitest run` puis `npx tsc --noEmit`
+Expected: aucune nouvelle erreur, seuls les 2 échecs de fuseau horaire pré-existants.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add migrations/0037_facture_donnees_reglementaires.sql src/services/factureService.ts tests/factureService.test.ts
+git commit -m "feat: socle facture electronique - date d'execution + snapshot identites a l'emission"
+```
+
+---
+
+### Task 4: Route `POST /api/factures`
 
 **Files:**
 - Modify: `src/routes/facturation.ts` (section `// ─── FACTURES ───`, juste avant `GET /factures`)
 
 **Interfaces:**
 - Consumes: `createFacture()` + `CreateFactureInput` (tâches 1-2) · `convertirDevis(db, id, userId)` (`src/services/devisService.ts:400`) · `getDevis(db, id)` (déjà importé dans ce fichier, utilisé par `POST /devis/:id/acompte`) · `getBoutiqueId(user, paramBoutiqueId?)` · `ajouterPaiement()` · `emettreFacture()`.
-- Produces: endpoint `POST /api/factures` — consommé par le frontend en tâche 6.
+- Produces: endpoint `POST /api/factures` — consommé par le frontend en tâche 7.
 
 **Décision NF525 sur le chemin devis, à respecter telle quelle :** avec `action: 'brouillon'`, la route appelle `convertirDevis()` **et rien d'autre** — aucune entrée `journal_nf525` n'est créée, elle le sera à l'émission par `emettreFacture()`. C'est le comportement correct (NF525 = facture émise inaltérable) et cela évite une double entrée dans un journal à hachage chaîné. La route legacy `PUT /devis/:id/convertir` enregistre elle immédiatement — **ne pas la modifier sur ce point**, c'est hors périmètre et risqué.
 
@@ -599,8 +801,11 @@ Ajouter dans `src/routes/facturation.ts`, section FACTURES, avant `facturation.g
  * porte déjà ses garanties (refus si devis refusé/annulé/déjà converti,
  * déduction d'un acompte antérieur) — et les lignes du body sont ignorées.
  *
- * @body { client_id, ticket_id?, devis_id?, lignes[], notes?, conditions?,
+ * @body { client_id, ticket_id?, devis_id?, lignes[], notes?, conditions?, date_execution?,
  *         action: 'brouillon'|'emettre'|'emettre_encaisser', mode_paiement?, reference? }
+ * `date_execution` (date de livraison/exécution, socle réglementaire de la facture
+ * électronique) transite tel quel vers createFacture() par le spread du body ; absent,
+ * le service retombe sur la date du jour.
  * @returns 201 { success, facture_id, facture_numero, statut }
  */
 facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
@@ -666,7 +871,7 @@ Expected: aucune nouvelle erreur sur `src/routes/facturation.ts`.
 - [ ] **Step 3: Vérifier la suite unitaire**
 
 Run: `npx vitest run`
-Expected: 850/852, inchangé par rapport à la tâche 2.
+Expected: inchangé par rapport à la tâche 3 (aucun test unitaire n'est ajouté par cette tâche).
 
 - [ ] **Step 4: Vérifier l'endpoint contre le serveur local**
 
@@ -704,7 +909,7 @@ git commit -m "feat: POST /api/factures - creation manuelle + delegation devis"
 
 ---
 
-### Task 4: Refermer la faille d'isolation sur la conversion de devis
+### Task 5: Refermer la faille d'isolation sur la conversion de devis
 
 **Files:**
 - Modify: `src/routes/facturation.ts:248` (`PUT /devis/:id/convertir`)
@@ -714,7 +919,7 @@ git commit -m "feat: POST /api/factures - creation manuelle + delegation devis"
 - Consumes: `getDevis(db, id)` · `createTenantAdmin(request)` (`tests/e2e/fixtures/tenant.ts`).
 - Produces: rien de consommé par les tâches suivantes.
 
-`PUT /api/devis/:id/convertir` n'a **aucune** vérification `boutique_id` : un manager de la boutique B peut convertir en facture un devis de la boutique A. Même classe que les 3 failles déjà corrigées sur ce repo (`project-docs/bugs.md`). La route `POST /devis/:id/acompte` juste en dessous applique le bon patron — on l'aligne. La tâche 3 a déjà posé cette garde sur le nouvel endpoint ; il reste à la poser sur la route legacy et à verrouiller les deux par un test.
+`PUT /api/devis/:id/convertir` n'a **aucune** vérification `boutique_id` : un manager de la boutique B peut convertir en facture un devis de la boutique A. Même classe que les 3 failles déjà corrigées sur ce repo (`project-docs/bugs.md`). La route `POST /devis/:id/acompte` juste en dessous applique le bon patron — on l'aligne. La tâche 4 a déjà posé cette garde sur le nouvel endpoint ; il reste à la poser sur la route legacy et à verrouiller les deux par un test.
 
 - [ ] **Step 1: Écrire les tests E2E qui échouent**
 
@@ -750,7 +955,7 @@ Ajouter dans `tests/e2e/isolation.spec.ts`, à l'intérieur du `test.describe('I
 - [ ] **Step 2: Lancer les tests pour vérifier que le premier échoue**
 
 Serveur local démarré, puis Run: `npm run test:e2e -- isolation.spec.ts`
-Expected: le test `POST /api/factures` PASSE déjà (garde posée en tâche 3), le test `PUT /devis/:id/convertir` ÉCHOUE avec un `200` — c'est la faille.
+Expected: le test `POST /api/factures` PASSE déjà (garde posée en tâche 4), le test `PUT /devis/:id/convertir` ÉCHOUE avec un `200` — c'est la faille.
 
 - [ ] **Step 3: Poser la garde sur la route legacy**
 
@@ -805,16 +1010,16 @@ git commit -m "fix: isolation boutique_id sur PUT /devis/:id/convertir (faille m
 
 ---
 
-### Task 5: Modal facture — nettoyage HTML et TVA
+### Task 6: Modal facture — nettoyage HTML et TVA
 
 **Files:**
 - Modify: `public/factures.html:106-201` (modal `modal-facture`)
 
 **Interfaces:**
 - Consumes: rien.
-- Produces: les identifiants DOM `f-tva-defaut` (nouveau select), `fl-tva-<lid>` (nouvelle colonne par ligne), et les handlers `saveFacture('brouillon')` / `saveFacture('emettre')` / `saveFacture('emettre_encaisser')` — implémentés en tâche 6. Les identifiants supprimés : `f-description`, `f-status`, `f-sig-area`, `f-sig-canvas`, `f-sig-placeholder`.
+- Produces: les identifiants DOM `f-tva-defaut` (nouveau select), `fl-tva-<lid>` (nouvelle colonne par ligne), et les handlers `saveFacture('brouillon')` / `saveFacture('emettre')` / `saveFacture('emettre_encaisser')` — implémentés en tâche 7. Le nouveau champ `f-date-execution`. Les identifiants supprimés : `f-description`, `f-status`, `f-sig-area`, `f-sig-canvas`, `f-sig-placeholder`.
 
-Cette tâche laisse volontairement le JS cassé entre elle et la tâche 6 (les handlers n'existent pas encore avec cette signature) : les deux tâches se valident ensemble en tâche 7. Ne pas déployer entre les deux.
+Cette tâche laisse volontairement le JS cassé entre elle et la tâche 7 (les handlers n'existent pas encore avec cette signature) : les deux tâches se valident ensemble en tâche 9. Ne pas déployer entre les deux.
 
 - [ ] **Step 1: Supprimer le champ Description**
 
@@ -843,6 +1048,11 @@ Remplacer le `form-grid` qui contient `f-payment` et `f-status` par :
 
 ```html
         <div class="form-grid" style="margin-top:16px;">
+          <div class="form-field">
+            <label>Date d'exécution</label>
+            <input type="date" id="f-date-execution">
+            <small style="color:var(--muted);font-size:0.78rem;">Date de livraison ou de fin de prestation — donnée obligatoire de la facture électronique. Vide = date du jour.</small>
+          </div>
           <div class="form-field">
             <label>TVA par défaut</label>
             <select id="f-tva-defaut" onchange="onTvaDefautChange()">
@@ -908,13 +1118,13 @@ git commit -m "refactor: modal facture - retrait signature/statut/description, a
 
 ---
 
-### Task 6: `factures.js` — actions réelles, TVA, suppression du fallback
+### Task 7: `factures.js` — actions réelles, TVA, suppression du fallback
 
 **Files:**
 - Modify: `public/static/js/factures.js` — `checkFromDevis()` (l.362), `openNewFacture()` (l.406), `saveFacture()` (l.428), `saveFactureFallback()` (l.498, supprimée), `addFactureLine()` (l.1156), `updateFactureLineTotals()` (l.1200), `updateFactureTotals()` (l.1209), `initSigPad()`/`clearSig()` (l.1225-1264)
 
 **Interfaces:**
-- Consumes: identifiants DOM de la tâche 5 (`f-tva-defaut`, `fl-tva-<lid>`) · `apiPost(url, body)` → `{ ok, status, data, error }` (`app.js`) · `POST /api/factures` (tâche 3).
+- Consumes: identifiants DOM de la tâche 6 (`f-tva-defaut`, `fl-tva-<lid>`, `f-date-execution`) · `apiPost(url, body)` → `{ ok, status, data, error }` (`app.js`) · `POST /api/factures` (tâche 4).
 - Produces: `saveFacture(action)`, `onTvaDefautChange()`, `setFactureLinesReadOnly(bool)` — appelés depuis `factures.html`.
 
 - [ ] **Step 1: Réécrire `saveFacture()`**
@@ -933,6 +1143,8 @@ async function saveFacture(action) {
   const devisId  = parseInt(document.getElementById('f-devis')?.value,  10) || null;
   const notes    = document.getElementById('f-notes')?.value.trim() || '';
   const modeLabel = document.getElementById('f-payment')?.value || 'Virement bancaire';
+  // Donnée du socle réglementaire ; vide = le backend retombe sur la date du jour.
+  const dateExec = document.getElementById('f-date-execution')?.value || '';
 
   if (!clientId) {
     showFlash('⚠️ Veuillez sélectionner un client.', 'error');
@@ -963,6 +1175,7 @@ async function saveFacture(action) {
     devis_id:  devisId,
     lignes,
     notes:     notes || undefined,
+    date_execution: dateExec || undefined,
     action,
   };
   if (action === 'emettre_encaisser') payload.mode_paiement = modeLabel;
@@ -1106,7 +1319,7 @@ Brancher le select devis (`public/factures.html`) :
 Dans `openNewFacture()`, remplacer la boucle de réinitialisation et le bloc statut :
 
 ```js
-  ['f-notes'].forEach(id => {
+  ['f-notes', 'f-date-execution'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1134,7 +1347,150 @@ git commit -m "feat: modal facture branche sur POST /api/factures, TVA par ligne
 
 ---
 
-### Task 7: Validation live et cache
+### Task 8: Document imprimé — ventilation TVA, mentions légales, identités figées
+
+**Files:**
+- Modify: `public/static/js/factures.js` — `_fetchFacturePrintData()` (l.972) et `_buildFactureHTML()` (l.1033)
+
+**Interfaces:**
+- Consumes: colonnes `date_execution`, `vendeur_snapshot`, `acheteur_snapshot` (tâche 3), exposées telles quelles par `GET /api/factures/:id` (`getFacture()` fait `SELECT f.*`, aucun changement backend nécessaire).
+- Produces: rien de consommé par une tâche suivante.
+
+**Le texte des mentions légales ci-dessous est statutaire** (articles cités, non rédigé librement) **et doit avoir été validé par l'utilisateur avant le dispatch de cette tâche** — le workspace interdit d'inventer un texte légal. Ne pas le reformuler.
+
+- [ ] **Step 1: Exposer les nouvelles données dans `_fetchFacturePrintData()`**
+
+Dans le `return { … }` de `_fetchFacturePrintData()`, ajouter après `hash_nf525` :
+
+```js
+    dateExec:     raw.date_execution || '',
+    // Identités : le snapshot figé à l'émission fait foi. Une facture émise ne doit
+    // jamais être re-rendue depuis les fiches vivantes (elle est inaltérable, NF525).
+    // Un brouillon n'a pas de snapshot et retombe donc sur la jointure vivante.
+    vendeurFige:  _parseSnapshot(raw.vendeur_snapshot),
+    acheteurFige: _parseSnapshot(raw.acheteur_snapshot),
+    ventilation:  _ventilationTVA(lignes),
+```
+
+Puis ajouter ces deux helpers juste au-dessus de `_fetchFacturePrintData()` :
+
+```js
+/** Lit une colonne snapshot JSON. Retourne null si absente ou illisible (brouillon). */
+function _parseSnapshot(raw) {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw);
+    return (o && Object.keys(o).length) ? o : null;
+  } catch { return null; }
+}
+
+/**
+ * Ventile le total HT et la TVA par taux — donnée du socle réglementaire de la
+ * facture électronique ("montant total HT par taux de TVA").
+ * @returns {Array<{taux:number, ht:number, tva:number}>} trié par taux décroissant
+ */
+function _ventilationTVA(lignes) {
+  const round2 = v => Math.round(v * 100) / 100;
+  const parTaux = new Map();
+  (lignes || []).forEach(l => {
+    const taux = parseFloat(l.tva_taux) || 0;
+    const ht   = parseFloat(l.total_ht)  || 0;
+    const tva  = parseFloat(l.total_tva) || 0;
+    const acc  = parTaux.get(taux) || { taux, ht: 0, tva: 0 };
+    acc.ht  = round2(acc.ht  + ht);
+    acc.tva = round2(acc.tva + tva);
+    parTaux.set(taux, acc);
+  });
+  return [...parTaux.values()].sort((a, b) => b.taux - a.taux);
+}
+```
+
+- [ ] **Step 2: Afficher les identités figées et la date d'exécution**
+
+Dans `_buildFactureHTML()`, là où le bloc client est construit, préférer le snapshot quand il existe. Ajouter en tête de la fonction :
+
+```js
+  // Identités affichées : snapshot figé si la facture est émise, sinon jointure vivante.
+  const ach = d.acheteurFige;
+  const clientNomAffiche = ach
+    ? (ach.raison_sociale || [ach.prenom, ach.nom].filter(Boolean).join(' '))
+    : d.clientNom;
+  const clientIdent = ach && ach.siret
+    ? `SIRET ${esc(ach.siret)}${ach.tva_intracom ? ' · TVA ' + esc(ach.tva_intracom) : ''}`
+    : '';
+  const clientAdresseAffichee = ach
+    ? [ach.adresse, [ach.code_postal, ach.ville].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
+    : esc(d.clientAdresse || '');
+```
+
+Utiliser `clientNomAffiche`, `clientIdent` et `clientAdresseAffichee` dans le bloc client du document à la place des valeurs vivantes actuelles (`d.clientNom`, `d.clientAdresse`).
+
+Ajouter la date d'exécution à côté de la date d'émission, dans le bloc des dates :
+
+```js
+        ${d.dateExec ? `<div>Date d'exécution : <strong>${esc(d.dateExec)}</strong></div>` : ''}
+```
+
+- [ ] **Step 3: Ajouter la ventilation de TVA sous les totaux**
+
+Insérer, juste après le bloc des totaux (sous-total HT / TVA / TTC) et avant le pied de page :
+
+```js
+      ${d.ventilation && d.ventilation.length ? `
+      <table class="print-tva-table" style="width:auto;margin-left:auto;margin-top:10px;border-collapse:collapse;font-size:0.82rem;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:4px 10px;border-bottom:1px solid #d1d5db;">Taux TVA</th>
+            <th style="text-align:right;padding:4px 10px;border-bottom:1px solid #d1d5db;">Base HT</th>
+            <th style="text-align:right;padding:4px 10px;border-bottom:1px solid #d1d5db;">Montant TVA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${d.ventilation.map(v => `
+          <tr>
+            <td style="padding:4px 10px;">${v.taux.toString().replace('.', ',')} %</td>
+            <td style="padding:4px 10px;text-align:right;">${formatMoney(v.ht)}</td>
+            <td style="padding:4px 10px;text-align:right;">${formatMoney(v.tva)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+```
+
+- [ ] **Step 4: Ajouter les mentions légales obligatoires**
+
+Insérer dans le pied de page du document, avant la mention du hash NF525 :
+
+```js
+      <div class="print-mentions" style="margin-top:14px;font-size:0.72rem;color:#6b7280;line-height:1.5;">
+        ${d.vendeurFige && d.vendeurFige.franchise_tva
+          ? `<div>TVA non applicable, article 293 B du CGI.</div>` : ''}
+        <div>En cas de retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de commerce).</div>
+        <div>Pas d'escompte pour paiement anticipé.</div>
+      </div>
+```
+
+- [ ] **Step 5: Valider le rendu en local live**
+
+Serveur local démarré, se connecter, ouvrir une facture **émise** (créée en tâche 4 ou 9) et lancer l'impression (Ctrl+P, aperçu uniquement — ne pas imprimer réellement).
+
+Vérifier :
+1. La ventilation TVA apparaît avec une ligne par taux réellement présent sur la facture (créer une facture à deux taux pour ce test).
+2. Les trois mentions légales sont présentes et lisibles.
+3. L'identité du client affiche le SIRET quand le client est professionnel.
+4. La date d'exécution s'affiche.
+5. Le document tient toujours **sur une seule page A4** — le garde-fou `.print-compact` de `_triggerPrint()` doit absorber le contenu ajouté (`CLAUDE.md` § Documents imprimables). Si le contenu déborde malgré le garde-fou, le signaler comme DONE_WITH_CONCERNS plutôt que de contourner le mécanisme.
+6. Ouvrir ensuite une facture **en brouillon** : elle n'a pas de snapshot et doit continuer à afficher les identités vivantes sans rien casser.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add public/static/js/factures.js
+git commit -m "feat: document facture - ventilation TVA, mentions legales, identites figees"
+```
+
+---
+
+### Task 9: Validation live et cache
 
 **Files:**
 - Modify: `public/sw.js` (`CACHE_VERSION`)
@@ -1168,12 +1524,15 @@ Se connecter (`admin@izigsm.fr` / `Admin@2026!`), aller sur `/factures`, ouvrir 
 - [ ] **Step 4: Vérifier la persistance réelle en base**
 
 ```bash
-npx wrangler d1 execute DB --local --command "SELECT id, numero, statut, locked, total_ht, total_tva, total_ttc, hash_nf525 FROM factures ORDER BY id DESC LIMIT 3"
+npx wrangler d1 execute DB --local --command "SELECT id, numero, statut, locked, total_ht, total_tva, total_ttc, hash_nf525, date_execution FROM factures ORDER BY id DESC LIMIT 3"
+npx wrangler d1 execute DB --local --command "SELECT id, statut, locked, vendeur_snapshot, acheteur_snapshot FROM factures ORDER BY id DESC LIMIT 3"
 npx wrangler d1 execute DB --local --command "SELECT document_id, ordre, description, tva_taux, total_ttc FROM lignes_document WHERE document_type='facture' ORDER BY id DESC LIMIT 6"
 npx wrangler d1 execute DB --local --command "SELECT facture_id, montant, mode_paiement FROM paiements ORDER BY id DESC LIMIT 2"
 ```
 
-Expected: les 3 factures avec les bons statuts (`brouillon` / `en_attente` / `payee`), `locked` à 0 puis 1 puis 1, `hash_nf525` non nul pour les deux émises, les lignes avec leurs taux respectifs, un paiement au montant TTC exact.
+Expected: les 3 factures avec les bons statuts (`brouillon` / `en_attente` / `payee`), `locked` à 0 puis 1 puis 1, `hash_nf525` non nul pour les deux émises, les lignes avec leurs taux respectifs, un paiement au montant TTC exact. `date_execution` renseignée sur les trois. **Snapshots** : `vendeur_snapshot` et `acheteur_snapshot` renseignés (JSON contenant le SIRET) sur les deux factures émises, et **nuls sur le brouillon** — c'est le comportement voulu, une facture non verrouillée continue de lire les fiches vivantes.
+
+Vérifier enfin l'invariant d'immuabilité : modifier l'adresse du client dans `/clients`, réimprimer la facture émise, et confirmer que le document affiche toujours **l'ancienne** adresse (celle figée à l'émission).
 
 - [ ] **Step 5: Suite complète**
 
@@ -1185,7 +1544,7 @@ Expected: 850/852 (les 2 échecs de fuseau pré-existants) et E2E entièrement v
 Dans `project-docs/todo.md`, § « 🔴 P1 — Audit persistance des champs », remplacer l'item `factures.html` par :
 
 ```markdown
-- [x] `factures.html` — corrigé 2026-07-30 : `POST /api/factures` implémenté (`createFacture()` + délégation `convertirDevis()`), 3 actions explicites (brouillon / émettre / émettre & encaisser), TVA par ligne, signature morte retirée du modal, fallback localStorage supprimé. Faille d'isolation trouvée et corrigée au passage sur `PUT /devis/:id/convertir` (voir `bugs.md`). Validé en local live + gates vitest/Playwright.
+- [x] `factures.html` — corrigé 2026-07-30 : `POST /api/factures` implémenté (`createFacture()` + délégation `convertirDevis()`), 3 actions explicites (brouillon / émettre / émettre & encaisser), TVA par ligne, signature morte retirée du modal, fallback localStorage supprimé. Socle de la facture électronique ajouté au passage (migration `0037` : date d'exécution, snapshot vendeur/acheteur figé à l'émission, régime de franchise TVA ; ventilation TVA et mentions légales sur le document imprimé) — le format structuré UBL/CII et le raccordement PDP restent un chantier dédié. Faille d'isolation trouvée et corrigée sur `PUT /devis/:id/convertir` (voir `bugs.md`). Validé en local live + gates vitest/Playwright.
 ```
 
 - [ ] **Step 7: Commit**
@@ -1200,5 +1559,9 @@ git commit -m "chore: bump CACHE_VERSION v2.80 + todo factures.html coche"
 ## Non couvert par ce plan
 
 Volontairement hors périmètre (voir la spec § Hors périmètre) : email de facture au client, workflow de facturation automatique ticket terminé → brouillon, configuration HT/TTC par boutique, et les quatre fichiers restants au pattern `r.success` / `r.data` (`reconditionnement.js`, `fournisseurs.js`, `caisse.js`, `services.js`).
+
+**Facturation électronique — format et transmission** : génération UBL 2.1 / CII D22B (ou Factur-X), raccordement à une plateforme agréée (PDP), statuts normalisés du cycle de vie, e-reporting. Chantier dédié, à cadrer par son propre `superpowers:brainstorming`. Ce plan se limite à capturer et figer les données que ce format exigera — c'est la partie qu'il serait coûteux de rattraper après coup, les factures émises étant verrouillées.
+
+Aucune UI n'est prévue ici pour renseigner `boutiques.franchise_tva` : la colonne est créée avec un défaut à `0` et se règle en base pour l'instant. L'ajouter à l'onglet Boutique de `settings.html` est un item de suivi, pas un prérequis de ce plan.
 
 Le déploiement en production n'est pas dans ce plan : il reste une décision humaine explicite.

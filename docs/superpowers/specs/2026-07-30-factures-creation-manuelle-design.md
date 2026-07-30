@@ -215,6 +215,80 @@ montant réglé couvre le TTC).
   `lignes_document`, `paiements`), plus un rejet volontaire pour confirmer que la
   saisie n'est pas perdue.
 
+## Amendement 2026-07-30 — socle de données de la facture électronique
+
+Ajouté après la rédaction initiale, sur demande utilisateur : la réforme française de
+la facturation électronique s'impose à toutes les entreprises et doit être prise en
+compte dès ce chantier.
+
+**Sources** : `frenchinvoice.fr/reforme-2026/donnees-reglementaires` ·
+`impots.gouv.fr/specifications-externes-b2b` (spécifications externes DGFiP v3.1,
+normes AFNOR XP Z12-012 / 013 / 014).
+
+**Ce que la réforme exige** : un socle initial de données réglementaires dès le
+**1er septembre 2026**, au format sémantique **EN 16931** enrichi des extensions
+françaises **EXT-FR-FE**, transmis en **UBL 2.1** ou **CII D22B**. Le PPF rejette les
+flux non conformes (`REJ_SEMAN` format sémantique, `REJ_UNI` unicité du triplet
+*numéro + SIREN vendeur + année*, `REJ_COH` cohérence avec les référentiels).
+Le calendrier par taille d'entreprise n'est pas couvert par ces deux sources — à
+confirmer avant toute communication client.
+
+### Écart constaté et décision
+
+| Donnée du socle | Avant amendement | Décision |
+|---|---|---|
+| Numéro unique séquentiel | ✅ `nextNumero()`, séquence par boutique et par année | Rien à faire — compatible avec le contrôle d'unicité PPF |
+| Date d'émission | ✅ `date_emission` / `issued_at` | Rien à faire |
+| Date de livraison ou d'exécution | ❌ absente | **Ajoutée** — colonne `factures.date_execution` + champ au formulaire |
+| Identité vendeur (SIREN, adresse) | ⚠️ lue par jointure vivante sur `boutiques` | **Figée à l'émission** |
+| Identité acheteur (SIREN, adresse, TVA intracom) | ⚠️ lue par jointure vivante sur `clients` | **Figée à l'émission** |
+| Total HT ventilé par taux de TVA | ❌ absent | **Ajoutée** au document imprimé (dérivée des lignes) |
+| Mention franchise TVA (art. 293 B CGI) | ❌ absente | **Ajoutée** — `boutiques.franchise_tva` + mention conditionnelle |
+| Pénalités de retard + indemnité forfaitaire 40 € | ❌ absentes | **Ajoutées** au document (texte statutaire, voir ci-dessous) |
+| Format structuré UBL 2.1 / CII D22B | ❌ inexistant | **Hors périmètre** — chantier dédié |
+| Transmission PDP / PPF, e-reporting | ❌ inexistante | **Hors périmètre** — chantier dédié |
+
+### Pourquoi maintenant plutôt qu'après
+
+Deux raisons, dont une qui ne dépend pas de la réforme :
+
+1. **Le snapshot corrige un défaut déjà présent.** Une facture émise est verrouillée
+   (`locked = 1`, CGI art. 289) et censée être inaltérable, or son rendu lit
+   aujourd'hui la fiche client et la fiche boutique *vivantes* par jointure : modifier
+   une adresse client réécrit rétroactivement une facture déjà émise. La réforme rend
+   ce défaut bloquant, elle ne le crée pas.
+2. **Le coût est asymétrique.** Toute facture émise avant l'ajout de ces colonnes en
+   sera définitivement dépourvue — le verrouillage NF525 interdit le rattrapage.
+   Ajouter les colonnes avant la mise en service coûte une migration ; les ajouter
+   après coûte la même migration plus un stock de factures non conformes.
+
+### Point de conception : où figer le snapshot
+
+Dans `emettreFacture()`, pas dans `createFacture()`. C'est le moment exact où le
+document devient inaltérable, et c'est le point de passage **unique** des trois
+chemins de création (facture manuelle, conversion de devis, facture d'acompte) — les
+trois héritent donc du snapshot sans code dupliqué. Une facture restée en brouillon
+n'a pas de snapshot et continue de lire les fiches vivantes, ce qui est le
+comportement voulu tant qu'elle reste modifiable.
+
+### Mentions légales — à valider avant implémentation
+
+Le workspace interdit d'inventer un texte légal (`todo.md` : « ne pas inventer le
+texte »). Les formulations ci-dessous sont les formulations statutaires par défaut,
+citées avec leur article — elles ne sont pas rédigées librement, mais elles
+**nécessitent une validation utilisateur** avant d'être posées dans le document :
+
+- Retard : « En cas de retard de paiement, une pénalité égale à trois fois le taux
+  d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une
+  indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de
+  commerce). »
+- Escompte : « Pas d'escompte pour paiement anticipé. »
+- Franchise (si `boutiques.franchise_tva = 1`) : « TVA non applicable, article 293 B
+  du CGI. »
+
+Les CGV/CGR complètes restent l'item distinct de `todo.md` (à récupérer sur
+`telnet-beynost.fr`, hors de ce chantier).
+
 ## Hors périmètre
 
 Tracé, non traité ici :
@@ -226,3 +300,8 @@ Tracé, non traité ici :
 - Configuration d'affichage HT/TTC par boutique (`project-docs/todo.md`).
 - Les quatre autres fichiers au pattern `r.success` / `r.data`
   (`reconditionnement.js`, `fournisseurs.js`, `caisse.js`, `services.js`).
+- **Facturation électronique — format et transmission** : génération UBL 2.1 / CII
+  D22B (ou Factur-X), raccordement à une plateforme agréée (PDP), cycle de vie des
+  statuts normalisés, e-reporting des opérations B2C et internationales. Chantier
+  dédié, à cadrer par son propre `superpowers:brainstorming`. Le présent chantier se
+  limite à **capturer et figer les données** que ce format exigera.
