@@ -1,5 +1,13 @@
 # iziGSM — Décisions
 
+## 2026-07-30 — Fiche client (`clients.html`) : coordonnées obligatoires (sauf Notes)
+
+**Décision** : dans le formulaire "Nouveau client"/"Modifier" de `/clients`, tous les champs deviennent obligatoires — Prénom, Nom, Email, Téléphone, Adresse, Code postal, Ville, Pays. Seul **Notes** reste optionnel (note interne libre, pas une coordonnée client). Demandé par l'utilisateur suite à la fiche client vide observée en capture d'écran.
+
+**Scope volontairement limité** : validation ajoutée uniquement côté `clients.html`/`clients.js` (attributs `required` + checks JS explicites avec messages précis, même pattern que le check `nom` déjà existant). **Pas de changement côté API** (`POST /api/clients` reste permissif, seuls prénom/nom restent obligatoires côté backend) — cette route est aussi utilisée par la création rapide de client depuis la prise en charge (`tickets.js`, aucun champ adresse dans ce flux plus court), la rendre strictement obligatoire aurait cassé ce parcours.
+
+**Cohérent avec** le fix du même jour sur la synchro email/téléphone en prise en charge (voir `todo.md`) — les deux visent à réduire les fiches client incomplètes.
+
 ## 2026-07-23/24 — Rebranding produit « Mon Atelier » → « MyDesk » (EN COURS, pas terminé)
 
 **Décision** : remplacer le nom d'affichage par défaut "Mon Atelier" (fallback quand une boutique n'a pas encore configuré son propre nom) par "MyDesk" — décision produit, exécutée en tâches unitaires successives par la loop-engineering.

@@ -201,38 +201,38 @@
 
       <div class="form-grid">
         <div class="form-field">
-          <label id="label-c-prenom">Prénom</label>
-          <input type="text" id="c-prenom" placeholder="Jean">
+          <label id="label-c-prenom">Prénom *</label>
+          <input type="text" id="c-prenom" placeholder="Jean" required>
         </div>
         <div class="form-field">
           <label id="label-c-nom">Nom *</label>
           <input type="text" id="c-nom" placeholder="Dupont" required>
         </div>
         <div class="form-field">
-          <label>Email</label>
-          <input type="email" id="c-email" placeholder="jean@email.com">
+          <label>Email *</label>
+          <input type="email" id="c-email" placeholder="jean@email.com" required>
         </div>
         <div class="form-field">
-          <label>Téléphone</label>
-          <input type="tel" id="c-telephone" placeholder="+33 6 12 34 56 78">
+          <label>Téléphone *</label>
+          <input type="tel" id="c-telephone" placeholder="+33 6 12 34 56 78" required>
         </div>
         <div class="form-field full" style="position:relative;">
-          <label>Adresse</label>
-          <input type="text" id="c-adresse" placeholder="12 rue de la Paix" autocomplete="off"
+          <label>Adresse *</label>
+          <input type="text" id="c-adresse" placeholder="12 rue de la Paix" autocomplete="off" required
             oninput="onAdresseInput(this.value)" onfocus="onAdresseInput(this.value)">
           <div id="adresse-suggestions" style="display:none;position:absolute;z-index:999;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:220px;overflow-y:auto;"></div>
         </div>
         <div class="form-field">
-          <label>Code postal</label>
-          <input type="text" id="c-code-postal" placeholder="75001">
+          <label>Code postal *</label>
+          <input type="text" id="c-code-postal" placeholder="75001" required>
         </div>
         <div class="form-field">
-          <label>Ville</label>
-          <input type="text" id="c-ville" placeholder="Paris">
+          <label>Ville *</label>
+          <input type="text" id="c-ville" placeholder="Paris" required>
         </div>
         <div class="form-field">
-          <label>Pays</label>
-          <input type="text" id="c-pays" value="France">
+          <label>Pays *</label>
+          <input type="text" id="c-pays" value="France" required>
         </div>
         <div class="form-field full">
           <label>Notes</label>

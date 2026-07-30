@@ -224,16 +224,31 @@ function editClient(id) {
  * @returns {Promise<void>}
  */
 async function saveClient() {
-  const id     = document.getElementById('client-id')?.value;
-  const prenom = (document.getElementById('c-prenom')?.value || '').trim();
-  const nom    = (document.getElementById('c-nom')?.value    || '').trim();
-  const email  = (document.getElementById('c-email')?.value  || '').trim();
+  const id          = document.getElementById('client-id')?.value;
+  const prenom      = (document.getElementById('c-prenom')?.value      || '').trim();
+  const nom         = (document.getElementById('c-nom')?.value         || '').trim();
+  const email       = (document.getElementById('c-email')?.value       || '').trim();
+  const telephone   = (document.getElementById('c-telephone')?.value   || '').trim();
+  const adresse     = (document.getElementById('c-adresse')?.value     || '').trim();
+  const codePostal  = (document.getElementById('c-code-postal')?.value || '').trim();
+  const ville       = (document.getElementById('c-ville')?.value       || '').trim();
+  const pays        = (document.getElementById('c-pays')?.value        || '').trim();
 
-  if (!nom) { showFlash('Le nom est obligatoire.', 'error'); return; }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // Tous les champs de coordonnées sont obligatoires sur ce formulaire (Notes excepté) —
+  // décision 2026-07-30, pour garantir qu'un client créé ici a toujours un email/téléphone
+  // exploitables (voir aussi le fix "prise en charge" du même jour sur la synchro email).
+  if (!prenom)     { showFlash('Le prénom est obligatoire.', 'error'); return; }
+  if (!nom)        { showFlash('Le nom est obligatoire.', 'error'); return; }
+  if (!email)      { showFlash('L\'email est obligatoire.', 'error'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     showFlash('Email invalide.', 'error');
     return;
   }
+  if (!telephone)  { showFlash('Le téléphone est obligatoire.', 'error'); return; }
+  if (!adresse)    { showFlash('L\'adresse est obligatoire.', 'error'); return; }
+  if (!codePostal) { showFlash('Le code postal est obligatoire.', 'error'); return; }
+  if (!ville)      { showFlash('La ville est obligatoire.', 'error'); return; }
+  if (!pays)       { showFlash('Le pays est obligatoire.', 'error'); return; }
   const raisonSociale = (document.getElementById('c-raison-sociale')?.value || '').trim();
   if (_clientType === 'professionnel' && !raisonSociale) {
     showFlash('La raison sociale est obligatoire pour un client professionnel.', 'error');
@@ -251,12 +266,12 @@ async function saveClient() {
   const data = {
     prenom,
     nom,
-    email:       email || null,
-    telephone:   (document.getElementById('c-telephone')?.value   || '').trim() || null,
-    adresse:     (document.getElementById('c-adresse')?.value     || '').trim() || null,
-    code_postal: (document.getElementById('c-code-postal')?.value || '').trim() || null,
-    ville:       (document.getElementById('c-ville')?.value       || '').trim() || null,
-    pays:        (document.getElementById('c-pays')?.value        || '').trim() || 'France',
+    email,
+    telephone,
+    adresse,
+    code_postal: codePostal,
+    ville,
+    pays,
     type_client:     _clientType,
     raison_sociale:  _clientType === 'professionnel' ? raisonSociale : null,
     siret:           _clientType === 'professionnel' ? (siret || null) : null,
