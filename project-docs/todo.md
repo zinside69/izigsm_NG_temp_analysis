@@ -39,8 +39,8 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 - [ ] Mentions légales + CGV + CGR à ajouter dans devis/avoir/facture — à récupérer sur www.telnet-beynost.fr (ne pas inventer le texte)
 - [ ] Workflow facturation auto : ticket passé "réparation terminée" → génère une facture en mode **brouillon** automatiquement ; le technicien peut ensuite la passer en **acquittée** (= client a payé) → déclenche le chaînage NF525 + enregistrement comptabilité
 
-## 🔴 Sélection modèle smartphone cassée (2026-07-24, PAS traité)
-- [ ] Le filtre par constructeur ne restreint pas la liste des modèles — doit n'afficher que les modèles du constructeur sélectionné
+## ✅ Sélection modèle smartphone cassée — CORRIGÉ le 2026-07-30
+- [x] Le filtre par constructeur ne restreint pas la liste des modèles — `onModeleInput()` (`tickets.js`) ignorait la marque déjà sélectionnée (`t-device-type-id`) et filtrait sur les 500 modèles en cache sans restriction. Fix : filtre d'abord par `marque_id` si une marque est sélectionnée. Validé contre l'API réelle (local live) — commit `1898da7`.
 
 ## 🔴 Devis — durée de vie 15 jours (2026-07-24, PAS traité)
 - [ ] Un devis devient caduc (désactivé) 15 jours après sa création
@@ -53,10 +53,10 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 - [ ] Les informations saisies à la création d'un client ne sont pas reportées automatiquement dans le formulaire de prise en charge
 - [ ] L'email saisi dans la prise en charge n'est pas conservé — conséquence : le devis est marqué "envoyé" alors qu'il ne l'a jamais été réellement (email manquant au moment de l'envoi). Bug à investiguer en priorité, impact silencieux sur la relation client.
 
-## 🔴 Page Clients (`/clients`) — 3 bugs (2026-07-24, PAS traité)
+## 🔴 Page Clients (`/clients`) — 3 bugs (2026-07-24, 1/3 corrigé)
 - [ ] Import client (fichier) non fonctionnel
 - [ ] Recherche client non fonctionnelle
-- [ ] Bouton "Actions" sur une fiche client : icône non visible
+- [x] Bouton "Actions" sur une fiche client : icône non visible — CORRIGÉ le 2026-07-30 : `clients.html` ne chargeait jamais le CDN FontAwesome (contrairement à la plupart des autres pages), donc **toutes** les icônes `<i class="fas fa-*">` de la page étaient invisibles (Actions, empty-state), pas seulement le bouton signalé. Fix : ajout du lien CDN (même version que `settings.html`). Vérifié servi par le serveur local — commit `1898da7`.
 
 ## 🟡 État de l'appareil à l'entrée — checklist à cocher + nouveaux items (2026-07-24, PAS traité)
 Actuellement saisie libre (texte) — remplacer par des cases à cocher pour le technicien (plus rapide, évite les erreurs/oublis).
@@ -289,7 +289,7 @@ Constaté le 2026-07-10 en testant `rdv-public.html`. `getDisponibilites()` (`pu
 - [x] `public/static/js/register.js:230,231` — fallback session après inscription email/OTP — commit `5506b73`, mergé sur `main` le 2026-07-24 (loop-engineering, gate Playwright désormais exécutable sur Windows depuis `d7c5ed1`)
 - [x] `public/login.html:81,156,157,267,268` — placeholder input onboarding Google + fallback session (×2 occurrences : handleGoogleCredential et submitOnboarding) — commit `600ffa6`, mergé sur `main` le 2026-07-24 (loop-engineering, réimplémenté sur branche fraîche depuis `main` à jour, l'ancienne branche `loop/rebrand-login-html-mydesk` étant stale de 15 commits/gate Playwright pré-`d7c5ed1`)
 - [x] `public/register.html:158,201,326,447,448` — placeholder `company_name`, lien "🇧🇪 Mon atelier est en Belgique" (formulation générique, à reformuler aussi), placeholder onboarding Google, fallback session — commit `4b5f195`, mergé sur `main` le 2026-07-24 (loop-engineering, lien reformulé en "Mon entreprise est en Belgique" par cohérence avec la terminologie déjà utilisée ailleurs dans le fichier — "Nom de l'entreprise", "Rechercher mon entreprise")
-- [ ] `src/routes/auth.ts:659` — exemple dans un commentaire JSDoc (`workshopName: "Mon Atelier"`) — cosmétique, à corriger pour cohérence
+- [x] `src/routes/auth.ts:652` — exemple dans un commentaire JSDoc (`workshopName: "Mon Atelier"`) → `"MyDesk"` — CORRIGÉ le 2026-07-30, commit `1898da7`
 - Vérifier aussi les autres pages internes (`dashboard.html`, `settings.html`, etc.) non auditées ici — recherche limitée à `src/` et `public/` en surface
 
 ## Page de suivi ticket — étape "Accord" avec double validation boutique→client — IMPLÉMENTÉE le 2026-07-16 (spécifié 2026-07-10)

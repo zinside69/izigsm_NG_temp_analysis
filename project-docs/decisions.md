@@ -6,7 +6,7 @@
 
 **Fichiers traités** (littéraux d'affichage uniquement, `boutique_id`/tokens/logique auth toujours vérifiés intacts à chaque tâche) : `register.js:230-231` (checkpoint 45→47), `app.js:27,424-425` (checkpoint 49), `login.html:81,156,157,267,268` (checkpoint 50), `register.html:158,201,326,447-448` (checkpoint 51, dont une reformulation "Mon atelier est en Belgique"→"Mon entreprise est en Belgique").
 
-**Reste ouvert (todo.md L229-230)** : `auth.ts` L229 (JSDoc cosmétique, mais fichier de la catégorie "Authentification/sessions" — signal à re-classifier prudemment, jamais traité par la loop malgré plusieurs runs) ; audit des pages internes (`dashboard.html`/`settings.html`/etc., todo.md:230) jamais fait. **Le rebranding n'est donc pas terminé** — toute nouvelle session touchant ces fichiers doit continuer avec "MyDesk", pas "Mon Atelier".
+**`auth.ts` JSDoc corrigé le 2026-07-30** (commit `1898da7`, hors loop-engineering — fixé manuellement en session interactive). **Reste ouvert** : audit des pages internes (`dashboard.html`/`settings.html`/etc., todo.md:230) jamais fait. Le rebranding n'est donc pas totalement terminé — toute nouvelle session touchant ces pages doit continuer avec "MyDesk", pas "Mon Atelier".
 
 ## 2026-07-09 — Migration hébergement Genspark → Cloudflare direct
 
