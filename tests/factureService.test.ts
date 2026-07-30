@@ -174,11 +174,13 @@ const SQL_GET_FACTURE_EMETTRE = n(`SELECT * FROM factures WHERE id = ?`)
 
 const SQL_LOCK_FACTURE = n(`
   UPDATE factures
-  SET locked         = 1,
-      issued_at      = CURRENT_TIMESTAMP,
-      tracking_token = ?,
-      hash_nf525     = ?,
-      statut         = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
+  SET locked            = 1,
+      issued_at         = CURRENT_TIMESTAMP,
+      tracking_token    = ?,
+      hash_nf525        = ?,
+      vendeur_snapshot  = ?,
+      acheteur_snapshot = ?,
+      statut            = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
   WHERE id = ?
 `)
 
@@ -556,7 +558,7 @@ describe('emettreFacture()', () => {
     const calls = db.__getCalls()
     const lockCall = calls.find(c => c.sql === SQL_LOCK_FACTURE)
     expect(lockCall).toBeDefined()
-    expect(lockCall!.params[2]).toBe(20)
+    expect(lockCall!.params[4]).toBe(20)
   })
 
   it('appelle auditLog EMETTRE_FACTURE', async () => {
@@ -569,6 +571,35 @@ describe('emettreFacture()', () => {
     const auditCall = calls.find(c => c.sql === SQL_AUDIT)
     expect(auditCall).toBeDefined()
     expect(auditCall!.params).toContain('EMETTRE_FACTURE')
+  })
+
+  it('fige les identités vendeur et acheteur au moment de l\'émission', async () => {
+    db.__setResponse(n('SELECT * FROM factures WHERE id = ?'), {
+      id: 20, boutique_id: 1, client_id: 3, numero: 'FAC-2026-00001',
+      total_ht: 100, total_tva: 20, total_ttc: 120, locked: 0,
+    })
+    db.__setNotFound(n('SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1'))
+    db.__setResponse(
+      n(`SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville, s.tva_taux_defaut, s.mention_facture FROM boutiques b LEFT JOIN boutique_settings s ON s.boutique_id = b.id WHERE b.id = ?`),
+      { nom: 'iziGSM Paris 11', siret: '12345678901234', tva_numero: 'FR12345678901',
+        adresse: '5 avenue Montaigne', code_postal: '75011', ville: 'Paris',
+        tva_taux_defaut: 20, mention_facture: null }
+    )
+    db.__setResponse(
+      n(`SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville FROM clients WHERE id = ?`),
+      { type_client: 'professionnel', raison_sociale: 'SOTELI', prenom: 'Marie', nom: 'Dupont',
+        siret: '98765432101234', tva_intracom: 'FR98987654321',
+        adresse: '10 rue de la Paix', code_postal: '75001', ville: 'Paris' }
+    )
+
+    await emettreFacture(db, 20, 10)
+
+    const lockCall = db.__getCalls().find(c => c.sql.includes('SET') && c.sql.includes('locked') && c.sql.includes('factures'))
+    expect(lockCall).toBeDefined()
+    const snapshots = lockCall!.params.filter(p => typeof p === 'string' && p.startsWith('{'))
+    expect(snapshots).toHaveLength(2)
+    expect(snapshots[0]).toContain('12345678901234')  // SIRET vendeur
+    expect(snapshots[1]).toContain('98765432101234')  // SIRET acheteur
   })
 })
 
@@ -1048,8 +1079,8 @@ describe('createFacture()', () => {
   const SQL_CHECK_TICKET = n(`SELECT id FROM tickets WHERE id = ? AND boutique_id = ?`)
   const SQL_INSERT_FACTURE = n(`
     INSERT INTO factures
-      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, statut)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, date_execution, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
     RETURNING id
   `)
 
@@ -1194,6 +1225,24 @@ describe('createFacture()', () => {
 
     expect(db.batch).toHaveBeenCalledTimes(1)
     expect((db.batch as any).mock.calls[0][0]).toHaveLength(2)
+  })
+
+  it('enregistre la date d\'exécution fournie', async () => {
+    setupBrouillon(65)
+
+    await createFacture(db, 10, { ...BASE_INPUT, date_execution: '2026-07-15' })
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall!.params[9]).toBe('2026-07-15')
+  })
+
+  it('retombe sur la date du jour si aucune date d\'exécution n\'est fournie', async () => {
+    setupBrouillon(66)
+
+    await createFacture(db, 10, BASE_INPUT)
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall!.params[9]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('calcule les totaux du document à partir de tous les taux de TVA', async () => {

@@ -17,6 +17,7 @@
 
 import { nextNumero, auditLog, parsePagination, calculLignes } from '../lib/db'
 import { enregistrerTransaction } from '../lib/nf525'
+import { todayParis } from '../lib/timezone'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -234,16 +235,42 @@ export async function emettreFacture(
     user_id:          userId,
   })
 
+  // Socle facture électronique : figer les identités au moment exact où le document
+  // devient inaltérable. Passé ce point, plus aucune jointure vivante ne doit pouvoir
+  // réécrire une facture émise (voir la spec § Amendement 2026-07-30).
+  // Le LEFT JOIN sur boutique_settings fige aussi le régime de TVA (tva_taux_defaut = 0
+  // ⇒ franchise en base, art. 293 B) et la mention paramétrée par la boutique : ces deux
+  // valeurs conditionnent le pied de facture et doivent suivre le document, pas la config
+  // du jour où on le réimprime. LEFT JOIN car la ligne de settings peut ne pas exister.
+  const vendeur = await db.prepare(`
+    SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville,
+           s.tva_taux_defaut, s.mention_facture
+    FROM   boutiques b
+    LEFT   JOIN boutique_settings s ON s.boutique_id = b.id
+    WHERE  b.id = ?
+  `).bind(facture.boutique_id).first<any>()
+
+  const acheteur = await db.prepare(`
+    SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville
+    FROM clients WHERE id = ?
+  `).bind(facture.client_id).first<any>()
+
   // Verrouillage — CGI art. 289 (inaltérable après émission)
   await db.prepare(`
     UPDATE factures
-    SET locked         = 1,
-        issued_at      = CURRENT_TIMESTAMP,
-        tracking_token = ?,
-        hash_nf525     = ?,
-        statut         = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
+    SET locked            = 1,
+        issued_at         = CURRENT_TIMESTAMP,
+        tracking_token    = ?,
+        hash_nf525        = ?,
+        vendeur_snapshot  = ?,
+        acheteur_snapshot = ?,
+        statut            = CASE WHEN statut = 'brouillon' THEN 'en_attente' ELSE statut END
     WHERE id = ?
-  `).bind(trackingToken, hashNf525, factureId).run()
+  `).bind(
+    trackingToken, hashNf525,
+    JSON.stringify(vendeur ?? {}), JSON.stringify(acheteur ?? {}),
+    factureId,
+  ).run()
 
   await auditLog(db, {
     boutique_id: facture.boutique_id, user_id: userId,
@@ -378,6 +405,12 @@ export interface CreateFactureInput {
   notes?:      string
   conditions?: string
   /**
+   * Date de livraison ou d'exécution de la prestation (ISO `YYYY-MM-DD`).
+   * Donnée du socle réglementaire de la facture électronique (01/09/2026).
+   * Absente = date du jour.
+   */
+  date_execution?: string
+  /**
    * 'brouillon'         → facture éditable, non verrouillée
    * 'emettre'           → + verrouillage NF525 (irréversible)
    * 'emettre_encaisser' → + encaissement immédiat du TTC, puis verrouillage
@@ -454,13 +487,14 @@ export async function createFacture(
   // exigent toutes deux locked=0, la facture doit donc démarrer éditable.
   const facture = await db.prepare(`
     INSERT INTO factures
-      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, statut)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, date_execution, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
     RETURNING id
   `).bind(
     input.boutique_id, numero, input.client_id, input.ticket_id ?? null,
     totaux.total_ht, totaux.total_tva, totaux.total_ttc,
     input.notes ?? null, input.conditions ?? null,
+    input.date_execution ?? todayParis(),
   ).first<{ id: number }>()
 
   if (!facture?.id) throw new Error('Erreur lors de la création de la facture.')
