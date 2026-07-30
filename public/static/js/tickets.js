@@ -1164,6 +1164,35 @@ async function saveTicket() {
       return;
     }
     clientId = createdClient.data?.id;
+  } else if (ticketsUseApi && !currentTicketId && clientId) {
+    // Client existant sélectionné : si le téléphone/email retapés dans la prise
+    // en charge diffèrent de la fiche client sur le fichier, les reporter sur le
+    // client — sinon la saisie reste piégée sur ce seul ticket (client_email) et
+    // ne met jamais à jour clients.email, y compris quand la fiche client n'avait
+    // aucun email jusque-là (todo.md, bug "infos client non reportées / email non
+    // conservé"). updateClient() fait un UPDATE complet (pas de COALESCE) — on
+    // relit donc la fiche existante et on ne remplace que phone/email dedans,
+    // jamais un objet partiel, pour ne pas écraser adresse/SIRET/type_client.
+    const cached      = _clientsCache.find(c => c.id == clientId);
+    const typedPhone  = document.getElementById('t-phone').value.trim();
+    const typedEmail  = document.getElementById('t-email').value.trim();
+    const phoneChanged = cached && typedPhone && typedPhone !== cached.phone;
+    const emailChanged = cached && typedEmail && typedEmail !== cached.email;
+    if (phoneChanged || emailChanged) {
+      const full = await apiGet('/api/clients/' + clientId);
+      const existing = full.data?.data;
+      if (existing) {
+        const updated = await apiPut('/api/clients/' + clientId, {
+          ...existing,
+          telephone: typedPhone || existing.telephone,
+          email:     typedEmail || existing.email,
+        });
+        if (!updated.ok) {
+          // Non bloquant : la prise en charge continue même si la synchro fiche client échoue.
+          console.warn('Sync fiche client échouée (' + (updated.error || 'erreur inconnue') + ') — la prise en charge se poursuit.');
+        }
+      }
+    }
   }
 
   // État de l'appareil à l'entrée (onglet État & Sécurité) : sérialisé en un seul
@@ -1429,6 +1458,11 @@ function addAttachmentItem(file) {
 }
 
 // ======================== CLIENT LIST ========================
+// _clientsCache : alimenté par populateClients(), relu par saveTicket() pour
+// détecter si le téléphone/email retapés dans la prise en charge diffèrent de
+// la fiche client existante (voir todo.md, bug "infos client non reportées").
+let _clientsCache = [];
+
 async function populateClients() {
   const select = document.getElementById('t-client');
   if (!select) return;
@@ -1441,6 +1475,7 @@ async function populateClients() {
       phone: c.telephone || c.phone || '',
       email: c.email || '',
     }));
+    _clientsCache = clients;
     clients.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;

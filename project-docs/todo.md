@@ -49,9 +49,11 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 ## 🟡 Détection automatique du nom de société par ville (2026-07-24, PAS traité, priorité à confirmer)
 - [ ] À l'inscription/configuration boutique : proposer automatiquement un nom de société à partir de la ville renseignée — mécanisme exact à définir (API SIRENE déjà utilisée ailleurs dans le projet pour la recherche entreprise, cf. § "Fonctionnalité manquante — recherche entreprise à l'inscription")
 
-## 🔴 Prise en charge — infos client non reportées + email non conservé (2026-07-24, PAS traité)
-- [ ] Les informations saisies à la création d'un client ne sont pas reportées automatiquement dans le formulaire de prise en charge
-- [ ] L'email saisi dans la prise en charge n'est pas conservé — conséquence : le devis est marqué "envoyé" alors qu'il ne l'a jamais été réellement (email manquant au moment de l'envoi). Bug à investiguer en priorité, impact silencieux sur la relation client.
+## ✅ Prise en charge — email/téléphone non conservés sur la fiche client — CORRIGÉ le 2026-07-30
+- [x] Investigation : le nom/téléphone/email d'un client existant sélectionné dans la prise en charge **étaient** déjà reportés dans le formulaire (`populateClients()`, handler `change` depuis 2026-06-01) — ce sous-point de l'énoncé était obsolète.
+- [x] **Vrai bug confirmé** : si le téléphone/email retapé dans la prise en charge diffère de la fiche client existante (notamment quand elle n'a encore aucun email), la saisie restait piégée sur le seul ticket (`ticket.client_email`) — jamais reportée sur `clients.email`/`clients.telephone`. `saveTicket()` (`tickets.js`) compare désormais la saisie à la fiche en cache et fait un `PUT /api/clients/:id` (fiche complète relue puis fusionnée — jamais un objet partiel, `updateClient()` fait un UPDATE complet sans COALESCE, risque réel d'écraser adresse/SIRET/type_client sinon) si ça diffère. Non bloquant : un échec de cette synchro n'empêche jamais la création du ticket.
+- [x] Vérifié que `POST /devis/:id/envoyer` (`facturation.ts:198`) bloque déjà correctement l'envoi si `client_email` est vide (`422`, garde existante depuis 2026-06-17, `ee5cfdc`) — donc le scénario littéral "devis marqué envoyé sans email" n'est pas reproductible via ce endpoint. Risque résiduel non traité par ce fix (documenté, pas un regression de ce chantier) : `sendEmail()` est fire-and-forget (`waitUntil()`), un email valide en syntaxe mais faux (typo) serait accepté sans confirmation de livraison — même classe de limitation que les autres emails transactionnels du projet.
+- [x] Validé en local live : client créé sans email → prise en charge avec nouvel email saisi → `GET /api/clients/:id` confirme l'email persisté, `type_client`/`adresse` intacts (pas d'écrasement). Commit `[à venir]`.
 
 ## 🔴 Page Clients (`/clients`) — 3 bugs (2026-07-24, 1/3 corrigé)
 - [ ] Import client (fichier) non fonctionnel
