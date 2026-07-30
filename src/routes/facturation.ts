@@ -370,6 +370,14 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
       if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
       if (devis.boutique_id !== boutiqueId)
         return c.json({ success: false, error: 'Accès refusé.' }, 403)
+      // Garde côté serveur : la modale a un select "Client" et un select "Devis source"
+      // indépendants, que rien ne synchronise côté UI. Sans ce contrôle, choisir le
+      // client Dupont puis un devis de Martin produit silencieusement une facture pour
+      // Martin (convertirDevis() utilise toujours le client du devis, body.client_id
+      // n'est jamais lu) — sur un document verrouillable. Voir finding F4, revue finale
+      // 2026-07-30.
+      if (body.client_id && Number(body.client_id) !== devis.client_id)
+        return c.json({ success: false, error: 'client_id ne correspond pas au client du devis sélectionné.' }, 400)
 
       const { facture_id, facture_numero } = await convertirDevis(c.env.DB, body.devis_id, user.sub)
 
