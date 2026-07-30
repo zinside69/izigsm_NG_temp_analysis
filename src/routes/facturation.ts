@@ -16,6 +16,7 @@ import {
   listFactures, getFacture, ajouterPaiement, emettreFacture,
   listAvoirs, getAvoir, createAvoir, createFactureAcompte,
   getDevisPourNf525, updateFactureHash,
+  createFacture, type CreateFactureInput,
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
 import { enregistrerTransaction } from '../lib/nf525'
@@ -320,6 +321,76 @@ facturation.post('/devis/:id/acompte', requireRole('admin', 'manager'), async (c
 // ══════════════════════════════════════════════════════════════════════════════
 // FACTURES — Controller pur (0 SQL), délègue à factureService
 // ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/factures
+ * Crée une facture manuelle (modal "Nouvelle facture" de factures.html).
+ * Voir docs/superpowers/specs/2026-07-30-factures-creation-manuelle-design.md.
+ *
+ * Si `devis_id` est fourni, délègue à convertirDevis() — chemin existant qui
+ * porte déjà ses garanties (refus si devis refusé/annulé/déjà converti,
+ * déduction d'un acompte antérieur) — et les lignes du body sont ignorées.
+ *
+ * @body { client_id, ticket_id?, devis_id?, lignes[], notes?, conditions?, date_execution?,
+ *         action: 'brouillon'|'emettre'|'emettre_encaisser', mode_paiement?, reference? }
+ * `date_execution` (date de livraison/exécution, socle réglementaire de la facture
+ * électronique) transite tel quel vers createFacture() par le spread du body ; absent,
+ * le service retombe sur la date du jour.
+ * @returns 201 { success, facture_id, facture_numero, statut }
+ */
+facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json().catch(() => ({} as any))
+
+  const ACTIONS = ['brouillon', 'emettre', 'emettre_encaisser']
+
+  if (!body.client_id)
+    return c.json({ success: false, error: 'client_id obligatoire.' }, 400)
+  if (!ACTIONS.includes(body.action))
+    return c.json({ success: false, error: `action invalide (${ACTIONS.join(' | ')}).` }, 400)
+  if (!body.devis_id && !body.lignes?.length)
+    return c.json({ success: false, error: 'lignes obligatoires sans devis source.' }, 400)
+  if (body.action === 'emettre_encaisser' && !body.mode_paiement)
+    return c.json({ success: false, error: 'mode_paiement obligatoire pour encaisser.' }, 400)
+
+  const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  try {
+    // ── Chemin devis : délégation, jamais de seconde implémentation ────────
+    if (body.devis_id) {
+      const devis = await getDevis(c.get('db'), body.devis_id)
+      if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+      if (devis.boutique_id !== boutiqueId)
+        return c.json({ success: false, error: 'Accès refusé.' }, 403)
+
+      const { facture_id, facture_numero } = await convertirDevis(c.env.DB, body.devis_id, user.sub)
+
+      let statut = 'brouillon'
+      if (body.action === 'emettre_encaisser') {
+        const paiement = await ajouterPaiement(c.env.DB, facture_id, user.sub, {
+          montant:       devis.total_ttc,
+          mode_paiement: body.mode_paiement,
+          reference:     body.reference,
+        })
+        statut = paiement.statut
+      }
+      if (body.action !== 'brouillon') {
+        await emettreFacture(c.env.DB, facture_id, user.sub)
+        if (statut === 'brouillon') statut = 'en_attente'
+      }
+
+      return c.json({ success: true, facture_id, facture_numero, statut }, 201)
+    }
+
+    // ── Chemin manuel ──────────────────────────────────────────────────────
+    const input: CreateFactureInput = { ...body, boutique_id: boutiqueId }
+    const result = await createFacture(c.env.DB, user.sub, input)
+    return c.json({ success: true, ...result }, 201)
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+})
 
 /**
  * GET /api/factures
