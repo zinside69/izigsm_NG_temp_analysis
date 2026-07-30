@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-07-25, checkpoint 61 — audit rétroactif checkpoints + clôture session refonte A4)
+# iziGSM — État courant (MàJ : 2026-07-30, checkpoint 62 — backfill checkpoints, 4 fixes prise en charge/clients, incident CDN, audit persistance complet)
+
+## Checkpoint 62 — Session humaine : backfill recovery-prompt.md + 4 chantiers + incident prod + audit persistance des champs (2026-07-30)
+
+**Session la plus dense depuis longtemps, plusieurs chantiers distincts enchaînés.** Reprise via `/init recover izigsm` (checkpoint 61 déjà à jour).
+
+**1. Backfill `recovery-prompt.md` (22 checkpoints 29-56 reconstruits)** — commit `92ff9df`. Voir `todo.md` § Backfill, entrée mémoire dédiée. 4 invariants trouvés en cours de route et remontés dans `CLAUDE.md`/`decisions.md`/`bugs.md`/`loop-runbook.md` : rebranding MyDesk (en cours, pas terminé), piège worktree sandbox (bloqué sur 9 checkpoints), fix gates Playwright/tsc Windows (`d7c5ed1`), piège `docs/*.pdf` gitignorés.
+
+**2. 3 tâches simples corrigées** (commit `1898da7`) : `auth.ts` JSDoc MyDesk, `clients.html` FontAwesome jamais chargé (toutes les icônes invisibles, pas juste le bouton signalé), filtre modèle smartphone qui ignorait la marque sélectionnée (`tickets.js`). Validé en local live + Claude in Chrome.
+
+**3. Bug prise en charge — email/téléphone non synchronisés vers la fiche client existante** (commit `71a87a2`) : en sélectionnant un client existant et en retapant email/téléphone dans la prise en charge, la saisie restait piégée sur le ticket seul, jamais reportée sur `clients.email`/`clients.telephone`. Fix : `saveTicket()` relit la fiche client complète et fusionne (jamais un objet partiel — `updateClient()` fait un UPDATE complet sans COALESCE, risque réel d'écraser adresse/SIRET/type_client sinon). Validé en local live (client sans email → prise en charge avec nouvel email → `GET /api/clients/:id` confirme la persistance, `type_client`/`adresse` intacts).
+
+**4. Fiche client — coordonnées obligatoires + autocomplete Raison sociale** (commits `f84c2e1`, `9e1e82b`) : tous les champs deviennent obligatoires (sauf Notes), suite à une capture d'écran utilisateur montrant une fiche vide. Volet Professionnel : SIRET obligatoire (TVA reste optionnelle), autocomplete "Raison sociale" ajouté en réutilisant `recherche-entreprises.api.gouv.fr` (même API déjà utilisée par `onSiretInput()` dans ce fichier et par l'inscription) — sélectionner un résultat remplit raison_sociale/SIRET/adresse/CP/ville et **calcule automatiquement la TVA intracommunautaire** (`computeTvaFromSiren()`, formule standard déjà existante). Validé en local live avec une recherche réelle ("SOTELI").
+
+**5. Incident production — cache CDN Cloudflare empoisonné sur `clients.f2fcc753.js`** (commit `2bdb4a2`, documenté `bugs.md`) : après le déploiement du point 4, la page `/clients` s'est retrouvée entièrement cassée pour tous les utilisateurs (KPIs à "—", tableau vide). Root cause : un edge Cloudflare (Marseille) a caché une réponse 200+HTML (fallback SPA du catch-all Hono) au lieu du JS, pendant la fenêtre de propagation du déploiement — comme l'asset est marqué `immutable`, la mauvaise réponse restait figée indéfiniment. Purge API impossible (permission "Cache Purge" manquante sur le token Cloudflare disponible dans cet environnement — testé et confirmé en échec). Fix : nouveau hash de fichier forcé (commentaire ajouté), qui contourne le cache empoisonné par construction. Revalidé après ~1 min de propagation. **Recommandation structurelle non implémentée** : exclure `/static/*` du catch-all SPA pour qu'un asset manquant renvoie un vrai 404 (non caché) plutôt qu'un 200+HTML (caché indéfiniment si immutable).
+
+**6. Comparatif monatelier.net/aide/prise-en-charge** : lecture fraîche de la page d'aide concurrente. Nouveau gap trouvé : champ "Couleur" de l'appareil absent (ajouté best-effort dans `todo.md`, pas prioritaire). Reconfirme 2 items déjà trackés : multi-appareils par ticket (déprioritisé en P2 sur demande utilisateur ce jour) et email/SMS au bon de dépôt (recoupe le chantier bloqué impression A4/thermique).
+
+**7. Découverte majeure — bug `t-imei` puis audit complet de persistance des champs sur TOUT repairdesk.fr.** En répondant à une question utilisateur sur la validation IMEI, découverte que le champ "IMEI/N° de série" de la prise en charge est **silencieusement jeté** — aucune colonne `imei` sur `tickets`, absent de `CreateTicketData`, absent de l'INSERT. L'utilisateur a alors demandé un audit complet de tous les formulaires du site. **3 subagents lancés en parallèle** (lecture seule) : Tickets/Clients/Devis/Factures, Stock/Services/Fournisseurs/Rachats/Reconditionnement, Agenda/Personnel/Caisse/SAV/Settings. Rapport consolidé : `project-docs/audit-persistance-2026-07-30.md` (commit `86e5269`), findings intégrés en priorité 1 dans `todo.md` (commit `0cd436e`).
+
+**Résultat le plus grave de l'audit — 2 fonctionnalités entières hors service, jamais documentées avant ce jour** :
+- `factures.html` : `POST /api/factures` **n'existe pas côté backend** — création manuelle de facture 100% cassée (le CRUD complet annoncé en commentaire dans `src/index.tsx:50` est trompeur). Signature électronique triplement morte.
+- `personnel.html` : `app.js` n'est chargé sur aucun script de cette page (seule page du site dans ce cas) → toutes les fonctions API undefined, `ReferenceError` systématique. Aucune création employé/pointage possible actuellement.
+
+Plus 8 cas de perte silencieuse de données (priorité ticket en création, notes/quantité stock en édition, marque modèle en édition, remise caisse, devise settings, 5 champs agenda impossibles à vider en édition) et le pattern `r.success`/`r.data` déjà connu ailleurs trouvé sur 3 nouveaux fichiers (`reconditionnement.js` — bloque 2 modals clés —, `fournisseurs.js`, `caisse.js`). Détail complet, fichier+ligne exacts, dans le rapport d'audit.
+
+**`qualirepar.html` confirmé comme simulation 100% locale** (localStorage, zéro appel API/route/table) — pas un bug de persistance au sens strict, mais un vrai risque si non intentionnel (dossiers de subvention réglementaire perdus au changement d'appareil/cache).
+
+## Reste ouvert
+- **QualiRépar → vraie API EcoSystem (Fonds Réparation)** : décision prise de passer par `superpowers:brainstorming` avant tout code (chantier non trivial : nouveau service backend + table DB + réécriture frontend + auth tiers). Utilisateur confirme avoir/pouvoir obtenir des identifiants API réels. **Pas encore démarré** — utilisateur a demandé de faire d'abord ce checkpoint.
+- Tout le contenu de `todo.md` § "🔴 P1 — Audit persistance des champs" — rien corrigé à ce stade, uniquement documenté. Priorité recommandée dans le rapport : `factures.html` → `personnel.html` → `t-imei` → `t-priority` → 3 fichiers `r.success`/`r.data` → reste.
+- `t-imei`/`numero_serie` sur tickets : décisions déjà actées avec l'utilisateur avant l'audit (validation format/checksum locale Luhn, pas d'API tierce payante ; IMEI obligatoire seulement si type=smartphone) — implémentation pas commencée, va probablement fusionner avec le point `t-imei` de l'audit ci-dessus.
+- Recommandation structurelle incident CDN (exclure `/static/*` du catch-all SPA) — non implémentée.
 
 ## Checkpoint 61 — Session humaine : audit rétroactif du protocole checkpoint + clôture (2026-07-25)
 

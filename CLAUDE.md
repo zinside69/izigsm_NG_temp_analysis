@@ -115,6 +115,14 @@ enregistrement).
 
 Le nom d'affichage par défaut (fallback boutique sans nom configuré) est en cours de remplacement. Déjà fait : `register.js`, `app.js`, `login.html`, `register.html`. **Reste "Mon Atelier"** dans `auth.ts` (JSDoc) et les pages internes non auditées (`dashboard.html`/`settings.html`/etc.) — toute nouvelle référence à ce nom par défaut doit utiliser "MyDesk", pas "Mon Atelier".
 
+## Fonctionnalités entièrement hors service (trouvé 2026-07-30, `audit-persistance-2026-07-30.md`)
+
+Ne pas supposer que ces deux fonctionnalités marchent — vérifié en lisant le code, pas encore corrigé :
+- **`factures.html` — création manuelle de facture** : `POST /api/factures` **n'existe pas** côté backend (le commentaire de routage `src/index.tsx:50` est trompeur). Toute soumission tombe en 404. Les factures ne peuvent être créées aujourd'hui que via conversion d'un devis accepté ou via la caisse.
+- **`personnel.html`** : `app.js` n'est chargé sur aucun script de cette page (seule page du site dans ce cas) — `apiGet`/`apiPost` sont `undefined`, `ReferenceError` systématique. Aucune création employé/pointage possible actuellement.
+
+Voir `project-docs/todo.md` § "🔴 P1 — Audit persistance des champs" pour la liste complète (8 autres cas de perte silencieuse de données + 3 fichiers avec le pattern `r.success`/`r.data` cassé).
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +
@@ -186,6 +194,21 @@ script défini dans `package.json`). Constaté le 2026-07-24 : l'appel direct `n
 wrangler pages deploy dist --project-name izigsm` est bloqué par une règle de
 permission (`deny`) dont la source exacte n'a pas été localisée dans les fichiers
 `settings.json` accessibles (probablement une politique gérée à un niveau non
-inspectable) — `npm run deploy` n'est pas concerné par cette règle et fonctionne
-normalement. Vérifié en prod après déploiement via cette commande : `GET
+inspectable). Vérifié en prod après déploiement via cette commande : `GET
 /api/health` 200, `sw.js` `CACHE_VERSION` à jour, contenu réellement changé.
+
+**Constaté le 2026-07-30** : en session avec mode auto, même `npm run deploy` peut être
+bloqué par le classificateur automatique (action jugée à risque), y compris après
+confirmation explicite de l'utilisateur en chat — dans ce cas, demander à l'utilisateur
+de lancer la commande lui-même plutôt que de chercher un contournement.
+
+**Piège cache CDN après déploiement d'un asset hashé (`bugs.md`, incident 2026-07-30)** :
+un edge Cloudflare peut caché une mauvaise réponse (200+HTML du catch-all SPA au lieu
+du JS) pendant la fenêtre de propagation juste après le déploiement — comme les assets
+hashés sont `immutable`, cette mauvaise réponse reste figée indéfiniment sur cet edge.
+Après un déploiement touchant des assets `public/static/js|css/*`, si un comportement
+semble cassé malgré un déploiement "réussi" : comparer une requête avec et sans
+paramètre de cache-busting (`?_=timestamp`) et vérifier l'en-tête `cf-cache-status`
+avant de conclure à un bug de code. Purge cache API non disponible dans cet environnement
+(permission "Cache Purge" manquante sur le token Cloudflare) — le fix qui marche est de
+forcer un nouveau hash de fichier (modification triviale du contenu) et redéployer.

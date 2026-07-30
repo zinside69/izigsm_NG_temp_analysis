@@ -1,3 +1,43 @@
+# Recovery Prompt — iziGSM — 2026-07-30 (checkpoint 62 — backfill checkpoints, 4 fixes prise en charge/clients, incident CDN, audit persistance complet)
+
+## Vue d'ensemble (checkpoint 62)
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant, `izigsm/webapp/`, branche `main`. Suite du checkpoint 61 (audit rétroactif du protocole checkpoint). Session la plus dense depuis longtemps — 6 chantiers enchaînés en une session.
+
+## Ce qui a été fait
+1. **Backfill `recovery-prompt.md`** (22 checkpoints 29-56 reconstruits depuis `current-state.md` + `git log`) — `92ff9df`. 4 invariants remontés dans `CLAUDE.md`/`decisions.md`/`bugs.md`/`loop-runbook.md` (MyDesk rebranding, piège worktree sandbox, fix gates Playwright/tsc, piège `docs/*.pdf` gitignorés).
+2. **3 tâches simples corrigées** — `1898da7` : JSDoc MyDesk (`auth.ts`), FontAwesome manquant sur `clients.html` (toutes icônes invisibles), filtre modèle smartphone ignorant la marque sélectionnée.
+3. **Bug prise en charge → fiche client** — `71a87a2` : email/téléphone retapés sur un client existant n'étaient jamais reportés sur `clients.email`/`clients.telephone`, restaient piégés sur le ticket seul. Fix : relecture + fusion complète de la fiche client (jamais un objet partiel, risque d'écrasement sinon).
+4. **Fiche client obligatoire + autocomplete Raison sociale** — `f84c2e1`, `9e1e82b` : tous les champs obligatoires sauf Notes ; volet Pro : SIRET obligatoire + autocomplete via `recherche-entreprises.api.gouv.fr` (réutilise l'API déjà en place), TVA intracom auto-calculée.
+5. **Incident production résolu** — `2bdb4a2` : cache CDN Cloudflare figé sur une mauvaise réponse (200+HTML au lieu du JS) pour `clients.f2fcc753.js`, suite à une course de propagation post-déploiement sur un asset `immutable`. Purge API impossible (permission manquante), fix par changement de hash forcé. Documenté `bugs.md` avec recommandation structurelle (exclure `/static/*` du catch-all SPA) non implémentée.
+6. **Audit complet de persistance des champs** (3 subagents parallèles, lecture seule, 22 pages) déclenché par la découverte que `t-imei` (prise en charge) est silencieusement jeté (aucune colonne `imei` sur `tickets`). Rapport : `project-docs/audit-persistance-2026-07-30.md` (`86e5269`), intégré en priorité 1 dans `todo.md` (`0cd436e`).
+
+## Décisions prises
+- IMEI : validation format/checksum locale (Luhn), pas d'API tierce payante. IMEI obligatoire uniquement si type d'appareil = smartphone (tablette/PC n'en ont pas).
+- Multi-appareils par ticket : déprioritisé en P2 (décision explicite utilisateur ce jour), reconfirmé pertinent par la doc monatelier.net mais pas urgent.
+- QualiRépar → vraie API EcoSystem (Fonds Réparation) : passera par `superpowers:brainstorming` avant tout code (chantier non trivial). Utilisateur confirme avoir/pouvoir obtenir des identifiants API réels.
+
+## État courant
+Working tree propre, tout commité et poussé sur `main`/origin. Rien de cassé en prod actuellement (incident CDN résolu et vérifié). Deux fonctionnalités entières découvertes hors service par l'audit (`factures.html` création manuelle, `personnel.html` page entière) — **pas encore corrigées**, juste documentées.
+
+## Tâches en attente
+- [ ] `superpowers:brainstorming` sur QualiRépar → vraie API EcoSystem — **ne pas démarrer avant que l'utilisateur le redemande explicitement** (il a explicitement mis en pause pour faire ce checkpoint d'abord)
+- [ ] `todo.md` § "🔴 P1 — Audit persistance des champs" — rien corrigé, tout reste à faire. Ordre recommandé : `factures.html` (endpoint manquant) → `personnel.html` (app.js non chargé) → `t-imei` → `t-priority` création → 3 fichiers `r.success`/`r.data` (`reconditionnement.js`/`fournisseurs.js`/`caisse.js`) → reste (stock-notes, stock-qty édition, modele-marque-id édition, remise caisse, devise settings, 5 champs agenda)
+- [ ] Champ IMEI/N° de série à scoper ensemble avec le fix du bug `t-imei` de l'audit (migration DB nécessaire : colonnes `imei`+`numero_serie` sur `tickets`,+ probablement `appareil_type` pour savoir si IMEI doit être obligatoire)
+- [ ] Recommandation structurelle incident CDN (exclure `/static/*` du catch-all SPA `src/index.tsx`) — non implémentée
+
+## Bugs connus
+Voir `bugs.md` pour le détail complet du nouvel incident CDN (résolu) et `audit-persistance-2026-07-30.md` pour tous les bugs de persistance trouvés ce jour (aucun corrigé à ce stade).
+
+## Contraintes
+Toujours valables : DNS mail Gandi (jamais toucher sans confirmation explicite), pas de secret en clair, commenter le code ajouté, jamais de `Co-Authored-By: Claude`, proposer avant modif/suppression, migrations NF525 = validation explicite, déploiement toujours sur confirmation explicite (et souvent bloqué par le classificateur auto-mode pour `npm run deploy` — l'utilisateur le fait alors manuellement).
+
+## Prochaines étapes recommandées
+1. Attendre que l'utilisateur relance le brainstorming QualiRépar (mis en pause volontairement pour ce checkpoint)
+2. Une fois repris : `superpowers:brainstorming` → `writing-plans` → implémentation (nouveau service + table DB + frontend + auth tiers)
+3. En parallèle ou après : commencer à traiter `todo.md` § P1 dans l'ordre recommandé, en commençant par les 2 fonctionnalités entières hors service (`factures.html`, `personnel.html`) qui ont l'impact métier le plus large
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 61 — audit rétroactif protocole checkpoint + clôture session refonte A4)
 
 ## Vue d'ensemble (checkpoint 61)
