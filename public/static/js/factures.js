@@ -451,7 +451,13 @@ async function openNewFacture() {
   const modalTitle = document.getElementById('modal-facture-title');
   if (modalTitle) modalTitle.textContent = 'Nouvelle facture';
 
-  await loadTvaDefautBoutique();
+  try {
+    await loadTvaDefautBoutique();
+  } catch (err) {
+    // Confort, pas un prérequis : une panne réseau ici ne doit jamais empêcher
+    // l'ouverture de la modale (le select garde sa valeur par défaut du HTML).
+    console.warn('[factures] loadTvaDefautBoutique erreur réseau', err);
+  }
   addFactureLine();
   updateFactureTotals();
   openModal('modal-facture');
@@ -507,7 +513,17 @@ async function saveFacture(action) {
   };
   if (action === 'emettre_encaisser') payload.mode_paiement = modeLabel;
 
-  const res = await apiPost('/api/factures', payload);
+  let res;
+  try {
+    res = await apiPost('/api/factures', payload);
+  } catch (err) {
+    // api() ne protège pas fetch() : une panne réseau rejette au lieu de résoudre
+    // { ok:false }. Sans ce catch, aucun toast, aucune trace — la modale reste ouverte
+    // comme si rien ne s'était passé (cas hors-ligne d'un PWA de boutique).
+    console.warn('[factures] saveFacture erreur réseau', err);
+    showFlash('⚠️ Erreur réseau — réessayez.', 'error');
+    return;
+  }
 
   if (!res.ok || !res.data?.success) {
     // Aucun repli local : une facture porte un numéro séquentiel de boutique et un
@@ -997,18 +1013,19 @@ async function _fetchFacturePrintData(id) {
   const raw = f._raw || f;
 
   // Profil boutique (non bloquant — valeurs par défaut si API KO)
-  let boutique = { nom: 'iziGSM', adresse: '', siret: '', telephone: '', email: '' };
+  let boutique = { nom: 'iziGSM', adresse: '', siret: '', tva_numero: '', telephone: '', email: '' };
   try {
     // /api/boutiques/:id (et non la liste) : seul endpoint qui expose `settings`
     // (tva_taux_defaut, mention_facture) — nécessaire pour la mention légale.
     const bs = await apiGet(`/api/boutiques/${raw.boutique_id}`);
     const b  = bs.data?.data || bs.data || {};
     boutique = {
-      nom:       b.nom       || b.name   || 'iziGSM',
-      adresse:   b.adresse   || b.address || '',
-      siret:     b.siret     || '',
-      telephone: b.telephone || b.phone  || '',
-      email:     b.email     || '',
+      nom:        b.nom        || b.name   || 'iziGSM',
+      adresse:    b.adresse    || b.address || '',
+      siret:      b.siret      || '',
+      tva_numero: b.tva_numero || '',
+      telephone:  b.telephone  || b.phone  || '',
+      email:      b.email      || '',
       tva_taux_defaut: b.settings?.tva_taux_defaut ?? 20,
       mention_facture: b.settings?.mention_facture  ?? null,
     };
@@ -1081,11 +1098,20 @@ function _buildFactureHTML(d, printCssHref) {
   // Même garantie côté émetteur : snapshot vendeur figé à l'émission si présent
   // (facture émise, inaltérable), sinon profil boutique vivant (brouillon).
   const vend = d.vendeurFige;
-  const boutiqueNomAffiche = vend ? (vend.nom || d.boutique.nom) : d.boutique.nom;
+  const boutiqueNomAffiche = vend ? (vend.nom || '') : d.boutique.nom;
   const boutiqueSiretAffiche = vend ? (vend.siret || '') : (d.boutique.siret || '');
+  // TVA intracom émetteur — mention obligatoire hors franchise (CGI art. 242 nonies A).
+  // Même règle stricte que SIRET : le snapshot fait foi dès qu'il existe, pas de repli
+  // sur la donnée vivante (une facture émise est inaltérable).
+  const boutiqueTvaNumeroAffiche = vend ? (vend.tva_numero || '') : (d.boutique.tva_numero || '');
   const boutiqueAdresseAffichee = vend
     ? [esc(vend.adresse || ''), [esc(vend.code_postal || ''), esc(vend.ville || '')].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
     : esc(d.boutique.adresse || '');
+  // Téléphone/email : capturés dans le snapshot depuis ce correctif seulement — les
+  // factures émises avant n'auront jamais ces clés. Contrairement à nom/SIRET/adresse,
+  // un repli sur la donnée vivante est ici acceptable et voulu (dégradation propre).
+  const boutiqueTelAffiche   = vend ? (vend.telephone || d.boutique.telephone) : d.boutique.telephone;
+  const boutiqueEmailAffiche = vend ? (vend.email     || d.boutique.email)     : d.boutique.email;
 
   const badgeCls = {
     payee:               'print-badge-paid',
@@ -1138,8 +1164,8 @@ function _buildFactureHTML(d, printCssHref) {
           <strong>${esc(boutiqueNomAffiche)}</strong><br>
           ${boutiqueAdresseAffichee ? boutiqueAdresseAffichee + '<br>' : ''}
           ${boutiqueSiretAffiche  ? 'SIRET : ' + esc(boutiqueSiretAffiche) + '<br>' : ''}
-          ${d.boutique.telephone ? esc(d.boutique.telephone) + '<br>' : ''}
-          ${d.boutique.email     ? esc(d.boutique.email)             : ''}
+          ${boutiqueTelAffiche ? esc(boutiqueTelAffiche) + '<br>' : ''}
+          ${boutiqueEmailAffiche ? esc(boutiqueEmailAffiche)      : ''}
         </div>
       </div>
 
@@ -1151,7 +1177,7 @@ function _buildFactureHTML(d, printCssHref) {
         <div class="print-doc-meta">
           <strong>Date d'émission :</strong> ${_fmtDate(d.dateEm)}<br>
           ${d.dateEch   ? '<strong>Échéance :</strong> ' + _fmtDate(d.dateEch) + '<br>' : ''}
-          ${d.dateExec ? `<div>Date d'exécution : <strong>${esc(d.dateExec)}</strong></div>` : ''}
+          ${d.dateExec ? `<div>Date d'exécution : <strong>${_fmtDate(d.dateExec)}</strong></div>` : ''}
           ${d.hash_nf525 ? '<span style="font-size:7pt;color:#aaa;">NF525 ✓</span>' : ''}
         </div>
       </div>
@@ -1162,7 +1188,8 @@ function _buildFactureHTML(d, printCssHref) {
           <div class="print-party-name">${esc(boutiqueNomAffiche)}</div>
           <div class="print-party-detail">
             ${boutiqueAdresseAffichee ? boutiqueAdresseAffichee + '<br>' : ''}
-            ${boutiqueSiretAffiche   ? 'SIRET : ' + esc(boutiqueSiretAffiche) : ''}
+            ${boutiqueSiretAffiche   ? 'SIRET : ' + esc(boutiqueSiretAffiche) + '<br>' : ''}
+            ${boutiqueTvaNumeroAffiche ? 'TVA : ' + esc(boutiqueTvaNumeroAffiche) : ''}
           </div>
         </div>
         <div class="print-party-box">
