@@ -1136,6 +1136,7 @@ git commit -m "refactor: modal facture - retrait signature/statut/description, a
 
 **Files:**
 - Modify: `public/static/js/factures.js` — `checkFromDevis()` (l.362), `openNewFacture()` (l.406), `saveFacture()` (l.428), `saveFactureFallback()` (l.498, supprimée), `addFactureLine()` (l.1156), `updateFactureLineTotals()` (l.1200), `updateFactureTotals()` (l.1209), `initSigPad()`/`clearSig()` (l.1225-1264)
+- Modify: `public/factures.html` — trois retouches ponctuelles décrites dans les étapes ci-dessous : le libellé statique `TVA (20%)` des totaux, le bandeau `f-devis-banner`, et l'attribut `onchange` du select `f-devis`. Le gros du modal a été posé par la tâche 6 ; il ne s'agit ici que de ce qui accompagne le JS.
 
 **Interfaces:**
 - Consumes: identifiants DOM de la tâche 6 (`f-tva-defaut`, `fl-tva-<lid>`, `f-date-execution`) · `apiPost(url, body)` → `{ ok, status, data, error }` (`app.js`) · `POST /api/factures` (tâche 4).
