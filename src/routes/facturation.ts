@@ -250,6 +250,13 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
   const user    = c.get('user')
   const devisId = parseInt(c.req.param('id'), 10)
 
+  // Isolation multi-tenant : ne jamais convertir le devis d'une autre boutique.
+  // Même patron que POST /devis/:id/acompte ci-dessous (faille trouvée le 2026-07-30).
+  const devisAControler = await getDevis(c.get('db'), devisId)
+  if (!devisAControler) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+  if (user.role !== 'admin' && devisAControler.boutique_id !== user.boutique_id)
+    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+
   try {
     const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
 

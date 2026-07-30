@@ -1,5 +1,18 @@
 # iziGSM — Bugs connus
 
+## FAILLE — `PUT /devis/:id/convertir` sans isolation `boutique_id` (2026-07-30) — CORRIGÉE
+
+Trouvée en préparant `POST /api/factures` : la route ne vérifiait pas que le devis
+appartenait à la boutique de l'appelant. Un manager de la boutique B pouvait convertir
+un devis de la boutique A en facture — création d'un document comptable dans une
+boutique tierce, consommation d'un numéro de séquence, entrée NF525 associée.
+Même classe que les failles `GET /tickets/:id` et `PUT/DELETE /tickets/:id`
+(2026-07-19). La route voisine `POST /devis/:id/acompte` faisait le contrôle
+correctement depuis le départ.
+
+Fix : `getDevis()` + comparaison `boutique_id` + `403`, patron identique à la route
+acompte. Gate de non-régression ajoutée dans `tests/e2e/isolation.spec.ts`.
+
 ## 🔴 Incident prod — cache CDN Cloudflare figé sur une mauvaise réponse pour un asset hashé (`clients.f2fcc753.js`) — CORRIGÉ le 2026-07-30
 
 Après le déploiement du chantier "SIRET obligatoire + autocomplete Raison sociale" (commit `9e1e82b`), la page `/clients` s'est retrouvée **entièrement cassée en production** pour tous les utilisateurs : KPIs à "—", tableau vide, plus aucun bouton fonctionnel — signalé par l'utilisateur avec capture d'écran (`ST` connecté, `Base clients — —`).
