@@ -1,5 +1,13 @@
 # iziGSM — Décisions
 
+## 2026-07-23/24 — Rebranding produit « Mon Atelier » → « MyDesk » (EN COURS, pas terminé)
+
+**Décision** : remplacer le nom d'affichage par défaut "Mon Atelier" (fallback quand une boutique n'a pas encore configuré son propre nom) par "MyDesk" — décision produit, exécutée en tâches unitaires successives par la loop-engineering.
+
+**Fichiers traités** (littéraux d'affichage uniquement, `boutique_id`/tokens/logique auth toujours vérifiés intacts à chaque tâche) : `register.js:230-231` (checkpoint 45→47), `app.js:27,424-425` (checkpoint 49), `login.html:81,156,157,267,268` (checkpoint 50), `register.html:158,201,326,447-448` (checkpoint 51, dont une reformulation "Mon atelier est en Belgique"→"Mon entreprise est en Belgique").
+
+**Reste ouvert (todo.md L229-230)** : `auth.ts` L229 (JSDoc cosmétique, mais fichier de la catégorie "Authentification/sessions" — signal à re-classifier prudemment, jamais traité par la loop malgré plusieurs runs) ; audit des pages internes (`dashboard.html`/`settings.html`/etc., todo.md:230) jamais fait. **Le rebranding n'est donc pas terminé** — toute nouvelle session touchant ces fichiers doit continuer avec "MyDesk", pas "Mon Atelier".
+
 ## 2026-07-09 — Migration hébergement Genspark → Cloudflare direct
 
 **Décision** : quitter le déploiement `gsk hosted deploy` (Genspark, Workers for Platforms géré) au profit d'un déploiement Cloudflare Pages standard sur le compte `Contact@soteli.fr`, domaine final `repairdesk.fr`.

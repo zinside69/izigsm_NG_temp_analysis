@@ -1,5 +1,9 @@
 # iziGSM — Bugs connus
 
+## Piège outillage — `docs/*.pdf` de référence invisibles à `git status`/`git ls-files` (trouvé 2026-07-25, checkpoint 55)
+
+`docs/bon de réparation.pdf` et `docs/test impression.pdf` (maquettes de référence pour le chantier impression A4/thermique) existent réellement sur disque et sont lisibles directement (outil `Read`), mais sont exclus par la règle générique `*.pdf` du `.gitignore` — donc invisibles à tout audit basé sur `git ls-files`/`git status`. Un run de la loop-engineering (checkpoint 54) les avait déclarés "absents du repo" à tort sur cette seule base, avant qu'un run suivant (checkpoint 55) ne découvre qu'ils étaient présents sur le filesystem. **Pas encore corrigé** : les tracker explicitement (`git add -f`) comme fichiers de référence design, distincts des PDF générés par l'app, éviterait la récidive — décision à valider par l'utilisateur, non fait à ce jour.
+
 ## 🔴 Fiche A4 ticket imprimée débordant sur 2 pages en production — CORRIGÉ le 2026-07-25
 
 Signalé par l'utilisateur avec capture d'écran réelle (`repairdesk.fr`, ticket `TKT-2026-00006`) juste après le déploiement de la refonte visuelle A4 : page 1 se terminait après les signatures, le bloc QR/code-barre/lien de suivi + le pied de page débordaient seuls sur une page 2. `todo.md` listait "Garantir le rendu sur une seule page A4" comme **jamais vérifié** depuis le chantier impression initial (checkpoint 33, 2026-07-18) — risque latent préexistant, révélé par un contenu dense réel (panne 2 lignes, état à l'entrée 4 items cochés, acompte versé, signature client dessinée), pas une régression du jour (la ligne CGV ajoutée ne contribue que marginalement).

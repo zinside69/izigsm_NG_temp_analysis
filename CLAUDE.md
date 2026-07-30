@@ -111,6 +111,10 @@ Pages) doit être manipulé. Toute mutation DNS sur ce domaine nécessite confir
 explicite utilisateur avant exécution (pas seulement pour ces records — pour tout
 enregistrement).
 
+## Rebranding produit « Mon Atelier » → « MyDesk » — EN COURS depuis 2026-07-23 (`decisions.md`)
+
+Le nom d'affichage par défaut (fallback boutique sans nom configuré) est en cours de remplacement. Déjà fait : `register.js`, `app.js`, `login.html`, `register.html`. **Reste "Mon Atelier"** dans `auth.ts` (JSDoc) et les pages internes non auditées (`dashboard.html`/`settings.html`/etc.) — toute nouvelle référence à ce nom par défaut doit utiliser "MyDesk", pas "Mon Atelier".
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +

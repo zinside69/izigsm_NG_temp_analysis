@@ -59,6 +59,184 @@ Tout commité et poussé sur `main`/origin (dernier commit `81d5804`). Code A4 +
 
 ---
 
+# Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 56 — loop-engineering : IMEI/N° série fiche A4, déjà implémenté)
+*(Entrée reconstruite rétroactivement le 2026-07-30 depuis `current-state.md` + `git log` — voir `todo.md` § Backfill recovery-prompt.md)*
+
+Run loop-engineering, `todo.md:19` sélectionnée. Vérification directe du code : `_buildTicketA4HTML()` affiche déjà IMEI et N° Série (`tickets.js:764-765`, alimentés par la jointure `appareils`). Case obsolète cochée, aucun code modifié, aucun worktree créé. Gates : vitest 833/835 relancé par prudence (baseline inchangée).
+
+## État git
+Commit doc `490d01f`/`a397a8b`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 55 — loop-engineering : mise en page A4 vs PDF de référence, escaladé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Run loop-engineering, `todo.md:10` (garder l'indigo actuel ou aligner sur le bleu marine/ambre du modèle `docs/bon de réparation.pdf`) — escaladé comme décision de branding/produit hors périmètre loop. **Découverte majeure, corrige le checkpoint 54** : `docs/bon de réparation.pdf` et `docs/test impression.pdf` existent réellement sur disque mais sont exclus par la règle générique `*.pdf` du `.gitignore`, donc invisibles à `git status`/`git ls-files` — le checkpoint 54 les avait déclarés absents à tort. Contenu analysé : bandeau bleu marine + encart ambre "Acompte versé" + signatures (PDF cible) vs système indigo actuel en prod. Aucun code modifié, escaladé pour décision humaine (options A/B documentées).
+
+## État git
+Commit doc `2b6d4c4`/`d0231fa`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-25 (checkpoint 54 — loop-engineering : audit initial contenu fiche A4, todo.md:7)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Run loop-engineering, `todo.md:7` — premier travail du chantier 🔴 impression A4/thermique (demandé 2026-07-24). Audit comparé (liste attendue vs `_buildTicketA4HTML()`) : description/client/réparateur/état matériel déjà présents ; **commentaires publics manquants** (aucun champ dédié dans le modèle de données, seul `notes_internes` existe et n'est jamais affiché — pas de fuite mais pas de contenu non plus). Observation complémentaire : `todo.md:11` (IMEI/N° série) déjà obsolète, à revérifier plutôt qu'à recoder (repris et confirmé au checkpoint 56). PDF de référence déclarés absents à tort (corrigé au checkpoint 55). Worktree `.claude/worktrees/audit-impression-a4` (chemin frère bloqué par le sandbox). Aucun code modifié.
+
+## État git
+Commit doc `fce1f83`/`4da507c`/`a772b1f`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 53 — cache-busting par hash de contenu, chantier complet mergé sur main)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Chantier escaladé à répétition par la loop-engineering (architectural), traité en session humaine : `brainstorming` → `writing-plans` → `subagent-driven-development`. `public/static/js/*.js`/`*.css` désormais hashés par contenu au build (`scripts/build-hash-assets.mjs`), éliminant à la source l'incident de propagation CDN du 2026-07-18 (checkpoint 36). `dist/_headers` : cache long+immutable sur assets hashés, no-cache sur `sw.js`/HTML.
+
+**3 régressions attrapées et corrigées avant merge** : retype `Buffer`→`Uint8Array` (régression tsc 32→235 erreurs, dépendance Node incompatible Workers), 2 bugs latents révélés par le nouveau garde-fou "échec bruyant" (CSS orphelines + `dist/` jamais vidé entre builds), bug CRLF Windows sur `scripts/build-hash-assets.mjs` (`.gitattributes` ajouté, `*.mjs text eol=lf`).
+
+Revue finale (opus) : Ready to merge = Yes. Gates finaux : vitest 833/835, tsc 32 (baseline inchangée), Playwright 10/10, build idempotent vérifié (23 fichiers hashés × 2 runs).
+
+## État git
+Commits `0b0f793`→`021c19d` (10 commits : spec, plan, 3 tâches, 1 fix régression, corrections), doc `32d1aaf`. **Rien déployé** — `npm run deploy` reste un geste humain explicite.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 52 — loop-engineering : devis.js demanderAcompte() refresh manquant, escaladé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Run loop-engineering, `todo.md:278` — `demanderAcompte()` (`devis.js`, dupliqué depuis `tickets.js`) ne rafraîchit jamais la fiche après un `POST /api/devis/:id/acompte` réussi (la branche de rafraîchissement post-succès ne couvre que `contextType === 'ticket'`). Fix identifié précisément (1 ligne : `if (contextType === 'devis' && entityId) openDevisDetail(entityId);`) mais **non appliqué** — escaladé par prudence : mot-clé "acompte" (catégorie Paiement de `loop-policy.md`) + signal graphe `sensitiveMatch:true` (auth/isolation/paiement) sur `devis.js`.
+
+## État git
+Aucun commit de code. Doc `dd322a3`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 51 — loop-engineering : rebranding register.html « Mon Atelier » → « MyDesk », mergé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:228` — `public/register.html`, 5 occurrences (dont une reformulation non-triviale ligne 158, "Mon atelier est en Belgique"→"Mon entreprise est en Belgique", cohérente avec la terminologie du formulaire plutôt qu'un simple remplacement). `boutique_id`/tokens/logique credential intacts, vérifiés par lecture directe. Gates verts : vitest 824/826, tsc baseline inchangée, build OK, Playwright 10/10. `CACHE_VERSION` v2.69→v2.70.
+
+## État git
+Commit `4b5f195` mergé sur `main` (`git merge --ff-only`, poussé). Doc `65fd024`. Reste ouvert rebranding : `auth.ts` L229 (JSDoc, fichier sensible), audit pages internes L230.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 50 — loop-engineering : rebranding login.html « Mon Atelier » → « MyDesk », mergé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:227` — `public/login.html`, 5 littéraux (placeholder onboarding + fallback session `boutique_name`/`company` ×2). Ancienne branche `loop/rebrand-login-html-mydesk` (`76eb413`) 15 commits derrière `main` → réimplémentation propre plutôt que merge/rebase. `boutique_id`/tokens/OTP intacts. Gates verts, Playwright 10/10 (gate réparé au checkpoint 47). `CACHE_VERSION` v2.68→v2.69.
+
+## État git
+Commit `600ffa6` mergé sur `main`. Doc `a426ea3`. Reste ouvert : `register.html` L228, `auth.ts` L229.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 49 — loop-engineering : rebranding app.js « Mon Atelier » → « MyDesk », mergé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:225` — `public/static/js/app.js:27,424-425` (fallback `session.company`/`user.boutique_name`, 3 occurrences dans `buildSidebar()`/`storeSession()`). Tâche précédemment escaladée (checkpoint 45, branche `loop/rebrand-app-js-mydesk` non mergée) débloquée par la réparation du gate Playwright au checkpoint 47 (`d7c5ed1`) — changement de contexte légitime, pas une nouvelle tentative aveugle. Réimplémentation propre (ancienne branche 26 commits derrière `main`). Gates verts, Playwright 10/10. `CACHE_VERSION` v2.67→v2.68.
+
+## État git
+Commit `283c8c5` mergé sur `main`. Doc `ec0a038`. Reste ouvert : `login.html` L227, `register.html` L228, `auth.ts` L229.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 48 — loop-engineering : fiche imprimée utilise la boutique du ticket, pas la 1ère de la liste)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:39` (bug mineur non bloquant, comptes admin uniquement) — `_fetchTicketPrintData()` prenait systématiquement `(GET /api/boutiques)[0]` au lieu de la boutique réelle du ticket. Corrigé via `GET /api/boutiques/:id` avec `t.boutique_id` (même patron que `settings.html`, isolation déjà en place côté route). **2 déviations procédurales signalées** : Étape 1bis (rafraîchissement graphe) exécutée après l'implémentation au lieu d'avant (par omission) ; travail fait directement sur `main` sans worktree isolé (diff trivial, gates tous verts avant commit, pas de risque matériel constaté mais à corriger). Gates verts, Playwright 10/10.
+
+## État git
+Commit `ece114d` + `ba3f81f` (`CACHE_VERSION` v2.66→v2.67, rattrapé en commit séparé) directement sur `main`. Doc `86604e0`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 47 — loop-engineering : rebranding register.js « Mon Atelier » → « MyDesk » + gate Playwright réparé, mergé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:226` — repris après réparation des gates Windows par le commit `d7c5ed1` (`@playwright/test` jamais installé + `executablePath` codé en dur vers un chemin Linux inexistant + `typescript` jamais déclaré en devDependency, `npx tsc` exécutait un package factice npm). Cette réparation invalidait la raison d'escalade du run précédent (checkpoint 45) sans nécessiter de décision produit — traité comme changement de contexte légitime. `register.js:230-231` — fallback session `company_name || 'Mon Atelier'` → `'MyDesk'`. Réimplémentation propre sur branche fraîche (ancienne branche antérieure à `d7c5ed1`). Gates verts, **Playwright 10/10 (gate désormais exécutable pour la première fois)**. `CACHE_VERSION` v2.65→v2.66.
+
+## État git
+Commit `5506b73` mergé sur `main`. Doc `89c767e`. Reste ouvert : `app.js` L225 (candidat naturel du run suivant, traité checkpoint 49), `login.html` L227, `register.html` L228, `auth.ts` L229.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-24 (checkpoint 46 — Graphify : chunks stale réparés, doublons fusionnés, lien QualiRépar↔ecosystem tracé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Suite du graphe construit au checkpoint 40 — un `/graphify --update` du 2026-07-23 avait laissé `cache/semantic/` incohérent. **Chunk 11 (index)** retraité intégralement (tronqué par la coupure de quota du checkpoint 40 — ne couvrait que 1/8 PDF). **12 chunks (12-23)** vérifiés à tort suspectés stale (contenu légitimement minimal, favicon+icônes PWA) ; 2 vrais bugs schema corrigés (chunk_13 clé `"type"` au lieu de `"relation"`, chunk_23/`.graphify_detect.json` BOM UTF-8). **Chunk 10** : 11 nœuds doublons découverts et fusionnés (pas supprimés) vers les IDs canoniques du chunk 11. Graphe régénéré (2 passes) : 1937 nœuds/2752 liens, `graph.json`/`graph.html`/`GRAPH_REPORT.md`/vault Obsidian.
+
+**Découverte annexe actionnable** : `public/qualirepar.js` est une simulation UI 100% locale (zéro `fetch()` vers l'API ecosystem réelle), jamais branchée sur le vrai workflow Fonds Réparation documenté dans les PDF partenaires — bonus calculé localement (`Math.min(amount*0.25, maxBonus)` codé en dur) plutôt que via `GET /catalog`.
+
+## État git
+Rien commité côté code applicatif (`graphify-out/` gitignoré). Doc `5bc0924`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-23 (checkpoint 45 — loop-engineering : rebranding register.js « Mon Atelier » → « MyDesk », escaladé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:226` — `register.js:230-231` (fallback session OTP `company_name || 'Mon Atelier'` → `'MyDesk'`). Contrôle OTP/tokens/`boutique_id` intacts, signal graphe `sensitiveMatch:false`. **Escaladé** : gate Playwright inexécutable sur Windows (`@playwright/test` non provisionné, `playwright.config.ts` cible un chemin chromium Linux CI) = condition dure L2 non satisfaite. Réparé ensuite au checkpoint 47 (`d7c5ed1`).
+
+## État git
+Commit `f029415` sur branche `loop/rebrand-register-js-mydesk`, **non mergé** (en attente jusqu'au checkpoint 47). Doc `fd0c95e`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-23 (checkpoint 44 — loop-engineering : case obsolète /robots.txt 500 Genspark réconciliée)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:169` — Genspark abandonné depuis la migration Cloudflare (2026-07-10), le 500 spécifique à cet hébergeur est sans objet. Sur Cloudflare, `/robots.txt` renvoie 200 (asset statique `public/robots.txt` + route Hono de redondance `src/index.tsx:242`). Case cochée, **delta code nul**. **Constat durable noté** : sur cet environnement Windows, la loop ne peut auto-commiter aucun vrai changement de code tant que le gate Playwright n'est pas réparé (fait ensuite au checkpoint 47) — seules les réconciliations docs-only restent auto-committables jusque-là.
+
+## État git
+Docs uniquement, sur `main` directement (pas de worktree isolé — contrainte sandbox). Doc `f02c5a4`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-23 (checkpoint 43 — loop-engineering : case obsolète tests/phoneCatalogService.test.ts réconciliée)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:168` — le fichier existe déjà depuis la migration Ports & Adapters (checkpoint 14, 2026-07-15) : 209 lignes, 11 tests couvrant les 5 fonctions de `phoneCatalogService.ts`. Case obsolète (même classe de décalage doc/code que le bug slug boutiques et la réconciliation r.success/r.data). Cochée, **delta code nul** (pas d'ajout de couverture supplémentaire — le sous-item plus large "0 test sur ~1500 lignes du fallback catalogue" reste hors scope, laissé décoché).
+
+## État git
+Docs uniquement, sur `main` directement. Doc `cb87767`/`8ee0a56`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 42 — garde-fou anti-dump SKILL.md + collision git évitée avec un run planifié en cours)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Incident `alltasks.tmp.json` (29 Ko, dump `pick-task.mjs --all`) trouvé non suivi dans le working tree — bloquait le prochain run planifié dès l'Étape 0 (précondition working tree propre). Supprimé, pattern `*.tmp.json` ajouté au `.gitignore`. Garde-fou ajouté dans `SKILL.md` § Garde-fous globaux : toute investigation ponctuelle (dump/debug) doit rediriger hors du repo ou être nettoyée avant la fin du run. **Collision git évitée** : `git status` a révélé des changements déjà indexés par un run planifié actif (`.loop-lock` présent, ~13 min) — attente explicite de la disparition du lock plutôt que de committer par-dessus (le run planifié a terminé proprement de son côté, checkpoint 41).
+
+## État git
+Commit `9305d0b`. Doc `d4d710c`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 41 — loop-engineering : docs/ARCHITECTURE_MODULES.md §2 noms de tables corrigés)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Loop-engineering, `todo.md:163` — 5 noms de tables obsolètes corrigés dans le tableau §2 "Schéma de base de données", chacun vérifié contre les vrais `CREATE TABLE` de `migrations/*.sql` : `statuts_historique`→`tickets_statuts_historique` (0004), `lignes_facture`→`lignes_document` (0006), `sessions_caisse`/`lignes_caisse`→`clotures_journalieres` (0008, les deux premiers noms n'existent dans aucune migration), `otp_codes`→`otp_tokens` (0009), `tickets_sav`→`sav_dossiers` (0019). Portée volontairement limitée aux noms erronés (pas d'ajout de complétude type migrations 0032-0036, éviterait le scope creep). Gates verts (docs-only, Playwright n/a).
+
+## État git
+Commit `2e6da16`. Doc `112d925`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 40 — graphe de connaissance /graphify sur tout le repo + /approve Telegram validé)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+`/graphify` lancé sur `izigsm/webapp` en entier (255 fichiers, ~1.63M mots) — 1867 nœuds, 2643 relations, 418 communautés, sorties dans `graphify-out/` (gitignoré) : `graph.json`, `graph.html`, `GRAPH_REPORT.md`, vault Obsidian (2282 notes). **Incident en cours de route** : la limite de dépense mensuelle du compte a coupé 24 sous-agents d'extraction en plein run (23/24 chunks sauvés malgré la coupure, 1 refait manuellement) ; fichiers temporaires Graphify non gitignorés au départ ont sali le working tree et fait échouer le run planifié suivant — corrigé (`.graphify_*`/`graphify-out/` ajoutés au `.gitignore`).
+
+**Commande `/approve` validée en conditions réelles** (tâche déploiement groupé taguée `[loop-safe]` via Telegram) — sans effet pratique ici : `loop-policy.md` interdit tout `wrangler pages deploy` automatique quel que soit le tag, le prochain run qui la sélectionnerait devrait constater qu'il ne peut rien déployer et escalader. Les 4 commandes Telegram (`/status`, `/digest`, `/run`, `/approve`) désormais toutes confirmées en usage réel au moins une fois.
+
+## État git
+Doc `40fb393`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 39 — loop-engineering pilotable à distance : Telegram + cadence horaire)
 
 ## Vue d'ensemble (checkpoint 39)
@@ -85,6 +263,16 @@ Suite du checkpoint 38 (loop-engineering mise en place au 37, premier commit aut
 
 ## État git à la fin de ce checkpoint
 Tout commité et pushé sur `main` (`d13976c`/`d87de2a` checkpoint 38, `6051332`, `a480f5d`, `7fb2436` — infra notifications/commandes Telegram de ce checkpoint). Aucun changement de code applicatif — uniquement infra loop-engineering + documentation.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-20 (checkpoint 38 — loop-engineering : réconciliation backlog « pattern r.success/r.data »)
+*(Entrée reconstruite rétroactivement le 2026-07-30 depuis `current-state.md` + `git log`)*
+
+Run loop-engineering autonome (une tâche, de bout en bout). Après skips Étape 1 (cache-busting déjà escaladé, deep-link admin déjà escaladé), première tâche risque faible implémentable : audit de `agenda.js` fonction par fonction (`todo.md` § "Bug étendu — pattern r.success/r.data"). **Résultat : déjà corrigé** — le commit `c281411` (2026-07-17) avait déjà traité `agenda.js` (8 fonctions), `sav.js` (8 fonctions), `stats.html` (3+4 fonctions), validé en local live à l'époque. Seules les checkboxes `todo.md` étaient restées décochées (même décalage documentation/code que le bug slug boutiques `92f0db8`). Réconciliation documentaire uniquement, gates baseline vérifiés verts (vitest 824/826, tsc sans nouvelle erreur, build OK).
+
+## État git
+Commits `d13976c`/`d87de2a`.
 
 ---
 
@@ -155,6 +343,28 @@ Tout commité et pushé sur `main`. Chantier impression ticket 8/8 tâches + tou
 2. Décider si un vrai restyle visuel A4 (bandeau bleu marine façon `bon de réparation.pdf`) reste souhaité (toujours en attente depuis checkpoint 31, système indigo actuel conservé pour l'instant)
 3. Namespacer les futurs fichiers `.superpowers/sdd/` créés hors plan écrit (convention déjà appliquée depuis l'incident du 2026-07-18, à poursuivre)
 4. Rien d'autre en attente identifié à ce jour pour le chantier impression ticket — chantier clos
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 34 — incident sécurité /login corrigé, cause réelle : extension NoScript)
+*(Entrée reconstruite rétroactivement le 2026-07-30 depuis `current-state.md` + `git log` — voir aussi checkpoint 35 ci-dessus qui consolide ce contenu)*
+
+Incident client — /login + dashboard cassés sur Chrome, **RÉSOLU**. Utilisateur a signalé une connexion impossible + identifiants visibles dans l'URL, puis un dashboard vide. Vraie cause trouvée en investiguant en direct sur le poste de l'utilisateur (Claude in Chrome) : l'extension **NoScript** bloquait l'exécution JS sur `repairdesk.fr` (pas encore en site de confiance) — logs `DocumentFreezer`/`SyncMessage loops` confirmés en console. Résolu par l'utilisateur en ajoutant le domaine aux domaines de confiance NoScript. **Le code applicatif n'était jamais en cause.** Un fix Service Worker déployé en parallèle (retirer `/login`/`/register`/`/reset-password` du cache, `CACHE_VERSION v2.63`) reste une amélioration légitime mais ne réglait pas ce symptôme précis.
+
+## État git
+Commits `40ac842` (fix SW), `13036a9`/`d68646b` (doc, correction de la vraie cause).
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-18 (checkpoint 33 — déploiement production, chantier impression ticket 8/8 tâches)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Les 8 tâches du chantier impression ticket (+ 2 amendements hors plan, Tasks 4bis/4b) déployées sur `repairdesk.fr`, sur confirmation explicite de l'utilisateur. Tests avant déploiement : 824/826 (2 échecs fuseau horaire pré-existants connus). `CACHE_VERSION` v2.61→v2.62 (fichiers frontend touchés : `tickets.js`/`tickets.html`/`print.css`). Vérifié après déploiement : `GET /api/health` → 200, `sw.js` confirme `CACHE_VERSION izigsm-v2.62`.
+
+**2 bugs connus non corrigés, documentés dans `bugs.md`** : le deep-link technicien (`tickets.html?open=<token>`) ne fonctionne jamais pour un compte admin (route `GET /api/tickets` exige `boutique_id` sans exception admin), et une confusion connexe erreur/introuvable dans `_checkOpenDeepLink()`.
+
+## État git
+Commits `a756c5e`/`e8cdd61`/`c2df45f`/`2d1dd74`.
 
 ---
 
@@ -231,6 +441,39 @@ SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant de gestion pour
 
 ## État git à la fin de cette session
 Tout commité sur `main` local. **Pas encore pushé au moment de l'écriture de ce recovery prompt** — à vérifier au prochain `git status`/`git push`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-17 (checkpoint 30 — chantier impression ticket démarré, session suspendue le soir même)
+*(Entrée reconstruite rétroactivement le 2026-07-30 depuis `current-state.md` + `git log`)*
+
+Nouveau chantier, brainstormé et planifié dans la foulée du checkpoint 29 (acompte structuré). Objectif : 2 nouveaux formats d'impression ticket thermique (72mm) — ticket client à emporter + étiquette technicien à coller sur l'appareil — en plus de la fiche A4 existante (corrigée au passage : elle affichait les notes internes, une fuite de confidentialité). QR code + code-barre EAN-13 sur les 3 formats. Pas d'agent d'impression externe (QZ Tray écarté) — `window.print()` natif, l'imprimante thermique reconnue comme imprimante système standard.
+
+Spec `docs/superpowers/specs/2026-07-17-impression-ticket-design.md` (commit `2b63d23`), plan `docs/superpowers/plans/2026-07-17-impression-ticket.md` (commit `10cd47e`, 8 tâches TDD/local-live).
+
+**État d'avancement — 2/8 tâches, session suspendue avant la revue de Task 2** : Task 1 (`_fetchTicketPrintData()` expose l'ID numérique, `a9bf783`) terminée et revue. Task 2 (`listTickets()` reconnaît token/EAN-13 en recherche, `236f8c2`) **implémentée mais pas encore revue**. Tasks 3-8 pas commencées.
+
+## Prochaine étape au retour
+Dispatcher le reviewer sur Task 2 (BASE `a9bf783`, HEAD `236f8c2`) avant de continuer vers Task 3 — ne pas re-dispatcher l'implémenteur.
+
+## État git
+Doc `954b5d1`.
+
+---
+
+# Recovery Prompt — iziGSM — 2026-07-17 (checkpoint 29 — acompte structuré implémenté de bout en bout)
+*(Entrée reconstruite rétroactivement le 2026-07-30)*
+
+Suite du checkpoint 28 (plan écrit). Exécution des 10 tâches du plan via `superpowers:subagent-driven-development`, directement sur `main` — un subagent implémenteur + un subagent reviewer par tâche, revue finale de branche (opus) sur l'ensemble.
+
+**Avant le chantier acompte, même session** : bug étendu `r.success`/`r.data` corrigé dans `agenda.js`/`sav.js`/`stats.html` — 19 fonctions cassées depuis toujours, ces 3 pages intégralement non fonctionnelles (KPIs jamais affichés, formulaires en échec silencieux). Commit `c281411`.
+
+**10 tâches terminées et approuvées** — résumé fonctionnel : acompte facturé immédiatement (vraie facture verrouillée, séquence `FAC-` partagée), déduit automatiquement à la facture finale, annulation avec acompte perçu → avoir automatique (2 mois), UI staff (tickets/devis) + UI publique (`suivi.html`).
+
+**Revue finale de branche** (`33d9a739`..`09d7e23`, 17 commits, verdict initial "With fixes") : 2 findings Important corrigés après la revue (commit `a9d28d5`) — validation `montant_ht` durcie, et surtout `changeStatus()` (annulation avec avoir) qui approximait le HT/taux TVA de l'acompte à 20% fixe au lieu de lire les valeurs réelles.
+
+## État git
+Commits `33d9a739`..`09d7e23`, doc `03992c0`.
 
 ---
 

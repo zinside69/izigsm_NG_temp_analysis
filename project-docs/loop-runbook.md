@@ -95,6 +95,23 @@ lettre. Dans l'ordre :
 4. **Isolation dans un worktree git** (`git worktree add ../izigsm-loop-<slug> -b
    loop/<slug> main`) — tout le travail se fait à côté, jamais directement sur ton
    checkout principal.
+   - **Piège récurrent (checkpoints 41/43/44/45/47/49/50/51 + audit A4 checkpoint 54)** :
+     le chemin frère `../izigsm-loop-<slug>` réussit à la création (`git worktree add`)
+     mais `cd`/écriture dedans est bloqué par le sandbox de session ("allowed working
+     directories... 'izigsm/webapp'"). Workaround stable utilisé depuis : créer le
+     worktree **sous** `.claude/worktrees/<slug>` (déjà ignoré par `.gitignore`, dans le
+     périmètre autorisé) au lieu du chemin frère prescrit littéralement ci-dessus —
+     isolation par branche + répertoire dédié identique, seul le chemin change. Si le
+     worktree frère reste inutilisable, retomber sur une branche fraîche créée
+     directement sur le checkout principal (`git checkout -b loop/<slug>-v2 main`) plutôt
+     que de travailler sans branche isolée.
+   - **Gate Playwright/tsc cassé sur Windows jusqu'au 2026-07-24 (fix `d7c5ed1`)** :
+     `@playwright/test` n'était jamais installé, `executablePath` codé en dur vers un
+     chemin chromium Linux inexistant, et `typescript` jamais déclaré en devDependency
+     (`npx tsc` exécutait un package factice du registre npm). Plusieurs tâches
+     risque-faible ont dû être escaladées puis reprises une fois ce fix mergé (checkpoints
+     45→47, 49, 50) — si Playwright redevient inexécutable sur une future machine
+     Windows, revérifier ces 3 points avant de chercher une autre cause.
 5. **Planification + implémentation** — pour une tâche simple : implémentation directe
    avec un sous-agent implémenteur + un sous-agent reviewer (c'est ce qui explique les
    multiples processus `claude` que tu as pu voir dans `Get-Process` — chaque sous-agent
