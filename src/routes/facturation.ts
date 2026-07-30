@@ -368,8 +368,15 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
 
       let statut = 'brouillon'
       if (body.action === 'emettre_encaisser') {
+        // Le montant à encaisser n'est PAS `devis.total_ttc` : convertirDevis() déduit
+        // une facture d'acompte antérieure et crée donc une facture au solde restant
+        // (devisService.ts:437-483). Encaisser le total du devis ferait payer deux fois
+        // l'acompte au client et laisserait `montant_paye` au-dessus du `total_ttc` réel.
+        // On relit la facture créée plutôt que de recopier ici la règle de déduction —
+        // si celle-ci évolue, l'encaissement suit sans modification.
+        const factureCreee = await getFacture(c.get('db'), facture_id)
         const paiement = await ajouterPaiement(c.env.DB, facture_id, user.sub, {
-          montant:       devis.total_ttc,
+          montant:       factureCreee?.total_ttc ?? devis.total_ttc,
           mode_paiement: body.mode_paiement,
           reference:     body.reference,
         })
