@@ -242,8 +242,14 @@ export async function emettreFacture(
   // ⇒ franchise en base, art. 293 B) et la mention paramétrée par la boutique : ces deux
   // valeurs conditionnent le pied de facture et doivent suivre le document, pas la config
   // du jour où on le réimprime. LEFT JOIN car la ligne de settings peut ne pas exister.
+  // telephone/email inclus depuis le correctif F2 (revue finale 2026-07-30) : avant, ils
+  // restaient vivants sur une facture déjà émise (changer le tel de la boutique réécrivait
+  // rétroactivement toutes les factures). Les factures émises avant ce correctif n'auront
+  // jamais ces deux clés dans leur snapshot — le rendu frontend dégrade sur la donnée
+  // vivante dans ce cas précis (contrairement à nom/siret/adresse).
   const vendeur = await db.prepare(`
     SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville,
+           b.telephone, b.email,
            s.tva_taux_defaut, s.mention_facture
     FROM   boutiques b
     LEFT   JOIN boutique_settings s ON s.boutique_id = b.id
