@@ -197,7 +197,7 @@ montant réglé couvre le TTC).
 | `action = 'emettre_encaisser'` sans `mode_paiement` | `400` |
 | `client_id` (ou `ticket_id`) d'une autre boutique | `422` — refus du service |
 | `devis_id` déjà converti, refusé ou annulé | `422`, message existant de `convertirDevis()` |
-| Total TTC égal à 0 | `400` — sans objet comptable, et l'encaissement échouerait plus loin |
+| Total TTC égal à 0 | `422` — refus du service, sans objet comptable et l'encaissement échouerait plus loin |
 | Rôle `technicien` | `403` |
 
 ## Tests
