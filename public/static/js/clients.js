@@ -255,6 +255,13 @@ async function saveClient() {
     return;
   }
   const siret = (document.getElementById('c-siret')?.value || '').replace(/\s/g, '');
+  // SIRET obligatoire pour un client professionnel (décision 2026-07-30) — se remplit
+  // naturellement via la sélection dans l'autocomplete Raison sociale ci-dessus.
+  // TVA intracom reste optionnelle : non fournie par l'API pour toutes les structures.
+  if (_clientType === 'professionnel' && !siret) {
+    showFlash('Le SIRET est obligatoire pour un client professionnel.', 'error');
+    return;
+  }
   if (siret && !/^\d{14}$/.test(siret)) {
     showFlash('SIRET invalide (14 chiffres attendus).', 'error');
     return;
@@ -476,6 +483,98 @@ function computeTvaFromSiren(siren) {
   const cle = (12 + 3 * (Number(siren) % 97)) % 97;
   return `FR${String(cle).padStart(2, '0')}${siren}`;
 }
+
+// ─── Recherche entreprise par nom (autocomplete "Raison sociale") ─────────────
+// Même API que la recherche par SIRET ci-dessus (recherche-entreprises.api.gouv.fr,
+// gratuite/sans clé), recherche par nom au lieu du SIRET exact — même principe que
+// l'autocomplete "Rechercher mon entreprise" de register.html. Réutilise
+// computeTvaFromSiren() pour préremplir la TVA intracom au clic, comme lookupSiret().
+let _raisonSocialeTimer     = null;
+let _entrepriseResultsCache = [];
+
+/** Déclenché à chaque frappe dans le champ Raison sociale */
+function onRaisonSocialeInput(val) {
+  clearTimeout(_raisonSocialeTimer);
+  const box = document.getElementById('raison-sociale-suggestions');
+  if (!box) return;
+
+  if (!val || val.trim().length < 3) {
+    box.style.display = 'none';
+    return;
+  }
+
+  _raisonSocialeTimer = setTimeout(async () => {
+    let results = [];
+    try {
+      const res  = await fetch(`${SIRET_API_BASE}?q=${encodeURIComponent(val)}&per_page=5`);
+      const json = await res.json();
+      results = json.results || [];
+    } catch {
+      box.style.display = 'none';
+      return;
+    }
+
+    if (!results.length) { box.style.display = 'none'; return; }
+
+    _entrepriseResultsCache = results;
+    box.innerHTML = results.map((r, i) => {
+      const nom  = r.nom_raison_sociale || r.nom_complet || '';
+      const etab = r.siege;
+      return `
+        <div class="entreprise-suggestion-item" data-idx="${i}"
+             style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f5f9;"
+             onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">
+          <div style="font-weight:600;">${_esc(nom)}</div>
+          <div style="font-size:11px;color:#94a3b8;">${_esc(etab?.libelle_commune || '')} · SIRET ${_esc(etab?.siret || '')}</div>
+        </div>
+      `;
+    }).join('');
+    box.style.display = 'block';
+    if (!box.dataset.wired) {
+      box.dataset.wired = '1';
+      box.addEventListener('click', e => {
+        const item = e.target.closest('.entreprise-suggestion-item');
+        if (!item) return;
+        selectEntrepriseFromSuggestion(Number(item.dataset.idx));
+      });
+    }
+  }, 350);
+}
+
+/**
+ * Sélectionne une entreprise dans la dropdown "Raison sociale" — remplace toujours
+ * raison_sociale/SIRET (c'est le but explicite du clic), mais ne préremplit
+ * adresse/code postal/ville/TVA que s'ils sont encore vides (_fillIfEmpty, même
+ * règle que lookupSiret() : jamais d'écrasement d'une saisie manuelle existante).
+ */
+function selectEntrepriseFromSuggestion(idx) {
+  const result = _entrepriseResultsCache[idx];
+  if (!result) return;
+  const etab = result.siege;
+
+  document.getElementById('c-raison-sociale').value = result.nom_raison_sociale || result.nom_complet || '';
+  document.getElementById('c-siret').value           = etab?.siret || '';
+
+  const codePostal = etab?.code_postal || '';
+  // adresse brute type "20 AVENUE DE SEGUR 75007 PARIS" — retire le suffixe CP+ville
+  const idxCp   = etab?.adresse && codePostal ? etab.adresse.indexOf(codePostal) : -1;
+  const adresse = idxCp > -1 ? etab.adresse.slice(0, idxCp).trim() : (etab?.adresse || '');
+
+  _fillIfEmpty('c-adresse',      adresse);
+  _fillIfEmpty('c-code-postal',  codePostal);
+  _fillIfEmpty('c-ville',        etab?.libelle_commune || '');
+  _fillIfEmpty('c-tva-intracom', computeTvaFromSiren(result.siren));
+
+  document.getElementById('raison-sociale-suggestions').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  const box = document.getElementById('raison-sociale-suggestions');
+  const inp = document.getElementById('c-raison-sociale');
+  if (box && inp && !inp.contains(e.target) && !box.contains(e.target)) {
+    box.style.display = 'none';
+  }
+});
 
 // ─── Historique CRM ───────────────────────────────────────────────────────────
 

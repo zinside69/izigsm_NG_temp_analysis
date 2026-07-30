@@ -6,6 +6,8 @@
 
 **Scope volontairement limité** : validation ajoutée uniquement côté `clients.html`/`clients.js` (attributs `required` + checks JS explicites avec messages précis, même pattern que le check `nom` déjà existant). **Pas de changement côté API** (`POST /api/clients` reste permissif, seuls prénom/nom restent obligatoires côté backend) — cette route est aussi utilisée par la création rapide de client depuis la prise en charge (`tickets.js`, aucun champ adresse dans ce flux plus court), la rendre strictement obligatoire aurait cassé ce parcours.
 
+**Volet Professionnel (même jour, suite)** : SIRET rendu obligatoire, TVA intracommunautaire reste optionnelle (décision utilisateur — se remplit automatiquement via la sélection entreprise mais pas de source garantie pour toutes les structures). Autocomplete "Raison sociale" ajouté (`onRaisonSocialeInput()`/`selectEntrepriseFromSuggestion()`, `clients.js`) — réutilise `recherche-entreprises.api.gouv.fr`, la même API gratuite déjà utilisée par `onSiretInput()`/`lookupSiret()` dans ce fichier et par l'autocomplete d'inscription (`register.js`, `/api/public/entreprise-search`). Sélectionner un résultat remplace toujours raison_sociale/SIRET, mais ne préremplit adresse/CP/ville/TVA que s'ils sont vides (`_fillIfEmpty`, jamais d'écrasement d'une saisie manuelle) — TVA calculée via `computeTvaFromSiren()` déjà existant. Validé en local live avec une recherche réelle ("SOTELI").
+
 **Cohérent avec** le fix du même jour sur la synchro email/téléphone en prise en charge (voir `todo.md`) — les deux visent à réduire les fiches client incomplètes.
 
 ## 2026-07-23/24 — Rebranding produit « Mon Atelier » → « MyDesk » (EN COURS, pas terminé)
