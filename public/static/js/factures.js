@@ -389,7 +389,7 @@ async function loadTvaDefautBoutique() {
 }
 
 // ─── Pré-remplissage depuis devis (flux devis → facture) ─────────────────────
-function checkFromDevis() {
+async function checkFromDevis() {
   const stored = localStorage.getItem('izigsm_devis_to_facture');
   if (!stored) return;
   localStorage.removeItem('izigsm_devis_to_facture');
@@ -397,37 +397,40 @@ function checkFromDevis() {
   let d;
   try { d = JSON.parse(stored); } catch { return; }
 
-  openNewFacture();
+  await openNewFacture();
 
-  setTimeout(() => {
-    // Client
-    const clientSelect = document.getElementById('f-client');
-    if (clientSelect && d.clientId) clientSelect.value = d.clientId;
+  // openNewFacture() est résolue : le modal est prêt, plus besoin d'un délai
+  // arbitraire pour attendre son rendu (l'ancien setTimeout(150) masquait une
+  // course avec loadTvaDefautBoutique() — la réinitialisation pouvait effacer
+  // le pré-remplissage si le fetch dépassait 150 ms).
 
-    // Devis source
-    const devisSelect = document.getElementById('f-devis');
-    if (devisSelect && d.devisId) devisSelect.value = d.devisId;
+  // Client
+  const clientSelect = document.getElementById('f-client');
+  if (clientSelect && d.clientId) clientSelect.value = d.clientId;
 
-    // Lignes
-    if (d.lines?.length) {
-      factureLines = [];
-      document.getElementById('facture-lines').innerHTML = '';
+  // Devis source
+  const devisSelect = document.getElementById('f-devis');
+  if (devisSelect && d.devisId) devisSelect.value = d.devisId;
 
-      d.lines.forEach(l => {
-        addFactureLine();
-        const lid    = factureLines[factureLines.length - 1];
-        const descEl = document.getElementById('fl-desc-'  + lid);
-        const qtyEl  = document.getElementById('fl-qty-'   + lid);
-        const priceEl= document.getElementById('fl-price-' + lid);
-        if (descEl)  descEl.value  = l.desc || l.description || '';
-        if (qtyEl)   qtyEl.value   = l.qty  || l.quantite    || 1;
-        if (priceEl) priceEl.value = l.unitPrice || l.prix_unitaire_ht || '';
-        updateFactureLineTotals(lid);
-      });
-    }
+  // Lignes
+  if (d.lines?.length) {
+    factureLines = [];
+    document.getElementById('facture-lines').innerHTML = '';
 
-    setFactureLinesReadOnly(true);
-  }, 150);
+    d.lines.forEach(l => {
+      addFactureLine();
+      const lid    = factureLines[factureLines.length - 1];
+      const descEl = document.getElementById('fl-desc-'  + lid);
+      const qtyEl  = document.getElementById('fl-qty-'   + lid);
+      const priceEl= document.getElementById('fl-price-' + lid);
+      if (descEl)  descEl.value  = l.desc || l.description || '';
+      if (qtyEl)   qtyEl.value   = l.qty  || l.quantite    || 1;
+      if (priceEl) priceEl.value = l.unitPrice || l.prix_unitaire_ht || '';
+      updateFactureLineTotals(lid);
+    });
+  }
+
+  setFactureLinesReadOnly(true);
 }
 
 // ─── Ouverture modal nouvelle facture ────────────────────────────────────────
