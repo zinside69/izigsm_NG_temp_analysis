@@ -397,10 +397,13 @@ export interface CreateFactureInput {
  * ne doit jamais être consommé par une saisie invalide (il ne peut pas être rendu).
  *
  * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
- * dépend de `nextNumero()`/`auditLog()`/`db.batch()`, tous sur `D1Database` brut.
+ * dépend de `nextNumero()`/`auditLog()`/`db.batch()`/`ajouterPaiement()`/
+ * `emettreFacture()`, tous sur `D1Database` brut.
  *
- * Cette fonction ne couvre que `action: 'brouillon'` — les actions 'emettre' et
- * 'emettre_encaisser' sont ajoutées dans un chantier ultérieur (voir la spec).
+ * `action: 'emettre'` verrouille la facture (NF525) juste après création ;
+ * `action: 'emettre_encaisser'` encaisse en plus le TTC avant verrouillage —
+ * même séquence que `createFactureAcompte()` (`ajouterPaiement()` avant
+ * `emettreFacture()`, car ce dernier pose `locked = 1`).
  *
  * @param db     - Instance D1Database
  * @param userId - ID de l'utilisateur créateur
@@ -423,6 +426,9 @@ export async function createFacture(
     if (!TVA_TAUX_AUTORISES.includes(l.tva_taux))
       throw new Error(`tva_taux invalide : ${l.tva_taux} (autorisés : ${TVA_TAUX_AUTORISES.join(', ')}).`)
   }
+
+  if (input.action === 'emettre_encaisser' && !input.mode_paiement)
+    throw new Error('mode_paiement obligatoire pour encaisser.')
 
   const totaux = calculLignes(input.lignes)
   if (totaux.total_ttc <= 0)
@@ -475,13 +481,34 @@ export async function createFacture(
     )
   }))
 
+  // ── Encaissement puis émission ───────────────────────────────────────────
+  // Ordre imposé : ajouterPaiement() exige locked=0, emettreFacture() pose
+  // locked=1. Même séquence que createFactureAcompte().
+  let statut: StatutFacture = 'brouillon'
+
+  if (input.action === 'emettre_encaisser') {
+    const paiement = await ajouterPaiement(db, factureId, userId, {
+      montant:       totaux.total_ttc,
+      mode_paiement: input.mode_paiement!,
+      reference:     input.reference,
+    })
+    statut = paiement.statut
+  }
+
+  if (input.action !== 'brouillon') {
+    await emettreFacture(db, factureId, userId)
+    // emettreFacture() ne repasse en 'en_attente' que depuis 'brouillon' :
+    // un encaissement préalable ('payee') est préservé.
+    if (statut === 'brouillon') statut = 'en_attente'
+  }
+
   await auditLog(db, {
     boutique_id: input.boutique_id, user_id: userId,
     action: 'CREATE_FACTURE', entite_type: 'facture', entite_id: factureId,
-    apres: { numero, total_ttc: totaux.total_ttc, action: input.action },
+    apres: { numero, total_ttc: totaux.total_ttc, action: input.action, statut },
   })
 
-  return { facture_id: factureId, facture_numero: numero, statut: 'brouillon' }
+  return { facture_id: factureId, facture_numero: numero, statut }
 }
 
 // ─── Avoirs ───────────────────────────────────────────────────────────────────

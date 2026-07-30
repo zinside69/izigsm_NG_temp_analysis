@@ -1233,4 +1233,78 @@ describe('createFacture()', () => {
     )
     expect(auditCall).toBeDefined()
   })
+
+  const SQL_GET_FACTURE_PAIEMENT = n(`SELECT id, total_ttc, montant_paye, boutique_id, locked FROM factures WHERE id = ?`)
+  const SQL_GET_FACTURE_EMETTRE  = n(`SELECT * FROM factures WHERE id = ?`)
+  const SQL_NF525_LAST_HASH      = n(`SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1`)
+
+  function setupEmission(factureId: number) {
+    setupBrouillon(factureId)
+    db.__setResponse(SQL_GET_FACTURE_PAIEMENT, {
+      id: factureId, total_ttc: 120, montant_paye: 0, boutique_id: 1, locked: 0,
+    })
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, {
+      id: factureId, boutique_id: 1, client_id: 3, numero: 'FAC-2026-00008',
+      total_ht: 100, total_tva: 20, total_ttc: 120, locked: 0,
+    })
+    db.__setNotFound(SQL_NF525_LAST_HASH)
+  }
+
+  it('lance Error si action=emettre_encaisser sans mode_paiement', async () => {
+    await expect(createFacture(db, 10, { ...BASE_INPUT, action: 'emettre_encaisser' }))
+      .rejects.toThrow('mode_paiement obligatoire pour encaisser.')
+  })
+
+  it('action=emettre : verrouille la facture sans encaisser', async () => {
+    setupEmission(61)
+
+    const result = await createFacture(db, 10, { ...BASE_INPUT, action: 'emettre' })
+
+    const calls = db.__getCalls()
+    expect(calls.some(c => c.sql.includes('INSERT INTO journal_nf525'))).toBe(true)
+    expect(calls.some(c => c.sql.includes('INSERT INTO paiements'))).toBe(false)
+    expect(result.statut).toBe('en_attente')
+  })
+
+  it('action=emettre_encaisser : encaisse le TTC puis verrouille', async () => {
+    setupEmission(62)
+
+    const result = await createFacture(db, 10, {
+      ...BASE_INPUT, action: 'emettre_encaisser', mode_paiement: 'especes',
+    })
+
+    const calls = db.__getCalls()
+    const paiement = calls.find(c => c.sql.includes('INSERT INTO paiements'))
+    expect(paiement).toBeDefined()
+    // (facture_id, boutique_id, montant, mode_paiement, reference, user_id, notes)
+    expect(paiement!.params[2]).toBe(120)        // montant = total TTC
+    expect(paiement!.params[3]).toBe('especes')  // mode_paiement
+    expect(calls.some(c => c.sql.includes('INSERT INTO journal_nf525'))).toBe(true)
+    expect(result.statut).toBe('payee')
+  })
+
+  it('encaisse avant d\'émettre (ajouterPaiement exige locked=0)', async () => {
+    setupEmission(63)
+
+    await createFacture(db, 10, {
+      ...BASE_INPUT, action: 'emettre_encaisser', mode_paiement: 'carte',
+    })
+
+    const calls = db.__getCalls()
+    const idxPaiement = calls.findIndex(c => c.sql.includes('INSERT INTO paiements'))
+    const idxNf525    = calls.findIndex(c => c.sql.includes('INSERT INTO journal_nf525'))
+    expect(idxPaiement).toBeGreaterThan(-1)
+    expect(idxNf525).toBeGreaterThan(idxPaiement)
+  })
+
+  it('transmet la référence de paiement quand elle est fournie', async () => {
+    setupEmission(64)
+
+    await createFacture(db, 10, {
+      ...BASE_INPUT, action: 'emettre_encaisser', mode_paiement: 'cheque', reference: 'CHQ-4412',
+    })
+
+    const paiement = db.__getCalls().find(c => c.sql.includes('INSERT INTO paiements'))
+    expect(paiement!.params[4]).toBe('CHQ-4412')
+  })
 })
