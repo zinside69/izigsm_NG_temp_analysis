@@ -60,6 +60,10 @@ Reprend et étend le chantier impression déjà déployé (checkpoint 33, voir p
 - [ ] Recherche client non fonctionnelle
 - [x] Bouton "Actions" sur une fiche client : icône non visible — CORRIGÉ le 2026-07-30 : `clients.html` ne chargeait jamais le CDN FontAwesome (contrairement à la plupart des autres pages), donc **toutes** les icônes `<i class="fas fa-*">` de la page étaient invisibles (Actions, empty-state), pas seulement le bouton signalé. Fix : ajout du lien CDN (même version que `settings.html`). Vérifié servi par le serveur local — commit `1898da7`.
 
+## 🔵 Champ "Couleur" de l'appareil (identifié 2026-07-30, comparatif monatelier.net/aide/prise-en-charge, best-effort)
+Monatelier demande explicitement la couleur de l'appareil à la prise en charge (aide à l'identification sans IMEI). Absent du formulaire iziGSM (`tickets.html`) et du schéma `appareils` — nécessiterait une migration DB (nouvelle colonne). Priorité basse, pas bloquant.
+- [ ] Ajouter le champ (DB + formulaire + fiche imprimée) — best-effort, non prioritaire
+
 ## 🟡 État de l'appareil à l'entrée — checklist à cocher + nouveaux items (2026-07-24, PAS traité)
 Actuellement saisie libre (texte) — remplacer par des cases à cocher pour le technicien (plus rapide, évite les erreurs/oublis).
 - [ ] Passer d'une saisie texte à une checklist d'états prédéfinis
@@ -197,7 +201,7 @@ Point de départ : `docs/ANALYSE_COMPARATIVE_MONATELIER.md` §1 (gaps liés à l
 - [x] **Faille XSS corrigée le 2026-07-11** — `signature_client` validé strictement (data URL PNG/JPEG base64 uniquement) côté API ET frontend avant toute interpolation dans `<img src>`, trouvée par revue de sécurité automatique. Détail dans `bugs.md`.
 - [x] **Bug bloquant création de ticket corrigé le 2026-07-11** — `client_id` jamais envoyé + 4 champs mal nommés (`marque`/`modele`/`description`/`devis_montant` → `appareil_marque`/`appareil_modele`/`description_panne`/`prix_estime`) + valeurs de priorité non alignées avec l'enum API. Validé en local sur les deux chemins (client existant / nouveau client créé à la volée). Détail complet dans `bugs.md`. **Ce chantier est maintenant réellement utilisable de bout en bout.**
 - [ ] Non corrigé, hors scope (fonctionnalité à construire, pas un renommage) : assignation technicien à la création — `<select id="t-technician">` contient des noms en dur, jamais les vrais employés, `technicien_id` jamais envoyé. Nécessite un `populateTechniciens()` sur le modèle de `populateClients()`.
-- [ ] Décision à prendre : multi-appareils par ticket (`appareil_id` est singulier en base aujourd'hui) — identifié dans l'analyse comparative §1.4, pas encore scopé
+- [ ] 🟡 **P2** (déprioritisé le 2026-07-30, à reprendre plus tard) — Décision à prendre : multi-appareils par ticket (`appareil_id` est singulier en base aujourd'hui, colonnes `appareil_marque`/`appareil_modele`/`appareil_id` directement sur `tickets` — un seul appareil possible par ticket). Reconfirmé par la lecture de `monatelier.net/aide/prise-en-charge` (bouton "+ Ajouter un appareil"). Nécessiterait soit une vraie table `ticket_appareils` (relation 1-N), soit plusieurs sous-tickets liés à une même prise en charge — vraie décision d'architecture, pas un ajout de champ. Identifié dans l'analyse comparative §1.4, pas encore scopé.
 - [ ] Décision à prendre : acompte structuré à la prise en charge (§1.6 de l'analyse) — actuellement une convention informelle en notes libres
 
 ## Migration Cloudflare — TERMINÉE le 2026-07-10
