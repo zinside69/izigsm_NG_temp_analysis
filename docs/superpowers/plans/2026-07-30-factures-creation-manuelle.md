@@ -1537,15 +1537,32 @@ Et compléter la lecture du profil boutique de `_fetchFacturePrintData()` (le bl
 
 - [ ] **Step 5: Valider le rendu en local live**
 
-Serveur local démarré, se connecter, ouvrir une facture **émise** (créée en tâche 4 ou 9) et lancer l'impression (Ctrl+P, aperçu uniquement — ne pas imprimer réellement).
+Serveur local démarré, se connecter, ouvrir une facture **émise** (créée en tâche 4 ou 9).
 
-Vérifier :
+**Ne jamais déclencher de vraie boîte de dialogue d'impression** (`window.print()`, Ctrl+P) : une modale navigateur bloque tout pilotage automatisé de la page et fige la session. Valider à la place en générant le HTML du document dans la console et en l'inspectant :
+
+```js
+const d = await _fetchFacturePrintData(<ID_FACTURE>);
+const html = _buildFactureHTML(d, '');
+console.log(JSON.stringify({
+  ventilation:      d.ventilation,
+  mention:          d.mentionBoutique,
+  dateExec:         d.dateExec,
+  acheteurFige:     d.acheteurFige,
+  aPenalites:       html.includes('L441-10'),
+  aEscompte:        html.includes('escompte'),
+  aTableauTva:      html.includes('print-tva-table'),
+}, null, 2));
+```
+
+Vérifier sur cette sortie :
 1. La ventilation TVA apparaît avec une ligne par taux réellement présent sur la facture (créer une facture à deux taux pour ce test).
 2. Les trois mentions légales sont présentes et lisibles.
 3. L'identité du client affiche le SIRET quand le client est professionnel.
 4. La date d'exécution s'affiche.
-5. Le document tient toujours **sur une seule page A4** — le garde-fou `.print-compact` de `_triggerPrint()` doit absorber le contenu ajouté (`CLAUDE.md` § Documents imprimables). Si le contenu déborde malgré le garde-fou, le signaler comme DONE_WITH_CONCERNS plutôt que de contourner le mécanisme.
-6. Ouvrir ensuite une facture **en brouillon** : elle n'a pas de snapshot et doit continuer à afficher les identités vivantes sans rien casser.
+5. Ouvrir ensuite une facture **en brouillon** : `acheteurFige` doit valoir `null` (pas de snapshot) et le rendu doit continuer à afficher les identités vivantes sans rien casser.
+
+La tenue **sur une seule page A4** n'est pas vérifiable sans impression réelle : elle est validée par un humain à la tâche 9. Le garde-fou `.print-compact` de `_triggerPrint()` (`app.js`, partagé tickets/factures/devis) doit absorber le contenu ajouté — ne jamais le contourner ni le dupliquer (`CLAUDE.md` § Documents imprimables).
 
 - [ ] **Step 6: Commit**
 
