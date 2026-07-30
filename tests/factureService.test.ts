@@ -29,10 +29,12 @@ import {
   getDevisPourNf525,
   updateFactureHash,
   createFactureAcompte,
+  createFacture,
   type StatutFacture,
   type CreateAvoirInput,
   type LigneInput,
   type CreateFactureAcompteInput,
+  type CreateFactureInput,
 } from '../src/services/factureService'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -1034,5 +1036,201 @@ describe('createFactureAcompte()', () => {
     const insertCall = calls.find(c => c.sql === SQL_INSERT_FACTURE_ACOMPTE)
     expect(insertCall!.params[3]).toBeNull() // ticket_id
     expect(insertCall!.params[4]).toBe(7)    // devis_id
+  })
+})
+
+// ─── createFacture ────────────────────────────────────────────────────────────
+
+describe('createFacture()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  const SQL_CHECK_CLIENT = n(`SELECT id FROM clients WHERE id = ? AND boutique_id = ?`)
+  const SQL_CHECK_TICKET = n(`SELECT id FROM tickets WHERE id = ? AND boutique_id = ?`)
+  const SQL_INSERT_FACTURE = n(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+    RETURNING id
+  `)
+
+  function setupNumeroFacture() {
+    db.__setResponse(
+      'SELECT prefix_ticket, prefix_facture, prefix_devis, prefix_avoir, prefix_rachat, format_numero, padding_numero FROM boutique_settings WHERE boutique_id = ?',
+      { prefix_facture: 'FAC', format_numero: 'annee', padding_numero: 5 }
+    )
+    db.__setResponse(
+      'SELECT dernier_num FROM sequences WHERE boutique_id = ? AND type = ? AND annee = ?',
+      { dernier_num: 7 }
+    )
+  }
+
+  function setupBrouillon(factureId: number) {
+    setupNumeroFacture()
+    db.__setResponse(SQL_CHECK_CLIENT, { id: 3 })
+    db.__setResponse(SQL_CHECK_TICKET, { id: 42 })
+    db.__setResponseFn(SQL_INSERT_FACTURE, () => ({ id: factureId }))
+  }
+
+  beforeEach(() => { db = createMockD1() })
+
+  const BASE_INPUT: CreateFactureInput = {
+    boutique_id: 1,
+    client_id:   3,
+    ticket_id:   null,
+    lignes: [
+      { description: 'Réparation écran', quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 },
+    ],
+    action: 'brouillon',
+  }
+
+  it('lance Error si aucune ligne', async () => {
+    await expect(createFacture(db, 10, { ...BASE_INPUT, lignes: [] }))
+      .rejects.toThrow('La facture doit contenir au moins une ligne.')
+  })
+
+  it('lance Error si une quantité est nulle ou négative', async () => {
+    await expect(createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [{ description: 'X', quantite: 0, prix_unitaire_ht: 100, tva_taux: 20 }],
+    })).rejects.toThrow('quantite doit être positive.')
+  })
+
+  it('lance Error si un prix unitaire est négatif', async () => {
+    await expect(createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [{ description: 'X', quantite: 1, prix_unitaire_ht: -5, tva_taux: 20 }],
+    })).rejects.toThrow('prix_unitaire_ht ne peut pas être négatif.')
+  })
+
+  it('lance Error si un taux de TVA n\'est pas autorisé', async () => {
+    await expect(createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [{ description: 'X', quantite: 1, prix_unitaire_ht: 100, tva_taux: 7 }],
+    })).rejects.toThrow('tva_taux invalide')
+  })
+
+  it('lance Error si le total TTC est nul', async () => {
+    await expect(createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [{ description: 'Geste commercial', quantite: 1, prix_unitaire_ht: 0, tva_taux: 20 }],
+    })).rejects.toThrow('Le total de la facture ne peut pas être nul.')
+  })
+
+  it('lance Error si le client appartient à une autre boutique', async () => {
+    setupNumeroFacture()
+    db.__setNotFound(SQL_CHECK_CLIENT)
+
+    await expect(createFacture(db, 10, BASE_INPUT))
+      .rejects.toThrow('Client introuvable dans cette boutique.')
+  })
+
+  it('lance Error si le ticket appartient à une autre boutique', async () => {
+    setupNumeroFacture()
+    db.__setResponse(SQL_CHECK_CLIENT, { id: 3 })
+    db.__setNotFound(SQL_CHECK_TICKET)
+
+    await expect(createFacture(db, 10, { ...BASE_INPUT, ticket_id: 42 }))
+      .rejects.toThrow('Ticket introuvable dans cette boutique.')
+  })
+
+  it('ne consomme aucun numéro de facture quand la validation échoue', async () => {
+    setupBrouillon(60)
+
+    await expect(createFacture(db, 10, { ...BASE_INPUT, lignes: [] })).rejects.toThrow()
+
+    const calls = db.__getCalls()
+    expect(calls.some(c => c.sql.includes('sequences'))).toBe(false)
+  })
+
+  it('crée la facture en brouillon et retourne id + numéro + statut', async () => {
+    setupBrouillon(60)
+
+    const result = await createFacture(db, 10, BASE_INPUT)
+
+    expect(result.facture_id).toBe(60)
+    expect(result.facture_numero).toMatch(/^FAC-/)
+    expect(result.statut).toBe('brouillon')
+  })
+
+  it('INSERT la facture avec les totaux calculés et les champs texte', async () => {
+    setupBrouillon(60)
+
+    await createFacture(db, 10, {
+      ...BASE_INPUT,
+      ticket_id: 42,
+      notes: 'Merci de votre visite',
+      conditions: 'Paiement à réception',
+    })
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall).toBeDefined()
+    // (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions)
+    expect(insertCall!.params[0]).toBe(1)                      // boutique_id
+    expect(insertCall!.params[2]).toBe(3)                      // client_id
+    expect(insertCall!.params[3]).toBe(42)                     // ticket_id
+    expect(insertCall!.params[4]).toBe(100)                    // total_ht
+    expect(insertCall!.params[5]).toBe(20)                     // total_tva
+    expect(insertCall!.params[6]).toBe(120)                    // total_ttc
+    expect(insertCall!.params[7]).toBe('Merci de votre visite') // notes
+    expect(insertCall!.params[8]).toBe('Paiement à réception')  // conditions
+  })
+
+  // Les lignes sont écrites via db.batch(), que createMockD1 stube en no-op sans
+  // enregistrer les statements (tests/helpers/mockD1.ts:192) — __getCalls() ne les
+  // voit donc pas. Même limite que createAvoir(), qui utilise déjà db.batch(). On
+  // vérifie ici le nombre de statements ; l'exactitude des totaux par ligne est
+  // couverte par les tests de calculLignes() et par la vérification en base réelle
+  // de la tâche 7 (SELECT sur lignes_document).
+  it('écrit une ligne par ligne saisie, en un seul batch', async () => {
+    setupBrouillon(60)
+
+    await createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [
+        { description: 'Écran',         quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 },
+        { description: 'Main d\'œuvre', quantite: 2, prix_unitaire_ht: 25,  tva_taux: 10 },
+      ],
+    })
+
+    expect(db.batch).toHaveBeenCalledTimes(1)
+    expect((db.batch as any).mock.calls[0][0]).toHaveLength(2)
+  })
+
+  it('calcule les totaux du document à partir de tous les taux de TVA', async () => {
+    setupBrouillon(60)
+
+    await createFacture(db, 10, {
+      ...BASE_INPUT,
+      lignes: [
+        { description: 'Écran',         quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 },
+        { description: 'Main d\'œuvre', quantite: 2, prix_unitaire_ht: 25,  tva_taux: 10 },
+      ],
+    })
+
+    const insertCall = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insertCall!.params[4]).toBe(150)  // total_ht  = 100 + 50
+    expect(insertCall!.params[5]).toBe(25)   // total_tva = 20 + 5
+    expect(insertCall!.params[6]).toBe(175)  // total_ttc
+  })
+
+  it('n\'émet ni n\'encaisse rien en action brouillon', async () => {
+    setupBrouillon(60)
+
+    await createFacture(db, 10, BASE_INPUT)
+
+    const calls = db.__getCalls()
+    expect(calls.some(c => c.sql.includes('INSERT INTO paiements'))).toBe(false)
+    expect(calls.some(c => c.sql.includes('INSERT INTO journal_nf525'))).toBe(false)
+  })
+
+  it('appelle auditLog CREATE_FACTURE', async () => {
+    setupBrouillon(60)
+
+    await createFacture(db, 10, BASE_INPUT)
+
+    const auditCall = db.__getCalls().find(
+      c => c.sql.includes('INSERT INTO audit_logs') && c.params.includes('CREATE_FACTURE')
+    )
+    expect(auditCall).toBeDefined()
   })
 })

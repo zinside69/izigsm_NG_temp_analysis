@@ -258,6 +258,129 @@ export async function emettreFacture(
   }
 }
 
+/** Taux de TVA autorisés sur une ligne de facture (France, 2026). */
+const TVA_TAUX_AUTORISES = [0, 5.5, 10, 20]
+
+export interface CreateFactureInput {
+  boutique_id: number
+  client_id:   number
+  /** Rattachement optionnel à un ticket de réparation. */
+  ticket_id?:  number | null
+  lignes: Array<{
+    description:      string
+    quantite:         number
+    prix_unitaire_ht: number
+    tva_taux:         number
+  }>
+  notes?:      string
+  conditions?: string
+  /**
+   * 'brouillon'         → facture éditable, non verrouillée
+   * 'emettre'           → + verrouillage NF525 (irréversible)
+   * 'emettre_encaisser' → + encaissement immédiat du TTC, puis verrouillage
+   */
+  action: 'brouillon' | 'emettre' | 'emettre_encaisser'
+  /** Requis si action = 'emettre_encaisser'. */
+  mode_paiement?: string
+  /** Référence libre du paiement (n° de chèque, transaction CB…). */
+  reference?: string
+}
+
+/**
+ * Crée une facture manuelle avec ses lignes, sans passer par un devis.
+ * Voir docs/superpowers/specs/2026-07-30-factures-creation-manuelle-design.md.
+ *
+ * Toute la validation précède `nextNumero()` : un numéro séquentiel de boutique
+ * ne doit jamais être consommé par une saisie invalide (il ne peut pas être rendu).
+ *
+ * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
+ * dépend de `nextNumero()`/`auditLog()`/`db.batch()`, tous sur `D1Database` brut.
+ *
+ * Cette fonction ne couvre que `action: 'brouillon'` — les actions 'emettre' et
+ * 'emettre_encaisser' sont ajoutées dans un chantier ultérieur (voir la spec).
+ *
+ * @param db     - Instance D1Database
+ * @param userId - ID de l'utilisateur créateur
+ * @param input  - Client, lignes (prix HT) et action souhaitée
+ */
+export async function createFacture(
+  db:     D1Database,
+  userId: number,
+  input:  CreateFactureInput
+): Promise<{ facture_id: number; facture_numero: string; statut: StatutFacture }> {
+  // ── Validation (avant toute écriture et avant nextNumero) ────────────────
+  if (!input.lignes || input.lignes.length === 0)
+    throw new Error('La facture doit contenir au moins une ligne.')
+
+  for (const l of input.lignes) {
+    if (typeof l.quantite !== 'number' || isNaN(l.quantite) || l.quantite <= 0)
+      throw new Error('quantite doit être positive.')
+    if (typeof l.prix_unitaire_ht !== 'number' || isNaN(l.prix_unitaire_ht) || l.prix_unitaire_ht < 0)
+      throw new Error('prix_unitaire_ht ne peut pas être négatif.')
+    if (!TVA_TAUX_AUTORISES.includes(l.tva_taux))
+      throw new Error(`tva_taux invalide : ${l.tva_taux} (autorisés : ${TVA_TAUX_AUTORISES.join(', ')}).`)
+  }
+
+  const totaux = calculLignes(input.lignes)
+  if (totaux.total_ttc <= 0)
+    throw new Error('Le total de la facture ne peut pas être nul.')
+
+  // ── Isolation à l'écriture : le client et le ticket doivent appartenir à
+  //    la boutique appelante. Ne jamais supposer qu'un filtre en amont suffit
+  //    (historique de failles multi-tenant, voir project-docs/bugs.md).
+  const client = await db.prepare('SELECT id FROM clients WHERE id = ? AND boutique_id = ?')
+    .bind(input.client_id, input.boutique_id).first<{ id: number }>()
+  if (!client) throw new Error('Client introuvable dans cette boutique.')
+
+  if (input.ticket_id) {
+    const ticket = await db.prepare('SELECT id FROM tickets WHERE id = ? AND boutique_id = ?')
+      .bind(input.ticket_id, input.boutique_id).first<{ id: number }>()
+    if (!ticket) throw new Error('Ticket introuvable dans cette boutique.')
+  }
+
+  // ── Création ─────────────────────────────────────────────────────────────
+  const numero = await nextNumero(db, input.boutique_id, 'facture')
+
+  // statut='brouillon' à la création : ajouterPaiement() et emettreFacture()
+  // exigent toutes deux locked=0, la facture doit donc démarrer éditable.
+  const facture = await db.prepare(`
+    INSERT INTO factures
+      (boutique_id, numero, client_id, ticket_id, total_ht, total_tva, total_ttc, notes, conditions, statut)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
+    RETURNING id
+  `).bind(
+    input.boutique_id, numero, input.client_id, input.ticket_id ?? null,
+    totaux.total_ht, totaux.total_tva, totaux.total_ttc,
+    input.notes ?? null, input.conditions ?? null,
+  ).first<{ id: number }>()
+
+  if (!facture?.id) throw new Error('Erreur lors de la création de la facture.')
+  const factureId = facture.id
+
+  // Totaux par ligne calculés avec calculLignes() sur une ligne isolée : même
+  // arrondi comptable que les totaux du document, pas de seconde formule.
+  await db.batch(input.lignes.map((l, i) => {
+    const t = calculLignes([l])
+    return db.prepare(`
+      INSERT INTO lignes_document
+        (document_type, document_id, ordre, description, quantite,
+         prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    `).bind(
+      factureId, i + 1, l.description, l.quantite,
+      l.prix_unitaire_ht, l.tva_taux, t.total_ht, t.total_tva, t.total_ttc,
+    )
+  }))
+
+  await auditLog(db, {
+    boutique_id: input.boutique_id, user_id: userId,
+    action: 'CREATE_FACTURE', entite_type: 'facture', entite_id: factureId,
+    apres: { numero, total_ttc: totaux.total_ttc, action: input.action },
+  })
+
+  return { facture_id: factureId, facture_numero: numero, statut: 'brouillon' }
+}
+
 // ─── Acompte structuré ────────────────────────────────────────────────────────
 
 export interface CreateFactureAcompteInput {
