@@ -1070,7 +1070,7 @@ function _buildFactureHTML(d, printCssHref) {
     ? `SIRET ${esc(ach.siret)}${ach.tva_intracom ? ' · TVA ' + esc(ach.tva_intracom) : ''}`
     : '';
   const clientAdresseAffichee = ach
-    ? [ach.adresse, [ach.code_postal, ach.ville].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
+    ? [esc(ach.adresse || ''), [esc(ach.code_postal || ''), esc(ach.ville || '')].filter(Boolean).join(' ')].filter(Boolean).join('<br>')
     : esc(d.clientAdresse || '');
 
   const badgeCls = {
