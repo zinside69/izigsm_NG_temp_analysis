@@ -921,7 +921,10 @@ async function confirmAvoir() {
 
 // ─── Impression / PDF (Sprint 2.13) ──────────────────────────────────────────
 // Principe P4 : fonction principale déléguant à 3 sous-fonctions spécialisées.
-// _money() et _fmtDate() proviennent de app.js (Principe P2 — centralisation).
+// formatMoney() et _fmtDate() proviennent de app.js (Principe P2 — centralisation).
+// Le document facture affiche tous ses montants à 2 décimales (formatMoney) — pas
+// _money() (0 décimale), utilisé ailleurs (écran, ticket) et volontairement laissé
+// tel quel : ce choix ne concerne que ce document (2026-07-30, décision utilisateur).
 
 /**
  * Point d'entrée public pour l'impression d'une facture.
@@ -1098,9 +1101,9 @@ function _buildFactureHTML(d, printCssHref) {
         <tr>
           <td>${esc(l.description || l.designation || '—')}</td>
           <td class="text-center">${parseFloat(l.quantite || 1).toLocaleString('fr-FR')}</td>
-          <td class="text-right">${_money(l.prix_unitaire_ht)}</td>
+          <td class="text-right">${formatMoney(l.prix_unitaire_ht)}</td>
           <td class="text-center">${parseFloat(l.tva_taux || 20)}%</td>
-          <td class="text-right"><strong>${_money(l.total_ttc)}</strong></td>
+          <td class="text-right"><strong>${formatMoney(l.total_ttc)}</strong></td>
         </tr>`).join('')
     : `<tr><td colspan="5" style="text-align:center;color:#aaa;padding:8px;">Aucune ligne</td></tr>`;
 
@@ -1110,11 +1113,11 @@ function _buildFactureHTML(d, printCssHref) {
       ${d.paiements.map(p => `
         <div class="print-paiement-row">
           <span>${_fmtDate(p.date_paiement)} — ${esc(p.mode_paiement || '—')}</span>
-          <span>${_money(p.montant)}</span>
+          <span>${formatMoney(p.montant)}</span>
         </div>`).join('')}
       <div class="print-solde">
         <span>Reste à payer</span>
-        <span style="color:${d.reste <= 0 ? '#22c55e' : '#ef4444'};">${_money(d.reste)}</span>
+        <span style="color:${d.reste <= 0 ? '#22c55e' : '#ef4444'};">${formatMoney(d.reste)}</span>
       </div>
     </div>` : '';
 
@@ -1128,9 +1131,9 @@ function _buildFactureHTML(d, printCssHref) {
           <div class="print-logo-name">iziGSM</div>
         </div>
         <div class="print-boutique-info">
-          <strong>${esc(d.boutique.nom)}</strong><br>
-          ${d.boutique.adresse   ? esc(d.boutique.adresse)   + '<br>' : ''}
-          ${d.boutique.siret     ? 'SIRET : ' + esc(d.boutique.siret) + '<br>' : ''}
+          <strong>${esc(boutiqueNomAffiche)}</strong><br>
+          ${boutiqueAdresseAffichee ? boutiqueAdresseAffichee + '<br>' : ''}
+          ${boutiqueSiretAffiche  ? 'SIRET : ' + esc(boutiqueSiretAffiche) + '<br>' : ''}
           ${d.boutique.telephone ? esc(d.boutique.telephone) + '<br>' : ''}
           ${d.boutique.email     ? esc(d.boutique.email)             : ''}
         </div>
@@ -1185,9 +1188,9 @@ function _buildFactureHTML(d, printCssHref) {
 
       <div class="print-totaux">
         <table class="print-totaux-table">
-          <tr><td>Sous-total HT</td><td>${_money(d.totalHT)}</td></tr>
-          <tr class="total-ht"><td>TVA</td><td>${_money(d.totalTVA)}</td></tr>
-          <tr class="total-ttc"><td>TOTAL TTC</td><td>${_money(d.totalTTC)}</td></tr>
+          <tr><td>Sous-total HT</td><td>${formatMoney(d.totalHT)}</td></tr>
+          <tr class="total-ht"><td>TVA</td><td>${formatMoney(d.totalTVA)}</td></tr>
+          <tr class="total-ttc"><td>TOTAL TTC</td><td>${formatMoney(d.totalTTC)}</td></tr>
         </table>
       </div>
 
@@ -1220,7 +1223,7 @@ function _buildFactureHTML(d, printCssHref) {
           <div>En cas de retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de commerce).</div>
           <div>Pas d'escompte pour paiement anticipé.</div>
         </div>
-        <div>${esc(d.boutique.nom)} ${d.boutique.siret ? '— SIRET : ' + esc(d.boutique.siret) : ''}</div>
+        <div>${esc(boutiqueNomAffiche)} ${boutiqueSiretAffiche ? '— SIRET : ' + esc(boutiqueSiretAffiche) : ''}</div>
         <div class="print-footer-legal">Document généré par iziGSM le ${new Date().toLocaleDateString('fr-FR')}</div>
         <div>Page 1</div>
       </div>
