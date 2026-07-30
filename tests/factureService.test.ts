@@ -580,9 +580,10 @@ describe('emettreFacture()', () => {
     })
     db.__setNotFound(n('SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1'))
     db.__setResponse(
-      n(`SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville, s.tva_taux_defaut, s.mention_facture FROM boutiques b LEFT JOIN boutique_settings s ON s.boutique_id = b.id WHERE b.id = ?`),
+      n(`SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville, b.telephone, b.email, s.tva_taux_defaut, s.mention_facture FROM boutiques b LEFT JOIN boutique_settings s ON s.boutique_id = b.id WHERE b.id = ?`),
       { nom: 'iziGSM Paris 11', siret: '12345678901234', tva_numero: 'FR12345678901',
         adresse: '5 avenue Montaigne', code_postal: '75011', ville: 'Paris',
+        telephone: '0102030405', email: 'contact@izigsm-paris11.fr',
         tva_taux_defaut: 20, mention_facture: null }
     )
     db.__setResponse(
@@ -600,6 +601,16 @@ describe('emettreFacture()', () => {
     expect(snapshots).toHaveLength(2)
     expect(snapshots[0]).toContain('12345678901234')  // SIRET vendeur
     expect(snapshots[1]).toContain('98765432101234')  // SIRET acheteur
+
+    // tva_taux_defaut / mention_facture pilotent l'affichage conditionnel de la mention
+    // légale "TVA non applicable, article 293 B du CGI" (factures.js:1046-1053) — un
+    // contrat de mention légale non testé jusqu'ici (finding F5, revue finale 2026-07-30).
+    // telephone/email : capturés par le correctif F2, mêmes assertions ajoutées ici.
+    const vendeurSnapshot = JSON.parse(snapshots[0])
+    expect(vendeurSnapshot.tva_taux_defaut).toBe(20)
+    expect(vendeurSnapshot.mention_facture).toBeNull()
+    expect(vendeurSnapshot.telephone).toBe('0102030405')
+    expect(vendeurSnapshot.email).toBe('contact@izigsm-paris11.fr')
   })
 })
 
