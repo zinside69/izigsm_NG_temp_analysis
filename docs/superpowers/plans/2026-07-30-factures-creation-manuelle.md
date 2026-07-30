@@ -41,7 +41,7 @@ Compte de démo : `admin@izigsm.fr` / `Admin@2026!` (boutique 1).
 |---|---|---|
 | `src/services/factureService.ts` | `CreateFactureInput` + `createFacture()` — logique métier et SQL ; snapshot des identités dans `emettreFacture()` | 1, 2, 3 |
 | `tests/factureService.test.ts` | Tests unitaires du service (mocks D1) | 1, 2, 3 |
-| `migrations/0037_facture_donnees_reglementaires.sql` | Socle facture électronique : date d'exécution, snapshots, régime de TVA de la boutique | 3 |
+| `migrations/0037_facture_donnees_reglementaires.sql` | Socle facture électronique : date d'exécution + snapshots vendeur/acheteur | 3 |
 | `src/routes/facturation.ts` | `POST /factures` (validation du body, isolation, délégation devis) + garde d'isolation sur `PUT /devis/:id/convertir` | 4, 5 |
 | `tests/e2e/isolation.spec.ts` | Gate de non-régression isolation — 2 cas ajoutés | 5 |
 | `public/factures.html` | Modal : suppression signature/statut/description, ajout TVA + date d'exécution, 3 boutons | 6 |
@@ -585,7 +585,7 @@ git commit -m "feat: createFacture() - actions emettre et emettre_encaisser"
 
 **Interfaces:**
 - Consumes: `createFacture()` et `emettreFacture()` (tâches 1-2) · `todayParis()` (`src/lib/timezone.ts`).
-- Produces: `CreateFactureInput.date_execution?: string` (date ISO `YYYY-MM-DD`) — envoyé par la route en tâche 4 et par le formulaire en tâches 6-7. Colonnes `factures.date_execution`, `factures.vendeur_snapshot`, `factures.acheteur_snapshot` (JSON) et `boutiques.franchise_tva` — lues par le document imprimé en tâche 8.
+- Produces: `CreateFactureInput.date_execution?: string` (date ISO `YYYY-MM-DD`) — envoyé par la route en tâche 4 et par le formulaire en tâches 6-7. Colonnes `factures.date_execution`, `factures.vendeur_snapshot`, `factures.acheteur_snapshot` (JSON) — lues par le document imprimé en tâche 8. Le snapshot vendeur embarque `tva_taux_defaut` et `mention_facture` repris de `boutique_settings`.
 
 Contexte : voir la spec § « Amendement 2026-07-30 — socle de données de la facture électronique ». Le snapshot est posé dans `emettreFacture()` et non dans `createFacture()` : c'est le moment où la facture devient inaltérable (`locked = 1`) et c'est le point de passage unique des trois chemins de création (manuelle, conversion de devis, acompte), qui en héritent donc tous sans duplication.
 
@@ -605,20 +605,19 @@ Créer `migrations/0037_facture_donnees_reglementaires.sql` :
 ALTER TABLE factures ADD COLUMN date_execution    TEXT;  -- date de livraison ou d'exécution (socle du 01/09/2026)
 ALTER TABLE factures ADD COLUMN vendeur_snapshot  TEXT;  -- JSON figé par emettreFacture()
 ALTER TABLE factures ADD COLUMN acheteur_snapshot TEXT;  -- JSON figé par emettreFacture()
-
--- Régime de TVA de la boutique : déclenche la mention "TVA non applicable, art. 293 B du CGI"
-ALTER TABLE boutiques ADD COLUMN franchise_tva INTEGER NOT NULL DEFAULT 0;
 ```
+
+**Aucune colonne de régime de TVA n'est créée** (décision utilisateur 2026-07-30) : le paramétrage existe déjà et est déjà multi-tenant — `boutique_settings.tva_taux_defaut` (migration `0002`, réglé dans `settings.html`) vaut `0` pour une boutique en franchise (auto-entrepreneur / micro-entreprise), et `boutique_settings.mention_facture` (migration `0018`) porte le texte libre de la mention. Les deux sont repris dans le snapshot vendeur ci-dessous.
 
 - [ ] **Step 2: Appliquer la migration en local et vérifier**
 
 ```bash
 npx wrangler d1 migrations apply DB --local
 npx wrangler d1 execute DB --local --command "SELECT date_execution, vendeur_snapshot, acheteur_snapshot FROM factures LIMIT 1"
-npx wrangler d1 execute DB --local --command "SELECT franchise_tva FROM boutiques LIMIT 1"
+npx wrangler d1 execute DB --local --command "SELECT boutique_id, tva_taux_defaut, mention_facture FROM boutique_settings LIMIT 1"
 ```
 
-Expected: les deux requêtes s'exécutent sans erreur (colonnes vides / `0`).
+Expected: la première requête s'exécute sans erreur (colonnes vides). La seconde confirme que le paramétrage TVA existant est bien lisible — c'est la source du régime de franchise, aucune colonne n'est ajoutée pour ça.
 
 - [ ] **Step 3: Écrire les tests qui échouent**
 
@@ -654,9 +653,10 @@ Et un nouveau bloc dans le `describe('emettreFacture()')` existant :
     })
     db.__setNotFound(n('SELECT hash_courant FROM journal_nf525 WHERE boutique_id = ? ORDER BY id DESC LIMIT 1'))
     db.__setResponse(
-      n(`SELECT nom, siret, tva_numero, adresse, code_postal, ville, franchise_tva FROM boutiques WHERE id = ?`),
+      n(`SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville, s.tva_taux_defaut, s.mention_facture FROM boutiques b LEFT JOIN boutique_settings s ON s.boutique_id = b.id WHERE b.id = ?`),
       { nom: 'iziGSM Paris 11', siret: '12345678901234', tva_numero: 'FR12345678901',
-        adresse: '5 avenue Montaigne', code_postal: '75011', ville: 'Paris', franchise_tva: 0 }
+        adresse: '5 avenue Montaigne', code_postal: '75011', ville: 'Paris',
+        tva_taux_defaut: 20, mention_facture: null }
     )
     db.__setResponse(
       n(`SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville FROM clients WHERE id = ?`),
@@ -726,9 +726,16 @@ Dans `emettreFacture()`, juste après le calcul de `hashNf525` et avant l'UPDATE
   // Socle facture électronique : figer les identités au moment exact où le document
   // devient inaltérable. Passé ce point, plus aucune jointure vivante ne doit pouvoir
   // réécrire une facture émise (voir la spec § Amendement 2026-07-30).
+  // Le LEFT JOIN sur boutique_settings fige aussi le régime de TVA (tva_taux_defaut = 0
+  // ⇒ franchise en base, art. 293 B) et la mention paramétrée par la boutique : ces deux
+  // valeurs conditionnent le pied de facture et doivent suivre le document, pas la config
+  // du jour où on le réimprime. LEFT JOIN car la ligne de settings peut ne pas exister.
   const vendeur = await db.prepare(`
-    SELECT nom, siret, tva_numero, adresse, code_postal, ville, franchise_tva
-    FROM boutiques WHERE id = ?
+    SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville,
+           s.tva_taux_defaut, s.mention_facture
+    FROM   boutiques b
+    LEFT   JOIN boutique_settings s ON s.boutique_id = b.id
+    WHERE  b.id = ?
   `).bind(facture.boutique_id).first<any>()
 
   const acheteur = await db.prepare(`
@@ -1125,7 +1132,7 @@ git commit -m "refactor: modal facture - retrait signature/statut/description, a
 
 **Interfaces:**
 - Consumes: identifiants DOM de la tâche 6 (`f-tva-defaut`, `fl-tva-<lid>`, `f-date-execution`) · `apiPost(url, body)` → `{ ok, status, data, error }` (`app.js`) · `POST /api/factures` (tâche 4).
-- Produces: `saveFacture(action)`, `onTvaDefautChange()`, `setFactureLinesReadOnly(bool)` — appelés depuis `factures.html`.
+- Produces: `saveFacture(action)`, `onTvaDefautChange()`, `setFactureLinesReadOnly(bool)`, `loadTvaDefautBoutique()` — les trois premiers appelés depuis `factures.html`.
 
 - [ ] **Step 1: Réécrire `saveFacture()`**
 
@@ -1314,6 +1321,28 @@ Brancher le select devis (`public/factures.html`) :
             <select id="f-devis" onchange="setFactureLinesReadOnly(!!this.value)"><option value="">Créer sans devis</option></select>
 ```
 
+- [ ] **Step 5b: Pré-sélectionner le taux de TVA de la boutique**
+
+Le select « TVA par défaut » ne doit pas être figé sur 20 % : chaque boutique règle son taux dans `settings.html` (`boutique_settings.tva_taux_defaut`), et une boutique en franchise le met à 0. Ajouter :
+
+```js
+/**
+ * Pré-sélectionne le taux de TVA paramétré par la boutique (multi-tenant).
+ * `GET /api/boutiques/:id` retourne `{ ...boutique, settings }` (routes/boutiques.ts:114).
+ * Non bloquant : en cas d'échec, le select garde sa valeur par défaut du HTML.
+ */
+async function loadTvaDefautBoutique() {
+  const boutiqueId = getBoutiqueId();
+  if (!boutiqueId) return;
+  const r = await apiGet(`/api/boutiques/${boutiqueId}`);
+  const taux = r.data?.data?.settings?.tva_taux_defaut;
+  const el = document.getElementById('f-tva-defaut');
+  if (el && taux != null) el.value = String(taux);
+}
+```
+
+Le taux reste modifiable, globalement et ligne par ligne : une réparation facture couramment une pièce à 20 % et une prestation à 10 %.
+
 - [ ] **Step 6: Nettoyer `openNewFacture()` et la signature**
 
 Dans `openNewFacture()`, remplacer la boucle de réinitialisation et le bloc statut :
@@ -1330,6 +1359,8 @@ Dans `openNewFacture()`, remplacer la boucle de réinitialisation et le bloc sta
 ```
 
 (supprimer les lignes qui touchent `f-description` et `f-status`).
+
+`openNewFacture()` devient `async` et appelle `await loadTvaDefautBoutique();` **avant** `addFactureLine()` — l'ordre compte : `addFactureLine()` lit `f-tva-defaut` pour initialiser la ligne créée.
 
 Dans `checkFromDevis()`, supprimer le bloc `// Description` qui écrit dans `f-description`, et ajouter `setFactureLinesReadOnly(true);` à la fin du `setTimeout` puisqu'un devis est justement sélectionné.
 
@@ -1356,7 +1387,7 @@ git commit -m "feat: modal facture branche sur POST /api/factures, TVA par ligne
 - Consumes: colonnes `date_execution`, `vendeur_snapshot`, `acheteur_snapshot` (tâche 3), exposées telles quelles par `GET /api/factures/:id` (`getFacture()` fait `SELECT f.*`, aucun changement backend nécessaire).
 - Produces: rien de consommé par une tâche suivante.
 
-**Le texte des mentions légales ci-dessous est statutaire** (articles cités, non rédigé librement) **et doit avoir été validé par l'utilisateur avant le dispatch de cette tâche** — le workspace interdit d'inventer un texte légal. Ne pas le reformuler.
+**Le texte des mentions légales ci-dessous est statutaire** (articles cités, non rédigé librement) **et a été validé par l'utilisateur le 2026-07-30**. Le reformuler, le compléter ou en ajouter d'autres est hors périmètre — le workspace interdit d'inventer un texte légal.
 
 - [ ] **Step 1: Exposer les nouvelles données dans `_fetchFacturePrintData()`**
 
@@ -1462,11 +1493,38 @@ Insérer dans le pied de page du document, avant la mention du hash NF525 :
 
 ```js
       <div class="print-mentions" style="margin-top:14px;font-size:0.72rem;color:#6b7280;line-height:1.5;">
-        ${d.vendeurFige && d.vendeurFige.franchise_tva
-          ? `<div>TVA non applicable, article 293 B du CGI.</div>` : ''}
+        ${d.mentionBoutique ? `<div>${esc(d.mentionBoutique)}</div>` : ''}
         <div>En cas de retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de commerce).</div>
         <div>Pas d'escompte pour paiement anticipé.</div>
       </div>
+```
+
+`mentionBoutique` est calculée à l'étape 1. Règle, décidée avec l'utilisateur le 2026-07-30 :
+
+- Si la boutique a saisi une `mention_facture`, c'est **son** texte qui s'affiche — jamais réécrit.
+- Sinon, et seulement si la boutique est en franchise (`tva_taux_defaut === 0`, cas des auto-entrepreneurs et micro-entreprises), on affiche la mention statutaire « TVA non applicable, article 293 B du CGI. »
+- Sinon, rien.
+
+Les pénalités de retard et l'absence d'escompte sont **toujours** affichées, à titre informatif, en pied de facture — elles ne dépendent d'aucun paramétrage.
+
+Ajouter ce calcul au `return` de `_fetchFacturePrintData()`, à la suite des champs de l'étape 1 :
+
+```js
+    mentionBoutique: (() => {
+      const v = _parseSnapshot(raw.vendeur_snapshot);
+      // Facture émise : la mention suit le snapshot. Brouillon : paramétrage vivant.
+      const mention = v ? v.mention_facture : (boutique.mention_facture || null);
+      if (mention) return mention;
+      const taux = v ? v.tva_taux_defaut : boutique.tva_taux_defaut;
+      return Number(taux) === 0 ? 'TVA non applicable, article 293 B du CGI.' : null;
+    })(),
+```
+
+Et compléter la lecture du profil boutique de `_fetchFacturePrintData()` (le bloc `apiGet('/api/boutiques')`, qui alimente `boutique`) pour récupérer aussi le paramétrage — `GET /api/boutiques/:id` retourne `{ ...boutique, settings }` (`src/routes/boutiques.ts:114`) :
+
+```js
+      tva_taux_defaut: b.settings?.tva_taux_defaut ?? 20,
+      mention_facture: b.settings?.mention_facture  ?? null,
 ```
 
 - [ ] **Step 5: Valider le rendu en local live**
@@ -1562,6 +1620,6 @@ Volontairement hors périmètre (voir la spec § Hors périmètre) : email de fa
 
 **Facturation électronique — format et transmission** : génération UBL 2.1 / CII D22B (ou Factur-X), raccordement à une plateforme agréée (PDP), statuts normalisés du cycle de vie, e-reporting. Chantier dédié, à cadrer par son propre `superpowers:brainstorming`. Ce plan se limite à capturer et figer les données que ce format exigera — c'est la partie qu'il serait coûteux de rattraper après coup, les factures émises étant verrouillées.
 
-Aucune UI n'est prévue ici pour renseigner `boutiques.franchise_tva` : la colonne est créée avec un défaut à `0` et se règle en base pour l'instant. L'ajouter à l'onglet Boutique de `settings.html` est un item de suivi, pas un prérequis de ce plan.
+Aucun nouveau champ de paramétrage n'est ajouté à `settings.html` : le régime de TVA se déduit de `boutique_settings.tva_taux_defaut` et la mention de `boutique_settings.mention_facture`, tous deux déjà saisissables. Les templates **devis** et **avoir** n'affichent pas non plus `mention_facture` — l'y étendre est un item de suivi, hors de ce plan.
 
 Le déploiement en production n'est pas dans ce plan : il reste une décision humaine explicite.

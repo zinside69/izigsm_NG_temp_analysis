@@ -243,7 +243,7 @@ confirmer avant toute communication client.
 | Identité vendeur (SIREN, adresse) | ⚠️ lue par jointure vivante sur `boutiques` | **Figée à l'émission** |
 | Identité acheteur (SIREN, adresse, TVA intracom) | ⚠️ lue par jointure vivante sur `clients` | **Figée à l'émission** |
 | Total HT ventilé par taux de TVA | ❌ absent | **Ajoutée** au document imprimé (dérivée des lignes) |
-| Mention franchise TVA (art. 293 B CGI) | ❌ absente | **Ajoutée** — `boutiques.franchise_tva` + mention conditionnelle |
+| Mention franchise TVA (art. 293 B CGI) | ❌ absente du document | **Ajoutée** — sans nouvelle colonne : le régime se déduit de `boutique_settings.tva_taux_defaut = 0` et le texte vient de `boutique_settings.mention_facture`, tous deux déjà paramétrables |
 | Pénalités de retard + indemnité forfaitaire 40 € | ❌ absentes | **Ajoutées** au document (texte statutaire, voir ci-dessous) |
 | Format structuré UBL 2.1 / CII D22B | ❌ inexistant | **Hors périmètre** — chantier dédié |
 | Transmission PDP / PPF, e-reporting | ❌ inexistante | **Hors périmètre** — chantier dédié |
@@ -271,20 +271,41 @@ trois héritent donc du snapshot sans code dupliqué. Une facture restée en bro
 n'a pas de snapshot et continue de lire les fiches vivantes, ce qui est le
 comportement voulu tant qu'elle reste modifiable.
 
-### Mentions légales — à valider avant implémentation
+### Mentions légales — validées le 2026-07-30
 
 Le workspace interdit d'inventer un texte légal (`todo.md` : « ne pas inventer le
-texte »). Les formulations ci-dessous sont les formulations statutaires par défaut,
-citées avec leur article — elles ne sont pas rédigées librement, mais elles
-**nécessitent une validation utilisateur** avant d'être posées dans le document :
+texte »). Les formulations ci-dessous sont statutaires, citées avec leur article, et
+ont été **validées par l'utilisateur** :
 
-- Retard : « En cas de retard de paiement, une pénalité égale à trois fois le taux
-  d'intérêt légal sera exigible (art. L441-10 du code de commerce), ainsi qu'une
-  indemnité forfaitaire pour frais de recouvrement de 40 € (art. D441-5 du code de
-  commerce). »
-- Escompte : « Pas d'escompte pour paiement anticipé. »
-- Franchise (si `boutiques.franchise_tva = 1`) : « TVA non applicable, article 293 B
-  du CGI. »
+- Retard, **toujours affichée en pied de facture, à titre informatif** : « En cas de
+  retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera
+  exigible (art. L441-10 du code de commerce), ainsi qu'une indemnité forfaitaire pour
+  frais de recouvrement de 40 € (art. D441-5 du code de commerce). »
+- Escompte, toujours affichée : « Pas d'escompte pour paiement anticipé. »
+- Franchise, **conditionnelle** : « TVA non applicable, article 293 B du CGI. »
+
+### Régime de TVA — piloté par le paramétrage existant, pas par une nouvelle colonne
+
+La mention de franchise ne concerne que les auto-entrepreneurs et micro-entreprises.
+Le paramétrage nécessaire existe déjà et est déjà multi-tenant — la colonne
+`boutiques.franchise_tva` initialement envisagée est abandonnée :
+
+| Besoin | Source existante |
+|---|---|
+| Boutique en franchise ? | `boutique_settings.tva_taux_defaut === 0` (migration `0002`, réglé dans `settings.html:238`) |
+| Texte de la mention | `boutique_settings.mention_facture` (migration `0018`, `settings.html:255`) |
+
+Règle de rendu : la `mention_facture` saisie par la boutique prime toujours et n'est
+jamais réécrite ; à défaut, et seulement si `tva_taux_defaut === 0`, la mention
+statutaire 293 B s'affiche ; sinon rien.
+
+`mention_facture` est aujourd'hui saisie, stockée et rechargée mais **jamais affichée**
+sur aucun document — même famille de défaut que l'audit du 2026-07-30. Ce chantier la
+branche sur la facture ; devis et avoir restent à traiter séparément.
+
+Le taux de TVA proposé par défaut dans le modal de création suit lui aussi
+`tva_taux_defaut` au lieu d'un 20 % codé en dur, tout en restant modifiable ligne par
+ligne (une réparation facture couramment une pièce à 20 % et une prestation à 10 %).
 
 Les CGV/CGR complètes restent l'item distinct de `todo.md` (à récupérer sur
 `telnet-beynost.fr`, hors de ce chantier).
