@@ -11,7 +11,7 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 36 migrations dans `migrations/`
+- Base de données : Cloudflare D1 (SQLite edge) — 37 migrations dans `migrations/`
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
 - Tests unitaires : Vitest (826 tests, 22 suites) — `tests/`, mocks D1 dans `tests/helpers/`
@@ -188,6 +188,24 @@ terminal, purement local, complémentaire au gate quota programmatique).
 
 **Jamais automatique.** Toujours sur confirmation explicite de l'utilisateur, y compris
 pour la loop d'automatisation (voir `loop-policy.md`).
+
+**Obligation d'ordonnancement — migrations avant déploiement.** Si une tâche en cours a
+ajouté une migration D1 (`migrations/00NN_*.sql`) sur laquelle du code déployé s'appuie
+(nouvelle colonne lue/écrite par une route ou un service), cette migration **doit** être
+appliquée à distance **avant** `npm run deploy`, jamais après :
+
+```bash
+npx wrangler d1 migrations apply DB --remote
+npm run deploy
+```
+
+Déployer le Worker avant d'avoir appliqué la migration distante fait échouer en
+production toute requête qui touche la colonne manquante (`no such column`), sans
+avertissement préalable — constaté avec la migration `0037` (`date_execution`,
+`vendeur_snapshot`, `acheteur_snapshot` sur `factures`) : sans elle appliquée à distance,
+`POST /factures/:id/emettre`, `POST /api/factures` (actions `emettre`/`emettre_encaisser`,
+et création en brouillon), ainsi que la conversion de devis en facture, lèvent tous une
+erreur SQL en prod.
 
 **Commande à utiliser : `npm run deploy`** (= `npm run build && wrangler pages deploy`,
 script défini dans `package.json`). Constaté le 2026-07-24 : l'appel direct `npx
