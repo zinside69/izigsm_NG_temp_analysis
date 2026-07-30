@@ -112,7 +112,7 @@
       <div class="modal-body">
         <div class="info-panel">
           <span class="info-icon">💡</span>
-          <span>Vous pouvez créer une facture directement ou depuis un devis accepté. Les données seront pré-remplies automatiquement.</span>
+          <span>Créez une facture libre, ou reprenez un devis accepté — ses lignes seront alors reprises telles quelles. « Émettre » verrouille définitivement la facture (obligation NF525).</span>
         </div>
         <div class="form-grid">
           <div class="form-field">
@@ -122,10 +122,6 @@
           <div class="form-field">
             <label>Devis source</label>
             <select id="f-devis"><option value="">Créer sans devis</option></select>
-          </div>
-          <div class="form-field full">
-            <label>Description *</label>
-            <textarea id="f-description" rows="2" placeholder="Description de la prestation facturée"></textarea>
           </div>
         </div>
         <!-- Lignes -->
@@ -141,6 +137,7 @@
                   <th style="text-align:left;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);">Description</th>
                   <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:80px;">Qté</th>
                   <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:110px;">Prix unit. HT</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:90px;">TVA</th>
                   <th style="text-align:right;padding:10px 12px;font-size:0.78rem;font-weight:700;text-transform:uppercase;color:var(--muted);width:110px;">Total HT</th>
                   <th style="width:40px;"></th>
                 </tr>
@@ -156,6 +153,20 @@
         </div>
         <div class="form-grid" style="margin-top:16px;">
           <div class="form-field">
+            <label>Date d'exécution</label>
+            <input type="date" id="f-date-execution">
+            <small style="color:var(--muted);font-size:0.78rem;">Date de livraison ou de fin de prestation — donnée obligatoire de la facture électronique. Vide = date du jour.</small>
+          </div>
+          <div class="form-field">
+            <label>TVA par défaut</label>
+            <select id="f-tva-defaut" onchange="onTvaDefautChange()">
+              <option value="20">20 % — taux normal</option>
+              <option value="10">10 %</option>
+              <option value="5.5">5,5 %</option>
+              <option value="0">0 % — exonéré</option>
+            </select>
+          </div>
+          <div class="form-field">
             <label>Mode de paiement</label>
             <select id="f-payment">
               <option>Virement bancaire</option>
@@ -163,39 +174,19 @@
               <option>Espèces</option>
               <option>Chèque</option>
             </select>
-          </div>
-          <div class="form-field">
-            <label>Statut</label>
-            <select id="f-status">
-              <option value="Brouillon">Brouillon</option>
-              <option value="Envoyée">Envoyée</option>
-              <option value="Payée">Payée</option>
-            </select>
+            <small style="color:var(--muted);font-size:0.78rem;">Utilisé uniquement par « Émettre &amp; encaisser ».</small>
           </div>
           <div class="form-field full">
             <label>Notes / Conditions</label>
             <textarea id="f-notes" rows="2" placeholder="Conditions de paiement, mentions légales..."></textarea>
           </div>
         </div>
-        <!-- Signature -->
-        <div style="margin-top:18px;">
-          <label style="font-size:0.8rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#667085;display:block;margin-bottom:10px;">Signature électronique (optionnel)</label>
-          <div class="signature-area" id="f-sig-area" style="height:140px;">
-            <div class="signature-placeholder" id="f-sig-placeholder">
-              <span style="font-size:1.8rem;opacity:0.2;">✍️</span>
-              <span style="font-size:0.88rem;">Cliquez pour signer</span>
-            </div>
-            <canvas class="sig-canvas" id="f-sig-canvas"></canvas>
-          </div>
-          <div class="sig-actions">
-            <button class="btn btn-ghost btn-sm" onclick="clearSig('f-sig-canvas','f-sig-placeholder')">🗑 Effacer</button>
-          </div>
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-facture')">Annuler</button>
-        <button class="btn btn-ghost" onclick="saveFacture('Brouillon')">💾 Brouillon</button>
-        <button class="btn btn-primary" onclick="saveFacture('Envoyée')">📧 Enregistrer & Envoyer</button>
+        <button class="btn btn-ghost"   onclick="saveFacture('brouillon')">💾 Brouillon</button>
+        <button class="btn btn-ghost"   onclick="saveFacture('emettre')">📄 Émettre</button>
+        <button class="btn btn-primary" onclick="saveFacture('emettre_encaisser')">💶 Émettre &amp; encaisser</button>
       </div>
     </div>
   </div>
