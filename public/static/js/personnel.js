@@ -120,12 +120,12 @@ async function loadEmployes() {
   try {
     const res = await apiGet('/api/pointage/statuts');
 
-    if (!res.success) throw new Error(res.error || 'Erreur API');
+    if (!res.data?.success) throw new Error(res.error || 'Erreur API');
 
-    allEmployes = res.data || [];
+    allEmployes = res.data.data || [];
 
     // Mise à jour des compteurs
-    const resume = res.resume || {};
+    const resume = res.data.resume || {};
     document.getElementById('cnt-en-poste').textContent = resume.en_poste ?? 0;
     document.getElementById('cnt-pause').textContent    = resume.pause    ?? 0;
     document.getElementById('cnt-absent').textContent   = resume.absent   ?? 0;
@@ -375,17 +375,17 @@ async function pointer(employeId, statut) {
   try {
     const res = await apiPost(`/api/pointage/${employeId}/pointer`, { statut, notes });
 
-    if (!res.success) throw new Error(res.error || 'Erreur API');
+    if (!res.data?.success) throw new Error(res.error || 'Erreur API');
 
     // Mettre à jour l'état local immédiatement
     const empIdx = allEmployes.findIndex(e => e.id === employeId);
     if (empIdx !== -1) {
-      allEmployes[empIdx].statut_pointage = res.statut_apres;
-      allEmployes[empIdx].depuis          = res.horodatage;
+      allEmployes[empIdx].statut_pointage = res.data.statut_apres;
+      allEmployes[empIdx].depuis          = res.data.horodatage;
     }
 
     closeModal('modal-pointage');
-    toast(res.message || 'Pointage enregistré', 'success');
+    toast(res.data.message || 'Pointage enregistré', 'success');
 
     // Recharger pour avoir les données fraîches
     await loadEmployes();
@@ -443,7 +443,7 @@ async function submitAddEmploye(event) {
   try {
     const res = await apiPost('/api/employes', data);
 
-    if (!res.success) throw new Error(res.error || 'Erreur API');
+    if (!res.data?.success) throw new Error(res.error || 'Erreur API');
 
     closeModal('modal-add-employe');
     toast(`${data.prenom} ${data.nom} ajouté avec succès !`, 'success');
@@ -514,9 +514,9 @@ async function loadRapport() {
     const qs = new URLSearchParams({ date_debut: debut, date_fin: fin }).toString();
     const res = await apiGet(`/api/pointage/rapport?${qs}`);
 
-    if (!res.success) throw new Error(res.error || 'Erreur API');
+    if (!res.data?.success) throw new Error(res.error || 'Erreur API');
 
-    renderRapport(res);
+    renderRapport(res.data);
 
   } catch (err) {
     console.error('Erreur loadRapport:', err);
