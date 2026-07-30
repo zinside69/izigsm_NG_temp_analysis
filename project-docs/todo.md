@@ -1,5 +1,40 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 Facture verrouillée = encaissement impossible (découvert 2026-07-30, décision prise, PAS implémenté)
+`ajouterPaiement()` (`src/services/factureService.ts:163`) refuse toute facture `locked = 1` : `if (facture.locked) throw new Error('Facture verrouillée — modification interdite (CGI art. 289).')`, traduit en `403` par la route. Conséquence : **une facture ne peut être encaissée que tant qu'elle est brouillon**, et le flux normal « j'émets, le client paie ensuite » est impossible. C'est pourquoi l'acompte et le bouton « Émettre & encaisser » font paiement *puis* émission. L'interface propose pourtant « enregistrer un paiement » sur les factures émises — action qui échoue systématiquement (constaté sur `FAC-2026-00005`, `en_attente` + `locked=1` + `montant_paye=0`).
+
+**Décision utilisateur du 2026-07-30** : autoriser l'encaissement sur facture émise. Retirer la garde `locked` de `ajouterPaiement()` **uniquement** — les lignes et montants restent inaltérables. Justification : encaisser n'est pas modifier la facture ; les paiements vivent dans leur propre table avec leur trace, et le chaînage NF525 porte sur le document émis, pas sur son règlement.
+- [ ] Retirer la garde `locked` de `ajouterPaiement()` sans toucher aux autres gardes d'immuabilité
+- [ ] Vérifier qu'aucun autre chemin ne dépend de ce refus (notamment `createFactureAcompte()` et `createFacture()` qui encaissent avant d'émettre — leur ordre reste valide, mais ne doit plus être *obligatoire*)
+- [ ] Tests : encaissement sur facture émise, encaissement partiel puis solde, statut résultant
+
+## 🔴 Facturation automatique à la clôture du ticket (demandé 2026-07-30, cadré, PAS commencé)
+Remplace et précise l'item « Workflow facturation auto » de la section impression plus bas. Quand une réparation est marquée terminée, une facture doit être générée automatiquement pour pouvoir encaisser.
+
+**Décisions utilisateur du 2026-07-30** :
+- **État initial** : brouillon à la clôture du ticket, **émission au moment de l'encaissement** — même patron que `createFactureAcompte()` et que l'action « Émettre & encaisser » (`ajouterPaiement()` puis `emettreFacture()`). Fonctionne indépendamment du chantier ci-dessus.
+- **Contenu** : si un devis accepté existe pour ce ticket, réutiliser `convertirDevis()` (qui déduit déjà l'acompte versé) ; sinon construire les lignes depuis les services et pièces du ticket.
+- Nécessite son propre `superpowers:brainstorming` : déclencheur exact (quel statut de ticket, réversibilité si le ticket est rouvert), doublon à éviter si une facture existe déjà, et comportement quand le ticket n'a ni devis ni lignes chiffrables.
+
+## 🟡 Envoi de facture par email (chantier séparé acté 2026-07-30, PAS commencé)
+Aucun template de facture n'existe dans `src/services/emailService.ts` — contrairement aux devis qui ont un vrai `POST /devis/:id/envoyer` (`src/routes/facturation.ts:192`, avec garde `422` si `client_email` est vide). C'est la raison pour laquelle le statut `en_attente` est libellé « Émise » et non « Envoyée » : rien n'est jamais envoyé aujourd'hui.
+- Acquis : `factures.tracking_token` (UUID) est déjà posé par `emettreFacture()` à l'émission, prévu pour la vitrine de suivi client — aucune migration nécessaire.
+- Piège connu : `sendEmail()` est fire-and-forget (`waitUntil()`), un email valide en syntaxe mais erroné part sans confirmation de livraison. Même limite que tous les emails transactionnels du projet.
+- À trancher au brainstorming : un envoi réel doit-il créer un statut distinct, ou une simple date `envoye_le` comme sur les devis ?
+
+## 🟡 Mise en page du document facture — aligner sur le modèle A4 (chantier séparé acté 2026-07-30, PAS commencé)
+Référence : `docs/modele-facture.pdf`, **ou** le template A4 du ticket `_buildTicketA4HTML()` (`public/static/js/tickets.js`), déjà refondu le 2026-07-25 en s'inspirant de ce même PDF (accent gris ardoise unique, aucun aplat de couleur — voir `decisions.md` et `docs/superpowers/specs/2026-07-25-refonte-fiche-a4-design.md`).
+- Le PDF **n'est pas lisible sur le poste Windows actuel** (rendu PDF absent, `poppler-utils` non installé) ; le template ticket est lisible directement dans le code et constitue la référence praticable.
+- État de départ : les deux documents partagent déjà `print.css` et le vocabulaire de classes `print-*`, mais la facture conserve des couleurs en dur (`#d1d5db`, `#22c55e`, `#ef4444`) là où le ticket a été neutralisé — elle n'a jamais reçu le passage de la refonte de juillet.
+- Ne jamais contourner ni dupliquer le garde-fou « 1 page A4 » de `_triggerPrint()` (`app.js`, partagé tickets/factures/devis).
+- Validation obligatoirement humaine : une impression réelle, non automatisable (`window.print()` fige toute session pilotée).
+
+## 🟡 Facture — défauts isolés trouvés le 2026-07-30 (PAS traités)
+- [ ] `listFactures()` (`src/services/factureService.ts`) ne sélectionne pas `total_ht`/`total_tva` : les colonnes « Montant HT » et « TVA » de la liste affichent toujours `0,00 €` alors que les valeurs sont correctes en base
+- [ ] `PUT /api/boutiques/:id/settings` ne peut pas **effacer** `mention_facture` : `COALESCE(?, mention_facture)` fait retomber un `null` volontaire sur l'ancienne valeur. Même classe que les 5 champs d'`agenda.html` de l'audit de persistance
+- [ ] `mention_facture` n'est affichée que sur la **facture** — l'étendre aux devis et aux avoirs
+- [ ] Snapshot vendeur : `telephone` et `email` de la boutique ne sont pas capturés par `emettreFacture()` et restent donc vivants dans l'en-tête du document (hors socle réglementaire, mais incohérent avec le reste du bloc figé)
+
 ## 🔴 P1 — Audit persistance des champs (2026-07-30, PAS traité)
 Détail complet, root cause exacte (fichier+ligne) et méthode dans `project-docs/audit-persistance-2026-07-30.md` — audit complet des 22 pages de repairdesk.fr (3 subagents en parallèle, lecture seule), déclenché par la découverte du bug `t-imei`.
 
