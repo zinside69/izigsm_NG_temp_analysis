@@ -43,7 +43,7 @@ function updateTopbarAvatar(session) {
 // ─── Mapping API → format local ───────────────────────────────────────────────
 const STATUT_API_TO_LABEL = {
   brouillon:           'Brouillon',
-  emise:               'Envoyée',
+  en_attente:          'Émise',
   payee:               'Payée',
   partiellement_payee: 'Part. payée',
   annulee:             'Annulée',
@@ -51,7 +51,7 @@ const STATUT_API_TO_LABEL = {
 
 const STATUT_LABEL_TO_API = {
   'Brouillon':    'brouillon',
-  'Envoyée':      'emise',
+  'Émise':        'en_attente',
   'Payée':        'payee',
   'Part. payée':  'partiellement_payee',
   'Annulée':      'annulee',
@@ -170,11 +170,11 @@ function renderFactures(filter = '', statusFilter = '') {
   const caTotal     = all.reduce((s, f) => s + f.totalTTC, 0);
   const encaisse    = all.reduce((s, f) => s + f.montantPaye, 0);
   const enAttente   = all
-    .filter(f => f._statut === 'emise' || f._statut === 'partiellement_payee')
+    .filter(f => f._statut === 'en_attente' || f._statut === 'partiellement_payee')
     .reduce((s, f) => s + f.resteAPayer, 0);
   const enRetard    = all
     .filter(f => {
-      if (f._statut !== 'emise' && f._statut !== 'partiellement_payee') return false;
+      if (f._statut !== 'en_attente' && f._statut !== 'partiellement_payee') return false;
       const dateEmission = new Date(f.createdAt);
       const echeance    = new Date(dateEmission.getTime() + 30 * 24 * 60 * 60 * 1000); // 30j
       return echeance < now;
@@ -205,7 +205,7 @@ function renderFactures(filter = '', statusFilter = '') {
   tbody.innerHTML = data.map(f => {
     const dateEmission = new Date(f.createdAt);
     const echeance     = new Date(dateEmission.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const isOverdue    = echeance < now && f._statut === 'emise';
+    const isOverdue    = echeance < now && f._statut === 'en_attente';
     const echeanceStr  = formatDate(echeance.toISOString(), false);
     const nf525Badge   = f.hash_nf525
       ? `<span title="NF525 : ${esc(f.hash_nf525.slice(0, 16))}…" style="color:var(--green);font-size:0.78rem;margin-left:4px;">🔐</span>`
@@ -261,7 +261,7 @@ function renderFactures(filter = '', statusFilter = '') {
 function statusBadgeFacture(status) {
   const map = {
     'Brouillon':   'status-badge status-new',
-    'Envoyée':     'status-badge status-progress',
+    'Émise':       'status-badge status-progress',
     'Part. payée': 'status-badge status-progress',
     'Payée':       'status-badge status-done',
     'Annulée':     'status-badge status-cancelled',
@@ -464,6 +464,7 @@ async function openNewFacture() {
  * confirmation explicite avant les deux actions non réversibles.
  */
 async function saveFacture(action) {
+  const boutiqueId = getBoutiqueId();
   const clientId = parseInt(document.getElementById('f-client')?.value, 10) || null;
   const devisId  = parseInt(document.getElementById('f-devis')?.value,  10) || null;
   const notes    = document.getElementById('f-notes')?.value.trim() || '';
@@ -496,8 +497,9 @@ async function saveFacture(action) {
   }
 
   const payload = {
-    client_id: clientId,
-    devis_id:  devisId,
+    client_id:   clientId,
+    devis_id:    devisId,
+    boutique_id: boutiqueId,
     lignes,
     notes:     notes || undefined,
     date_execution: dateExec || undefined,
@@ -1086,14 +1088,16 @@ function _buildFactureHTML(d, printCssHref) {
     : esc(d.boutique.adresse || '');
 
   const badgeCls = {
-    payee:    'print-badge-paid',
-    brouillon:'print-badge-draft',
-    emise:    'print-badge-sent',
-    annulee:  'print-badge-cancel',
+    payee:               'print-badge-paid',
+    brouillon:           'print-badge-draft',
+    en_attente:          'print-badge-sent',
+    partiellement_payee: 'print-badge-sent',
+    annulee:             'print-badge-cancel',
   }[d.statut] || 'print-badge-draft';
 
   const badgeLbl = {
-    payee:'Payée', brouillon:'Brouillon', emise:'Émise', annulee:'Annulée',
+    payee: 'Payée', brouillon: 'Brouillon', en_attente: 'Émise',
+    partiellement_payee: 'Part. payée', annulee: 'Annulée',
   }[d.statut] || d.statut;
 
   const lignesHTML = d.lignes.length
