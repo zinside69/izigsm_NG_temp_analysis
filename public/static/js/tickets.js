@@ -1880,8 +1880,16 @@ async function onModeleInput(val) {
       const res = await apiGet('/api/services/modeles?limit=500');
       _modelesCache = res.data?.data || [];
     }
+    // Si une marque a déjà été sélectionnée (t-device-type-id, rempli par
+    // selectMarqueFromSuggestion), restreindre aux modèles de cette marque —
+    // sinon le filtre par constructeur n'a aucun effet (bug todo.md, 2026-07-24).
+    const selectedMarqueId = parseInt(document.getElementById('t-device-type-id')?.value, 10) || null;
+    const pool = selectedMarqueId
+      ? _modelesCache.filter(m => m.marque_id === selectedMarqueId)
+      : _modelesCache;
+
     const lv = val.toLowerCase();
-    const matches = _modelesCache.filter(m =>
+    const matches = pool.filter(m =>
       m.nom.toLowerCase().includes(lv) || (m.marque_nom || '').toLowerCase().includes(lv)
     ).slice(0, 10);
 

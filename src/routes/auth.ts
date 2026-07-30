@@ -649,7 +649,7 @@ auth.post('/google', async (c) => {
  * Body JSON :
  * ```json
  * {
- *   "workshopName": "Mon Atelier",
+ *   "workshopName": "MyDesk",
  *   "siret":        "12345678900012", // optionnel — préremplis via /api/public/entreprise-search
  *   "tvaNumero":    "FR123456789",    // optionnel
  *   "adresse":      "12 Rue de la Paix", // optionnel
