@@ -115,13 +115,21 @@ enregistrement).
 
 Le nom d'affichage par défaut (fallback boutique sans nom configuré) est en cours de remplacement. Déjà fait : `register.js`, `app.js`, `login.html`, `register.html`. **Reste "Mon Atelier"** dans `auth.ts` (JSDoc) et les pages internes non auditées (`dashboard.html`/`settings.html`/etc.) — toute nouvelle référence à ce nom par défaut doit utiliser "MyDesk", pas "Mon Atelier".
 
-## Fonctionnalités entièrement hors service (trouvé 2026-07-30, `audit-persistance-2026-07-30.md`)
+## Fonctionnalités entièrement hors service (trouvé 2026-07-30, `audit-persistance-2026-07-30.md`) — les 2 sont CORRIGÉES
 
-Ne pas supposer que ces deux fonctionnalités marchent — vérifié en lisant le code, pas encore corrigé :
-- **`factures.html` — création manuelle de facture** : `POST /api/factures` **n'existe pas** côté backend (le commentaire de routage `src/index.tsx:50` est trompeur). Toute soumission tombe en 404. Les factures ne peuvent être créées aujourd'hui que via conversion d'un devis accepté ou via la caisse.
-- **`personnel.html`** : `app.js` n'est chargé sur aucun script de cette page (seule page du site dans ce cas) — `apiGet`/`apiPost` sont `undefined`, `ReferenceError` systématique. Aucune création employé/pointage possible actuellement.
+- **`personnel.html`** — corrigé le 2026-07-30 (`385c171`) : `app.js` n'était chargé sur aucun script de cette page + pattern `r.success`/`r.data`.
+- **`factures.html` — création manuelle de facture** — corrigé le 2026-07-30 (checkpoint 64) : `POST /api/factures` n'existait pas, le modal postait dans le vide depuis sa création.
 
-Voir `project-docs/todo.md` § "🔴 P1 — Audit persistance des champs" pour la liste complète (8 autres cas de perte silencieuse de données + 3 fichiers avec le pattern `r.success`/`r.data` cassé).
+Voir `project-docs/todo.md` § "🔴 P1 — Audit persistance des champs" pour ce qui reste (8 cas de perte silencieuse de données + 4 fichiers avec le pattern `r.success`/`r.data` cassé).
+
+## Factures — invariants (depuis 2026-07-30, checkpoint 64)
+
+- **Une facture émise est figée, y compris son identité.** `emettreFacture()` écrit `vendeur_snapshot` et `acheteur_snapshot` (JSON) : le document réimprimé doit refléter ce qui était vrai à l'émission, jamais les fiches client/boutique du jour. C'est le point de passage **unique** des trois chemins de création (manuelle, conversion de devis, acompte) — n'ajoute jamais de figeage ailleurs, et ne réécris jamais ces colonnes. Une facture en brouillon n'a volontairement pas de snapshot et lit les fiches vivantes.
+- **Toute validation précède `nextNumero()`.** Un numéro de séquence de boutique est consommé définitivement : le brûler sur une saisie invalide est irréparable.
+- **`ajouterPaiement()` refuse une facture `locked = 1`** (`factureService.ts`). Conséquence actuelle : une facture ne peut être encaissée que tant qu'elle est brouillon, d'où l'ordre paiement→émission de l'acompte et de « Émettre & encaisser ». Décision prise de lever cette garde (`todo.md`), **pas encore implémentée** — ne pas supposer qu'un paiement différé fonctionne.
+- **Statuts réels** : `brouillon` | `en_attente` | `partiellement_payee` | `payee` | `annulee`. La valeur `'emise'` n'est écrite par aucun `INSERT` du dépôt — elle survit dans le `DEFAULT` du schéma et dans `statsService.ts`, où elle fausse silencieusement les KPI. `en_attente` s'affiche « Émise » et non « Envoyée » : aucun envoi d'email de facture n'existe.
+- **Le régime de franchise TVA se déduit de `boutique_settings.tva_taux_defaut === 0`**, et le texte de la mention vient de `boutique_settings.mention_facture` — pas de colonne dédiée, le paramétrage est déjà multi-tenant.
+- **Aucune numérotation côté client.** Le fallback localStorage qui fabriquait des `FAC-2026-…` dans le navigateur a été supprimé ; ne jamais le réintroduire sous une autre forme.
 
 ## Docs obsolètes — ne pas suivre comme référence technique
 

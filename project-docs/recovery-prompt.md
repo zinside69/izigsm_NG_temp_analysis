@@ -1,3 +1,31 @@
+# Recovery Prompt — iziGSM — 2026-07-30 (checkpoint 64 — création manuelle de facture + socle facture électronique)
+
+## Vue d'ensemble (checkpoint 64)
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant, `izigsm/webapp/`, branche `main`. Deuxième et dernière « fonctionnalité entière hors service » de l'audit de persistance du 2026-07-30 : la création manuelle de facture. Chantier complet `superpowers:brainstorming` → `writing-plans` → `subagent-driven-development` (9 tâches, 28 commits, branche mergée sur `main` puis supprimée).
+
+*(Le checkpoint 63 — fix `personnel.html`, commit `385c171` : balise `app.js` manquante + pattern `r.success`/`r.data` sur 4 appels — n'avait pas généré d'entrée ici ; comblé rétroactivement à ce checkpoint.)*
+
+## Ce qui a été fait
+1. **`POST /api/factures` créé** — l'endpoint n'existait pas, le modal postait dans le vide depuis toujours. `createFacture()` (`factureService.ts`) avec 3 actions (`brouillon`/`emettre`/`emettre_encaisser`), validation intégrale **avant** `nextNumero()`, isolation vérifiée à l'écriture sur `client_id` et `ticket_id`.
+2. **Migration `0037`** — socle de la facture électronique (réforme 01/09/2026) : `date_execution`, `vendeur_snapshot`, `acheteur_snapshot`, figés dans `emettreFacture()` (point de passage unique des 3 chemins de création). Corrige au passage un défaut d'immuabilité préexistant : une facture verrouillée NF525 lisait les fiches client/boutique **vivantes**.
+3. **Faille d'isolation refermée** sur `PUT /devis/:id/convertir` — conversion cross-boutique possible, démontrée en `200` avant correctif, 2 tests Playwright ajoutés (`bugs.md`).
+4. **Modal et document refaits** — signature morte et statut muet retirés, TVA par ligne, date d'exécution, 3 actions explicites, fallback localStorage supprimé (il fabriquait de faux numéros de facture côté client) ; ventilation TVA par taux, mentions légales, identités figées, 2 décimales, `mention_facture` enfin rendue.
+
+## Décisions structurantes
+- Régime de franchise TVA **déduit** de `boutique_settings.tva_taux_defaut === 0` — aucune colonne dédiée, le paramétrage existait déjà et était déjà multi-tenant.
+- Snapshot posé à l'**émission**, jamais à la création : c'est le moment où le document devient inaltérable, et le seul point commun aux 3 chemins.
+- Sur le chemin devis, l'encaissement relit le `total_ttc` **de la facture créée** et non celui du devis — `convertirDevis()` déduit un acompte antérieur.
+- Format structuré UBL/CII et raccordement PDP explicitement **hors périmètre** : ce chantier capture et fige les données, il ne les transmet pas.
+
+## Prochaines étapes recommandées
+1. **Dette d'isolation sur 5 endpoints facture/avoir** (`todo.md`, priorité critique) — dont `POST /factures/:id/emettre` qui verrouille définitivement la facture d'une autre boutique et écrit dans son journal NF525. Même classe que les failles tickets de juillet.
+2. Encaissement sur facture verrouillée (décidé, non implémenté) — sans lui, « j'émets puis le client paie » reste impossible.
+3. Facturation automatique à la clôture du ticket (cadrée avec 3 décisions utilisateur).
+4. Vérifier la tenue sur une page A4 par une **impression réelle** (non automatisable) avant tout déploiement.
+5. Déploiement : `npx wrangler d1 migrations apply DB --remote` **avant** `npm run deploy` — l'inverse casse toute émission de facture en production.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-30 (checkpoint 62 — backfill checkpoints, 4 fixes prise en charge/clients, incident CDN, audit persistance complet)
 
 ## Vue d'ensemble (checkpoint 62)

@@ -1,3 +1,34 @@
+# iziGSM — État courant (MàJ : 2026-07-30, checkpoint 64 — création manuelle de facture + socle facture électronique, 2/2 fonctionnalités hors service traitées)
+
+## Checkpoint 64 — Session humaine : `factures.html` remis en service + socle de la facture électronique (2026-07-30)
+
+**Reprise via `/init recover izigsm`** (checkpoint 63). Deuxième et dernière des « fonctionnalités entières hors service » de l'audit de persistance. Chantier mené en `superpowers:brainstorming` → `writing-plans` → `subagent-driven-development`, **9 tâches, 28 commits**, branche `feat/factures-creation-manuelle` mergée sur `main` (`4fb97da`), suite verte sur le résultat mergé (855/857, les 2 échecs restants étant les tests de fuseau horaire pré-existants d'`agendaService`).
+
+**Le problème d'origine** : `POST /api/factures` n'existait pas. Le modal « Nouvelle facture » postait dans le vide depuis sa création — 404 silencieux, aucune facture manuelle jamais enregistrée. Le commentaire de routage `src/index.tsx:50` (« CRUD factures + paiements ») était trompeur.
+
+**Livré** :
+1. `createFacture()` (`factureService.ts`) — 3 actions (`brouillon` / `emettre` / `emettre_encaisser`), **toute la validation avant `nextNumero()`** (un numéro de séquence de boutique ne peut pas être brûlé par une saisie invalide), isolation multi-tenant vérifiée à l'écriture sur `client_id` et `ticket_id`.
+2. **Migration `0037`** — socle de la facture électronique française (réforme du 01/09/2026) : `date_execution`, `vendeur_snapshot`, `acheteur_snapshot`. Le snapshot est posé dans `emettreFacture()`, point de passage **unique** des trois chemins de création (manuelle, conversion de devis, acompte).
+3. Route `POST /api/factures` avec délégation à `convertirDevis()` quand un `devis_id` est fourni — aucune seconde implémentation de la conversion.
+4. **Faille d'isolation refermée** sur `PUT /devis/:id/convertir` (`bugs.md`) : un manager pouvait convertir en facture le devis d'une autre boutique. Démontrée en `200` avant correctif, verrouillée par 2 tests Playwright.
+5. Modal refait : signature morte retirée (endpoint inexistant, canvas jamais lu, colonne absente), select de statut muet retiré, TVA par ligne + taux par défaut issu de `boutique_settings.tva_taux_defaut`, date d'exécution, 3 boutons explicites. **Fallback localStorage supprimé** — il fabriquait de faux numéros `FAC-2026-…` côté navigateur.
+6. Document imprimé : ventilation HT par taux de TVA, mentions légales statutaires (L441-10, D441-5, 293 B conditionnelle), identités vendeur **et** acheteur figées, montants à 2 décimales, `mention_facture` enfin affichée (elle était saisie, stockée, rechargée et affichée nulle part).
+
+**Décisions utilisateur actées en cours de chantier** : régime de franchise déduit de `tva_taux_defaut === 0` plutôt qu'une nouvelle colonne · mentions légales validées mot pour mot · encaissement autorisé sur facture émise (non implémenté, voir `todo.md`) · facturation auto à la clôture du ticket cadrée (brouillon puis émission à l'encaissement, devis accepté si présent sinon lignes du ticket) · envoi par email et refonte de la mise en page A4 en chantiers séparés.
+
+**Ce que le processus a produit, et qui vaut d'être retenu** : **quatre défauts venaient du plan lui-même**, pas des implémenteurs — un bug financier (encaissement du montant plein sur un devis dont l'acompte était déjà déduit par `convertirDevis()`), un défaut d'échappement HTML sur l'adresse client figée, un snapshot vendeur capturé mais jamais consommé, et un `boutique_id` absent du payload rendant le formulaire inutilisable pour un compte `role=admin`. Les trois premiers ont été trouvés en revue de code ; **le quatrième n'est sorti qu'en cliquant réellement dans le navigateur**, après huit revues. La revue finale (opus, 22 commits) a ensuite sorti 8 findings supplémentaires, tous corrigés en une vague unique et revérifiés.
+
+## Reste ouvert
+- **Dette d'isolation prioritaire** : 5 endpoints facture/avoir voisins sans aucune vérification `boutique_id` (`GET /factures/:id`, `POST /factures/:id/paiement`, `POST /factures/:id/emettre`, `GET /avoirs/:id`, `POST /avoirs`). `POST /factures/:id/emettre` permet de **verrouiller définitivement la facture d'une autre boutique** et d'écrire dans son journal NF525. Dette antérieure, même classe que les failles tickets de juillet — chantier suivant recommandé sans intercalaire.
+- Encaissement sur facture verrouillée (`ajouterPaiement()` refuse `locked=1`) : décision prise, non implémentée. Tant que ce n'est pas fait, le flux « j'émets, le client paie ensuite » reste impossible.
+- Facturation auto à la clôture du ticket : cadrée, brainstorming à faire.
+- Envoi de facture par email · mise en page A4 · format UBL/CII + raccordement PDP : chantiers séparés, tous tracés dans `todo.md` avec leurs acquis.
+- KPI `statsService.ts` sur la valeur de statut morte `'emise'` (`factures_en_retard` renvoie toujours 0) · double enregistrement NF525 selon le chemin d'entrée · colonnes HT/TVA à 0 € dans la liste · `mention_facture` ineffaçable (`COALESCE`).
+- **Non vérifié, nécessite un humain** : la tenue du document sur une seule page A4 (impression réelle — `window.print()` fige toute session automatisée).
+- **Déploiement non fait.** `CLAUDE.md` porte désormais l'obligation d'ordonnancement : `npx wrangler d1 migrations apply DB --remote` **avant** `npm run deploy`, sans quoi toute émission de facture échoue en production (`no such column`).
+
+---
+
 # iziGSM — État courant (MàJ : 2026-07-30, checkpoint 63 — fix personnel.html, 1/2 fonctionnalités hors service de l'audit persistance)
 
 ## Checkpoint 63 — Session humaine : fix `personnel.html` (audit persistance, item 1/2 "hors service") (2026-07-30)
