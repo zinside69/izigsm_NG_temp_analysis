@@ -1,5 +1,23 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 PRIORITÉ CRITIQUE — Écritures cross-tenant sur 5 endpoints facture/avoir (revue finale 2026-07-30, PAS corrigé)
+Trouvé par la revue finale du chantier facture. **Dette antérieure, pas une régression de ce chantier**, mais même classe que les failles `GET /tickets/:id` et `PUT/DELETE /tickets/:id` déjà corrigées le 2026-07-19 (`bugs.md`) — et sur l'objet que ce chantier vient d'enrichir de données réglementaires irrécupérables.
+
+Aucun de ces handlers ne dérive ni ne vérifie `boutique_id` (`getFacture()` ne filtre pas) :
+- `src/routes/facturation.ts:427` `GET /factures/:id` — **lecture** complète d'une facture d'une autre boutique : client, email, téléphone, adresse, lignes, paiements, hash NF525, snapshots réglementaires
+- `src/routes/facturation.ts:466` `POST /factures/:id/emettre` — **émission et verrouillage définitif** du brouillon d'une autre boutique : irréversible, écrit dans le journal NF525 de la boutique victime avec l'`user_id` de l'attaquant, et fige le snapshot
+- `src/routes/facturation.ts:439` `POST /factures/:id/paiement` — enregistrement d'un paiement sur une facture d'une autre boutique
+- `src/routes/facturation.ts:506` `GET /avoirs/:id` et `:518` `POST /avoirs`
+
+- [ ] Appliquer le patron déjà en place sur `POST /api/factures` et `PUT /devis/:id/convertir` (relecture + comparaison `boutique_id` + `403`) aux 5 endpoints
+- [ ] Étendre `tests/e2e/isolation.spec.ts` — RED d'abord, comme pour la faille `convertir`
+- [ ] Envisager à cette occasion un helper `assertBoutiqueOwnership(db, table, id, boutiqueId)` : le patron est désormais copié à l'identique 3 fois et le sera 5 de plus — l'extraction cesse d'être prématurée
+
+## 🟡 Divergences de cohérence trouvées en revue finale (2026-07-30, PAS corrigées)
+- [ ] `src/services/statsService.ts:121` et `:132` interrogent la valeur de statut **morte** `'emise'` : aucun `INSERT INTO factures` du dépôt ne l'écrit (vérifié sur les 4 sites), seul le `DEFAULT` de schéma la porte encore. Conséquence : le KPI `factures_en_retard` (`:166`) renvoie **toujours 0** en production. Bonus : la valeur de `:121` est destructurée sous le nom `devis_en_attente` (`:77`) alors qu'elle compte des **factures**
+- [ ] Double enregistrement NF525 selon le chemin d'entrée : `PUT /devis/:id/convertir` (`facturation.ts:258-275`) appelle `enregistrerTransaction()` **à la conversion**, sur un brouillon non verrouillé, alors que `POST /api/factures` laisse `emettreFacture()` l'enregistrer **au verrouillage**. Émettre ensuite un brouillon issu du bouton « → Facture » de `devis.js:595` insère une **seconde** ligne `journal_nf525` avec le même `reference_id`. `verifyChain()` reste valide, mais deux transactions fiscales pour un document unique est un problème d'audit
+- [ ] La garde `400` sur `client_id` incohérent avec le devis source (ajoutée le 2026-07-30) n'a pas de test automatisé — seulement une vérification live
+
 ## 🔴 Facture verrouillée = encaissement impossible (découvert 2026-07-30, décision prise, PAS implémenté)
 `ajouterPaiement()` (`src/services/factureService.ts:163`) refuse toute facture `locked = 1` : `if (facture.locked) throw new Error('Facture verrouillée — modification interdite (CGI art. 289).')`, traduit en `403` par la route. Conséquence : **une facture ne peut être encaissée que tant qu'elle est brouillon**, et le flux normal « j'émets, le client paie ensuite » est impossible. C'est pourquoi l'acompte et le bouton « Émettre & encaisser » font paiement *puis* émission. L'interface propose pourtant « enregistrer un paiement » sur les factures émises — action qui échoue systématiquement (constaté sur `FAC-2026-00005`, `en_attente` + `locked=1` + `montant_paye=0`).
 
