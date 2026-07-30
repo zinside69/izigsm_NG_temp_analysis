@@ -5,7 +5,7 @@ Détail complet, root cause exacte (fichier+ligne) et méthode dans `project-doc
 
 **Fonctionnalités entières hors service :**
 - [ ] `factures.html` — `POST /api/factures` n'existe pas côté backend : création manuelle de facture 100% cassée (toast d'erreur visible, rien n'est enregistré). Signature électronique triplement morte (endpoint inexistant + jamais lue du canvas + colonne absente). Statut sélectionné jamais lu (vient du bouton cliqué). Mode de paiement envoyé sous une clé qui ne correspond à rien côté service.
-- [ ] `personnel.html` — `app.js` non chargé sur cette page (seule page du site dans ce cas) → `apiGet`/`apiPost` undefined, `ReferenceError` systématique. Plus pattern `r.success`/`r.data` cassé. Aucune création employé/pointage possible. Édition employé + gestion PIN/permissions absentes de l'UI (backend déjà prêt).
+- [x] `personnel.html` — corrigé 2026-07-30 (commit `385c171`) : `<script src="/static/js/app.js">` ajouté avant `personnel.js` + pattern `r.success`/`r.data` → `r.data.success`/`r.data.data` sur les 4 appels (`loadEmployes`, `pointer`, `submitAddEmploye`, `loadRapport`/`renderRapport`). Validé en local live (wrangler pages dev) : création employé + pointage réels, `POST /api/pointage/:id/pointer` 200, aucune erreur console. Édition employé + gestion PIN/permissions restent absentes de l'UI (backend déjà prêt) — hors scope de ce fix, à tracker séparément si besoin.
 
 **Données perdues silencieusement (pas d'erreur visible) :**
 - [ ] `tickets.html` — `t-priority` en création : toujours enregistré `'normale'` quel que soit le choix Basse/Moyenne/Haute (fonctionne en édition)

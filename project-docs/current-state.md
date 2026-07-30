@@ -1,4 +1,24 @@
-# iziGSM — État courant (MàJ : 2026-07-30, checkpoint 62 — backfill checkpoints, 4 fixes prise en charge/clients, incident CDN, audit persistance complet)
+# iziGSM — État courant (MàJ : 2026-07-30, checkpoint 63 — fix personnel.html, 1/2 fonctionnalités hors service de l'audit persistance)
+
+## Checkpoint 63 — Session humaine : fix `personnel.html` (audit persistance, item 1/2 "hors service") (2026-07-30)
+
+**Reprise via `/init recover izigsm audit persistance`** (checkpoint 62). Décision utilisateur : traiter d'abord les 2 fonctionnalités entières hors service, en commençant par la plus mécanique (`personnel.html`) avant `factures.html` (qui nécessitera le hard-gate `brainstorming` — nouvel endpoint + ambiguïtés de scope).
+
+**Fix `personnel.html`** (commit `385c171`) : `<script src="/static/js/app.js">` manquant ajouté avant `personnel.js` (seule page du site dans ce cas) + pattern `r.success`/`r.data` → `r.data.success`/`r.data.data` corrigé sur les 4 appels API (`loadEmployes`, `pointer`, `submitAddEmploye`, `loadRapport`/`renderRapport`) — confirmé en lisant `app.js` que `apiGet`/`apiPost` retournent `{ok, status, data, error}`, donc le corps réel de la réponse (`success`/`data`/`resume`/`statut_apres`/`horodatage`/`message`) vit sous `res.data.*`, jamais directement sur `res`.
+
+**Validé en local live** (`wrangler pages dev --local --port 3000`, launch.json enrichi avec la config `izigsm-local`) : login démo → `/personnel` → aucune `ReferenceError` console → création employé réelle (`POST /api/employes` 200) → pointage réel (`POST /api/pointage/:id/pointer` 200, statut passé "Absent" → "En poste", compteurs mis à jour). `npx vitest run` : 833/835 (2 échecs fuseau horaire pré-existants inchangés, baseline confirmée).
+
+**`CACHE_VERSION` bump `sw.js` v2.78→v2.79** (fichiers `public/static/js/*`/`public/*.html` touchés, dernière tâche frontend de ce chantier).
+
+`todo.md` § "🔴 P1 — Audit persistance des champs" : item `personnel.html` coché.
+
+## Reste ouvert
+- `factures.html` — endpoint `POST /api/factures` manquant + ambiguïtés annexes (statut jamais lu, signature triplement morte, `mode_paiement_prefere` orphelin) → nécessite `superpowers:brainstorming` avant tout code (plusieurs décisions de scope à trancher).
+- Reste du chantier "Audit persistance" (`todo.md`) : `t-imei`, `t-priority`, `stock-notes`/`stock-qty`, `modele-marque-id`, `remise_pct`, `monnaie`, 5 champs `agenda.html`, 3 fichiers `r.success`/`r.data` (`reconditionnement.js`/`fournisseurs.js`/`caisse.js`), `qualirepar.html` (décision produit).
+- Édition employé + gestion PIN/permissions absentes de l'UI `personnel.html` (backend déjà prêt) — hors scope de ce fix, pas dans l'audit initial, à tracker séparément si besoin.
+
+---
+
 
 ## Checkpoint 62 — Session humaine : backfill recovery-prompt.md + 4 chantiers + incident prod + audit persistance des champs (2026-07-30)
 
