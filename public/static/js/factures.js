@@ -29,7 +29,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   ]);
 
   addFactureLine();       // première ligne vide par défaut
-  initSigPad();
   checkFromDevis();
 });
 
@@ -358,6 +357,37 @@ function populateDevisSelect() {
   });
 }
 
+/**
+ * Quand un devis source est choisi, le backend reprend les lignes du devis et
+ * ignore celles du formulaire — les afficher éditables mentirait à l'utilisateur.
+ */
+function setFactureLinesReadOnly(readOnly) {
+  factureLines.forEach(lid => {
+    ['fl-desc-', 'fl-qty-', 'fl-price-', 'fl-tva-'].forEach(prefix => {
+      const el = document.getElementById(prefix + lid);
+      if (!el) return;
+      el.disabled = readOnly;
+      el.style.background = readOnly ? '#f3f4f6' : '';
+    });
+  });
+  const banner = document.getElementById('f-devis-banner');
+  if (banner) banner.style.display = readOnly ? 'block' : 'none';
+}
+
+/**
+ * Pré-sélectionne le taux de TVA paramétré par la boutique (multi-tenant).
+ * `GET /api/boutiques/:id` retourne `{ ...boutique, settings }` (routes/boutiques.ts:114).
+ * Non bloquant : en cas d'échec, le select garde sa valeur par défaut du HTML.
+ */
+async function loadTvaDefautBoutique() {
+  const boutiqueId = getBoutiqueId();
+  if (!boutiqueId) return;
+  const r = await apiGet(`/api/boutiques/${boutiqueId}`);
+  const taux = r.data?.data?.settings?.tva_taux_defaut;
+  const el = document.getElementById('f-tva-defaut');
+  if (el && taux != null) el.value = String(taux);
+}
+
 // ─── Pré-remplissage depuis devis (flux devis → facture) ─────────────────────
 function checkFromDevis() {
   const stored = localStorage.getItem('izigsm_devis_to_facture');
@@ -373,10 +403,6 @@ function checkFromDevis() {
     // Client
     const clientSelect = document.getElementById('f-client');
     if (clientSelect && d.clientId) clientSelect.value = d.clientId;
-
-    // Description
-    const desc = document.getElementById('f-description');
-    if (desc) desc.value = d.description || '';
 
     // Devis source
     const devisSelect = document.getElementById('f-devis');
@@ -399,145 +425,98 @@ function checkFromDevis() {
         updateFactureLineTotals(lid);
       });
     }
+
+    setFactureLinesReadOnly(true);
   }, 150);
 }
 
 // ─── Ouverture modal nouvelle facture ────────────────────────────────────────
-function openNewFacture() {
+async function openNewFacture() {
   currentFactureId = null;
 
   factureLines = [];
   document.getElementById('facture-lines').innerHTML = '';
-  ['f-description', 'f-notes'].forEach(id => {
+  ['f-notes', 'f-date-execution'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
 
-  const statusEl = document.getElementById('f-status');
-  if (statusEl) statusEl.value = 'Brouillon';
+  const devisEl = document.getElementById('f-devis');
+  if (devisEl) devisEl.value = '';
+  setFactureLinesReadOnly(false);
 
   const modalTitle = document.getElementById('modal-facture-title');
   if (modalTitle) modalTitle.textContent = 'Nouvelle facture';
 
+  await loadTvaDefautBoutique();
   addFactureLine();
   updateFactureTotals();
   openModal('modal-facture');
 }
 
 // ─── Sauvegarde facture (POST /api/factures) ──────────────────────────────────
-async function saveFacture(statusLabel) {
-  const clientSelect = document.getElementById('f-client');
-  const clientId     = parseInt(clientSelect?.value, 10) || null;
-  const devisSelect  = document.getElementById('f-devis');
-  const devisId      = parseInt(devisSelect?.value, 10)  || null;
-  const description  = document.getElementById('f-description')?.value.trim() || '';
-  const notes        = document.getElementById('f-notes')?.value.trim() || '';
-  const paymentEl    = document.getElementById('f-payment');
-  const modeLabel    = paymentEl?.value || 'Virement bancaire';
+/**
+ * @param {'brouillon'|'emettre'|'emettre_encaisser'} action
+ * Émettre verrouille la facture définitivement (NF525, CGI art. 289) — d'où la
+ * confirmation explicite avant les deux actions non réversibles.
+ */
+async function saveFacture(action) {
+  const clientId = parseInt(document.getElementById('f-client')?.value, 10) || null;
+  const devisId  = parseInt(document.getElementById('f-devis')?.value,  10) || null;
+  const notes    = document.getElementById('f-notes')?.value.trim() || '';
+  const modeLabel = document.getElementById('f-payment')?.value || 'Virement bancaire';
+  // Donnée du socle réglementaire ; vide = le backend retombe sur la date du jour.
+  const dateExec = document.getElementById('f-date-execution')?.value || '';
 
   if (!clientId) {
     showFlash('⚠️ Veuillez sélectionner un client.', 'error');
     return;
   }
 
-  // Construire les lignes
   const lignes = factureLines.map(lid => ({
     description:      document.getElementById('fl-desc-'  + lid)?.value || '',
     quantite:         parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 1,
     prix_unitaire_ht: parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0,
-    tva_taux:         20,
+    tva_taux:         parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0,
   })).filter(l => l.description || l.prix_unitaire_ht > 0);
 
-  if (!lignes.length) {
+  if (!devisId && !lignes.length) {
     showFlash('⚠️ Ajoutez au moins une ligne à la facture.', 'error');
     return;
   }
 
-  const statut     = STATUT_LABEL_TO_API[statusLabel] || 'brouillon';
-  const session    = requireAuth();
-  const boutiqueId = getBoutiqueId();
-
-  const payload = {
-    client_id:    clientId,
-    devis_id:     devisId,
-    boutique_id:  boutiqueId,
-    statut,
-    lignes,
-    notes:        description + (notes ? '\n' + notes : ''),
-    mode_paiement_prefere: modeLabel,
-  };
-
-  if (facturesUseApi) {
-    try {
-      const result = await apiPost('/api/factures', payload);
-      if (result.ok) {
-        const numero = result.data?.numero || result.data?.id || '?';
-        closeModal('modal-facture');
-        showFlash(`✓ Facture ${numero} ${statusLabel === 'Envoyée' ? 'envoyée' : 'enregistrée'}`, 'success');
-        await loadFactures();
-        return;
-      } else {
-        const msg = result.data?.error || 'Erreur lors de la création.';
-        showFlash(`⚠️ ${msg}`, 'error');
-        // En cas d'erreur API non fatale, on essaie le fallback localStorage
-        if (result.status >= 500) {
-          saveFactureFallback(payload, statusLabel, modeLabel, boutiqueId);
-        }
-        return;
-      }
-    } catch (err) {
-      console.warn('[factures] saveFacture erreur réseau', err);
-      saveFactureFallback(payload, statusLabel, modeLabel, boutiqueId);
-      return;
-    }
+  if (action !== 'brouillon') {
+    const label = action === 'emettre_encaisser'
+      ? 'Émettre cette facture et enregistrer le paiement ?'
+      : 'Émettre cette facture ?';
+    if (!confirm(`${label}\n\nUne facture émise est définitivement verrouillée et ne peut plus être modifiée (obligation NF525).`)) return;
   }
 
-  saveFactureFallback(payload, statusLabel, modeLabel, boutiqueId);
-}
-
-function saveFactureFallback(payload, statusLabel, modeLabel, boutiqueId) {
-  const existing   = getDB('factures');
-  const subtotalHT = (payload.lignes || []).reduce((s, l) =>
-    s + l.quantite * l.prix_unitaire_ht, 0);
-  const tva    = subtotalHT * 0.2;
-  const totalTTC = subtotalHT + tva;
-
-  const clientName = allClientsForFactures.find(c => c.id == payload.client_id)
-    ? (() => {
-        const c = allClientsForFactures.find(c => c.id == payload.client_id);
-        return c.prenom && c.nom
-          ? `${c.prenom} ${c.nom}`
-          : (c.name || `Client #${c.id}`);
-      })()
-    : `Client #${payload.client_id}`;
-
-  const item = {
-    id:          Date.now(),
-    number:      generateNumber('FAC-2026-', existing),
-    clientId:    payload.client_id,
-    clientName,
-    description: payload.notes || '',
-    lines:       payload.lignes,
-    subtotalHT,
-    tva,
-    totalTTC,
-    montantPaye: 0,
-    resteAPayer: totalTTC,
-    status:      statusLabel,
-    paymentMethod: modeLabel,
-    createdAt:   new Date().toISOString(),
-    _statut:     STATUT_LABEL_TO_API[statusLabel] || 'brouillon',
+  const payload = {
+    client_id: clientId,
+    devis_id:  devisId,
+    lignes,
+    notes:     notes || undefined,
+    date_execution: dateExec || undefined,
+    action,
   };
+  if (action === 'emettre_encaisser') payload.mode_paiement = modeLabel;
 
-  addToDB('factures', item);
-  allFacturesCache = getDB('factures').map(f => ({
-    ...f,
-    _statut: f._statut || STATUT_LABEL_TO_API[f.status] || 'brouillon',
-    resteAPayer: Math.max(0, (f.totalTTC || 0) - (f.montantPaye || 0)),
-  }));
+  const res = await apiPost('/api/factures', payload);
+
+  if (!res.ok || !res.data?.success) {
+    // Aucun repli local : une facture porte un numéro séquentiel de boutique et un
+    // hash NF525, en fabriquer un côté client produirait un document faux. On garde
+    // la saisie à l'écran pour que l'utilisateur puisse réessayer.
+    const msg = res.data?.error || res.error || 'Erreur lors de la création de la facture.';
+    showFlash(`⚠️ ${msg}`, 'error');
+    return;
+  }
+
+  const numero = res.data.facture_numero || res.data.facture_id;
   closeModal('modal-facture');
-  showFlash(`✓ Facture ${item.number} enregistrée (mode hors-ligne)`, 'success');
-  renderFactures();
+  showFlash(`✓ Facture ${numero} ${action === 'brouillon' ? 'enregistrée en brouillon' : 'émise'}`, 'success');
+  await loadFactures();
 }
 
 // ─── Modal paiement ───────────────────────────────────────────────────────────
@@ -1176,6 +1155,16 @@ function addFactureLine() {
         style="width:100px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateFactureLineTotals(${lid})">
     </td>
+    <td style="padding:6px 8px;">
+      <select id="fl-tva-${lid}"
+        style="width:80px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;font:inherit;font-size:0.88rem;text-align:right;"
+        onchange="updateFactureLineTotals(${lid})">
+        <option value="20">20 %</option>
+        <option value="10">10 %</option>
+        <option value="5.5">5,5 %</option>
+        <option value="0">0 %</option>
+      </select>
+    </td>
     <td style="padding:6px 12px;text-align:right;">
       <span id="fl-total-${lid}" style="font-weight:600;font-size:0.92rem;">0,00 €</span>
     </td>
@@ -1185,6 +1174,10 @@ function addFactureLine() {
         title="Supprimer la ligne">✕</button>
     </td>`;
   tbody.appendChild(tr);
+
+  const tauxDefaut = document.getElementById('f-tva-defaut')?.value || '20';
+  const tvaEl = document.getElementById('fl-tva-' + lid);
+  if (tvaEl) tvaEl.value = tauxDefaut;
 }
 
 function removeFactureLine(lid) {
@@ -1200,65 +1193,40 @@ function removeFactureLine(lid) {
 function updateFactureLineTotals(lid) {
   const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
   const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
-  const total = qty * price;
   const el    = document.getElementById('fl-total-' + lid);
-  if (el) el.textContent = formatMoney(total);
+  if (el) el.textContent = formatMoney(qty * price);
   updateFactureTotals();
 }
 
 function updateFactureTotals() {
-  const subtotal = factureLines.reduce((s, lid) => {
+  // Même arrondi comptable que calculLignes() côté backend : chaque ligne est
+  // arrondie avant d'être sommée, sinon l'aperçu diffère de la facture émise.
+  const round2 = v => Math.round(v * 100) / 100;
+
+  let totalHT = 0, totalTVA = 0;
+  factureLines.forEach(lid => {
     const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
     const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
-    return s + qty * price;
-  }, 0);
-  const tva = subtotal * 0.2;
-  const ttc = subtotal + tva;
+    const taux  = parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0;
+    const ht    = round2(qty * price);
+    totalHT  = round2(totalHT + ht);
+    totalTVA = round2(totalTVA + round2(ht * taux / 100));
+  });
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
-  set('f-subtotal-ht', subtotal);
-  set('f-total-tva',   tva);
-  set('f-total-ttc',   ttc);
+  set('f-subtotal-ht', totalHT);
+  set('f-total-tva',   totalTVA);
+  set('f-total-ttc',   round2(totalHT + totalTVA));
 }
 
-// ─── Signature canvas ─────────────────────────────────────────────────────────
-function initSigPad() {
-  const canvas = document.getElementById('f-sig-canvas');
-  if (!canvas) return;
-  const area = document.getElementById('f-sig-area');
-  const ctx  = canvas.getContext('2d');
-  let drawing = false;
-
-  function resize() {
-    if (!area) return;
-    const rect    = area.getBoundingClientRect();
-    canvas.width  = rect.width;
-    canvas.height = rect.height;
-  }
-  resize();
-  window.addEventListener('resize', resize);
-
-  function getPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  }
-
-  area.addEventListener('mousedown',  e => { drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); const ph = document.getElementById('f-sig-placeholder'); if (ph) ph.style.display = 'none'; });
-  area.addEventListener('mousemove',  e => { if (!drawing) return; const p = getPos(e); ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#101828'; ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
-  area.addEventListener('mouseup',    () => { drawing = false; });
-  area.addEventListener('mouseleave', () => { drawing = false; });
-  area.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
-  area.addEventListener('touchmove',  e => { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#101828'; ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
-  area.addEventListener('touchend',   () => { drawing = false; });
-}
-
-function clearSig(canvasId, placeholderId) {
-  const canvas = document.getElementById(canvasId);
-  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-  const ph = document.getElementById(placeholderId);
-  if (ph) ph.style.display = '';
+/** Applique le taux par défaut à toutes les lignes existantes. */
+function onTvaDefautChange() {
+  const taux = document.getElementById('f-tva-defaut')?.value || '20';
+  factureLines.forEach(lid => {
+    const el = document.getElementById('fl-tva-' + lid);
+    if (el) el.value = taux;
+  });
+  updateFactureTotals();
 }
 
 // ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -1279,7 +1247,6 @@ window.filterFactureStatus     = filterFactureStatus;
 window.addFactureLine          = addFactureLine;
 window.removeFactureLine       = removeFactureLine;
 window.updateFactureLineTotals = updateFactureLineTotals;
-window.clearSig                = clearSig;
 // Sprint 2.1 — Émission + Avoirs
 window.emettreFacture          = emettreFacture;
 window.openModalAvoir          = openModalAvoir;
