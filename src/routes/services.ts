@@ -36,6 +36,7 @@
  *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin uniquement — référentiel global)
  *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin uniquement — référentiel global)
  *   GET    /api/services/modeles/:id/services   → Services suggérés pour un modèle
+ *                                                 (filtrés sur la boutique de l'appelant)
  *   POST   /api/services/modeles/:id/services   → Lier un service à un modèle (admin/manager)
  *   DELETE /api/services/modeles/:id/services/:sid → Délier un service d'un modèle (admin/manager)
  *
@@ -549,10 +550,24 @@ services.delete('/services/modeles/:id', requireRole('admin'), async (c) => {
 /**
  * GET /api/services/modeles/:id/services
  * Services suggérés pour un modèle + détail du modèle.
+ *
+ * Isolation multi-tenant : le modèle est global, mais les services liés appartiennent
+ * chacun à une boutique. La liste renvoyée est filtrée sur la boutique de l'appelant —
+ * sans ce filtre, n'importe quel technicien lisait les tarifs de ses concurrents
+ * (`nom`, `description`, `prix_ht_effectif`, `prix_ttc_effectif`).
+ *
+ * `boutiqueId` est dérivé du JWT via `getBoutiqueId()`, jamais d'une valeur du corps
+ * ou du chemin. L'admin plateforme (`boutique_id` NULL) doit désigner explicitement
+ * une boutique via `?boutique_id=N` — même contrat que les autres routes de liste
+ * (ex. `GET /api/bons-commande`) : pas de vue « toutes boutiques » par défaut, qui
+ * rouvrirait la fuite pour ce rôle.
  */
 services.get('/services/modeles/:id/services', async (c) => {
-  const id   = parseInt(c.req.param('id'), 10)
-  const data = await getModeleWithServices(c.get('db'), id)
+  const id         = parseInt(c.req.param('id'), 10)
+  const boutiqueId = getBoutiqueId(c.get('user'), c.req.query('boutique_id'))
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await getModeleWithServices(c.get('db'), id, boutiqueId)
   if (!data.modele) return c.json({ success: false, error: 'Modèle introuvable.' }, 404)
   return c.json({ success: true, data })
 })

@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import { createTenantAdmin } from './fixtures/tenant'
+import { lierServiceAModele } from './fixtures/service-modele-link'
 
 /**
  * Isolation des routes par ID — voir
@@ -1484,6 +1485,81 @@ test.describe('Isolation — Liaison service <-> modele', () => {
       headers: authHeader(token),
     })
     expect(res.status()).toBe(200)
+  })
+})
+
+// ── Lecture des services suggeres d'un modele : fuite de tarifs inter-tenants ──
+//
+// Le modele est global, mais chaque service lie appartient a une boutique
+// (services.boutique_id NOT NULL, migration 0013). Avant correctif, la requete ne
+// filtrait pas sur la boutique de l'appelant : n'importe quel technicien lisait le
+// nom, la description et les prix HT/TTC des services de ses concurrents lies au
+// meme modele. La route etait exemptee du garde-fou de conformite au motif
+// « referentiel-global » — motif faux, l'exemption a ete retiree.
+//
+// Ces tests verifient le CONTENU de la reponse, pas seulement son code HTTP : la
+// route repondait deja 200 en fuyant.
+test.describe('Isolation — Services suggeres d\'un modele (lecture)', () => {
+  test('un tenant ne voit pas le service qu\'un autre tenant a lie au meme modele', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueFuiteTarifs')
+    const modeleId = await createModeleGlobal(request, marqueId, 'ModeleFuiteTarifs')
+
+    // Tenant A lie SON service au modele global, avec un prix reconnaissable
+    const tenantA   = await createTenantAdmin(request)
+    const nomServiceA = `Service confidentiel A ${uniqueSuffix()}`
+    const serviceAId  = await createServiceAvecToken(request, tenantA.accessToken, {
+      nom: nomServiceA, prix_ht: 1234,
+    })
+    lierServiceAModele(serviceAId, modeleId)
+
+    // Le proprietaire, lui, voit bien son service (sinon le test ci-dessous serait
+    // vert par simple absence de donnee)
+    const vueA = await request.get(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(tenantA.accessToken),
+    })
+    expect(vueA.status()).toBe(200)
+    const servicesA = (await vueA.json()).data.services
+    expect(servicesA.map((s: any) => s.id)).toContain(serviceAId)
+
+    // Tenant B interroge le MEME modele : il ne doit rien voir du service de A
+    const tenantB = await createTenantAdmin(request)
+    const vueB = await request.get(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(tenantB.accessToken),
+    })
+    expect(vueB.status()).toBe(200)
+    const servicesB = (await vueB.json()).data.services
+
+    expect(servicesB.map((s: any) => s.id)).not.toContain(serviceAId)
+    // Aucune trace du nom ni du tarif de A dans la reponse servie a B
+    expect(JSON.stringify(servicesB)).not.toContain(nomServiceA)
+    expect(JSON.stringify(servicesB)).not.toContain('1234')
+  })
+
+  test('l\'admin plateforme doit designer une boutique explicitement', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueAdminScope')
+    const modeleId = await createModeleGlobal(request, marqueId, 'ModeleAdminScope')
+
+    const tenantA  = await createTenantAdmin(request)
+    const serviceAId = await createServiceAvecToken(request, tenantA.accessToken, { prix_ht: 4321 })
+    lierServiceAModele(serviceAId, modeleId)
+
+    const token = await loginSeedAdmin(request)
+
+    // Sans ?boutique_id : refus explicite plutot qu'une vue « toutes boutiques »
+    // qui rouvrirait la fuite pour ce role (meme contrat que GET /api/bons-commande).
+    const sansScope = await request.get(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(token),
+    })
+    expect(sansScope.status()).toBe(400)
+
+    // Avec ?boutique_id : depannage possible, boutique par boutique
+    const avecScope = await request.get(
+      `/api/services/modeles/${modeleId}/services?boutique_id=${tenantA.boutiqueId}`,
+      { headers: authHeader(token) }
+    )
+    expect(avecScope.status()).toBe(200)
+    const services = (await avecScope.json()).data.services
+    expect(services.map((s: any) => s.id)).toContain(serviceAId)
   })
 })
 

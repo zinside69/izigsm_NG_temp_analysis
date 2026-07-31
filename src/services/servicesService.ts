@@ -620,9 +620,20 @@ export async function deleteModele(
  * Retourne les services suggérés pour un modèle d'appareil donné.
  * Utilisé lors de la création d'un ticket pour pré-remplir les prestations.
  * `prix_ht_effectif` = prix override si défini, sinon prix catalogue.
+ *
+ * Isolation multi-tenant : le modèle est global (référentiel partagé, migration 0031),
+ * mais les services liés appartiennent chacun à une boutique (`services.boutique_id`
+ * NOT NULL depuis la migration 0013). Sans le filtre `s.boutique_id`, cette requête
+ * renvoyait le nom, la description et les prix HT/TTC des services de TOUTES les
+ * boutiques ayant lié un service à ce modèle — fuite de tarifs entre concurrents.
+ * `boutiqueId` doit toujours venir du JWT (`getBoutiqueId()`), jamais du corps de requête.
+ *
+ * @param db          Port Database
+ * @param modeleId    Identifiant du modèle d'appareil (référentiel global)
+ * @param boutiqueId  Boutique appelante — seuls ses services sont retournés
  */
 export async function getServicesByModele(
-  db: Database, modeleId: number
+  db: Database, modeleId: number, boutiqueId: number
 ): Promise<object[]> {
   return db.all<any>(`
     SELECT s.id,
@@ -640,9 +651,9 @@ export async function getServicesByModele(
     FROM   service_modeles sm
     JOIN   services s  ON s.id = sm.service_id AND s.actif = 1
     LEFT JOIN categories_services c ON c.id = s.categorie_id
-    WHERE  sm.modele_id = ? AND sm.actif = 1
+    WHERE  sm.modele_id = ? AND sm.actif = 1 AND s.boutique_id = ?
     ORDER  BY c.nom ASC, s.nom ASC
-  `, [modeleId])
+  `, [modeleId, boutiqueId])
 }
 
 /**
@@ -684,9 +695,16 @@ export async function unlinkServiceModele(
  * Retourne toutes les liaisons service_modeles d'un modèle
  * sous forme plate (service_id + nom + prix_ht_specifique + actif).
  * Utile pour afficher la liste des services configurés dans l'UI.
+ *
+ * Le modèle lui-même est global (aucun `boutique_id` à comparer) ; l'isolation porte
+ * sur les services retournés — voir `getServicesByModele()`.
+ *
+ * @param db          Port Database
+ * @param modeleId    Identifiant du modèle d'appareil (référentiel global)
+ * @param boutiqueId  Boutique appelante — seuls ses services sont retournés
  */
 export async function getModeleWithServices(
-  db: Database, modeleId: number
+  db: Database, modeleId: number, boutiqueId: number
 ): Promise<{ modele: ModeleAppareil | null; services: object[] }> {
   const [modeleRow, services] = await Promise.all([
     db.get<ModeleAppareil>(`
@@ -695,7 +713,7 @@ export async function getModeleWithServices(
       JOIN   marques_appareils ma ON ma.id = mo.marque_id
       WHERE  mo.id = ? AND mo.actif = 1
     `, [modeleId]),
-    getServicesByModele(db, modeleId)
+    getServicesByModele(db, modeleId, boutiqueId)
   ])
   return { modele: modeleRow ?? null, services }
 }
