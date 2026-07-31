@@ -282,7 +282,11 @@ services.get('/services/modeles', async (c) => {
 services.get('/services/:id', async (c) => {
   const id      = parseInt(c.req.param('id'), 10)
   const service = await getService(c.get('db'), id)
-  if (!service) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir le service d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data: service })
 })
 
@@ -342,9 +346,10 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const error = validateService(body)
   if (error) return c.json({ success: false, error }, 400)
 
-  // Vérification existence avant tentative de mise à jour
+  // Isolation multi-tenant : ne jamais modifier le service d'une autre boutique
   const existing = await getService(c.get('db'), id)
-  if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+  const deny = assertBoutiqueOwnership(user, existing, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await updateService(c.env.DB, id, body, user.sub)
   return c.json({ success: true, message: 'Service mis à jour.' })
@@ -364,9 +369,10 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
 
-  // Vérification existence avant soft delete
+  // Isolation multi-tenant : ne jamais désactiver le service d'une autre boutique
   const existing = await getService(c.get('db'), id)
-  if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+  const deny = assertBoutiqueOwnership(user, existing, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await deleteService(c.env.DB, id, user.sub)
   return c.json({ success: true, message: 'Service désactivé.' })
@@ -555,6 +561,10 @@ services.get('/services/modeles/:id/services', async (c) => {
  * POST /api/services/modeles/:id/services
  * Lie un service à un modèle (avec prix override optionnel).
  * Body : `{ service_id: number, prix_ht_specifique?: number }`
+ *
+ * Isolation multi-tenant : le modèle appartient au référentiel global (pas de
+ * boutique_id, migration 0031), mais le service lié appartient bien à une
+ * boutique — c'est donc son appartenance qu'il faut vérifier, pas celle du modèle.
  */
 services.post('/services/modeles/:id/services', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
@@ -563,8 +573,13 @@ services.post('/services/modeles/:id/services', requireRole('admin', 'manager'),
 
   if (!body.service_id) return c.json({ success: false, error: 'service_id est requis.' }, 400)
 
+  const serviceId = parseInt(body.service_id, 10)
+  const service   = await getService(c.get('db'), serviceId)
+  const deny      = assertBoutiqueOwnership(user, service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await linkServiceModele(c.env.DB, {
-    service_id:          parseInt(body.service_id, 10),
+    service_id:          serviceId,
     modele_id:           modeleId,
     prix_ht_specifique:  body.prix_ht_specifique ?? null,
   }, user.sub)
@@ -574,11 +589,18 @@ services.post('/services/modeles/:id/services', requireRole('admin', 'manager'),
 /**
  * DELETE /api/services/modeles/:id/services/:sid
  * Dissocie un service d'un modèle (soft delete liaison).
+ *
+ * Isolation multi-tenant : voir commentaire identique sur POST ci-dessus —
+ * la garde porte sur le service (:sid), pas sur le modèle (:id).
  */
 services.delete('/services/modeles/:id/services/:sid', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
   const modeleId  = parseInt(c.req.param('id'), 10)
   const serviceId = parseInt(c.req.param('sid'), 10)
+
+  const service = await getService(c.get('db'), serviceId)
+  const deny    = assertBoutiqueOwnership(user, service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await unlinkServiceModele(c.env.DB, { service_id: serviceId, modele_id: modeleId }, user.sub)
   return c.json({ success: true, message: 'Service dissocié du modèle.' })
