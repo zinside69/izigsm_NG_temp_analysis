@@ -30,7 +30,7 @@
  *   GET    /api/services/marques                → Liste marques actives (avec nb_modeles)
  *   POST   /api/services/marques                → Créer une marque (admin/manager)
  *   PUT    /api/services/marques/:id            → Modifier une marque (admin uniquement — référentiel global)
- *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin/manager)
+ *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin uniquement — référentiel global)
  *   GET    /api/services/modeles                → Liste modèles (filtre: marque_id, search, type)
  *   POST   /api/services/modeles                → Créer un modèle (admin/manager)
  *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin uniquement — référentiel global)
@@ -41,7 +41,9 @@
  *
  * Sécurité :
  *   Toutes les routes requièrent `authMiddleware` (appliqué globalement).
- *   Les mutations (POST/PUT/DELETE) requièrent `requireRole('admin', 'manager')`.
+ *   Les mutations (POST/PUT/DELETE) requièrent `requireRole('admin', 'manager')`,
+ *   sauf l'écriture sur le référentiel global marques/modèles (PUT marques/:id,
+ *   PUT/DELETE modeles/:id, DELETE marques/:id), réservée à `requireRole('admin')`.
  *
  * Format de réponse (P5 uniforme) : `{ success, data?, error?, message? }`
  */
@@ -474,8 +476,15 @@ services.put('/services/marques/:id', requireRole('admin'), async (c) => {
   return c.json({ success: true, message: 'Marque mise à jour.' })
 })
 
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : partagé par
+// toutes les boutiques. L'écriture est réservée à l'admin plateforme — sinon un
+// manager renomme ou désactive une entrée visible par tous les autres tenants.
+// Cas le plus dommageable des 4 routes : deleteMarque() cascade sur tous les
+// modèles de la marque (UPDATE modeles_appareils SET actif = 0 WHERE marque_id = ?)
+// avant de désactiver la marque elle-même — un manager neutraliserait donc une
+// marque entière et tous ses modèles, pour toutes les boutiques.
 /** DELETE /api/services/marques/:id — Désactiver une marque (+ ses modèles en cascade) */
-services.delete('/services/marques/:id', requireRole('admin', 'manager'), async (c) => {
+services.delete('/services/marques/:id', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
 

@@ -605,4 +605,27 @@ test.describe('Referentiel global — ecriture reservee a l\'admin plateforme', 
     })
     expect(res.status()).toBe(200)
   })
+
+  // Fix round 1 : DELETE /services/marques/:id oublie dans l'enumeration initiale du
+  // brief alors que le commentaire de justification (ci-dessus, sur PUT) couvrait deja
+  // "renomme ou desactive". Cascade reelle dans deleteMarque() (modeles_appareils.actif
+  // = 0 WHERE marque_id = ?) : le cas le plus dommageable des 4 routes. Marque fraiche
+  // par test — la desactivation est persistante, jamais de marque reutilisee.
+  test('un manager ne peut pas desactiver une marque du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueDelManager')
+    const manager  = await createTenantAdmin(request)
+    const res = await request.delete(`/api/services/marques/${marqueId}`, {
+      headers: authHeader(manager.accessToken),
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme desactive une marque du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueDelAdmin')
+    const token    = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/services/marques/${marqueId}`, {
+      headers: authHeader(token),
+    })
+    expect(res.status()).toBe(200)
+  })
 })
