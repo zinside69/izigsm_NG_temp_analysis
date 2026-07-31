@@ -15,6 +15,21 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## 🔴 P1 — Migration de reconstruction `service_modeles` (trouvé 2026-07-31, PAS corrigé)
+`service_modeles.modele_id` référence `modeles_appareils_old`, table supprimée par la migration `0031`
+(`ALTER TABLE RENAME` puis `DROP` dans le même fichier). Conséquence : **`POST /api/services/modeles/:id/services`
+renvoie 500 pour tout appelant, admin compris, très probablement en production depuis le Sprint 2.39.**
+- [ ] Migration de reconstruction de la table (recréation + copie des données, patron SQLite de la migration 0031)
+- [ ] À appliquer **en distant avant** tout déploiement du Worker (`CLAUDE.md` § Déploiement)
+- [ ] Remplacer alors la fixture `tests/e2e/fixtures/service-modele-link.ts` (écriture directe en SQLite local, `PRAGMA foreign_keys = OFF`) par un appel API normal
+
+## 🟡 Suivis du chantier isolation (revue finale 2026-07-31, PAS corrigés)
+- [ ] `propageAUnService()` (`tests/routes-isolation-conformite.test.ts`) matche `if (...)` comme un appel de fonction et ne franchit pas les parenthèses imbriquées. Conséquence : retirer `boutiqueId` de `getModeleWithServices(...)` — donc rouvrir la fuite de tarifs corrigée le 2026-07-31 — laisse le garde-fou vert. Exclure `if`/`while`/`for`/`switch`/`return` et gérer l'imbrication.
+- [ ] `receptionnerBonCommande()` ignore silencieusement une ligne dont le produit appartient à une autre boutique, sans `auditLog` : un bon hétérogène hérité s'affiche « réceptionné » avec un stock inchangé et aucune trace. Population concernée vérifiée vide en local (69 bons, 0 ligne avec `produit_id`), non vérifiée en production.
+- [ ] Le garde-fou ne couvre que les paramètres finissant par « id » : les routes `:token` / `:slug` lui échappent, dont `POST /services/catalog/sync-modeles/:slug` (mutation, protégée aujourd'hui par `requireRole('admin')` seul).
+- [ ] Frontend à aligner : les boutons « nouvelle marque / nouveau modèle » de `services.html` restent visibles aux managers alors que les 6 routes d'écriture du référentiel répondent désormais 403.
+- [ ] Frontend à aligner : un admin plateforme reçoit un 400 sur `GET /services/modeles/:id/services` tant que l'appel n'envoie pas `?boutique_id=N` (`apiGet` ne l'injecte que depuis la session, or l'admin plateforme n'a pas de boutique).
+
 ## ✅ PRIORITÉ CRITIQUE — Écritures cross-tenant sur 5 endpoints facture/avoir (revue finale 2026-07-30, CORRIGÉ le 2026-07-31)
 Trouvé par la revue finale du chantier facture. **Dette antérieure, pas une régression de ce chantier**, mais même classe que les failles `GET /tickets/:id` et `PUT/DELETE /tickets/:id` déjà corrigées le 2026-07-19 (`bugs.md`) — et sur l'objet que ce chantier vient d'enrichir de données réglementaires irrécupérables.
 
