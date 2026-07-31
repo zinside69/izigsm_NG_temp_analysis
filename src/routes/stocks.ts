@@ -223,6 +223,12 @@ stocks.post('/produits/:id/mouvement', async (c) => {
   const produitId = parseInt(c.req.param('id'), 10)
   const body      = await c.req.json()
 
+  // Isolation multi-tenant : ne jamais modifier le stock d'un produit d'une autre
+  // boutique — même patron que les 3 routes produits voisines (GET/PUT/DELETE /:id).
+  const produit = await getProduitById(dbPort, produitId)
+  const deny = assertBoutiqueOwnership(user, produit, 'Produit')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   if (!body.type_mouvement || body.quantite === undefined)
     return c.json({ success: false, error: 'type_mouvement et quantite obligatoires.' }, 400)
 
