@@ -2,14 +2,9 @@
 
 ## ⚠️ À TRAITER AVANT TOUT NOUVEAU CHANTIER
 
-**1. Faille critique ouverte — accès superadmin publié.**
-`admin@izigsm.fr` / `Admin@2026!` fonctionne en production (rôle `admin`, `boutique_id` NULL, les 5 boutiques visibles), et ces identifiants sont en clair dans `CLAUDE.md` et `seed.sql` du dépôt **public** `zinside69/izigsm_NG_temp_analysis`. N'importe qui peut se connecter en lisant le dépôt. Aucune garde d'isolation ne protège de cela.
-Procédure décidée, non exécutée : créer et **tester** la boîte `support@soteli.fr` (l'envoi d'email est `waitUntil()`, sans confirmation de livraison — un reset vers une boîte inexistante part dans le vide sans erreur), puis :
-```bash
-npx wrangler d1 execute DB --remote --command "UPDATE users SET email = 'support@soteli.fr' WHERE id = 1"
-curl -X POST https://repairdesk.fr/api/auth/reset-password-request -H "Content-Type: application/json" -d '{"email":"support@soteli.fr"}'
-```
-`zinside@gmail.com` est déjà pris (user id 6). Rendre le dépôt privé ne suffit pas : le secret est dans l'historique git.
+**1. ✅ Faille superadmin — FERMÉE le 2026-07-31.**
+`admin@izigsm.fr` / `Admin@2026!` fonctionnait en production (rôle `admin` plateforme, les 5 boutiques) alors que ces identifiants sont publiés dans un dépôt GitHub public. Compte rattaché à `support@soteli.fr` puis mot de passe tourné par lien de réinitialisation. **Vérifié : les deux combinaisons (ancien email et nouvel email avec l'ancien mot de passe) renvoient `401`**, et le compte reste actif pour le dépannage.
+Reste à faire à froid, pas urgent : retirer les identifiants de `seed.sql`/`CLAUDE.md` et générer le mot de passe de démo à l'installation. Le secret demeure dans l'historique git — sans conséquence maintenant qu'il ne vaut plus rien en production.
 
 **2. Quatre chantiers prêts, non déployés**, dans cet ordre impératif :
 ```bash

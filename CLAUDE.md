@@ -49,15 +49,19 @@ binding `DB`, `wrangler pages dev` le lit automatiquement. Détail complet dans
 
 Compte de démo (seed.sql) : `admin@izigsm.fr` / `Admin@2026!` (boutique 1, "iziGSM Paris 11").
 
-> ⚠️ **Ces identifiants sont publiés** — ce dépôt est public sur GitHub, et le même compte
-> existe **en production** avec le rôle `admin` plateforme (`boutique_id` NULL, accès à
-> toutes les boutiques). Vérifié le 2026-07-31 : le login réussit sur `repairdesk.fr`.
-> Tant que le mot de passe de production n'a pas été tourné (voir
-> `project-docs/recovery-prompt.md`, en tête), n'importe qui peut se connecter en lisant ce
-> fichier. Aucune garde d'isolation ne protège d'un identifiant publié.
+> ⚠️ **Ces identifiants sont publiés** (ce dépôt est public sur GitHub) et ils étaient
+> valides **en production** jusqu'au 2026-07-31 sur un compte `admin` plateforme
+> (`boutique_id` NULL, accès à toutes les boutiques). N'importe qui pouvait se connecter en
+> lisant ce fichier — aucune garde d'isolation ne protège d'un identifiant publié.
 >
-> Règle à appliquer désormais : le seed ne doit contenir aucun secret réutilisé en
-> production. Un mot de passe de démo doit être généré à l'installation, jamais écrit ici.
+> **Corrigé le 2026-07-31** : le compte de production a été rattaché à `support@soteli.fr`
+> et son mot de passe tourné. Vérifié — `admin@izigsm.fr` / `Admin@2026!` **et**
+> `support@soteli.fr` / `Admin@2026!` renvoient tous deux `401`. Les identifiants ci-dessus
+> ne valent plus que pour le seed local.
+>
+> Règle qui demeure : le seed ne doit contenir aucun secret réutilisable en production. Un
+> mot de passe de démo devrait être généré à l'installation plutôt qu'écrit ici — le
+> présent incident montre ce qu'il en coûte autrement.
 
 ## Architecture
 
