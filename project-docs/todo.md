@@ -34,6 +34,39 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 - [x] Fixture `tests/e2e/fixtures/service-modele-link.ts` repassée par l'API, `PRAGMA foreign_keys = OFF` supprimé
 </details>
 
+## 🔴 Supervision superadmin — l'interface manque (constaté 2026-07-31, PAS commencé)
+
+**Symptôme, constaté par l'utilisateur en production** : connecté avec le compte admin plateforme
+(`support@soteli.fr`), il ne voit aucune boutique cliente. Or le besoin est explicite — le superadmin
+doit pouvoir superviser et dépanner les boutiques clientes, pas produire dans la sienne.
+
+**Diagnostic** : la capacité existe côté API (`assertBoutiqueOwnership()` laisse passer le rôle `admin`
+sur les 36 routes gardées ; `GET /api/boutiques` renvoie bien les 5 boutiques, vérifié en production).
+C'est l'interface qui n'a jamais été construite pour : `apiGet` injecte `boutique_id` **depuis la
+session** (`app.js:604`, `app.js:742`), or l'admin plateforme a `boutique_id = NULL` — par conception,
+c'est ce qui lui permet de traverser. Résultat : aucun `boutique_id` à injecter, aucune boutique
+affichée, et 400 sur les routes qui en exigent un.
+
+**Décisions utilisateur du 2026-07-31, à respecter au cadrage :**
+- **Les deux livrables** : une console d'administration (vue d'ensemble des boutiques, comptes,
+  activité) **et** un sélecteur de boutique dans l'en-tête, réservé au rôle `admin`, qui bascule
+  les 29 pages existantes sur la boutique choisie via `?boutique_id=N`. À découper en deux chantiers
+  successifs, en commençant par celui qui débloque le dépannage.
+- **Accès complet + traçabilité** : l'admin conserve la lecture et l'écriture (comportement actuel de
+  l'API, aucune garde à modifier), mais **toute action sur une boutique qui n'est pas la sienne doit
+  être journalisée dans `audit_logs`** avec une mention explicite — pour qu'un client puisse savoir ce
+  qui a été fait sur ses données en cas de litige, notamment sur une facture.
+
+**Workflow imposé** (`CLAUDE.md` § Workflow de développement) : `/grill-with-docs` → `/to-spec` →
+`/to-tickets` → `/implement`. **À démarrer en session neuve** — les étapes de cadrage doivent tenir
+dans une seule fenêtre de contexte, et celle du 2026-07-31 était saturée quand le besoin a été
+constaté.
+
+Points à trancher au grilling : que voit l'admin dans le sélecteur quand il n'a lui-même aucune
+boutique · le sélecteur persiste-t-il entre les pages · la console affiche-t-elle des données
+agrégées inter-boutiques (donc une requête sans filtre tenant, à écrire avec précaution) · faut-il
+un bandeau visible signalant « vous consultez la boutique X » pour éviter une fausse manip.
+
 ## 🟡 Suivis du chantier isolation (revue finale 2026-07-31, PAS corrigés)
 - [x] `propageAUnService()` — **CORRIGÉ le 2026-07-31** (commit `73ef419`). Deux défauts se compensaient : `if (...)` compté comme un appel (or tout handler du patron JWT commence par `if (!boutiqueId) return`), et arguments imbriqués non franchis (`getModeleWithServices(c.get('db'), id, boutiqueId)` jamais vu). Un troisième cas est apparu en corrigeant le second — l'équilibrage fait aussi matcher l'appel englobant de déclaration de route ; les appels recevant une fonction fléchée sont désormais écartés. **Preuve par mutation refaite sur le code réel** : retirer `boutiqueId` de `services.ts:583` fait maintenant échouer le test en nommant la route. 2 méta-tests ajoutés (10 au total).
 - [ ] `receptionnerBonCommande()` ignore silencieusement une ligne dont le produit appartient à une autre boutique, sans `auditLog` : un bon hétérogène hérité s'affiche « réceptionné » avec un stock inchangé et aucune trace. Population concernée vérifiée vide en local (69 bons, 0 ligne avec `produit_id`), non vérifiée en production.
