@@ -32,14 +32,44 @@ Détail complet + effets démontrés endpoint par endpoint : `bugs.md`. **Pas en
 Les 3 sites d'isolation antérieurs (`facturation.ts:257`, `:299`, `:371`) n'ont pas été migrés
 vers le helper (code déjà validé) — migration optionnelle, à faire seulement si on retouche ces routes.
 
-## 🔴 PRIORITÉ CRITIQUE — 18 routes par ID sans isolation `boutique_id` (audit 2026-07-31, PAS corrigé)
-Rapport complet : `project-docs/audit-isolation-2026-07-31.md` (84 routes par ID analysées → 47 suspectes → 18 candidates).
-**3 vérifiées manuellement, 3 confirmées** : `GET /produits/:id` (prix d'achat/marge/fournisseur d'autrui),
-`PUT /employes/:id` (modification d'une fiche RH d'une autre boutique), `POST /tickets/:id/archiver`
-(route oubliée par la campagne du 2026-07-19 dans un fichier pourtant audité).
-- [ ] Vérifier une par une les 15 candidates restantes (liste dans le rapport)
-- [ ] Corriger les confirmées avec `assertBoutiqueOwnership()`, RED Playwright d'abord
-- [ ] Trancher la piste de fond : helper systématique vs garde par défaut sur toute route `/:id` (voir § Lecture d'ensemble du rapport)
+## ✅ PRIORITÉ CRITIQUE — 36 routes par ID sans isolation `boutique_id` (audit 2026-07-31, CORRIGÉ le 2026-07-31)
+Rapport complet : `project-docs/audit-isolation-2026-07-31.md` (84 routes par ID analysées → 47 suspectes → 18 candidates
+par l'audit statique initial). **Le compte réel n'était ni 13 ni 18 : 36 routes ont finalement reçu une garde.**
+L'écart vient d'un faux négatif systématique de l'audit statique — voir `bugs.md` et la section « Statut » de
+`audit-isolation-2026-07-31.md` pour le détail. `PUT /employes/:id` (modification d'une fiche RH d'une autre boutique),
+`GET /produits/:id` (prix d'achat/marge/fournisseur d'autrui) et `POST /tickets/:id/archiver`
+(route oubliée par la campagne du 2026-07-19 dans un fichier pourtant audité) ont été les 3 premières confirmées manuellement.
+- [x] Vérifier une par une les 15 candidates restantes de l'audit initial (liste dans le rapport) — 17/18 confirmées failles réelles (1 exemption légitime : `DELETE /employes/:id` en `admin`-only)
+- [x] Écrire le garde-fou de conformité (`tests/routes-isolation-conformite.test.ts`) — a révélé 23 failles supplémentaires que l'audit manuel avait manquées
+- [x] Corriger les 36 routes avec `assertBoutiqueOwnership()` ou l'équivalent service (`getTicketBoutiqueId`, `getBonCommandeBoutiqueId`, `getCategorieBoutiqueId`, `getRdvBoutiqueId`) — 125 tests e2e (`tests/e2e/isolation-routes.spec.ts`), test de conformité vert
+- [x] Trancher la piste de fond : garde-fou de conformité statique retenu (`tests/routes-isolation-conformite.test.ts`), plutôt qu'un middleware par défaut sur toute route `/:id` — voir § Lecture d'ensemble du rapport
+
+## Dette et bugs découverts pendant le chantier isolation routes par ID (2026-07-31, aucun corrigé)
+Trouvés en cours de route par les tâches 1 à 14 du chantier `feat/isolation-routes-par-id` (voir
+`.superpowers/sdd/2026-07-31-isolation-routes-par-id/progress.md`) — hors périmètre de ce chantier,
+qui ne devait modifier que des routes d'isolation. Documentés ici pour ne pas les perdre.
+
+- [ ] 🔴 `service_modeles.modele_id` référence `modeles_appareils_old`, table supprimée par la migration
+  `0031` (`ALTER TABLE RENAME` puis `DROP` dans la même migration) : `POST /services/modeles/:id/services`
+  renvoie **500 pour tout appelant, admin compris**, très probablement en production. Exige une nouvelle
+  migration D1. Trouvé Task 11-13 — les 2 tests e2e concernés assertent `!== 403/404` au lieu de `=== 200`,
+  limite documentée dans le test.
+- [ ] 🔴 `updateEmploye()` (`src/services/personnelService.ts`) échoue en 500 sur un body partiel :
+  `prenom`/`nom` restent `undefined` et violent une contrainte NOT NULL. `PUT /api/employes/:id` est donc
+  cassé pour toute mise à jour partielle. Trouvé Task 2, sans rapport avec l'isolation.
+- [ ] 🟡 Les 3 gardes posées le 2026-07-31 dans `src/routes/facturation.ts` (lignes ~464, ~496, ~564,
+  commit `5636b57`, **déjà déployé**) utilisent du SQL inline et violent la convention « 0 SQL inline dans
+  les controllers » (voir `CLAUDE.md` § Architecture). Fonctionnelles, mais à migrer vers une fonction de
+  service. Trouvé Task 3.
+- [ ] 🟡 `POST /services/marques` et `POST /services/modeles` restent ouverts aux managers : la création
+  dans le référentiel global n'est pas restreinte, contrairement à la modification et à la suppression
+  (passées à `requireRole('admin')` par Task 6). Trouvé Task 6.
+- [ ] 🟡 L'inscription renvoie `500 "Erreur serveur."` quand le nom de boutique est déjà pris, au lieu d'un
+  message explicite — un prospect reçoit une erreur serveur incompréhensible.
+- [ ] 🟡 `public/static/js/factures.js` : `confirmPaiement()` et `deleteFacture()` retombent sur un
+  enregistrement **local** en cas d'erreur réseau (« hors-ligne »), donc la base ne voit jamais l'opération ;
+  et `numero: … || ('FAC-' + id)` fabrique un numéro d'affichage. Même famille que le fallback localStorage
+  supprimé au checkpoint 64, sur des objets NF525-adjacents.
 
 ## 🟡 `addMonthsParis()` — mois précédent faux les 31 (trouvé 2026-07-31, PAS corrigé)
 `statsService.ts:45` : le décalage de mois via `Date.setUTCMonth()` déborde les 31 (2026-06-31 → 2026-07-01),
