@@ -28,11 +28,11 @@
  *
  *   Sprint 2.38 — Marques / Modèles / Liaisons
  *   GET    /api/services/marques                → Liste marques actives (avec nb_modeles)
- *   POST   /api/services/marques                → Créer une marque (admin/manager)
+ *   POST   /api/services/marques                → Créer une marque (admin uniquement — référentiel global)
  *   PUT    /api/services/marques/:id            → Modifier une marque (admin uniquement — référentiel global)
  *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin uniquement — référentiel global)
  *   GET    /api/services/modeles                → Liste modèles (filtre: marque_id, search, type)
- *   POST   /api/services/modeles                → Créer un modèle (admin/manager)
+ *   POST   /api/services/modeles                → Créer un modèle (admin uniquement — référentiel global)
  *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin uniquement — référentiel global)
  *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin uniquement — référentiel global)
  *   GET    /api/services/modeles/:id/services   → Services suggérés pour un modèle
@@ -43,8 +43,9 @@
  * Sécurité :
  *   Toutes les routes requièrent `authMiddleware` (appliqué globalement).
  *   Les mutations (POST/PUT/DELETE) requièrent `requireRole('admin', 'manager')`,
- *   sauf l'écriture sur le référentiel global marques/modèles (PUT marques/:id,
- *   PUT/DELETE modeles/:id, DELETE marques/:id), réservée à `requireRole('admin')`.
+ *   sauf TOUTE écriture sur le référentiel global marques/modèles — création
+ *   comprise (POST/PUT/DELETE marques et modeles, 6 routes) — réservée à
+ *   `requireRole('admin')`.
  *
  * Format de réponse (P5 uniforme) : `{ success, data?, error?, message? }`
  */
@@ -454,8 +455,15 @@ services.post('/services/catalog/sync-selected', requireRole('admin'), async (c)
 // MARQUES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/services/marques — Créer une marque manuellement */
-services.post('/services/marques', requireRole('admin', 'manager'), async (c) => {
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : la création
+// aussi est réservée à l'admin plateforme, au même titre que PUT/DELETE.
+// Une marque créée par un manager entre dans le namespace partagé de TOUTES les
+// boutiques (contrainte UNIQUE sur le nom : un tenant peut préempter un nom), et
+// lui seul ne pourra plus la corriger — PUT/DELETE lui répondent 403. Laisser la
+// création ouverte produisait donc des entrées globales que personne d'autre que
+// l'admin plateforme ne peut réparer.
+/** POST /api/services/marques — Créer une marque manuellement (admin uniquement) */
+services.post('/services/marques', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 
@@ -503,8 +511,13 @@ services.delete('/services/marques/:id', requireRole('admin'), async (c) => {
 // MODÈLES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/services/modeles — Créer un modèle manuellement */
-services.post('/services/modeles', requireRole('admin', 'manager'), async (c) => {
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : même raison
+// que POST /services/marques ci-dessus — création réservée à l'admin plateforme.
+// Le catalogue de modèles est par ailleurs alimenté par la synchronisation
+// externe (`/services/catalog/sync-*`), elle aussi admin uniquement : la création
+// manuelle est un complément, pas le canal d'approvisionnement normal.
+/** POST /api/services/modeles — Créer un modèle manuellement (admin uniquement) */
+services.post('/services/modeles', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 

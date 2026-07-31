@@ -544,6 +544,48 @@ async function createModeleGlobal(request: APIRequestContext, marqueId: number, 
 }
 
 test.describe('Referentiel global — ecriture reservee a l\'admin plateforme', () => {
+  // Creation (2026-07-31, condition 4 de la revue finale) : les 4 routes PUT/DELETE
+  // etaient passees admin-only, pas les 2 POST — un manager pouvait donc encore
+  // inscrire des entrees dans le namespace partage de toutes les boutiques, sans
+  // jamais pouvoir les corriger ensuite (PUT/DELETE lui repondent 403).
+  test('un manager ne peut pas creer une marque dans le referentiel partage', async ({ request }) => {
+    const manager = await createTenantAdmin(request)
+    const res = await request.post('/api/services/marques', {
+      headers: authHeader(manager.accessToken),
+      data: { nom: `MarqueCreeeParManager-${uniqueSuffix()}` },
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme cree une marque dans le referentiel partage', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const res = await request.post('/api/services/marques', {
+      headers: authHeader(token),
+      data: { nom: `MarqueCreeeParAdmin-${uniqueSuffix()}` },
+    })
+    expect(res.status()).toBe(201)
+  })
+
+  test('un manager ne peut pas creer un modele dans le referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueCreationModeleManager')
+    const manager  = await createTenantAdmin(request)
+    const res = await request.post('/api/services/modeles', {
+      headers: authHeader(manager.accessToken),
+      data: { nom: `ModeleCreeParManager-${uniqueSuffix()}`, marque_id: marqueId },
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme cree un modele dans le referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueCreationModeleAdmin')
+    const token    = await loginSeedAdmin(request)
+    const res = await request.post('/api/services/modeles', {
+      headers: authHeader(token),
+      data: { nom: `ModeleCreeParAdmin-${uniqueSuffix()}`, marque_id: marqueId },
+    })
+    expect(res.status()).toBe(201)
+  })
+
   test('un manager ne peut pas modifier une marque du referentiel partage', async ({ request }) => {
     const marqueId = await createMarqueGlobal(request, 'MarqueTest')
     const manager = await createTenantAdmin(request)
