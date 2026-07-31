@@ -922,3 +922,145 @@ test.describe('Isolation — Devis', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/**
+ * Tache 12-14 : agenda (RDV), bons de commande (detail + reception), pointage.
+ * Aucune fixture rendez_vous/bons_commande dans seed.sql au-dela de celles deja
+ * utilisees ci-dessus — creees via l'API, meme pattern que rachats/devis. Pour
+ * l'admin plateforme (boutique_id NULL), boutique_id: 1 est fourni explicitement
+ * dans le body de creation.
+ */
+
+/** Cree un RDV avec le token fourni (boutique derivee du JWT si non-admin). */
+async function createRdvAvec(
+  request: APIRequestContext, token: string, overrides: Record<string, any> = {}
+): Promise<number> {
+  const res = await request.post('/api/agenda', {
+    headers: authHeader(token),
+    data: {
+      titre:         'RDV fixture e2e',
+      debut:         '2026-08-15 10:00:00',
+      duree_minutes: 30,
+      ...overrides,
+    },
+  })
+  if (!res.ok()) throw new Error(`creation rdv failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un RDV cote boutique 1 via l'API admin. */
+async function createRdvBoutique1(request: APIRequestContext): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  return createRdvAvec(request, token, { boutique_id: 1 })
+}
+
+test.describe('Isolation — Agenda (RDV)', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un rdv qui ne lui appartient pas', async ({ request }) => {
+    const rdvId    = await createRdvBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/agenda/${rdvId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime lit son propre rdv', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const rdvId   = await createRdvAvec(request, proprio.accessToken, { boutique_id: proprio.boutiqueId })
+
+    const res = await request.get(`/api/agenda/${rdvId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le rdv de n\'importe quelle boutique', async ({ request }) => {
+    const rdvId = await createRdvBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/agenda/${rdvId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('un manager d\'une autre boutique ne peut pas modifier un rdv qui ne lui appartient pas', async ({ request }) => {
+    const rdvId    = await createRdvBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/agenda/${rdvId}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { titre: 'Modifie par un tenant etranger', debut: '2026-08-15 10:00:00' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime modifie son propre rdv', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const rdvId   = await createRdvAvec(request, proprio.accessToken, { boutique_id: proprio.boutiqueId })
+
+    const res = await request.put(`/api/agenda/${rdvId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: { titre: 'Modifie par son proprietaire', debut: '2026-08-15 10:00:00' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme modifie le rdv de n\'importe quelle boutique', async ({ request }) => {
+    const rdvId = await createRdvBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/agenda/${rdvId}`, {
+      headers: authHeader(token),
+      data: { titre: 'Modifie par l\'admin plateforme', debut: '2026-08-15 10:00:00' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : PATCH .../statut fait transiter un etat persistant
+  // (machine a etats PENDING -> SCHEDULED, non repetable sur le meme RDV).
+  test('un manager d\'une autre boutique ne peut pas changer le statut d\'un rdv qui ne lui appartient pas', async ({ request }) => {
+    const rdvId    = await createRdvBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.patch(`/api/agenda/${rdvId}/statut`, {
+      headers: authHeader(etranger.accessToken),
+      data: { statut: 'SCHEDULED' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime change le statut de son propre rdv', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const rdvId   = await createRdvAvec(request, proprio.accessToken, { boutique_id: proprio.boutiqueId })
+
+    const res = await request.patch(`/api/agenda/${rdvId}/statut`, {
+      headers: authHeader(proprio.accessToken),
+      data: { statut: 'SCHEDULED' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme change le statut du rdv de n\'importe quelle boutique', async ({ request }) => {
+    const rdvId = await createRdvBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.patch(`/api/agenda/${rdvId}/statut`, {
+      headers: authHeader(token),
+      data: { statut: 'SCHEDULED' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : DELETE fait transiter actif=0 de facon persistante.
+  test('un manager d\'une autre boutique ne peut pas supprimer un rdv qui ne lui appartient pas', async ({ request }) => {
+    const rdvId    = await createRdvBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.delete(`/api/agenda/${rdvId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime supprime son propre rdv', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const rdvId   = await createRdvAvec(request, proprio.accessToken, { boutique_id: proprio.boutiqueId })
+
+    const res = await request.delete(`/api/agenda/${rdvId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme supprime le rdv de n\'importe quelle boutique', async ({ request }) => {
+    const rdvId = await createRdvBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/agenda/${rdvId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+})

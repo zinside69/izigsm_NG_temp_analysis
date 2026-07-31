@@ -185,6 +185,25 @@ export async function listRendezVous(
  * @param boutiqueId  Identifiant de la boutique (isolation multi-tenant)
  * @returns           RDV enrichi (client, tech, ticket) ou `null` si introuvable / soft-deleted
  */
+/**
+ * Retourne uniquement le `boutique_id` d'un RDV, sans filtrer par boutique.
+ * Utilisé par la garde d'isolation des routes `agenda.ts` (`GET/PUT/PATCH statut/DELETE
+ * /agenda/:id`) — sur le modèle de `getTicketBoutiqueId()` (`ticketService.ts`) /
+ * `getBonCommandeBoutiqueId()` (`fournisseursService.ts`) : la route doit dériver le
+ * `boutique_id` de la ressource en base, jamais d'une valeur fournie par l'appelant
+ * (query/body), avant d'appeler `getRendezVous`/`updateRendezVous`/`updateStatutRdv`/
+ * `deleteRendezVous` ci-dessous.
+ *
+ * @param db  Binding D1 Cloudflare
+ * @param id  Identifiant du RDV
+ * @returns   `{ boutique_id }` ou `null` si RDV introuvable
+ */
+export async function getRdvBoutiqueId(
+  db: Database, id: number
+): Promise<{ boutique_id: number } | null> {
+  return db.get<{ boutique_id: number }>('SELECT boutique_id FROM rendez_vous WHERE id = ?', [id])
+}
+
 export async function getRendezVous(db: Database, id: number, boutiqueId: number) {
   return db.get<any>(`
     SELECT
