@@ -205,3 +205,44 @@ export function getBoutiqueId(
   }
   return user.boutique_id
 }
+
+// ─── Helper : appartenance d'une ressource à la boutique appelante ────────────
+
+/**
+ * Vérifie qu'une ressource chargée par ID appartient bien à la boutique de l'appelant.
+ *
+ * `getBoutiqueId()` ci-dessus résout la boutique d'une requête *de liste* ; ce helper
+ * couvre le cas complémentaire, celui des routes `/:id` qui chargent une ressource
+ * précise et doivent refuser celles d'une autre boutique. Historique de failles réelles
+ * sur exactement ce point (voir `project-docs/bugs.md`) : tickets `GET/PUT/DELETE /:id`
+ * (2026-07-19), `PUT /devis/:id/convertir` (2026-07-30), puis les 5 endpoints
+ * facture/avoir de ce chantier.
+ *
+ * Règle appliquée, identique au patron déjà en place dans `tickets.ts` :
+ *   - `admin` (admin plateforme, `boutique_id` NULL) → traverse
+ *   - Autres rôles → la ressource doit porter leur `boutique_id`
+ *
+ * @param user     Payload JWT décodé (contient `role` et `boutique_id`)
+ * @param resource Ressource chargée (doit exposer `boutique_id`), ou null/undefined
+ * @param label    Nom métier pour le message 404 (ex. `'Facture'` → « Facture introuvable. »)
+ * @returns        `null` si l'accès est légitime, sinon `{ status, error }` à retourner tel quel
+ *
+ * @example
+ * ```typescript
+ *   const data = await getFacture(c.get('db'), id)
+ *   const deny = assertBoutiqueOwnership(c.get('user'), data, 'Facture')
+ *   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+ * ```
+ */
+export function assertBoutiqueOwnership(
+  user:     JwtPayload,
+  resource: { boutique_id?: number | null } | null | undefined,
+  label:    string = 'Ressource'
+): { status: 403 | 404; error: string } | null {
+  if (!resource) return { status: 404, error: `${label} introuvable.` }
+
+  if (user.role !== 'admin' && resource.boutique_id !== user.boutique_id)
+    return { status: 403, error: 'Accès refusé.' }
+
+  return null
+}

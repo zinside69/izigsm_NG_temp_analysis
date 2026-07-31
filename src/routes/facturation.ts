@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import { parsePagination } from '../lib/db'
 import {
   listDevis, getDevis, createDevis, updateDevis,
@@ -435,7 +435,11 @@ facturation.get('/factures', async (c) => {
 facturation.get('/factures/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const data = await getFacture(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Facture introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir la facture d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Facture')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -451,6 +455,14 @@ facturation.post('/factures/:id/paiement', requireRole('admin', 'manager'), asyn
 
   if (!body.montant || !body.mode_paiement)
     return c.json({ success: false, error: 'montant et mode_paiement obligatoires.' }, 400)
+
+  // Isolation multi-tenant : la facture encaissée doit appartenir à la boutique
+  // appelante. ajouterPaiement() lit bien boutique_id mais ne le compare à rien.
+  const facture = await c.get('db').get<{ boutique_id: number }>(
+    'SELECT boutique_id FROM factures WHERE id = ?', [factureId]
+  )
+  const deny = assertBoutiqueOwnership(user, facture, 'Facture')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const result = await ajouterPaiement(c.env.DB, factureId, user.sub, body)
@@ -474,6 +486,15 @@ facturation.post('/factures/:id/paiement', requireRole('admin', 'manager'), asyn
 facturation.post('/factures/:id/emettre', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
   const factureId = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : l'émission verrouille la facture DÉFINITIVEMENT et écrit
+  // dans le journal NF525 de sa boutique — l'opération est irréversible, la vérification
+  // d'appartenance doit donc précéder tout appel au service.
+  const facture = await c.get('db').get<{ boutique_id: number }>(
+    'SELECT boutique_id FROM factures WHERE id = ?', [factureId]
+  )
+  const deny = assertBoutiqueOwnership(user, facture, 'Facture')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const result = await emettreFacture(c.env.DB, factureId, user.sub)
@@ -514,7 +535,11 @@ facturation.get('/avoirs', async (c) => {
 facturation.get('/avoirs/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const data = await getAvoir(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Avoir introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir l'avoir d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Avoir')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -530,6 +555,14 @@ facturation.post('/avoirs', requireRole('admin', 'manager'), async (c) => {
   if (!body.facture_id) return c.json({ success: false, error: 'facture_id obligatoire.' }, 400)
   if (!body.motif)      return c.json({ success: false, error: 'motif obligatoire.' }, 400)
   if (!body.lignes?.length) return c.json({ success: false, error: 'Au moins une ligne obligatoire.' }, 400)
+
+  // Isolation multi-tenant : l'avoir hérite de la boutique de sa facture support
+  // (createAvoir()), donc c'est l'appartenance de cette facture qui fait foi.
+  const factureSupport = await c.get('db').get<{ boutique_id: number }>(
+    'SELECT boutique_id FROM factures WHERE id = ?', [body.facture_id]
+  )
+  const deny = assertBoutiqueOwnership(user, factureSupport, 'Facture')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const result = await createAvoir(c.env.DB, user.sub, body)

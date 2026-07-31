@@ -1,5 +1,53 @@
 # iziGSM — Bugs connus
 
+## FAILLE — 5 endpoints facture/avoir sans isolation `boutique_id` (2026-07-31) — CORRIGÉE
+
+Dette antérieure trouvée par la revue finale du chantier facture (2026-07-30), corrigée
+le lendemain. Aucun des 5 handlers ne dérivait ni ne vérifiait `boutique_id` — `getFacture()`
+et `getAvoir()` chargent par ID sans filtre de boutique :
+
+| Endpoint | Statut reçu avant fix | Effet réel démontré |
+|---|---|---|
+| `GET /factures/:id`          | `200` | lecture complète : client, adresse, lignes, paiements, hash NF525, snapshots |
+| `POST /factures/:id/paiement`| `200` | paiement écrit sur la facture d'une autre boutique |
+| `POST /factures/:id/emettre` | `200` | **verrouillage définitif** + écriture journal NF525 de la boutique victime avec l'`user_id` de l'attaquant |
+| `GET /avoirs/:id`            | `200` | lecture complète de l'avoir |
+| `POST /avoirs`               | `201` | **avoir réellement créé** sur une facture étrangère |
+
+Démontré en exécution réelle (Playwright, tenant `manager` d'une boutique tierce) avant
+correctif — pas une revue théorique. `requireRole('admin','manager')` laissait entrer ce
+compte jusqu'au code métier, et le patron « l'admin plateforme traverse » ne le couvrait pas.
+
+Fix : helper `assertBoutiqueOwnership(user, resource, label)` (`src/lib/middleware.ts`),
+appliqué aux 5 routes. Le patron était déjà copié 3 fois dans `facturation.ts` (`:257`,
+`:299`, `:371`) et l'aurait été 5 de plus — extraction décidée à cette occasion. Les 3
+sites existants n'ont volontairement pas été migrés dans ce chantier (code validé, aucune
+régression gratuite) ; migration possible plus tard.
+
+Gate : `tests/e2e/isolation.spec.ts` passe de 7 à 13 tests — 5 tests de refus + **1 test de
+non-régression du propriétaire légitime** (lecture ET émission de sa propre facture), ajouté
+parce que 5 tests de refus seuls resteraient verts si la garde était trop stricte et
+renvoyait 403 aux ayants droit.
+
+## `addMonthsParis()` — mois précédent faux les 31 (trouvé 2026-07-31) — PAS CORRIGÉ
+
+`statsService.ts:45` : `d.setUTCMonth(d.getUTCMonth() - 1)` sur une date en 31 d'un mois
+dont le précédent compte 30 jours → JS normalise (2026-06-31 → 2026-07-01), donc
+`previousMonth` retombe sur le **mois courant**.
+
+Conséquence en production, pour toutes les boutiques : le 31 mai, 31 juillet, 31 octobre et
+31 décembre, le KPI dashboard `ca_mois_precedent` affiche le CA du mois en cours et
+`evolution_ca_pct` vaut mécaniquement 0 %.
+
+Découvert par les gates : `tests/statsService.test.ts` a 2 tests rouges ce jour-là
+(`evolution_ca_pct quand le mois précédent a du CA`, `injecte le CA du mois correspondant`).
+**La baseline vitest est donc de 4 échecs ces jours-là, contre 2 le reste de l'année**
+(les 2 permanents étant les tests de fuseau d'`agendaService`) — ne pas conclure à une
+régression sur cette seule base.
+
+Fix pressenti (non appliqué) : composer l'année/mois arithmétiquement plutôt que via
+`Date`, ou forcer le jour à 1 avant le décalage.
+
 ## FAILLE — `PUT /devis/:id/convertir` sans isolation `boutique_id` (2026-07-30) — CORRIGÉE
 
 Trouvée en préparant `POST /api/factures` : la route ne vérifiait pas que le devis

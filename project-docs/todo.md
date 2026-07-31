@@ -1,6 +1,6 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## 🔴 PRIORITÉ CRITIQUE — Écritures cross-tenant sur 5 endpoints facture/avoir (revue finale 2026-07-30, PAS corrigé)
+## ✅ PRIORITÉ CRITIQUE — Écritures cross-tenant sur 5 endpoints facture/avoir (revue finale 2026-07-30, CORRIGÉ le 2026-07-31)
 Trouvé par la revue finale du chantier facture. **Dette antérieure, pas une régression de ce chantier**, mais même classe que les failles `GET /tickets/:id` et `PUT/DELETE /tickets/:id` déjà corrigées le 2026-07-19 (`bugs.md`) — et sur l'objet que ce chantier vient d'enrichir de données réglementaires irrécupérables.
 
 Aucun de ces handlers ne dérive ni ne vérifie `boutique_id` (`getFacture()` ne filtre pas) :
@@ -9,9 +9,21 @@ Aucun de ces handlers ne dérive ni ne vérifie `boutique_id` (`getFacture()` ne
 - `src/routes/facturation.ts:439` `POST /factures/:id/paiement` — enregistrement d'un paiement sur une facture d'une autre boutique
 - `src/routes/facturation.ts:506` `GET /avoirs/:id` et `:518` `POST /avoirs`
 
-- [ ] Appliquer le patron déjà en place sur `POST /api/factures` et `PUT /devis/:id/convertir` (relecture + comparaison `boutique_id` + `403`) aux 5 endpoints
-- [ ] Étendre `tests/e2e/isolation.spec.ts` — RED d'abord, comme pour la faille `convertir`
-- [ ] Envisager à cette occasion un helper `assertBoutiqueOwnership(db, table, id, boutiqueId)` : le patron est désormais copié à l'identique 3 fois et le sera 5 de plus — l'extraction cesse d'être prématurée
+- [x] Appliquer le patron déjà en place sur `POST /api/factures` et `PUT /devis/:id/convertir` (relecture + comparaison `boutique_id` + `403`) aux 5 endpoints
+- [x] Étendre `tests/e2e/isolation.spec.ts` — RED d'abord, comme pour la faille `convertir` : RED observé (5 échecs, statuts reçus 200/200/200/200/**201**), puis GREEN 13/13
+- [x] Envisager à cette occasion un helper `assertBoutiqueOwnership(db, table, id, boutiqueId)` : le patron est désormais copié à l'identique 3 fois et le sera 5 de plus — l'extraction cesse d'être prématurée → helper créé dans `src/lib/middleware.ts`, signature retenue `(user, resource, label)` (la ressource est déjà chargée par la route, inutile de refaire une requête générique par table)
+
+Détail complet + effets démontrés endpoint par endpoint : `bugs.md`. **Pas encore déployé.**
+Les 3 sites d'isolation antérieurs (`facturation.ts:257`, `:299`, `:371`) n'ont pas été migrés
+vers le helper (code déjà validé) — migration optionnelle, à faire seulement si on retouche ces routes.
+
+## 🟡 `addMonthsParis()` — mois précédent faux les 31 (trouvé 2026-07-31, PAS corrigé)
+`statsService.ts:45` : le décalage de mois via `Date.setUTCMonth()` déborde les 31 (2026-06-31 → 2026-07-01),
+donc `ca_mois_precedent` = CA du mois courant et `evolution_ca_pct` = 0 % les 31 mai / juillet / octobre / décembre,
+pour toutes les boutiques. Root cause complète et fix pressenti dans `bugs.md`.
+- [ ] Corriger `addMonthsParis()` (composition arithmétique année/mois, ou jour forcé à 1 avant décalage)
+- [ ] Vérifier les autres appelants du helper (`getCaMensuel()` utilise `addMonthsParis(today, -11)`)
+- [ ] Note gate : tant que ce n'est pas corrigé, la baseline vitest est de **4 échecs les 31 concernés**, 2 le reste du temps
 
 ## 🟡 Divergences de cohérence trouvées en revue finale (2026-07-30, PAS corrigées)
 - [ ] `src/services/statsService.ts:121` et `:132` interrogent la valeur de statut **morte** `'emise'` : aucun `INSERT INTO factures` du dépôt ne l'écrit (vérifié sur les 4 sites), seul le `DEFAULT` de schéma la porte encore. Conséquence : le KPI `factures_en_retard` (`:166`) renvoie **toujours 0** en production. Bonus : la valeur de `:121` est destructurée sous le nom `devis_en_attente` (`:77`) alors qu'elle compte des **factures**
