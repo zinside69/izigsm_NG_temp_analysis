@@ -117,6 +117,13 @@ personnel.delete('/employes/:id', requireRole('admin'), async (c) => {
 personnel.post('/pointage/:employeId/pointer', async (c) => {
   const user      = c.get('user')
   const employeId = parseInt(c.req.param('employeId'), 10)
+
+  // Isolation multi-tenant : le pointage suit la boutique de l'employé (même
+  // patron que GET /pointage/:employeId/aujourd-hui ci-dessous).
+  const employe = await getEmploye(c.get('db'), employeId)
+  const deny = assertBoutiqueOwnership(user, employe, 'Employé')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const body      = await c.req.json().catch(() => ({}))
 
   try {

@@ -1169,3 +1169,47 @@ test.describe('Isolation — Bons de commande (detail + reception)', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+test.describe('Isolation — Pointage (pointer)', () => {
+  test('un manager d\'une autre boutique ne peut pas pointer un employe qui ne lui appartient pas', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/pointage/${EMPLOYE_BOUTIQUE_1}/pointer`, {
+      headers: authHeader(etranger.accessToken),
+      data: {},
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime pointe son propre employe', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'Pointeur', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    const res = await request.post(`/api/pointage/${employeId}/pointer`, {
+      headers: authHeader(proprio.accessToken),
+      data: {},
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme pointe l\'employe de n\'importe quelle boutique', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'PointeurAdmin', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    const token = await loginSeedAdmin(request)
+    const res = await request.post(`/api/pointage/${employeId}/pointer`, {
+      headers: authHeader(token),
+      data: {},
+    })
+    expect(res.status()).toBe(200)
+  })
+})
