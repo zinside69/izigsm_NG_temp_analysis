@@ -29,12 +29,12 @@
  *   Sprint 2.38 — Marques / Modèles / Liaisons
  *   GET    /api/services/marques                → Liste marques actives (avec nb_modeles)
  *   POST   /api/services/marques                → Créer une marque (admin/manager)
- *   PUT    /api/services/marques/:id            → Modifier une marque (admin/manager)
+ *   PUT    /api/services/marques/:id            → Modifier une marque (admin uniquement — référentiel global)
  *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin/manager)
  *   GET    /api/services/modeles                → Liste modèles (filtre: marque_id, search, type)
  *   POST   /api/services/modeles                → Créer un modèle (admin/manager)
- *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin/manager)
- *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin/manager)
+ *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin uniquement — référentiel global)
+ *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin uniquement — référentiel global)
  *   GET    /api/services/modeles/:id/services   → Services suggérés pour un modèle
  *   POST   /api/services/modeles/:id/services   → Lier un service à un modèle (admin/manager)
  *   DELETE /api/services/modeles/:id/services/:sid → Délier un service d'un modèle (admin/manager)
@@ -461,8 +461,11 @@ services.post('/services/marques', requireRole('admin', 'manager'), async (c) =>
   }
 })
 
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : partagé par
+// toutes les boutiques. L'écriture est réservée à l'admin plateforme — sinon un
+// manager renomme ou désactive une entrée visible par tous les autres tenants.
 /** PUT /api/services/marques/:id — Modifier une marque */
-services.put('/services/marques/:id', requireRole('admin', 'manager'), async (c) => {
+services.put('/services/marques/:id', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
@@ -501,8 +504,11 @@ services.post('/services/modeles', requireRole('admin', 'manager'), async (c) =>
   }
 })
 
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : partagé par
+// toutes les boutiques. L'écriture est réservée à l'admin plateforme — sinon un
+// manager renomme ou désactive une entrée visible par tous les autres tenants.
 /** PUT /api/services/modeles/:id — Modifier un modèle */
-services.put('/services/modeles/:id', requireRole('admin', 'manager'), async (c) => {
+services.put('/services/modeles/:id', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
@@ -511,8 +517,11 @@ services.put('/services/modeles/:id', requireRole('admin', 'manager'), async (c)
   return c.json({ success: true, message: 'Modèle mis à jour.' })
 })
 
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : partagé par
+// toutes les boutiques. L'écriture est réservée à l'admin plateforme — sinon un
+// manager renomme ou désactive une entrée visible par tous les autres tenants.
 /** DELETE /api/services/modeles/:id — Désactiver un modèle */
-services.delete('/services/modeles/:id', requireRole('admin', 'manager'), async (c) => {
+services.delete('/services/modeles/:id', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
 

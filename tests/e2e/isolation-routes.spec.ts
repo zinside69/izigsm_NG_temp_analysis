@@ -509,3 +509,100 @@ test.describe('Isolation — Categories de services', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/**
+ * Referentiel marques/modeles GLOBAL (migration 0031, Sprint 2.39) : pas de
+ * boutique_id, aucun proprietaire legitime a tester ici — seulement manager
+ * refuse vs admin plateforme autorise. Un suffixe aleatoire evite les
+ * collisions sur la contrainte UNIQUE(nom) de marques_appareils.
+ */
+function uniqueSuffix(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Cree une marque du referentiel global via l'API admin (seed.sql n'en contient aucune). */
+async function createMarqueGlobal(request: APIRequestContext, prefix: string): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  const res = await request.post('/api/services/marques', {
+    headers: authHeader(token),
+    data: { nom: `${prefix}-${uniqueSuffix()}` },
+  })
+  if (!res.ok()) throw new Error(`creation marque failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un modele du referentiel global via l'API admin, rattache a une marque donnee. */
+async function createModeleGlobal(request: APIRequestContext, marqueId: number, prefix: string): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  const res = await request.post('/api/services/modeles', {
+    headers: authHeader(token),
+    data: { nom: `${prefix}-${uniqueSuffix()}`, marque_id: marqueId },
+  })
+  if (!res.ok()) throw new Error(`creation modele failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+test.describe('Referentiel global — ecriture reservee a l\'admin plateforme', () => {
+  test('un manager ne peut pas modifier une marque du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueTest')
+    const manager = await createTenantAdmin(request)
+    const res = await request.put(`/api/services/marques/${marqueId}`, {
+      headers: authHeader(manager.accessToken),
+      data: { nom: 'Renommee par un manager' },
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme modifie une marque du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueAdmin')
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/services/marques/${marqueId}`, {
+      headers: authHeader(token),
+      data: { nom: 'MarqueAdmin renommee' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('un manager ne peut pas modifier un modele du referentiel partage', async ({ request }) => {
+    const marqueId  = await createMarqueGlobal(request, 'MarqueModelesModifManager')
+    const modeleId  = await createModeleGlobal(request, marqueId, 'ModeleTest')
+    const manager   = await createTenantAdmin(request)
+    const res = await request.put(`/api/services/modeles/${modeleId}`, {
+      headers: authHeader(manager.accessToken),
+      data: { nom: 'Renomme par un manager' },
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme modifie un modele du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueModelesModifAdmin')
+    const modeleId = await createModeleGlobal(request, marqueId, 'ModeleAdmin')
+    const token    = await loginSeedAdmin(request)
+    const res = await request.put(`/api/services/modeles/${modeleId}`, {
+      headers: authHeader(token),
+      data: { nom: 'ModeleAdmin renomme' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Modele frais par test : DELETE desactive reellement la ressource (actif = 0).
+  test('un manager ne peut pas desactiver un modele du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueModelesDelManager')
+    const modeleId = await createModeleGlobal(request, marqueId, 'ModeleDelManager')
+    const manager  = await createTenantAdmin(request)
+    const res = await request.delete(`/api/services/modeles/${modeleId}`, {
+      headers: authHeader(manager.accessToken),
+    })
+    expect(res.status()).toBe(403)
+  })
+
+  test('l\'admin plateforme desactive un modele du referentiel partage', async ({ request }) => {
+    const marqueId = await createMarqueGlobal(request, 'MarqueModelesDelAdmin')
+    const modeleId = await createModeleGlobal(request, marqueId, 'ModeleDelAdmin')
+    const token    = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/services/modeles/${modeleId}`, {
+      headers: authHeader(token),
+    })
+    expect(res.status()).toBe(200)
+  })
+})
