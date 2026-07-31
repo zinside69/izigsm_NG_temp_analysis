@@ -28,7 +28,24 @@ par une.
 | `PUT /employes/:id` | `personnel.ts:80` | `updateEmploye(db, id, body)` | modification de la fiche d'un employé d'une autre boutique (données RH) |
 | `POST /tickets/:id/archiver` | `tickets.ts:135` | `archiveTicket(db, id, user.sub)` | archivage du ticket d'une autre boutique — **route oubliée par la campagne de correction du 2026-07-19** sur ce même fichier |
 
-## Candidates non encore vérifiées (15)
+## Vérification complète (2026-07-31, seconde passe)
+
+**Les 18 candidates ont été relues une par une. 17 sont des failles exploitables.**
+
+Seule exception : `DELETE /employes/:id` (`personnel.ts:92`) est en `requireRole('admin')`
+**seul** — donc réservé à l'admin plateforme, qui traverse les boutiques par conception.
+Ce n'est pas une faille. Les 17 autres sont ouvertes à `admin` **et** `manager` : n'importe
+quel compte client peut donc les exploiter contre une autre boutique.
+
+Répartition par domaine : fournisseurs (3), bons de commande (1), personnel/RH (2),
+catalogue services (6), stock (3), tickets (1), plus les 2 produits déjà listés.
+
+Note de couverture de test : `seed.sql` ne fournit de données que pour `employes` (3) et
+`produits` (9). Les domaines fournisseurs / catégories / marques / modèles / bons de commande
+n'ont aucune donnée de départ — un test RED sur ces routes impose de créer chaque ressource
+via l'API au préalable.
+
+## Détail des candidates (les 15 de la première passe)
 
 | Route | Fichier | Tables concernées |
 |---|---|---|
