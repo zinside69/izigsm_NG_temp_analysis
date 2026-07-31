@@ -104,7 +104,12 @@ facturation.post('/devis', async (c) => {
 facturation.get('/devis/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const data = await getDevis(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir le devis d'une autre boutique
+  // (coordonnées client + montants).
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Devis')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -116,6 +121,12 @@ facturation.get('/devis/:id', async (c) => {
 facturation.put('/devis/:id', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la garde précède toute mutation.
+  const devisACtrl = await getDevis(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, devisACtrl, 'Devis')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const body = await c.req.json()
 
   try {
@@ -134,6 +145,12 @@ facturation.put('/devis/:id', requireRole('admin', 'manager'), async (c) => {
 facturation.put('/devis/:id/statut', requireRole('admin', 'manager'), async (c) => {
   const user   = c.get('user')
   const id     = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la garde précède toute mutation.
+  const devisACtrl = await getDevis(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, devisACtrl, 'Devis')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const { statut } = await c.req.json()
   if (!statut) return c.json({ success: false, error: 'statut obligatoire.' }, 400)
 
@@ -168,7 +185,11 @@ facturation.post('/devis/:id/accord-manuel', requireRole('admin', 'manager', 'te
   const id   = parseInt(c.req.param('id'), 10)
 
   const devis = await getDevis(c.get('db'), id)
-  if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+
+  // Isolation multi-tenant : la garde précède toute mutation.
+  const denyAccord = assertBoutiqueOwnership(user, devis, 'Devis')
+  if (denyAccord) return c.json({ success: false, error: denyAccord.error }, denyAccord.status)
+
   if (devis.statut !== 'envoye')
     return c.json({ success: false, error: `Ce devis ne peut pas être validé manuellement (statut actuel : ${devis.statut}).` }, 409)
 
@@ -195,7 +216,11 @@ facturation.post('/devis/:id/envoyer', requireRole('admin', 'manager'), async (c
   const id   = parseInt(c.req.param('id'), 10)
 
   const data = await getDevis(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
+
+  // Isolation multi-tenant : la garde précède toute mutation.
+  const denyEnvoyer = assertBoutiqueOwnership(user, data, 'Devis')
+  if (denyEnvoyer) return c.json({ success: false, error: denyEnvoyer.error }, denyEnvoyer.status)
+
   if (!data.client_email) return c.json({ success: false, error: 'Le client n\'a pas d\'email renseigné.' }, 422)
 
   try {

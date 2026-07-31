@@ -722,3 +722,203 @@ test.describe('Isolation — Rachats', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/** Cree un client via l'API avec le token fourni (email requis par POST /devis/:id/envoyer). */
+async function createClientPourDevis(
+  request: APIRequestContext, token: string, overrides: Record<string, any> = {}
+): Promise<number> {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const res = await request.post('/api/clients', {
+    headers: authHeader(token),
+    data: {
+      prenom: 'Client',
+      nom:    `E2E-${suffix}`,
+      email:  `client-${suffix}@e2e-test.local`,
+      ...overrides,
+    },
+  })
+  if (!res.ok()) throw new Error(`creation client failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un devis via l'API avec le token fourni (boutique derivee du JWT si non-admin). */
+async function createDevisAvec(
+  request: APIRequestContext, token: string, clientId: number, overrides: Record<string, any> = {}
+): Promise<number> {
+  const res = await request.post('/api/devis', {
+    headers: authHeader(token),
+    data: {
+      client_id: clientId,
+      lignes: [{ description: 'Ecran remplace', quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 }],
+      ...overrides,
+    },
+  })
+  if (!res.ok()) throw new Error(`creation devis failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un devis (avec client email) cote boutique 1 via l'API admin. */
+async function createDevisBoutique1(request: APIRequestContext): Promise<number> {
+  const token    = await loginSeedAdmin(request)
+  const clientId = await createClientPourDevis(request, token, { boutique_id: 1 })
+  return createDevisAvec(request, token, clientId, { boutique_id: 1 })
+}
+
+test.describe('Isolation — Devis', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un devis qui ne lui appartient pas', async ({ request }) => {
+    const devisId  = await createDevisBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/devis/${devisId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime lit son propre devis', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const clientId = await createClientPourDevis(request, proprio.accessToken)
+    const devisId  = await createDevisAvec(request, proprio.accessToken, clientId)
+
+    const res = await request.get(`/api/devis/${devisId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le devis de n\'importe quelle boutique', async ({ request }) => {
+    const devisId = await createDevisBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const res = await request.get(`/api/devis/${devisId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('un manager d\'une autre boutique ne peut pas modifier un devis qui ne lui appartient pas', async ({ request }) => {
+    const devisId  = await createDevisBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/devis/${devisId}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { notes: 'modifie par un tenant etranger' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime modifie son propre devis', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const clientId = await createClientPourDevis(request, proprio.accessToken)
+    const devisId  = await createDevisAvec(request, proprio.accessToken, clientId)
+
+    const res = await request.put(`/api/devis/${devisId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: { notes: 'modifie par son proprietaire' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme modifie le devis de n\'importe quelle boutique', async ({ request }) => {
+    const devisId = await createDevisBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const res = await request.put(`/api/devis/${devisId}`, {
+      headers: authHeader(token),
+      data: { notes: 'modifie par l\'admin plateforme' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : PUT .../statut fait transiter un etat persistant.
+  test('un manager d\'une autre boutique ne peut pas changer le statut d\'un devis qui ne lui appartient pas', async ({ request }) => {
+    const devisId  = await createDevisBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/devis/${devisId}/statut`, {
+      headers: authHeader(etranger.accessToken),
+      data: { statut: 'envoye' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime change le statut de son propre devis', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const clientId = await createClientPourDevis(request, proprio.accessToken)
+    const devisId  = await createDevisAvec(request, proprio.accessToken, clientId)
+
+    const res = await request.put(`/api/devis/${devisId}/statut`, {
+      headers: authHeader(proprio.accessToken),
+      data: { statut: 'envoye' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme change le statut du devis de n\'importe quelle boutique', async ({ request }) => {
+    const devisId = await createDevisBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const res = await request.put(`/api/devis/${devisId}/statut`, {
+      headers: authHeader(token),
+      data: { statut: 'envoye' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : POST .../accord-manuel fait transiter un etat persistant.
+  // La garde precede le controle metier (statut === 'envoye') : un devis fraichement
+  // cree (statut draft) suffit pour prouver le refus, sans avoir a le faire transiter.
+  test('un manager d\'une autre boutique ne peut pas valider manuellement l\'accord d\'un devis qui ne lui appartient pas', async ({ request }) => {
+    const devisId  = await createDevisBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/devis/${devisId}/accord-manuel`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime valide manuellement l\'accord de son propre devis', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const auth     = authHeader(proprio.accessToken)
+    const clientId = await createClientPourDevis(request, proprio.accessToken)
+    const devisId  = await createDevisAvec(request, proprio.accessToken, clientId)
+
+    const envoiRes = await request.put(`/api/devis/${devisId}/statut`, { headers: auth, data: { statut: 'envoye' } })
+    expect(envoiRes.status()).toBe(200)
+
+    const res = await request.post(`/api/devis/${devisId}/accord-manuel`, { headers: auth })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme valide manuellement l\'accord du devis de n\'importe quelle boutique', async ({ request }) => {
+    const devisId = await createDevisBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const auth     = authHeader(token)
+
+    const envoiRes = await request.put(`/api/devis/${devisId}/statut`, { headers: auth, data: { statut: 'envoye' } })
+    expect(envoiRes.status()).toBe(200)
+
+    const res = await request.post(`/api/devis/${devisId}/accord-manuel`, { headers: auth })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : POST .../envoyer fait transiter un etat persistant et
+  // declenche un envoi d'email best-effort (waitUntil(), catch() non bloquant dans le
+  // handler — voir routes/facturation.ts). Aucune cle RESEND_API_KEY n'est configuree
+  // dans cet environnement local (.dev.vars), donc l'email echoue reellement en
+  // arriere-plan sans jamais impacter la reponse HTTP testee ici : ce test verifie la
+  // garde d'isolation et le code de statut de la reponse, pas la livraison de l'email
+  // (non testable proprement sans mock Resend ou vraie cle API).
+  test('un manager d\'une autre boutique ne peut pas envoyer un devis qui ne lui appartient pas', async ({ request }) => {
+    const devisId  = await createDevisBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/devis/${devisId}/envoyer`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime envoie son propre devis', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const clientId = await createClientPourDevis(request, proprio.accessToken)
+    const devisId  = await createDevisAvec(request, proprio.accessToken, clientId)
+
+    const res = await request.post(`/api/devis/${devisId}/envoyer`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme envoie le devis de n\'importe quelle boutique', async ({ request }) => {
+    const devisId = await createDevisBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const res = await request.post(`/api/devis/${devisId}/envoyer`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+})
