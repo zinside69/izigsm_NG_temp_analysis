@@ -123,6 +123,47 @@ const CHARGEMENT_SEUL: RegExp[] = [
 ]
 
 /**
+ * Mots-cles du langage qui ressemblent syntaxiquement a un appel de fonction.
+ * `if (!boutiqueId) return ...` ouvre tout handler du patron JWT : les compter
+ * comme des appels validait n'importe quelle route sans rien verifier.
+ */
+const MOTS_CLES = new Set([
+  'if', 'while', 'for', 'switch', 'catch', 'return', 'typeof', 'await', 'function', 'new', 'async',
+])
+
+/**
+ * Extrait les appels de fonction d'un corps de handler, en equilibrant les
+ * parentheses.
+ *
+ * Une regex `\(([^()]*)\)` ne franchit pas les arguments imbriques : sur
+ * `getModeleWithServices(c.get('db'), id, boutiqueId)` elle ne voyait que
+ * `c.get('db')` et manquait l'appel englobant — donc la propagation de
+ * `boutiqueId`. Retirer cet argument (et rouvrir ainsi la fuite de tarifs
+ * inter-tenants corrigee le 2026-07-31) laissait le garde-fou vert.
+ *
+ * Limite connue : une parenthese a l'interieur d'une chaine de caracteres
+ * fausserait le comptage. Aucune occurrence dans `src/routes/*.ts` au 2026-07-31.
+ */
+function appelsDeFonction(corps: string): Array<{ nom: string; args: string }> {
+  const appels: Array<{ nom: string; args: string }> = []
+  const debutAppel = /([A-Za-z_$][\w$.]*)\s*\(/g
+  let m: RegExpExecArray | null
+
+  while ((m = debutAppel.exec(corps)) !== null) {
+    let profondeur = 1
+    let i = m.index + m[0].length
+    const debutArgs = i
+    while (i < corps.length && profondeur > 0) {
+      if (corps[i] === '(') profondeur++
+      else if (corps[i] === ')') profondeur--
+      i++
+    }
+    if (profondeur === 0) appels.push({ nom: m[1], args: corps.slice(debutArgs, i - 1) })
+  }
+  return appels
+}
+
+/**
  * Patron legitime distinct : le handler derive `boutiqueId` du JWT
  * (`getBoutiqueId()`, jamais une valeur fournie par l'appelant) PUIS le passe en
  * argument a un service qui filtre en SQL — `getOrdre(dbPort, id, boutiqueId)`,
@@ -135,12 +176,21 @@ const CHARGEMENT_SEUL: RegExp[] = [
  * puis ne jamais s'en servir ne garde rien non plus.
  */
 function propageAUnService(corps: string, variable: string): boolean {
-  for (const appel of corps.matchAll(/([A-Za-z_$][\w$.]*)\s*\(([^()]*)\)/g)) {
-    const nom = appel[1]
+  const motif = new RegExp(`\\b${variable}\\b`)
+  for (const { nom, args } of appelsDeFonction(corps)) {
+    // Mots-cles du langage : `if (!boutiqueId)` n'est pas un appel de service.
+    // Sans cette exclusion, tout handler du patron JWT etait valide d'office —
+    // ils commencent tous par `if (!boutiqueId) return ...`.
+    if (MOTS_CLES.has(nom)) continue
     // Exclusions : la derivation elle-meme, le rendu de reponse, les conversions.
     if (nom === 'getBoutiqueId' || nom.startsWith('c.') || nom === 'parseInt' || nom === 'Number' || nom === 'String')
       continue
-    if (new RegExp(`\\b${variable}\\b`).test(appel[2])) return true
+    // Appel prenant une fonction en argument : c'est la declaration de route
+    // elle-meme (`recond.get('/:id', async (c) => { ... })`), dont les arguments
+    // englobent tout le handler — donc `boutiqueId`, quoi qu'en fasse le code.
+    // Un appel de service ne recoit jamais de fonction flechee dans ce depot.
+    if (args.includes('=>')) continue
+    if (motif.test(args)) return true
   }
   return false
 }
@@ -258,6 +308,39 @@ describe('Conformite isolation multi-tenant', () => {
           return c.json({ success: true, boutique_id: boutiqueId, data: ordre })
         })`
       expect(aUneGarde(corps, corps)).toBe(false)
+    })
+
+    // Les deux cas ci-dessous reproduisent un defaut trouve en re-revue le
+    // 2026-07-31 : `if (...)` etait compte comme un appel de fonction, et la
+    // detection d'appels ne franchissait pas les parentheses imbriquees. Les deux
+    // defauts se compensaient — le test passait pour la mauvaise raison.
+
+    it('ne prend pas `if (!boutiqueId)` pour une propagation a un service', () => {
+      // Tout handler du patron JWT commence par cette garde de presence. Sans
+      // exclusion des mots-cles, `if` suffisait a valider n'importe quel handler.
+      const corps = `
+        recond.get('/:id', async (c) => {
+          const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
+          if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+          const ordre = await getOrdre(dbPort, id)
+          return c.json({ success: true, data: ordre })
+        })`
+      expect(aUneGarde(corps, corps)).toBe(false)
+    })
+
+    it('voit la propagation meme avec des parentheses imbriquees dans les arguments', () => {
+      // `getModeleWithServices(c.get('db'), id, boutiqueId)` : l'appel reel de
+      // GET /services/modeles/:id/services. Sans equilibrage des parentheses, il
+      // n'etait jamais detecte — retirer `boutiqueId` de cet appel (donc rouvrir la
+      // fuite de tarifs inter-tenants) laissait le garde-fou vert.
+      const corps = `
+        services.get('/services/modeles/:id/services', async (c) => {
+          const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))
+          if (!boutiqueId) return c.json({ success: false }, 400)
+          const data = await getModeleWithServices(c.get('db'), id, boutiqueId)
+          return c.json({ success: true, data })
+        })`
+      expect(aUneGarde(corps, corps)).toBe(true)
     })
 
     it('ne prend pas un commentaire pour une garde', () => {
