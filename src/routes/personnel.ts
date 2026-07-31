@@ -9,7 +9,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import {
   listEmployes, getEmploye, createEmploye, updateEmploye, desactiverEmploye,
   pointer, pointagesAujourdhui, rapportPointage, statutsTempsReel,
@@ -49,7 +49,11 @@ personnel.get('/employes', async (c) => {
 personnel.get('/employes/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const data = await getEmploye(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Employé introuvable.' }, 404)
+
+  // Isolation multi-tenant : fiche employé = donnée RH d'une boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Employé')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -78,8 +82,14 @@ personnel.post('/employes', requireRole('admin', 'manager'), async (c) => {
  * Body : { prenom, nom, poste?, email?, telephone?, taux_horaire?, commission_pct? }
  */
 personnel.put('/employes/:id', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
+
+  // Isolation multi-tenant : ne jamais modifier l'employé d'une autre boutique
+  const employe = await getEmploye(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, employe, 'Employé')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await updateEmploye(c.get('db'), id, body)
   return c.json({ success: true, message: 'Employé mis à jour.' })
@@ -125,6 +135,12 @@ personnel.post('/pointage/:employeId/pointer', async (c) => {
  */
 personnel.get('/pointage/:employeId/aujourd-hui', async (c) => {
   const employeId = parseInt(c.req.param('employeId'), 10)
+
+  // Isolation multi-tenant : le pointage suit la boutique de l'employé
+  const employe = await getEmploye(c.get('db'), employeId)
+  const deny = assertBoutiqueOwnership(c.get('user'), employe, 'Employé')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const result    = await pointagesAujourdhui(c.get('db'), employeId)
   return c.json({ success: true, employe_id: employeId, ...result })
 })

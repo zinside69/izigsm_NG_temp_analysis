@@ -10,6 +10,7 @@ import { createTenantAdmin } from './fixtures/tenant'
  */
 
 const PRODUIT_BOUTIQUE_1 = 1   // seed.sql : produits ids 1..9, boutique 1
+const EMPLOYE_BOUTIQUE_1 = 1   // seed.sql : employes ids 1,2,3 — boutique 1
 
 /** Connexion au compte admin plateforme du seed (boutique_id NULL). */
 async function loginSeedAdmin(request: APIRequestContext): Promise<string> {
@@ -73,5 +74,51 @@ test.describe('Isolation — Stock', () => {
       data: { nom: 'Renomme par son proprietaire' },
     })
     expect(modif.status()).toBe(200)
+  })
+})
+
+test.describe('Isolation — Personnel', () => {
+  test('un manager d\'une autre boutique ne peut pas lire la fiche d\'un employe etranger', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/employes/${EMPLOYE_BOUTIQUE_1}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas modifier la fiche d\'un employe etranger', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/employes/${EMPLOYE_BOUTIQUE_1}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { poste: 'modifie par un tenant etranger' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas lire le pointage d\'un employe etranger', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/pointage/${EMPLOYE_BOUTIQUE_1}/aujourd-hui`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('l\'admin plateforme lit la fiche employe de n\'importe quelle boutique', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/employes/${EMPLOYE_BOUTIQUE_1}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime lit la fiche de son propre employe', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'DuProprietaire', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    const res = await request.get(`/api/employes/${employeId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
   })
 })
