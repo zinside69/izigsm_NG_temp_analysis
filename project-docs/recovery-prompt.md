@@ -1,3 +1,48 @@
+# Recovery Prompt — iziGSM — 2026-07-31 (checkpoint 65 — isolation multi-tenant de 36 routes, déploiement cp64, FK service_modeles)
+
+## ⚠️ À TRAITER AVANT TOUT NOUVEAU CHANTIER
+
+**1. Faille critique ouverte — accès superadmin publié.**
+`admin@izigsm.fr` / `Admin@2026!` fonctionne en production (rôle `admin`, `boutique_id` NULL, les 5 boutiques visibles), et ces identifiants sont en clair dans `CLAUDE.md` et `seed.sql` du dépôt **public** `zinside69/izigsm_NG_temp_analysis`. N'importe qui peut se connecter en lisant le dépôt. Aucune garde d'isolation ne protège de cela.
+Procédure décidée, non exécutée : créer et **tester** la boîte `support@soteli.fr` (l'envoi d'email est `waitUntil()`, sans confirmation de livraison — un reset vers une boîte inexistante part dans le vide sans erreur), puis :
+```bash
+npx wrangler d1 execute DB --remote --command "UPDATE users SET email = 'support@soteli.fr' WHERE id = 1"
+curl -X POST https://repairdesk.fr/api/auth/reset-password-request -H "Content-Type: application/json" -d '{"email":"support@soteli.fr"}'
+```
+`zinside@gmail.com` est déjà pris (user id 6). Rendre le dépôt privé ne suffit pas : le secret est dans l'historique git.
+
+**2. Quatre chantiers prêts, non déployés**, dans cet ordre impératif :
+```bash
+npx wrangler d1 migrations apply DB --remote   # migration 0038 obligatoire d'abord
+npm run deploy
+```
+`c59d59c` (statsService — le dashboard affiche un CA du mois précédent faux), `1f99e4a` (migration helper), `52c041f` (36 routes isolées), `f1bc6dc` (migration 0038). Le token Cloudflare de session n'a pas les droits D1 distants (7403) : ces commandes sont à lancer par l'utilisateur.
+
+## Vue d'ensemble (checkpoint 65)
+SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant, `izigsm/webapp/`, branche `main`. Session de 30 commits : déploiement du cp64, correction des 5 endpoints facture/avoir avec **validation en production réelle**, puis un chantier complet d'isolation multi-tenant mené en `brainstorming` → `writing-plans` → `subagent-driven-development` (14 tâches, 28 commits, branche mergée et supprimée).
+
+## Ce qui a été fait
+1. **Déploiement cp64** — migration `0037` à distance puis Worker, dans le bon ordre. Vérifié en prod.
+2. **5 endpoints facture/avoir isolés** — helper `assertBoutiqueOwnership()` créé. RED : `200/200/200/200/201` (un avoir était réellement créé chez autrui). **403 prouvé en production** depuis le compte SOTELI contre une facture de la boutique 5.
+3. **`addMonthsParis()` corrigé** — `Date.setUTCMonth()` débordait sur un 31, faussant `ca_mois_precedent` 4 jours par an, pour toutes les boutiques. Constaté à l'écran en prod.
+4. **36 routes isolées + garde-fou** — voir `current-state.md` § Checkpoint 65 pour le détail.
+5. **Migration `0038`** — FK `service_modeles` pendante depuis la migration `0031` : `POST /services/modeles/:id/services` renvoyait 500 pour tout le monde depuis le Sprint 2.39. Reconstruit et vérifié.
+
+## Leçons de méthode, à retenir pour la suite
+- **Un audit statique qui cherche un signal dans un *fichier* plutôt que dans le *handler* produit des faux négatifs massifs** : 13 failles annoncées, 36 réelles. Le test de conformité, lui, analyse handler par handler.
+- **Un garde-fou statique ne voit pas tout** : la revue finale a trouvé une garde portant sur le bon objet mais pas sur l'objet muté (`receptionner` écrivait sur le stock d'une autre boutique), et une exemption au motif plausible mais faux (fuite de tarifs). Un harnais qui vérifierait qu'aucune ligne du tenant B n'a bougé les aurait attrapées mécaniquement.
+- **Tester le refus ne suffit pas** : sans un test « le propriétaire légitime passe », une garde trop stricte reste verte. Le plan initial l'exigeait par domaine, la spec par route — c'est la revue qui a rattrapé l'écart.
+- **`wrangler pages dev` ne recharge pas `dist/`** : après `npm run build`, tuer et relancer le serveur, sinon Playwright teste l'ancien bundle et l'on conclut à tort que le correctif ne marche pas.
+
+## Prochaines étapes recommandées
+1. Rotation du mot de passe superadmin (voir en tête)
+2. Déploiement des 4 chantiers, migration d'abord
+3. Ménage en prod : boutique 5 « ZZ Audit Isolation 2026 », compte `zinside+isotest@gmail.com` non vérifié
+4. `todo.md` § Suivis du chantier isolation : `propageAUnService()` matche `if(...)` comme un appel — le garde-fou ne protège donc pas le correctif de fuite de tarifs lui-même
+5. Frontend à aligner : boutons du référentiel visibles aux managers (403 côté serveur), admin plateforme en 400 sans `?boutique_id` sur les services d'un modèle
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-30 (checkpoint 64 — création manuelle de facture + socle facture électronique)
 
 ## ⚠️ EN ATTENTE D'UNE ACTION HUMAINE — à traiter avant tout nouveau chantier

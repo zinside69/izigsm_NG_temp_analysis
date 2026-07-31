@@ -49,6 +49,16 @@ binding `DB`, `wrangler pages dev` le lit automatiquement. Détail complet dans
 
 Compte de démo (seed.sql) : `admin@izigsm.fr` / `Admin@2026!` (boutique 1, "iziGSM Paris 11").
 
+> ⚠️ **Ces identifiants sont publiés** — ce dépôt est public sur GitHub, et le même compte
+> existe **en production** avec le rôle `admin` plateforme (`boutique_id` NULL, accès à
+> toutes les boutiques). Vérifié le 2026-07-31 : le login réussit sur `repairdesk.fr`.
+> Tant que le mot de passe de production n'a pas été tourné (voir
+> `project-docs/recovery-prompt.md`, en tête), n'importe qui peut se connecter en lisant ce
+> fichier. Aucune garde d'isolation ne protège d'un identifiant publié.
+>
+> Règle à appliquer désormais : le seed ne doit contenir aucun secret réutilisé en
+> production. Un mot de passe de démo doit être généré à l'installation, jamais écrit ici.
+
 ## Architecture
 
 ```
@@ -253,6 +263,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-07-31 : la migration `0038` (reconstruction de `service_modeles`) est
+committée mais PAS appliquée à distance.** Elle répare une clé étrangère laissée pendante
+par la migration `0031` (`ALTER TABLE RENAME` puis `DROP` dans le même fichier), qui rend
+`POST /api/services/modeles/:id/services` inutilisable en production — 500 pour tout
+appelant, admin compris, depuis le Sprint 2.39. Sans elle appliquée en distant, déployer le
+Worker ne change rien à ce symptôme.
 
 Déployer le Worker avant d'avoir appliqué la migration distante fait échouer en
 production toute requête qui touche la colonne manquante (`no such column`), sans

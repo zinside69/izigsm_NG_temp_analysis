@@ -1,3 +1,57 @@
+# iziGSM — État courant (MàJ : 2026-07-31, checkpoint 65 — déploiement cp64, isolation multi-tenant de 36 routes, FK service_modeles)
+
+## Checkpoint 65 — Session humaine : déploiement, chantier isolation complet, faille superadmin découverte (2026-07-31)
+
+**Reprise via `/init recover izigsm`** (checkpoint 64). Session la plus dense du projet : 30 commits, un chantier complet spec → plan → subagent-driven-development → revue finale → merge.
+
+### 1. Déploiement du checkpoint 64
+
+Migration `0037` appliquée à distance **puis** Worker déployé, dans cet ordre (l'inverse cassait toute émission de facture). Vérifié : `/api/health` 200, `CACHE_VERSION` local ↔ prod identiques (`izigsm-v2.82`), `factures.js` déployé contenant `emettre_encaisser` / `date_execution` / `mention_facture`. Le token Cloudflare de la session n'ayant pas les droits D1 distants (erreur 7403), l'utilisateur a lancé les deux commandes lui-même.
+
+### 2. Les 5 endpoints facture/avoir — corrigés, déployés, **validés en production**
+
+Helper `assertBoutiqueOwnership(user, resource, label)` créé dans `src/lib/middleware.ts` (404 absente / 403 étrangère / `admin` traverse), appliqué aux 5 routes. RED observé avant correctif : `200/200/200/200/**201**` — l'avoir était réellement créé sur la facture d'une autre boutique.
+
+**Preuve en production** : depuis le compte SOTELI (manager, boutique 2), `GET /api/factures/3` (boutique 5) renvoie **403 « Accès refusé. »**, tandis que `GET /api/factures/1` (sa propre facture) reste **200**. Une boutique de test dédiée a été créée pour cette démonstration (voir § Ménage).
+
+### 3. `addMonthsParis()` — KPI dashboard faux 4 jours par an
+
+`statsService.ts:45` décalait les mois via `Date.setUTCMonth()`, qui déborde sur un 31 (2026-06-31 → 2026-07-01). Les 31 mai / juillet / octobre / décembre, `ca_mois_precedent` renvoyait le CA du mois courant et `evolution_ca_pct` valait 0 %. **Constaté à l'écran sur le dashboard de production ce jour-là** (« CA ce mois 62 € / Mois préc. 62 € / ↑ +0% »). Corrigé par arithmétique pure sur (année, mois).
+
+### 4. Chantier isolation multi-tenant — 36 routes
+
+Audit statique → 13 failles annoncées. **Le test de conformité écrit ensuite en a révélé 23 de plus** : l'audit écartait toute route dont le *fichier* portait un signal d'isolation, sans vérifier que ce signal se trouvait dans le *handler* examiné — `getDevis(db, id)` mentionne `boutique_id` dans son `SELECT` sans jamais filtrer dessus. Décision utilisateur : tout corriger dans le même chantier.
+
+Livré sur branche `feat/isolation-routes-par-id`, mergée (`52c041f`) : 36 routes gardées, 6 routes du référentiel global marques/modèles passées en `requireRole('admin')` (gouvernance d'un catalogue partagé, pas isolation), 137 tests e2e (étranger refusé / propriétaire 200 / admin plateforme 200, **par route**).
+
+**Garde-fou** : `tests/routes-isolation-conformite.test.ts` fait échouer la suite si une route par ID n'a ni garde ni exemption motivée. Durci après revue — charger un `boutique_id` ne vaut plus preuve de l'avoir comparé (mutation vérifiée : 47 routes passent au rouge si l'on retire les gardes, contre 8 avant durcissement).
+
+**La revue finale a trouvé 2 failles que ni l'audit ni le garde-fou ne pouvaient voir** :
+- `POST /bons-commande/:id/receptionner` gardait le **bon** mais mutait les **produits** référencés : un manager pouvait créer un bon chez lui avec le `produit_id` d'un concurrent et écrire sur son stock et son prix d'achat.
+- `GET /services/modeles/:id/services` était exemptée au motif « référentiel global » — le modèle est global, mais la réponse exposait les services **et leurs prix de toutes les boutiques**.
+
+### 5. Migration `0038` — FK `service_modeles` reconstruite
+
+La migration `0031` avait renommé `modeles_appareils` puis supprimé l'ancienne table dans le même fichier ; SQLite avait propagé le renommage dans `service_modeles.modele_id`, laissant une FK vers une table inexistante. `POST /api/services/modeles/:id/services` renvoyait **500 pour tout appelant, admin compris, depuis le Sprint 2.39**. Table reconstruite, 9/9 liaisons reprises, route vérifiée en local live (200 + relecture).
+
+## Reste ouvert
+
+### 🔴 Faille critique NON corrigée — accès superadmin publié
+`admin@izigsm.fr` / `Admin@2026!` **fonctionne en production** (rôle `admin`, `boutique_id` NULL, accès aux 5 boutiques), et ces identifiants sont écrits en clair dans `CLAUDE.md` et `seed.sql` du dépôt **`zinside69/izigsm_NG_temp_analysis`, qui est public sur GitHub** (`visibility=public`, vérifié par appel non authentifié). Aucune des 36 gardes ne protège contre un identifiant publié.
+
+Procédure décidée, **non exécutée** : créer et tester la boîte `support@soteli.fr`, puis `UPDATE users SET email = 'support@soteli.fr' WHERE id = 1`, puis `POST /api/auth/reset-password-request`. `zinside@gmail.com` est déjà pris (user id 6). Rendre le dépôt privé ne suffit pas — seule la rotation du secret ferme l'accès.
+
+### 🔴 Rien de la journée n'est déployé, sauf le point 2
+Quatre chantiers sur `main` en attente : `c59d59c` (statsService), `1f99e4a` (migration helper), `52c041f` (36 routes), `f1bc6dc` (migration 0038). **Ordre impératif** : `npx wrangler d1 migrations apply DB --remote` avant `npm run deploy`.
+
+### 🟡 Ménage en production
+Boutique 5 « ZZ Audit Isolation 2026 » (1 client, 1 facture brouillon `FAC-2026-00001`) et compte `zinside+isotest@gmail.com` jamais vérifié — tous deux créés pour la validation du point 2. Identifiants du compte de test : `akiliai6913+isotest@gmail.com` / `IsoTest#2026!Rd7`.
+
+### 🟡 Bugs découverts, non corrigés (détail dans `todo.md`)
+`updateEmploye()` en 500 sur body partiel · SQL inline des 3 gardes de `facturation.ts` (déjà déployé) · `POST` du référentiel marques/modèles encore ouvert aux managers · inscription en 500 quand le nom de boutique est déjà pris · fallbacks localStorage de `factures.js` (`confirmPaiement`, `deleteFacture`, numéro fabriqué) · `propageAUnService()` du garde-fou matche `if(...)` comme un appel · pas d'`auditLog` sur la ligne ignorée à la réception · frontend à aligner (boutons référentiel visibles aux managers, admin plateforme en 400 sans `?boutique_id`).
+
+---
+
 # iziGSM — État courant (MàJ : 2026-07-30, checkpoint 64 — création manuelle de facture + socle facture électronique, 2/2 fonctionnalités hors service traitées)
 
 ## Checkpoint 64 — Session humaine : `factures.html` remis en service + socle de la facture électronique (2026-07-30)
