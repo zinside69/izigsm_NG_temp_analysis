@@ -108,6 +108,18 @@ La console d'administration (page listant boutiques, comptes et activité) fait 
 d'une spec distincte. L'API nécessaire existe déjà — `GET /api/boutiques`, `GET /api/users`,
 `GET /api/boutiques/:id/stats` — seule l'interface manque.
 
+### Nommage de la clé primaire de `boutiques`
+
+Question soulevée en revue : `boutiques.id` ne devrait-il pas s'appeler `boutique_id`, par
+cohérence avec les 6 585 clés étrangères du même nom et pour lever l'ambiguïté au dépannage ?
+
+Décision : **garder `id`**. La convention PK = `id` / FK = `<table>_id` s'applique à 46 des
+55 tables ; renommer cette seule table créerait une exception que le lecteur devrait retenir,
+et imposerait de recréer une table de production référencée par des clés étrangères. Le
+bénéfice de lisibilité est obtenu autrement, par un invariant : **toute requête exposant
+cette clé primaire l'aliase** (`SELECT b.id AS boutique_id`). Les 38 emplacements concernés
+sont dans 10 services et leurs 10 fichiers de tests.
+
 ## Tests
 
 Nouveau fichier `tests/e2e/isolation-routes.spec.ts`, RED avant toute correction.
