@@ -9,7 +9,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import type { Database } from '../ports/database'
 import {
   listProduits,
@@ -100,7 +100,10 @@ stocks.get('/produits/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10)
 
   const data = await getProduitById(dbPort, id)
-  if (!data) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir le produit d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Produit')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   return c.json({ success: true, data })
 })
@@ -171,9 +174,14 @@ stocks.post('/produits/import-csv', requireRole('admin', 'manager'), async (c) =
  * @returns { success, message }
  */
 stocks.put('/produits/:id', requireRole('admin', 'manager'), async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id   = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
+
+  // Isolation multi-tenant : ne jamais modifier le produit d'une autre boutique
+  const produit = await getProduitById(dbPort, id)
+  const deny = assertBoutiqueOwnership(user, produit, 'Produit')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     await updateProduit(db, id, user.sub, body)
@@ -191,8 +199,13 @@ stocks.put('/produits/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, message }
  */
 stocks.delete('/produits/:id', requireRole('admin', 'manager'), async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : ne jamais désactiver le produit d'une autre boutique
+  const produit = await getProduitById(dbPort, id)
+  const deny = assertBoutiqueOwnership(user, produit, 'Produit')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await deleteProduit(db, id, user.sub)
   return c.json({ success: true, message: 'Produit désactivé.' })
