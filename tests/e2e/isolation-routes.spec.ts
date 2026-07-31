@@ -629,3 +629,96 @@ test.describe('Referentiel global — ecriture reservee a l\'admin plateforme', 
     expect(res.status()).toBe(200)
   })
 })
+
+/**
+ * Tache 9-10 : rachats (livre de police, art. 321-7) et devis. Aucune fixture
+ * rachats/devis dans seed.sql — creees via l'API, comme fournisseurs/categories
+ * ci-dessus. Pour l'admin plateforme (boutique_id NULL), boutique_id: 1 est
+ * fourni explicitement dans le body de creation.
+ */
+
+/** Cree un rachat cote boutique 1 via l'API admin (aucun rachat dans seed.sql). */
+async function createRachatBoutique1(request: APIRequestContext): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  return createRachat(request, token, { boutique_id: 1 })
+}
+
+/** Cree un rachat avec le token fourni (boutique derivee du JWT si non-admin). */
+async function createRachat(
+  request: APIRequestContext, token: string, overrides: Record<string, any> = {}
+): Promise<number> {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const res = await request.post('/api/rachats', {
+    headers: authHeader(token),
+    data: {
+      vendeur_nom:       'Dupont',
+      vendeur_prenom:    'Jean',
+      vendeur_piece:     'CNI',
+      vendeur_piece_num: `ID-${suffix}`,
+      marque:            'Apple',
+      modele:            'iPhone 12',
+      prix_rachat:       50,
+      ...overrides,
+    },
+  })
+  if (!res.ok()) throw new Error(`creation rachat failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+test.describe('Isolation — Rachats', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un rachat qui ne lui appartient pas', async ({ request }) => {
+    const rachatId = await createRachatBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/rachats/${rachatId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime lit son propre rachat', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const rachatId = await createRachat(request, proprio.accessToken)
+
+    const res = await request.get(`/api/rachats/${rachatId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le rachat de n\'importe quelle boutique', async ({ request }) => {
+    const rachatId = await createRachatBoutique1(request)
+    const token     = await loginSeedAdmin(request)
+    const res = await request.get(`/api/rachats/${rachatId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : PATCH .../statut modifie un etat persistant.
+  test('un manager d\'une autre boutique ne peut pas changer le statut d\'un rachat qui ne lui appartient pas', async ({ request }) => {
+    const rachatId = await createRachatBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.patch(`/api/rachats/${rachatId}/statut`, {
+      headers: authHeader(etranger.accessToken),
+      data: { statut: 'vendu' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime change le statut de son propre rachat', async ({ request }) => {
+    const proprio  = await createTenantAdmin(request)
+    const rachatId = await createRachat(request, proprio.accessToken)
+
+    const res = await request.patch(`/api/rachats/${rachatId}/statut`, {
+      headers: authHeader(proprio.accessToken),
+      data: { statut: 'vendu' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme change le statut du rachat de n\'importe quelle boutique', async ({ request }) => {
+    const rachatId = await createRachatBoutique1(request)
+    const token     = await loginSeedAdmin(request)
+    const res = await request.patch(`/api/rachats/${rachatId}/statut`, {
+      headers: authHeader(token),
+      data: { statut: 'vendu' },
+    })
+    expect(res.status()).toBe(200)
+  })
+})
