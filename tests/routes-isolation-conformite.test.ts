@@ -20,6 +20,19 @@ import { join } from 'node:path'
  * laissent volontairement le test ROUGE plutot que d'etre exemptees pour faire
  * du vert de facade. Voir task-7-report.md pour le detail et le classement
  * complet des 28 routes remontees au premier lancement.
+ *
+ * DURCISSEMENT 2026-07-31 (condition 3 de la revue finale) : ce garde-fou
+ * acceptait le simple CHARGEMENT d'un boutique_id (`getTicketBoutiqueId`,
+ * `getBonCommandeBoutiqueId`, ...) comme preuve de garde. Ces fonctions ne
+ * comparent rien — preuve par mutation : en retirant tous les
+ * `assertBoutiqueOwnership` des handlers, 8 routes restaient vertes. Un signal de
+ * chargement ne vaut desormais garde qu'accompagne d'un signal de COMPARAISON
+ * dans le meme corps. Le patron « derive boutiqueId du JWT puis le passe au
+ * service qui filtre en SQL » (17 routes de clients.ts / reconditionnement.ts /
+ * users.ts, non vulnerables) reste reconnu, mais exige la propagation effective
+ * de la variable. Les commentaires sont retires avant analyse : le corps d'un
+ * handler englobe le JSDoc de la route suivante, dont une simple mention
+ * suffisait a verdir la precedente.
  */
 
 // @ts-ignore process types not available without @types/node
@@ -38,6 +51,21 @@ const EXEMPTIONS: Record<string, string> = {
 const DECL = /^\s*\w+\.(get|post|put|delete|patch)\(\s*['"`]([^'"`]*)['"`]/
 
 /**
+ * Retire commentaires de bloc et de ligne avant analyse.
+ *
+ * Le corps d'un handler s'etend jusqu'a la declaration suivante : il englobe donc
+ * le bloc de commentaires qui documente la route d'apres. Une simple phrase de
+ * JSDoc mentionnant `getBoutiqueId()` suffisait a verdir la route precedente —
+ * meme classe de faux positif que le constat traite ici (un signal qui n'execute
+ * rien vaut preuve). Un commentaire ne garde rien : on ne l'analyse pas.
+ */
+function sansCommentaires(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
+
+/**
  * Certains routers definissent un helper local `ctx(c)` qui derive lui-meme
  * boutiqueId via getBoutiqueId() avant de le retourner (sav.ts) : les handlers
  * font `const { boutiqueId } = ctx(c)` puis passent `boutiqueId` aux services,
@@ -46,42 +74,95 @@ const DECL = /^\s*\w+\.(get|post|put|delete|patch)\(\s*['"`]([^'"`]*)['"`]/
  * fichier. D'autres fichiers (clients.ts, stocks.ts, tickets.ts, reconditionnement.ts)
  * definissent aussi un `ctx(c)`, mais sans y deriver boutiqueId (ils se contentent
  * d'extraire `queryBoutiqueId` brut) : la garde reste alors explicite dans chaque
- * handler individuel et est deja couverte par `getBoutiqueId` ci-dessous — cette
- * fonction ne les concerne pas.
+ * handler individuel.
  *
  * Verifie manuellement (task 7, 2026-07-31) : getGarantie/getSav/updateSavStatut
  * (src/services/garantiesService.ts) filtrent bien `WHERE ... AND boutique_id = ?`
  * avec la valeur issue de ce helper avant d'elargir la detection sur ce patron.
  */
 function fichierDeriveBoutiqueIdViaCtx(texteFichier: string): boolean {
-  const m = texteFichier.match(/function\s+ctx\s*\(c[^)]*\)\s*\{([\s\S]*?)\n\}/)
+  const m = sansCommentaires(texteFichier).match(/function\s+ctx\s*\(c[^)]*\)\s*\{([\s\S]*?)\n\}/)
   return !!m && /getBoutiqueId\(/.test(m[1])
 }
 
-/** Signaux acceptes comme garde d'isolation. */
-function aUneGarde(corps: string, texteFichier: string): boolean {
-  if (/assertBoutiqueOwnership/.test(corps))  return true
-  if (/boutique_id\s*!==/.test(corps))        return true
-  if (/getBoutiqueId/.test(corps))            return true
-  if (/boutique_id\s*=\s*\?/.test(corps))     return true
+/**
+ * Signaux de COMPARAISON : le handler oppose effectivement la ressource a la
+ * boutique de l'appelant, ou delegue cette comparaison a une fonction qui la fait.
+ */
+const COMPARAISON: RegExp[] = [
+  /assertBoutiqueOwnership/,
+  /boutique_id\s*!==/,
   // boutiques.ts s'identifie par `id`, pas par `boutique_id`
-  if (/user\.boutique_id/.test(corps))        return true
-  // Fonctions de service dediees creees pendant ce chantier pour eviter le SQL
-  // inline dans les controllers : elles encapsulent la verification d'appartenance
-  // sans que "boutique_id" apparaisse tel quel dans le handler (voir
-  // ticketService.ts, fournisseursService.ts, servicesService.ts).
-  if (/getTicketBoutiqueId/.test(corps))      return true
-  if (/getBonCommandeBoutiqueId/.test(corps)) return true
-  if (/getCategorieBoutiqueId/.test(corps))   return true
+  /user\.boutique_id/,
+  // SQL inline filtre (routes historiques)
+  /boutique_id\s*=\s*\?/,
   // resetPINAdmin() (src/services/userService.ts) compare en interne
   // target.boutique_id a adminUser.boutique_id — adminUser est c.get('user')
   // (payload JWT signe), jamais une valeur fournie par l'appelant. Verifie
   // manuellement le 2026-07-31 (task 7) avant d'elargir la detection.
-  if (/resetPINAdmin\(/.test(corps))          return true
-  // Helper local ctx(c) qui derive boutiqueId via getBoutiqueId() avant de le
-  // retourner (voir fichierDeriveBoutiqueIdViaCtx ci-dessus).
-  if (/\bctx\(c\)/.test(corps) && /\bboutiqueId\b/.test(corps) && fichierDeriveBoutiqueIdViaCtx(texteFichier))
+  /resetPINAdmin\(/,
+]
+
+/**
+ * Signaux de CHARGEMENT SEUL — ne valent PAS garde a eux seuls (durcissement
+ * 2026-07-31, condition 3 de la revue finale).
+ *
+ * Ces fonctions de service se contentent de lire le `boutique_id` d'une ressource
+ * (`SELECT boutique_id FROM ... WHERE id = ?`). Elles ne le comparent a rien : la
+ * comparaison est faite ensuite par `assertBoutiqueOwnership()`. Les accepter
+ * seules rendait le garde-fou aveugle — preuve par mutation : en supprimant tous
+ * les `assertBoutiqueOwnership` des handlers, 8 routes restaient vertes.
+ * Elles sont conservees ici uniquement a titre documentaire : une route qui les
+ * appelle DOIT porter en plus un signal de COMPARAISON.
+ */
+const CHARGEMENT_SEUL: RegExp[] = [
+  /getTicketBoutiqueId/,
+  /getBonCommandeBoutiqueId/,
+  /getCategorieBoutiqueId/,
+  /getRdvBoutiqueId/,
+]
+
+/**
+ * Patron legitime distinct : le handler derive `boutiqueId` du JWT
+ * (`getBoutiqueId()`, jamais une valeur fournie par l'appelant) PUIS le passe en
+ * argument a un service qui filtre en SQL — `getOrdre(dbPort, id, boutiqueId)`,
+ * `getPermissions(db, targetId, boutiqueId)`, `canAccessClient(user, client, boutiqueId)`.
+ * Le filtrage a bien lieu, simplement dans le service et non dans le controller.
+ *
+ * 17 routes (clients.ts, reconditionnement.ts, users.ts) reposent sur ce patron,
+ * verifiees non vulnerables par la revue finale. La detection exige la PROPAGATION
+ * de la variable, pas la seule presence de `getBoutiqueId` : deriver un boutiqueId
+ * puis ne jamais s'en servir ne garde rien non plus.
+ */
+function propageAUnService(corps: string, variable: string): boolean {
+  for (const appel of corps.matchAll(/([A-Za-z_$][\w$.]*)\s*\(([^()]*)\)/g)) {
+    const nom = appel[1]
+    // Exclusions : la derivation elle-meme, le rendu de reponse, les conversions.
+    if (nom === 'getBoutiqueId' || nom.startsWith('c.') || nom === 'parseInt' || nom === 'Number' || nom === 'String')
+      continue
+    if (new RegExp(`\\b${variable}\\b`).test(appel[2])) return true
+  }
+  return false
+}
+
+/** Signaux acceptes comme garde d'isolation. */
+function aUneGarde(corpsBrut: string, texteFichier: string): boolean {
+  const corps = sansCommentaires(corpsBrut)
+
+  if (COMPARAISON.some(re => re.test(corps))) return true
+
+  // Chargement seul, sans comparaison dans le meme corps → refuse.
+  if (CHARGEMENT_SEUL.some(re => re.test(corps))) return false
+
+  // Derivation depuis le JWT + propagation au service qui filtre.
+  const declaration = corps.match(/(?:const|let)\s+(\w+)\s*=\s*getBoutiqueId\s*\(/)
+  if (declaration && propageAUnService(corps, declaration[1])) return true
+
+  // Meme patron, mais boutiqueId derive dans le helper local ctx(c) (sav.ts).
+  if (/\bctx\(c\)/.test(corps) && fichierDeriveBoutiqueIdViaCtx(texteFichier)
+      && propageAUnService(corps, 'boutiqueId'))
     return true
+
   return false
 }
 
@@ -134,5 +215,59 @@ describe('Conformite isolation multi-tenant', () => {
     const existantes = new Set(routesParId().map(r => r.cle))
     const orphelines = Object.keys(EXEMPTIONS).filter(c => !existantes.has(c))
     expect(orphelines, `Exemptions obsoletes a supprimer :\n  ${orphelines.join('\n  ')}`).toEqual([])
+  })
+
+  // ── Meta-tests du garde-fou lui-meme ──────────────────────────────────────
+  // Sans eux, rien n'empeche un futur elargissement de aUneGarde() de reintroduire
+  // le faux positif corrige le 2026-07-31 (chargement pris pour comparaison).
+
+  describe('aUneGarde() — durcissement chargement vs comparaison', () => {
+    it('refuse un handler qui se contente de CHARGER un boutique_id', () => {
+      const corps = `
+        fournisseurs.post('/bons-commande/:id/receptionner', async (c) => {
+          const bon = await getBonCommandeBoutiqueId(c.get('db'), id)
+          return c.json({ success: true })
+        })`
+      expect(aUneGarde(corps, corps)).toBe(false)
+    })
+
+    it('accepte le meme handler des lors qu\'il COMPARE', () => {
+      const corps = `
+        fournisseurs.post('/bons-commande/:id/receptionner', async (c) => {
+          const bon = await getBonCommandeBoutiqueId(c.get('db'), id)
+          const deny = assertBoutiqueOwnership(c.get('user'), bon, 'Bon de commande')
+          if (deny) return c.json({ success: false }, deny.status)
+        })`
+      expect(aUneGarde(corps, corps)).toBe(true)
+    })
+
+    it('accepte la derivation JWT propagee a un service qui filtre', () => {
+      const corps = `
+        recond.get('/:id', async (c) => {
+          const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+          const ordre = await getOrdre(dbPort, id, boutiqueId)
+        })`
+      expect(aUneGarde(corps, corps)).toBe(true)
+    })
+
+    it('refuse une derivation JWT jamais propagee', () => {
+      const corps = `
+        recond.get('/:id', async (c) => {
+          const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
+          const ordre = await getOrdre(dbPort, id)
+          return c.json({ success: true, boutique_id: boutiqueId, data: ordre })
+        })`
+      expect(aUneGarde(corps, corps)).toBe(false)
+    })
+
+    it('ne prend pas un commentaire pour une garde', () => {
+      const corps = `
+        services.delete('/services/modeles/:id', async (c) => {
+          await deleteModele(c.env.DB, id, user.sub)
+        })
+        /** Route suivante : derive boutiqueId via getBoutiqueId() et compare
+         *  avec assertBoutiqueOwnership(). */`
+      expect(aUneGarde(corps, corps)).toBe(false)
+    })
   })
 })
