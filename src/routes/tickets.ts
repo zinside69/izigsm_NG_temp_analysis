@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import { validateSignatureDataUrl } from '../lib/validators'
 import type { Database } from '../ports/database'
 import {
@@ -133,8 +133,15 @@ tickets.get('/', async (c) => {
  * @returns { success, message }
  */
 tickets.post('/:id/archiver', requireRole('admin', 'manager'), async (c) => {
-  const { user, db } = ctx(c)
+  const { user, db, dbPort } = ctx(c)
   const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : ne jamais archiver le ticket d'une autre boutique. Route
+  // omise par la campagne de correction du 2026-07-19 sur ce fichier (GET/PUT/DELETE
+  // /:id l'ont reçue, pas celle-ci) — voir commentaire identique sur GET /:id.
+  const ticket = await getTicketBoutiqueId(dbPort, id)
+  const deny = assertBoutiqueOwnership(user, ticket, 'Ticket')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     await archiveTicket(db, id, user.sub)

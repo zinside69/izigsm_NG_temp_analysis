@@ -11,6 +11,11 @@ import { createTenantAdmin } from './fixtures/tenant'
 
 const PRODUIT_BOUTIQUE_1 = 1   // seed.sql : produits ids 1..9, boutique 1
 const EMPLOYE_BOUTIQUE_1 = 1   // seed.sql : employes ids 1,2,3 — boutique 1
+// seed.sql : ticket 5 (boutique 1, statut 'livre') — pas le ticket 1 ('en_reparation') :
+// archiveTicket() rejette tout statut hors livre/annule avec un 422 qui masquerait la
+// garde d'isolation sur le cas admin (l'admin passe la garde mais heurterait quand meme
+// la regle metier, faux negatif constate au RED).
+const TICKET_BOUTIQUE_1  = 5
 
 /** Connexion au compte admin plateforme du seed (boutique_id NULL). */
 async function loginSeedAdmin(request: APIRequestContext): Promise<string> {
@@ -186,5 +191,59 @@ test.describe('Isolation — Personnel', () => {
     const token = await loginSeedAdmin(request)
     const res = await request.get(`/api/pointage/${EMPLOYE_BOUTIQUE_1}/aujourd-hui`, { headers: authHeader(token) })
     expect(res.status()).toBe(200)
+  })
+})
+
+test.describe('Isolation — Tickets', () => {
+  test('un manager d\'une autre boutique ne peut pas archiver un ticket qui ne lui appartient pas', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/tickets/${TICKET_BOUTIQUE_1}/archiver`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  // Le proprietaire cree et fait transiter son propre ticket (recu -> annule, transition
+  // directe autorisee) pour maitriser un etat archivable sans dependre du seed — la
+  // garde doit laisser passer un 200 strict, pas un 403/404 ni un 409 ambigu.
+  test('le proprietaire legitime archive son propre ticket', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const auth = authHeader(proprio.accessToken)
+
+    const clientRes = await request.post('/api/clients', {
+      headers: auth,
+      data: { prenom: 'E2E', nom: 'ProprietaireTicket' },
+    })
+    expect(clientRes.status()).toBe(201)
+    const clientId = (await clientRes.json()).id
+
+    const ticketRes = await request.post('/api/tickets', {
+      headers: auth,
+      data: {
+        client_id: clientId,
+        appareil_marque: 'Apple',
+        appareil_modele: 'iPhone 12',
+        description_panne: 'Ecran casse',
+      },
+    })
+    expect(ticketRes.status()).toBe(201)
+    const ticketId = (await ticketRes.json()).id
+
+    const statutRes = await request.put(`/api/tickets/${ticketId}/statut`, {
+      headers: auth,
+      data: { statut: 'annule' },
+    })
+    expect(statutRes.status()).toBe(200)
+
+    const res = await request.post(`/api/tickets/${ticketId}/archiver`, { headers: auth })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme n\'est pas bloque par la garde d\'archivage', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const res = await request.post(`/api/tickets/${TICKET_BOUTIQUE_1}/archiver`, { headers: authHeader(token) })
+    // 200 (archive) ou 409 (deja archive) : les deux prouvent que la garde a laisse
+    // passer l'admin. Un 403 signalerait une sur-restriction.
+    expect([200, 409]).toContain(res.status())
   })
 })
