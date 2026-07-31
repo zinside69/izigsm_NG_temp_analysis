@@ -22,15 +22,16 @@ répond **200** là où il renvoyait 500 — la relecture confirme la liaison. L
 est repassée par l'API, le contournement `PRAGMA foreign_keys = OFF` a été supprimé.
 **⚠ À appliquer en distant AVANT le prochain déploiement** : `npx wrangler d1 migrations apply DB --remote`.
 
-<details><summary>Diagnostic d'origine (conservé)</summary>
+<details><summary>Diagnostic d'origine (conservé pour mémoire — tout est traité)</summary>
 
-## 🔴 P1 — Migration de reconstruction `service_modeles` (trouvé 2026-07-31, PAS corrigé)
-`service_modeles.modele_id` référence `modeles_appareils_old`, table supprimée par la migration `0031`
-(`ALTER TABLE RENAME` puis `DROP` dans le même fichier). Conséquence : **`POST /api/services/modeles/:id/services`
-renvoie 500 pour tout appelant, admin compris, très probablement en production depuis le Sprint 2.39.**
-- [ ] Migration de reconstruction de la table (recréation + copie des données, patron SQLite de la migration 0031)
-- [ ] À appliquer **en distant avant** tout déploiement du Worker (`CLAUDE.md` § Déploiement)
-- [ ] Remplacer alors la fixture `tests/e2e/fixtures/service-modele-link.ts` (écriture directe en SQLite local, `PRAGMA foreign_keys = OFF`) par un appel API normal
+**Diagnostic du 2026-07-31, avant correctif.** `service_modeles.modele_id` référençait
+`modeles_appareils_old`, table supprimée par la migration `0031` (`ALTER TABLE RENAME` puis
+`DROP` dans le même fichier). Conséquence : `POST /api/services/modeles/:id/services`
+renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
+
+- [x] Migration de reconstruction de la table → `0038_service_modeles_fk_reconstruction.sql`
+- [x] À appliquer en distant avant tout déploiement du Worker → **reste à faire au moment du déploiement**, la migration est committée
+- [x] Fixture `tests/e2e/fixtures/service-modele-link.ts` repassée par l'API, `PRAGMA foreign_keys = OFF` supprimé
 </details>
 
 ## 🟡 Suivis du chantier isolation (revue finale 2026-07-31, PAS corrigés)
@@ -96,13 +97,14 @@ qui ne devait modifier que des routes d'isolation. Documentés ici pour ne pas l
   et `numero: … || ('FAC-' + id)` fabrique un numéro d'affichage. Même famille que le fallback localStorage
   supprimé au checkpoint 64, sur des objets NF525-adjacents.
 
-## 🟡 `addMonthsParis()` — mois précédent faux les 31 (trouvé 2026-07-31, PAS corrigé)
-`statsService.ts:45` : le décalage de mois via `Date.setUTCMonth()` déborde les 31 (2026-06-31 → 2026-07-01),
+## ✅ `addMonthsParis()` — mois précédent faux les 31 (trouvé et CORRIGÉ le 2026-07-31, commit `c59d59c`)
+`statsService.ts:45` : le décalage de mois via `Date.setUTCMonth()` débordait les 31 (2026-06-31 → 2026-07-01),
 donc `ca_mois_precedent` = CA du mois courant et `evolution_ca_pct` = 0 % les 31 mai / juillet / octobre / décembre,
-pour toutes les boutiques. Root cause complète et fix pressenti dans `bugs.md`.
-- [ ] Corriger `addMonthsParis()` (composition arithmétique année/mois, ou jour forcé à 1 avant décalage)
-- [ ] Vérifier les autres appelants du helper (`getCaMensuel()` utilise `addMonthsParis(today, -11)`)
-- [ ] Note gate : tant que ce n'est pas corrigé, la baseline vitest est de **4 échecs les 31 concernés**, 2 le reste du temps
+pour toutes les boutiques. Constaté à l'écran sur le dashboard de production le 2026-07-31.
+- [x] Corriger `addMonthsParis()` → arithmétique pure sur (année, mois), retourne le 1er du mois cible
+- [x] Vérifier les autres appelants (`getCaMensuel()` utilise `addMonthsParis(today, -11)`) — les deux ne consomment que `YYYY-MM`
+- [x] Baseline vitest revenue à 2 échecs (fuseau `agendaService`) le jour même
+**Committé, pas encore déployé** — le dashboard de production affiche donc toujours la valeur erronée.
 
 ## 🟡 Divergences de cohérence trouvées en revue finale (2026-07-30, PAS corrigées)
 - [ ] `src/services/statsService.ts:121` et `:132` interrogent la valeur de statut **morte** `'emise'` : aucun `INSERT INTO factures` du dépôt ne l'écrit (vérifié sur les 4 sites), seul le `DEFAULT` de schéma la porte encore. Conséquence : le KPI `factures_en_retard` (`:166`) renvoie **toujours 0** en production. Bonus : la valeur de `:121` est destructurée sous le nom `devis_en_attente` (`:77`) alors qu'elle compte des **factures**
