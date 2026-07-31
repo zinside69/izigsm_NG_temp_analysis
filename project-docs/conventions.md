@@ -8,3 +8,4 @@
 - Tests Vitest par service dans `tests/*.test.ts`, mock D1 via `tests/helpers/mockD1.ts`
 - Ne jamais écraser une ligne d'historique de version dans `docs/TODO.md` — toujours ajouter en dessous (règle globale CLAUDE.md)
 - Toujours proposer avant de modifier/supprimer un fichier existant (règle globale CLAUDE.md)
+- Stager nominativement (`git add <chemins>`), **jamais `git add -A`** — plusieurs sessions Claude Code peuvent travailler sur ce même checkout en parallèle (constaté le 2026-07-31 : un commit est apparu en cours de session, écrit par une autre session). Un `git add -A` emporterait le travail en cours du voisin dans un commit qui ne le concerne pas.

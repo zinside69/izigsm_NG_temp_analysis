@@ -166,7 +166,14 @@ fournisseurs.post('/bons-commande', requireRole('admin', 'manager'), async (c) =
 // ── GET /api/bons-commande/:id ────────────────────────────────────────────────
 /** Détail complet d'un bon de commande avec ses lignes */
 fournisseurs.get('/bons-commande/:id', async (c) => {
-  const id   = parseInt(c.req.param('id'), 10)
+  const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la garde précède le chargement complet (même patron
+  // que PATCH .../statut ci-dessous).
+  const bonRef = await getBonCommandeBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(c.get('user'), bonRef, 'Bon de commande')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const data = await getBonCommande(c.get('db'), id)
   if (!data) return c.json({ success: false, error: 'Bon de commande introuvable.' }, 404)
   return c.json({ success: true, data })
@@ -208,6 +215,11 @@ fournisseurs.post('/bons-commande/:id/receptionner', requireRole('admin', 'manag
   // lignes_recues : [{ ligne_id, quantite_recue }]
   if (!Array.isArray(body.lignes_recues) || body.lignes_recues.length === 0)
     return c.json({ success: false, error: 'lignes_recues obligatoire (tableau non vide).' }, 400)
+
+  // Isolation multi-tenant : la garde précède impérativement la mutation de stock.
+  const bon = await getBonCommandeBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, bon, 'Bon de commande')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const result = await receptionnerBonCommande(c.env.DB, id, body.lignes_recues, user.sub)

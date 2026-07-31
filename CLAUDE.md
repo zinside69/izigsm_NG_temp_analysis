@@ -75,6 +75,31 @@ Isolation multi-tenant : `boutique_id` sur (quasi) toutes les tables, dérivé d
 vérifier explicitement l'appartenance à la boutique de l'appelant, ne jamais supposer
 qu'un filtre en amont suffit.
 
+## Invariants isolation multi-tenant — routes par ID (depuis 2026-07-31)
+
+Chantier `feat/isolation-routes-par-id` (36 routes gardées, voir `project-docs/bugs.md` et
+`project-docs/audit-isolation-2026-07-31.md`). Règles issues de ce chantier, à respecter pour
+toute route future :
+
+- Toute route par ID doit vérifier l'appartenance de la ressource via
+  `assertBoutiqueOwnership(user, resource, label)` (`src/lib/middleware.ts`).
+- `tests/routes-isolation-conformite.test.ts` fait échouer la suite si une route par ID n'a ni
+  garde ni exemption — c'est un garde-fou statique, analysé handler par handler (pas fichier par
+  fichier, voir plus bas pourquoi ça compte). Une exemption exige un motif explicite dans
+  `EXEMPTIONS` (`admin-only`, `referentiel-global`, `public`) — jamais un contournement silencieux.
+- Le SQL de ces gardes vit dans les services (`getTicketBoutiqueId`, `getBonCommandeBoutiqueId`,
+  `getCategorieBoutiqueId`, `getRdvBoutiqueId`), jamais dans un controller — cohérent avec la
+  règle « 0 SQL inline » ci-dessus (§ Architecture).
+- La clé primaire de `boutiques` reste `id` (convention PK = `id`, FK = `<table>_id`, appliquée à
+  46 des 55 tables), mais **toute requête qui l'expose doit l'aliaser** : `SELECT b.id AS
+  boutique_id` — décision du 2026-07-31.
+
+Pourquoi « handler par handler » et pas « fichier par fichier » : l'audit statique initial de ce
+chantier (`project-docs/audit-isolation-2026-07-31.md`) écartait une route dès que son *fichier*
+contenait un signal d'isolation quelque part, sans vérifier que ce signal était dans *ce handler*
+— faux négatif qui a laissé 23 routes invisibles jusqu'à l'écriture du garde-fou actuel. Ne jamais
+réintroduire ce raccourci dans un futur audit ou script.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :

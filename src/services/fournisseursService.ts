@@ -345,11 +345,15 @@ export async function getBonCommandeBoutiqueId(
  * Statut initial : `draft` / paiement : `pending`.
  * Calcule automatiquement `montant_ht` et `montant_ttc` depuis les lignes.
  *
+ * Isolation multi-tenant : chaque `produit_id` de ligne est vérifié contre
+ * `data.boutique_id` AVANT toute écriture (voir bloc de garde ci-dessous).
+ *
  * @param db      Binding D1 Cloudflare
  * @param data    Données du bon (fournisseur, lignes, boutique_id, notes, ticket_id optionnel)
  * @param userId  Identifiant de l'utilisateur (pour audit log)
  * @returns       Identifiant du bon de commande créé
- * @throws        Error si l'insertion du bon échoue
+ * @throws        Error si l'insertion du bon échoue, ou si une ligne référence un
+ *                produit qui n'appartient pas à `data.boutique_id`
  */
 export async function createBonCommande(
   db: D1Database,
@@ -360,6 +364,31 @@ export async function createBonCommande(
   },
   userId: number
 ): Promise<number> {
+  // ── Isolation multi-tenant : les produits référencés doivent être ceux du bon ──
+  // Un `produit_id` étranger accepté ici devient, à la réception, une écriture sur
+  // le `stock_actuel` et le `prix_achat_cump` d'un concurrent (receptionnerBonCommande()
+  // ne compare pas les boutiques avant ce chantier). La garde est ici, en amont de
+  // toute écriture : ni le numéro de séquence ni le bon ne sont consommés si une
+  // ligne est illégitime.
+  //
+  // Rejet explicite plutôt qu'ignorance silencieuse : une ligne pointant un produit
+  // d'une autre boutique n'a aucun usage métier légitime (on ne commande pas le stock
+  // d'un concurrent), et l'ignorer produirait un bon dont la réception ne bougerait
+  // rien, sans que l'utilisateur comprenne pourquoi. Vérifié en base locale avant de
+  // trancher : 0 ligne de bon de commande référence un produit d'une autre boutique
+  // (69 bons, 0 ligne avec produit_id renseigné) — ce rejet ne casse aucun usage existant.
+  const produitIds = [...new Set(
+    data.lignes.map(l => l.produit_id).filter((v): v is number => typeof v === 'number')
+  )]
+  for (const produitId of produitIds) {
+    const produit = await db.prepare(
+      `SELECT boutique_id FROM produits WHERE id = ?`
+    ).bind(produitId).first<{ boutique_id: number }>()
+
+    if (!produit || produit.boutique_id !== data.boutique_id)
+      throw new Error(`Produit ${produitId} introuvable dans cette boutique.`)
+  }
+
   // Générer le numéro séquentiel BC-AAAA-XXXXX
   const annee = new Date().getFullYear()
   const seqRow = await db.prepare(`
@@ -463,6 +492,9 @@ export async function updateStatutBonCommande(
  *  4. Crée un mouvement de stock `reception_commande` pour la traçabilité
  *  5. Passe le bon en statut `received`
  *
+ * Isolation multi-tenant : seuls les produits de la boutique du bon sont mutés
+ * (filtre `boutique_id` sur le SELECT produit, voir commentaire dans la boucle).
+ *
  * @param db           Binding D1 Cloudflare
  * @param id           Identifiant du bon de commande
  * @param lignesRecues Liste `[{ ligne_id, quantite_recue }]` — quantité ≤ 0 ignorée
@@ -504,9 +536,20 @@ export async function receptionnerBonCommande(
 
     // Si la ligne a un produit_id : MAJ stock + CUMP
     if (ligne.produit_id) {
+      // Isolation multi-tenant : le filtre `boutique_id` porte la garde de la MUTATION.
+      // La garde de route (assertBoutiqueOwnership sur le bon) ne couvre que le bon —
+      // les produits mutés ici sont désignés par les lignes, et un produit_id étranger
+      // ferait écrire sur le stock et le CUMP d'un concurrent. createBonCommande()
+      // rejette désormais ces lignes à la création ; ce filtre est la seconde barrière,
+      // qui couvre aussi les bons créés avant ce correctif.
+      //
+      // Ignorer (produit non trouvé → ligne sautée) plutôt que lever : un bon
+      // historiquement hétérogène resterait sinon irréceptionnable à vie. La ligne du
+      // bon reste incrémentée (elle appartient bien à l'appelant), seul le produit
+      // étranger n'est pas touché et n'est pas compté dans nb_produits_mis_a_jour.
       const produit = await db.prepare(
-        `SELECT id, stock_actuel, prix_achat_cump, boutique_id FROM produits WHERE id = ?`
-      ).bind(ligne.produit_id).first<{ id: number; stock_actuel: number; prix_achat_cump: number; boutique_id: number }>()
+        `SELECT id, stock_actuel, prix_achat_cump, boutique_id FROM produits WHERE id = ? AND boutique_id = ?`
+      ).bind(ligne.produit_id, bc.boutique_id).first<{ id: number; stock_actuel: number; prix_achat_cump: number; boutique_id: number }>()
 
       if (produit) {
         const stockAvant   = produit.stock_actuel

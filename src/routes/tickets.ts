@@ -495,15 +495,27 @@ tickets.post('/:id/photos', async (c) => {
  * @returns Binaire de l'image avec Content-Type correct
  */
 tickets.get('/:id/photos/:photoId/view', async (c) => {
-  const { dbPort } = ctx(c)
-  const photoId = parseInt(c.req.param('photoId'), 10)
+  const { user, dbPort } = ctx(c)
+  const ticketId = parseInt(c.req.param('id'), 10)
+  const photoId  = parseInt(c.req.param('photoId'), 10)
 
   const r2 = c.env.PHOTOS
   if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
 
+  // Isolation multi-tenant : l'appartenance se vérifie sur le ticket parent,
+  // qui porte le boutique_id (la photo elle-même n'en a pas) — même patron
+  // que GET /:id/photos/:photoId/url ci-dessous.
+  const ticketRow = await getTicketBoutiqueId(dbPort, ticketId)
+  const deny = assertBoutiqueOwnership(user, ticketRow, 'Ticket')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   try {
     const meta = await getPhotoById(dbPort, photoId)
     if (!meta) return c.json({ success: false, error: 'Photo introuvable.' }, 404)
+    // La photo doit aussi appartenir au ticket de l'URL, pas seulement le ticket
+    // à la boutique appelante — sinon un ticket légitime servirait de passe-plat
+    // vers la photo d'un autre ticket de la même boutique (ou pire, mal ciblée).
+    if (meta.ticket_id !== ticketId) return c.json({ success: false, error: 'Photo non liée à ce ticket.' }, 403)
 
     const obj = await r2.get(meta.r2_key)
     if (!obj) return c.json({ success: false, error: 'Fichier introuvable dans le stockage.' }, 404)
@@ -570,6 +582,11 @@ tickets.delete('/:id/photos/:photoId', requireRole('admin', 'manager', 'technici
 
   const r2 = c.env.PHOTOS
   if (!r2) return c.json({ success: false, error: 'R2 non configuré.' }, 503)
+
+  // Isolation multi-tenant : voir commentaire identique sur GET /:id/photos/:photoId/view.
+  const ticketRow = await getTicketBoutiqueId(dbPort, ticketId)
+  const deny = assertBoutiqueOwnership(user, ticketRow, 'Ticket')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const meta = await getPhotoById(dbPort, photoId)

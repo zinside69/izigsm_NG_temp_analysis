@@ -28,22 +28,24 @@
  *
  *   Sprint 2.38 — Marques / Modèles / Liaisons
  *   GET    /api/services/marques                → Liste marques actives (avec nb_modeles)
- *   POST   /api/services/marques                → Créer une marque (admin/manager)
+ *   POST   /api/services/marques                → Créer une marque (admin uniquement — référentiel global)
  *   PUT    /api/services/marques/:id            → Modifier une marque (admin uniquement — référentiel global)
  *   DELETE /api/services/marques/:id            → Désactiver une marque + modèles (admin uniquement — référentiel global)
  *   GET    /api/services/modeles                → Liste modèles (filtre: marque_id, search, type)
- *   POST   /api/services/modeles                → Créer un modèle (admin/manager)
+ *   POST   /api/services/modeles                → Créer un modèle (admin uniquement — référentiel global)
  *   PUT    /api/services/modeles/:id            → Modifier un modèle (admin uniquement — référentiel global)
  *   DELETE /api/services/modeles/:id            → Désactiver un modèle (admin uniquement — référentiel global)
  *   GET    /api/services/modeles/:id/services   → Services suggérés pour un modèle
+ *                                                 (filtrés sur la boutique de l'appelant)
  *   POST   /api/services/modeles/:id/services   → Lier un service à un modèle (admin/manager)
  *   DELETE /api/services/modeles/:id/services/:sid → Délier un service d'un modèle (admin/manager)
  *
  * Sécurité :
  *   Toutes les routes requièrent `authMiddleware` (appliqué globalement).
  *   Les mutations (POST/PUT/DELETE) requièrent `requireRole('admin', 'manager')`,
- *   sauf l'écriture sur le référentiel global marques/modèles (PUT marques/:id,
- *   PUT/DELETE modeles/:id, DELETE marques/:id), réservée à `requireRole('admin')`.
+ *   sauf TOUTE écriture sur le référentiel global marques/modèles — création
+ *   comprise (POST/PUT/DELETE marques et modeles, 6 routes) — réservée à
+ *   `requireRole('admin')`.
  *
  * Format de réponse (P5 uniforme) : `{ success, data?, error?, message? }`
  */
@@ -282,7 +284,11 @@ services.get('/services/modeles', async (c) => {
 services.get('/services/:id', async (c) => {
   const id      = parseInt(c.req.param('id'), 10)
   const service = await getService(c.get('db'), id)
-  if (!service) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir le service d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data: service })
 })
 
@@ -342,9 +348,10 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const error = validateService(body)
   if (error) return c.json({ success: false, error }, 400)
 
-  // Vérification existence avant tentative de mise à jour
+  // Isolation multi-tenant : ne jamais modifier le service d'une autre boutique
   const existing = await getService(c.get('db'), id)
-  if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+  const deny = assertBoutiqueOwnership(user, existing, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await updateService(c.env.DB, id, body, user.sub)
   return c.json({ success: true, message: 'Service mis à jour.' })
@@ -364,9 +371,10 @@ services.delete('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
 
-  // Vérification existence avant soft delete
+  // Isolation multi-tenant : ne jamais désactiver le service d'une autre boutique
   const existing = await getService(c.get('db'), id)
-  if (!existing) return c.json({ success: false, error: 'Service introuvable.' }, 404)
+  const deny = assertBoutiqueOwnership(user, existing, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await deleteService(c.env.DB, id, user.sub)
   return c.json({ success: true, message: 'Service désactivé.' })
@@ -447,8 +455,15 @@ services.post('/services/catalog/sync-selected', requireRole('admin'), async (c)
 // MARQUES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/services/marques — Créer une marque manuellement */
-services.post('/services/marques', requireRole('admin', 'manager'), async (c) => {
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : la création
+// aussi est réservée à l'admin plateforme, au même titre que PUT/DELETE.
+// Une marque créée par un manager entre dans le namespace partagé de TOUTES les
+// boutiques (contrainte UNIQUE sur le nom : un tenant peut préempter un nom), et
+// lui seul ne pourra plus la corriger — PUT/DELETE lui répondent 403. Laisser la
+// création ouverte produisait donc des entrées globales que personne d'autre que
+// l'admin plateforme ne peut réparer.
+/** POST /api/services/marques — Créer une marque manuellement (admin uniquement) */
+services.post('/services/marques', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 
@@ -496,8 +511,13 @@ services.delete('/services/marques/:id', requireRole('admin'), async (c) => {
 // MODÈLES D'APPAREILS — Référentiel global (Sprint 2.38 + 2.39)
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/services/modeles — Créer un modèle manuellement */
-services.post('/services/modeles', requireRole('admin', 'manager'), async (c) => {
+// Référentiel marques/modèles GLOBAL (migration 0031, Sprint 2.39) : même raison
+// que POST /services/marques ci-dessus — création réservée à l'admin plateforme.
+// Le catalogue de modèles est par ailleurs alimenté par la synchronisation
+// externe (`/services/catalog/sync-*`), elle aussi admin uniquement : la création
+// manuelle est un complément, pas le canal d'approvisionnement normal.
+/** POST /api/services/modeles — Créer un modèle manuellement (admin uniquement) */
+services.post('/services/modeles', requireRole('admin'), async (c) => {
   const user = c.get('user')
   const body = await c.req.json()
 
@@ -543,10 +563,24 @@ services.delete('/services/modeles/:id', requireRole('admin'), async (c) => {
 /**
  * GET /api/services/modeles/:id/services
  * Services suggérés pour un modèle + détail du modèle.
+ *
+ * Isolation multi-tenant : le modèle est global, mais les services liés appartiennent
+ * chacun à une boutique. La liste renvoyée est filtrée sur la boutique de l'appelant —
+ * sans ce filtre, n'importe quel technicien lisait les tarifs de ses concurrents
+ * (`nom`, `description`, `prix_ht_effectif`, `prix_ttc_effectif`).
+ *
+ * `boutiqueId` est dérivé du JWT via `getBoutiqueId()`, jamais d'une valeur du corps
+ * ou du chemin. L'admin plateforme (`boutique_id` NULL) doit désigner explicitement
+ * une boutique via `?boutique_id=N` — même contrat que les autres routes de liste
+ * (ex. `GET /api/bons-commande`) : pas de vue « toutes boutiques » par défaut, qui
+ * rouvrirait la fuite pour ce rôle.
  */
 services.get('/services/modeles/:id/services', async (c) => {
-  const id   = parseInt(c.req.param('id'), 10)
-  const data = await getModeleWithServices(c.get('db'), id)
+  const id         = parseInt(c.req.param('id'), 10)
+  const boutiqueId = getBoutiqueId(c.get('user'), c.req.query('boutique_id'))
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await getModeleWithServices(c.get('db'), id, boutiqueId)
   if (!data.modele) return c.json({ success: false, error: 'Modèle introuvable.' }, 404)
   return c.json({ success: true, data })
 })
@@ -555,6 +589,10 @@ services.get('/services/modeles/:id/services', async (c) => {
  * POST /api/services/modeles/:id/services
  * Lie un service à un modèle (avec prix override optionnel).
  * Body : `{ service_id: number, prix_ht_specifique?: number }`
+ *
+ * Isolation multi-tenant : le modèle appartient au référentiel global (pas de
+ * boutique_id, migration 0031), mais le service lié appartient bien à une
+ * boutique — c'est donc son appartenance qu'il faut vérifier, pas celle du modèle.
  */
 services.post('/services/modeles/:id/services', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
@@ -563,8 +601,13 @@ services.post('/services/modeles/:id/services', requireRole('admin', 'manager'),
 
   if (!body.service_id) return c.json({ success: false, error: 'service_id est requis.' }, 400)
 
+  const serviceId = parseInt(body.service_id, 10)
+  const service   = await getService(c.get('db'), serviceId)
+  const deny      = assertBoutiqueOwnership(user, service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await linkServiceModele(c.env.DB, {
-    service_id:          parseInt(body.service_id, 10),
+    service_id:          serviceId,
     modele_id:           modeleId,
     prix_ht_specifique:  body.prix_ht_specifique ?? null,
   }, user.sub)
@@ -574,11 +617,18 @@ services.post('/services/modeles/:id/services', requireRole('admin', 'manager'),
 /**
  * DELETE /api/services/modeles/:id/services/:sid
  * Dissocie un service d'un modèle (soft delete liaison).
+ *
+ * Isolation multi-tenant : voir commentaire identique sur POST ci-dessus —
+ * la garde porte sur le service (:sid), pas sur le modèle (:id).
  */
 services.delete('/services/modeles/:id/services/:sid', requireRole('admin', 'manager'), async (c) => {
   const user      = c.get('user')
   const modeleId  = parseInt(c.req.param('id'), 10)
   const serviceId = parseInt(c.req.param('sid'), 10)
+
+  const service = await getService(c.get('db'), serviceId)
+  const deny    = assertBoutiqueOwnership(user, service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await unlinkServiceModele(c.env.DB, { service_id: serviceId, modele_id: modeleId }, user.sub)
   return c.json({ success: true, message: 'Service dissocié du modèle.' })

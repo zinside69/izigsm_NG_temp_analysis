@@ -1,5 +1,65 @@
 # iziGSM — Bugs connus
 
+## FAILLE — 36 routes par ID sans isolation `boutique_id`, dont 23 invisibles à l'audit statique initial (2026-07-31) — CORRIGÉES
+
+Chantier `feat/isolation-routes-par-id`. Point de départ : un audit manuel avait identifié **13 failles**
+(les 5 endpoints facture/avoir ci-dessous + les 8 déjà connues). Un audit statique élargi
+(`project-docs/audit-isolation-2026-07-31.md`) a ensuite remonté **18 candidates** sur 84 routes par ID
+analysées, dont 3 confirmées manuellement. Une fois le vrai garde-fou écrit
+(`tests/routes-isolation-conformite.test.ts`, tâche 7 du chantier), il a révélé **23 failles supplémentaires**
+que ni l'audit manuel ni l'audit statique n'avaient vues — soit **36 routes gardées au total**, pas 13 ni 18.
+
+**Root cause du faux négatif de l'audit statique** : le script d'audit écartait toute route dont le
+**fichier entier** contenait un signal d'isolation quelque part (`getBoutiqueId`, `assertBoutiqueOwnership`,
+`boutique_id !==`…), sans vérifier que ce signal était présent dans **ce handler précis**. Exemple concret :
+`getDevis(db, id)` (`devisService.ts`) mentionne `boutique_id` dans son `SELECT` mais ne filtre rien dessus —
+`facturation.ts` contient 17 occurrences des signaux d'isolation ailleurs dans le fichier, ce qui suffisait à
+faire écarter ses 5 routes devis voisines (`GET /devis/:id`, `PUT /devis/:id`, `PUT /devis/:id/statut`,
+`POST /devis/:id/accord-manuel`, `POST /devis/:id/envoyer`) de la liste des suspectes. Même mécanisme pour
+`fournisseurs.ts` (2), `personnel.ts` (1), `rachats.ts` (2), `services.ts` (5), `stocks.ts` (1), `tickets.ts` (2)
+et `clients.ts` (1). Seul `agenda.ts` (4 routes) échappait à ce mécanisme précis — écarté pour une autre raison :
+`agendaService.ts` filtre bien `WHERE id = ? AND boutique_id = ?` en SQL, mais avec une valeur de `boutique_id`
+fournie brute par l'appelant (query/body), jamais dérivée du JWT via `getBoutiqueId()` — un filtre SQL présent
+ne garantit rien si la valeur qui l'alimente n'est pas fiable.
+
+**Trois campagnes de correction antérieures (2026-07-19, 2026-07-30, 2026-07-31) avaient chacune corrigé
+« les routes connues » du moment en laissant leurs voisines intactes.** Démonstration la plus nette :
+`POST /tickets/:id/archiver` était restée vulnérable dans `tickets.ts`, un fichier pourtant audité et corrigé
+à trois reprises pour d'autres routes du même fichier (`GET /:id`, `PUT /:id`, `PUT /:id/statut`, `DELETE /:id`).
+C'est précisément cette classe de récidive que le garde-fou de conformité empêche désormais : il analyse chaque
+handler individuellement (pas le fichier), échoue la suite s'il n'a ni garde reconnue ni exemption motivée dans
+`EXEMPTIONS` (7 entrées, `admin-only`/`referentiel-global`/`public`), et a été vérifié pour détecter une vraie
+régression (garde retirée puis restaurée sur `stocks.ts GET /produits/:id`, le test nomme précisément la route).
+
+**Faille d'objet imbriqué fermée au passage** (Task 11-13) : `GET /:id/photos/:photoId/view` vérifiait que le
+ticket de l'URL appartenait à la boutique appelante, mais jamais que la photo `:photoId` demandée appartenait
+bien à ce ticket — une photo d'un autre ticket (même d'une autre boutique) était servable en changeant
+seulement `:photoId` dans l'URL, tant que `:id` restait un ticket légitime.
+
+**Décision utilisateur** : les 23 failles trouvées par le garde-fou de conformité ont été corrigées dans ce
+même chantier (tâches 9 à 14) plutôt que mises en dette — 125 tests e2e (`tests/e2e/isolation-routes.spec.ts`,
+3 cas par route : manager étranger refusé, propriétaire légitime 200, admin plateforme 200).
+
+Détail exhaustif route par route, fichier par fichier : `project-docs/audit-isolation-2026-07-31.md` §
+Statut et `.superpowers/sdd/2026-07-31-isolation-routes-par-id/task-7-report.md`. Dette découverte en cours
+de route (non liée à l'isolation, non corrigée) : `project-docs/todo.md` § "Dette et bugs découverts pendant
+le chantier isolation routes par ID". Non encore déployé.
+
+## Piège outillage — `wrangler pages dev` s'empile sans tuer l'instance précédente (trouvé 2026-07-31)
+
+**20 processus `workerd` vivants simultanément**, soit **2 Go de RAM**, plus une cinquantaine de processus `node` associés. Issus de redémarrages répétés du serveur dev : 09:33, 09:41, 10:26, 11:09, 11:20, 11:36, 11:37, 11:49, 11:50, 11:51, 11:58, 11:59, 12:07, 12:15, 12:42, 12:46, 12:59, 13:00, 13:50, 13:51.
+
+Une seule instance peut détenir le port 3000 — toutes les autres tournent pour rien, sans jamais s'arrêter ni signaler d'erreur visible.
+
+**Cause de l'empilement** : le serveur dev était déjà coincé (socket en `Listen` sur `127.0.0.1:3000`, mais aucune réponse HTTP même après 25 s d'attente) et il a été relancé encore et encore sans tuer le précédent. Chaque relance échoue silencieusement à prendre le port et laisse un arbre de processus derrière elle.
+
+**How to apply** :
+- Avant de lancer `wrangler pages dev`, vérifier l'existant : `Get-Process workerd`
+- Si le serveur ne répond pas, **ne pas relancer par-dessus** — tuer d'abord, c'est exactement ce geste manquant qui produit l'empilement
+- Nettoyage : `Get-Process workerd | Stop-Process -Force` puis les `node.exe` dont la ligne de commande contient `wrangler`
+
+Nettoyage effectué le 2026-07-31 (51 `node` + 17 `workerd` tués, ~1,7 Go de `workerd` récupérés, instance la plus récente préservée). L'instance survivante restait coincée — non traitée, laissée à la session propriétaire.
+
 ## FAILLE — 5 endpoints facture/avoir sans isolation `boutique_id` (2026-07-31) — CORRIGÉE
 
 Dette antérieure trouvée par la revue finale du chantier facture (2026-07-30), corrigée

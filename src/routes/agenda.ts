@@ -32,7 +32,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware } from '../lib/middleware'
+import { authMiddleware, assertBoutiqueOwnership } from '../lib/middleware'
 import { validateRendezVous } from '../lib/validators'
 import type { Database } from '../ports/database'
 import {
@@ -46,6 +46,7 @@ import {
   getKpisAgenda,
   getOrCreateIcalToken,
   generateIcal,
+  getRdvBoutiqueId,
   STATUTS_RDV,
 } from '../services/agendaService'
 
@@ -223,20 +224,26 @@ agenda.post('/agenda', authMiddleware, async (c) => {
  * GET /api/agenda/:id
  * Retourne le détail complet d'un rendez-vous (client, technicien, historique statuts).
  *
- * Query params :
- *   `boutique_id` (requis, isolation multi-tenant)
+ * Isolation multi-tenant : le `boutique_id` est dérivé du RDV en base
+ * (`getRdvBoutiqueId`), jamais d'une valeur fournie par l'appelant — voir
+ * `getRdvBoutiqueId()` (agendaService.ts).
  *
  * @param id  Identifiant numérique du rendez-vous
  * @returns 200 `{ success: true, data: RendezVous }`
- * @returns 400 si boutique_id manquant
- * @returns 404 si RDV introuvable ou appartient à une autre boutique
+ * @returns 403 si le RDV appartient à une autre boutique
+ * @returns 404 si RDV introuvable
  * @returns 500 en cas d'erreur serveur
  */
 agenda.get('/agenda/:id', authMiddleware, async (c) => {
   try {
-    const { boutique_id } = c.req.query()
-    if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    const rdv = await getRendezVous(c.get('db'), Number(c.req.param('id')), Number(boutique_id))
+    const id = Number(c.req.param('id'))
+
+    // Isolation multi-tenant : la garde précède le chargement complet.
+    const rdvRef = await getRdvBoutiqueId(c.get('db'), id)
+    const deny = assertBoutiqueOwnership(c.get('user'), rdvRef, 'RDV')
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+    const rdv = await getRendezVous(c.get('db'), id, rdvRef!.boutique_id)
     if (!rdv) return c.json({ success: false, error: 'RDV introuvable.' }, 404)
     return c.json({ success: true, data: rdv })
   } catch (e: any) {
@@ -249,24 +256,32 @@ agenda.get('/agenda/:id', authMiddleware, async (c) => {
  * Met à jour un rendez-vous existant (informations, date, technicien).
  * Ne modifie pas le statut — utiliser PATCH /:id/statut pour les transitions.
  *
- * Body JSON : même structure que POST (boutique_id requis).
+ * Isolation multi-tenant : la garde précède toute mutation, `boutique_id` est
+ * dérivé du RDV en base (`getRdvBoutiqueId`) — voir GET /:id ci-dessus.
+ * Body JSON : même structure que POST (`boutique_id` du body ignoré).
  * Validation déléguée à `validateRendezVous()`.
  *
  * @param id  Identifiant numérique du rendez-vous
  * @returns 200 `{ success: true, message: 'RDV mis à jour.' }`
- * @returns 400 si boutique_id manquant ou validation échouée
+ * @returns 400 si validation échouée
+ * @returns 403 si le RDV appartient à une autre boutique
  * @returns 404 si RDV introuvable
  * @returns 500 en cas d'erreur serveur
  */
 agenda.put('/agenda/:id', authMiddleware, async (c) => {
   try {
-    const body = await c.req.json()
-    if (!body.boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+    const id = Number(c.req.param('id'))
 
+    // Isolation multi-tenant : la garde précède toute mutation.
+    const rdvRef = await getRdvBoutiqueId(c.get('db'), id)
+    const deny = assertBoutiqueOwnership(c.get('user'), rdvRef, 'RDV')
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+    const body = await c.req.json()
     const err = validateRendezVous(body)
     if (err) return c.json({ success: false, error: err }, 400)
 
-    await updateRendezVous(c.get('db'), Number(c.req.param('id')), Number(body.boutique_id), body)
+    await updateRendezVous(c.get('db'), id, rdvRef!.boutique_id, body)
     return c.json({ success: true, message: 'RDV mis à jour.' })
   } catch (e: any) {
     // Détection 404 vs 400 par message d'erreur du service
@@ -284,11 +299,13 @@ agenda.put('/agenda/:id', authMiddleware, async (c) => {
  *   SCHEDULED → DONE | NO_SHOW | CANCELLED | CONVERTED
  *   NO_SHOW   → SCHEDULED (re-planification)
  *
+ * Isolation multi-tenant : la garde précède toute mutation, `boutique_id` est
+ * dérivé du RDV en base (`getRdvBoutiqueId`) — voir GET /:id ci-dessus.
+ *
  * Body JSON :
  * ```json
  * {
- *   "boutique_id": 1,
- *   "statut":      "SCHEDULED"
+ *   "statut": "SCHEDULED"
  * }
  * ```
  *
@@ -297,19 +314,26 @@ agenda.put('/agenda/:id', authMiddleware, async (c) => {
  *
  * @param id  Identifiant numérique du rendez-vous
  * @returns 200 `{ success: true, message: 'Statut mis à jour : SCHEDULED.' }`
- * @returns 400 si boutique_id/statut manquant, statut invalide, ou transition interdite
+ * @returns 400 si statut manquant, invalide, ou transition interdite
+ * @returns 403 si le RDV appartient à une autre boutique
  * @returns 404 si RDV introuvable
  */
 agenda.patch('/agenda/:id/statut', authMiddleware, async (c) => {
   try {
+    const id = Number(c.req.param('id'))
+
+    // Isolation multi-tenant : la garde précède toute mutation.
+    const rdvRef = await getRdvBoutiqueId(c.get('db'), id)
+    const deny = assertBoutiqueOwnership(c.get('user'), rdvRef, 'RDV')
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
     const body = await c.req.json()
-    if (!body.boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
     if (!body.statut) return c.json({ success: false, error: 'statut requis.' }, 400)
     // Validation de la valeur contre les statuts connus (constante du service)
     if (!(STATUTS_RDV as readonly string[]).includes(body.statut))
       return c.json({ success: false, error: `statut invalide. Valeurs : ${STATUTS_RDV.join(', ')}` }, 400)
 
-    await updateStatutRdv(c.get('db'), Number(c.req.param('id')), Number(body.boutique_id), body.statut)
+    await updateStatutRdv(c.get('db'), id, rdvRef!.boutique_id, body.statut)
     return c.json({ success: true, message: `Statut mis à jour : ${body.statut}.` })
   } catch (e: any) {
     const status = e.message.includes('introuvable') ? 404 : 400
@@ -322,20 +346,25 @@ agenda.patch('/agenda/:id/statut', authMiddleware, async (c) => {
  * Supprime un rendez-vous (soft delete — `actif = 0`).
  * Le RDV est conservé en base pour l'historique et l'audit.
  *
- * Query params :
- *   `boutique_id` (requis, isolation multi-tenant)
+ * Isolation multi-tenant : la garde précède la suppression, `boutique_id` est
+ * dérivé du RDV en base (`getRdvBoutiqueId`) — voir GET /:id ci-dessus.
  *
  * @param id  Identifiant numérique du rendez-vous
  * @returns 200 `{ success: true, message: 'RDV supprimé.' }`
- * @returns 400 si boutique_id manquant
+ * @returns 403 si le RDV appartient à une autre boutique
  * @returns 404 si RDV introuvable
  * @returns 500 en cas d'erreur serveur
  */
 agenda.delete('/agenda/:id', authMiddleware, async (c) => {
   try {
-    const { boutique_id } = c.req.query()
-    if (!boutique_id) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
-    await deleteRendezVous(c.get('db'), Number(c.req.param('id')), Number(boutique_id))
+    const id = Number(c.req.param('id'))
+
+    // Isolation multi-tenant : la garde précède la suppression.
+    const rdvRef = await getRdvBoutiqueId(c.get('db'), id)
+    const deny = assertBoutiqueOwnership(c.get('user'), rdvRef, 'RDV')
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+    await deleteRendezVous(c.get('db'), id, rdvRef!.boutique_id)
     return c.json({ success: true, message: 'RDV supprimé.' })
   } catch (e: any) {
     const status = e.message.includes('introuvable') ? 404 : 500

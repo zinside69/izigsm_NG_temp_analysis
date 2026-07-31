@@ -81,6 +81,60 @@ Deux pistes de fond, à trancher par l'utilisateur (aucune n'est engagée) :
   explicitement déclarée comme non-tenant. Inverse la charge de la preuve — coûteux à
   mettre en place, mais ferme la classe entière.
 
-## Statut
+## Statut — clôture du chantier, 2026-07-31
 
-Rien n'est corrigé. Aucune de ces 18 routes n'a été modifiée par cet audit.
+**Cet audit avait un faux négatif systématique.** Sa méthode (étape 2) écartait toute route dont le
+**fichier entier** portait un signal d'isolation quelque part (`boutique_id !==`, `assertBoutiqueOwnership`,
+`getBoutiqueId`, `boutique_id = ?`), sans vérifier que ce signal apparaissait dans **le handler examiné**.
+Résultat : dès qu'un fichier contenait *quelques* routes correctement gardées, ses routes non gardées
+disparaissaient de la liste des 47 suspectes puis des 18 candidates — l'exemple le plus net est
+`getDevis(db, id)` (`devisService.ts`) qui *mentionne* `boutique_id` dans son `SELECT` sans jamais filtrer
+dessus : les 5 routes voisines du sous-système devis (`GET /devis/:id`, `PUT /devis/:id`,
+`PUT /devis/:id/statut`, `POST /devis/:id/accord-manuel`, `POST /devis/:id/envoyer`) ont été écartées à
+tort par cette méthode, alors que `PUT /devis/:id/convertir` — corrigée la veille, à 20 lignes de là —
+portait pourtant un commentaire explicite référençant cette même faille de conversion.
+
+Le tableau ci-dessous compte les occurrences des 4 signaux dans le **fichier entier** (pas par handler),
+qui montre l'ampleur du masquage :
+
+| Fichier | Occurrences des 4 signaux dans le fichier entier | Routes non gardées masquées |
+|---|---|---|
+| `facturation.ts` | 17 | 5 (devis) |
+| `tickets.ts` | 14 | 2 (photos) |
+| `fournisseurs.ts` | 11 | 2 (bons de commande) |
+| `clients.ts` / `stocks.ts` | 10 | 1 + 1 |
+| `personnel.ts` / `services.ts` | 8 | 1 + 5 |
+| `rachats.ts` | 4 | 2 |
+| `agenda.ts` | **0** | 4 (écarté par un mécanisme distinct, voir ci-dessous) |
+
+`agenda.ts` n'a pas été masqué par ce mécanisme (0 occurrence) mais par un second angle mort de l'étape 3 :
+son service filtre bien `WHERE id = ? AND boutique_id = ?` en SQL, ce qui l'a fait classer comme « la
+fonction de service filtre par boutique en interne » — sans vérifier que la valeur de `boutique_id`
+injectée dans ce filtre était fiable. Elle ne l'était pas : les 4 routes lisaient `boutique_id` brut depuis
+la query/le body de l'appelant, jamais dérivé du JWT via `getBoutiqueId()`.
+
+**C'est le test de conformité statique (`tests/routes-isolation-conformite.test.ts`, écrit après cet audit,
+tâche 7 du chantier), pas cet audit, qui a permis de trouver le compte réel.** En analysant chaque handler
+individuellement plutôt que le fichier dans son ensemble, et en n'acceptant que des patrons de dérivation
+fiable de `boutique_id` (jamais la simple présence d'un filtre SQL en aval), il a révélé **23 routes
+vulnérables supplémentaires** au-delà des 18 candidates de cet audit — dont les 17 confirmées ici (une
+exemption légitime sur les 18 : `DELETE /employes/:id`, `admin`-only par conception).
+
+**Bilan final : 36 routes gardées** (17 des 18 candidates de cet audit, plus les 23 trouvées ensuite par le
+garde-fou de conformité — le détail exact route par route, tâche par tâche, est dans
+`.superpowers/sdd/2026-07-31-isolation-routes-par-id/task-7-report.md` et `progress.md`), réparties en
+produits (3), employés + pointage (4), archivage ticket (1), fournisseurs (3), bons de commande (3),
+catégories de services (2), rachats (2), devis (5), agenda (4), catalogue services (3), liaisons
+service↔modèle (2), photos de tickets (2), mouvement de stock (1), appareils client (1) — plus 4 routes du
+référentiel global marques/modèles passées de `requireRole('admin','manager')` à `requireRole('admin')`
+(gouvernance, pas isolation : ces tables n'ont plus de `boutique_id` depuis la migration 0031).
+
+125 tests e2e (`tests/e2e/isolation-routes.spec.ts`, 3 cas par route). Le test de conformité est désormais
+**vert**, `EXEMPTIONS` compte 7 entrées motivées (`admin-only`, `referentiel-global`, `public`). Une faille
+d'objet imbriqué a aussi été fermée au passage : `GET /:id/photos/:photoId/view` vérifiait l'appartenance du
+ticket à la boutique, mais pas celle de la photo demandée au ticket de l'URL.
+
+Détail exhaustif : `project-docs/bugs.md` (entrée en tête de fichier),
+`.superpowers/sdd/2026-07-31-isolation-routes-par-id/task-7-report.md` (classement des 28 routes remontées
+au premier lancement du garde-fou) et `progress.md` (journal des 14 tâches). Dette non liée à l'isolation
+découverte en route : `project-docs/todo.md`. **Non déployé.**

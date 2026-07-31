@@ -302,7 +302,8 @@ clients.delete('/:id', requireRole('admin', 'manager'), async (c) => {
  * @returns { success, id, message }
  */
 clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), async (c) => {
-  const { dbPort } = ctx(c)
+  const { user, dbPort, queryBoutiqueId } = ctx(c)
+  const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)
   const body = await c.req.json()
   const { marque, modele } = body
@@ -312,6 +313,8 @@ clients.post('/:id/appareils', requireRole('admin', 'manager', 'technicien'), as
 
   const client = await getClientById(dbPort, id)
   if (!client) return c.json({ success: false, error: 'Client introuvable.' }, 404)
+  if (!canAccessClient(user, client, boutiqueId))
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
 
   const result = await addAppareil(dbPort, id, body)
   return c.json({ success: true, id: result.id, message: 'Appareil ajouté.' }, 201)

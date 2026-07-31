@@ -11,7 +11,7 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import {
   listRachats, getRachat, createRachat, updateStatutRachat, exportLivrePolice,
   PIECES_VALIDES, ETATS_VALIDES, MODES_PAIEMENT_VALIDES, STATUTS_VALIDES,
@@ -106,7 +106,12 @@ rachats.get('/rachats/export', requireRole('admin', 'manager'), async (c) => {
 rachats.get('/rachats/:id', async (c) => {
   const id    = parseInt(c.req.param('id'), 10)
   const data  = await getRachat(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Rachat introuvable.' }, 404)
+
+  // Isolation multi-tenant : le livre de police est une pièce légale (art. 321-7),
+  // aucune boutique ne doit pouvoir lire le registre d'une autre.
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Rachat')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -179,6 +184,13 @@ rachats.post('/rachats', requireRole('admin', 'manager', 'technicien'), async (c
 rachats.patch('/rachats/:id/statut', requireRole('admin', 'manager'), async (c) => {
   const user   = c.get('user')
   const id     = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la garde précède toute mutation — un manager d'une
+  // autre boutique ne doit pas pouvoir changer le statut d'un rachat étranger.
+  const rachatACtrl = await getRachat(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, rachatACtrl, 'Rachat')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   const { statut, produit_id } = await c.req.json()
 
   if (!statut || !STATUTS_VALIDES.includes(statut))

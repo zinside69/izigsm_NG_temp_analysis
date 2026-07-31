@@ -54,7 +54,7 @@ const SQL_LIST_MODELES_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_
 
 const SQL_LIST_MODELES_MARQUE_TYPE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.actif = 1 AND mo.marque_id = ? AND mo.type = ? ORDER BY ma.nom ASC, mo.nom ASC LIMIT 500`
 
-const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif, sm.prix_ht_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 ORDER BY c.nom ASC, s.nom ASC`
+const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif, sm.prix_ht_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 AND s.boutique_id = ? ORDER BY c.nom ASC, s.nom ASC`
 
 const SQL_MODELE_WITH_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.id = ? AND mo.actif = 1`
 
@@ -481,7 +481,7 @@ describe('getServicesByModele()', () => {
 
   it('retourne les services suggérés avec prix_ttc_effectif', async () => {
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [SERVICE_SUGGESTION])
-    const res = await getServicesByModele(db, 10)
+    const res = await getServicesByModele(db, 10, 1)
     expect(res).toHaveLength(1)
     expect((res[0] as any).nom).toBe('Remplacement écran')
     expect((res[0] as any).prix_ttc_effectif).toBe(96)
@@ -489,8 +489,18 @@ describe('getServicesByModele()', () => {
 
   it('retourne tableau vide si aucun service lié', async () => {
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
-    const res = await getServicesByModele(db, 10)
+    const res = await getServicesByModele(db, 10, 1)
     expect(res).toEqual([])
+  })
+
+  // Isolation multi-tenant : le modèle est global, les services ne le sont pas.
+  it('filtre la requête sur la boutique de l\'appelant', async () => {
+    db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
+    await getServicesByModele(db, 10, 7)
+
+    const call = db.__getCalls().find(c => c.sql.includes('FROM service_modeles sm'))
+    expect(call?.sql).toContain('s.boutique_id = ?')
+    expect(call?.params).toEqual([10, 7])
   })
 })
 
@@ -544,7 +554,7 @@ describe('getModeleWithServices()', () => {
   it('retourne modele + services combinés', async () => {
     db.__setResponse(SQL_MODELE_WITH_MARQUE, MODELE_ROW)
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [SERVICE_SUGGESTION])
-    const res = await getModeleWithServices(db, 10)
+    const res = await getModeleWithServices(db, 10, 1)
     expect(res.modele).not.toBeNull()
     expect(res.modele?.nom).toBe('iPhone 14 Pro')
     expect(res.services).toHaveLength(1)
@@ -553,7 +563,7 @@ describe('getModeleWithServices()', () => {
   it('retourne modele null si introuvable', async () => {
     db.__setNotFound(SQL_MODELE_WITH_MARQUE)
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
-    const res = await getModeleWithServices(db, 999)
+    const res = await getModeleWithServices(db, 999, 1)
     expect(res.modele).toBeNull()
     expect(res.services).toEqual([])
   })
@@ -561,7 +571,18 @@ describe('getModeleWithServices()', () => {
   it('retourne services vides si aucune liaison', async () => {
     db.__setResponse(SQL_MODELE_WITH_MARQUE, MODELE_ROW)
     db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
-    const res = await getModeleWithServices(db, 10)
+    const res = await getModeleWithServices(db, 10, 1)
     expect(res.services).toEqual([])
+  })
+
+  // Le modèle reste global (pas de filtre boutique dessus) ; seul le volet services
+  // est isolé — la boutique appelante doit être propagée jusqu'à la requête services.
+  it('propage la boutique appelante à la requête des services', async () => {
+    db.__setResponse(SQL_MODELE_WITH_MARQUE, MODELE_ROW)
+    db.__setListResponse(SQL_SERVICES_BY_MODELE, [])
+    await getModeleWithServices(db, 10, 7)
+
+    const call = db.__getCalls().find(c => c.sql.includes('FROM service_modeles sm'))
+    expect(call?.params).toEqual([10, 7])
   })
 })
