@@ -1064,3 +1064,108 @@ test.describe('Isolation — Agenda (RDV)', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/** Cree un bon de commande avec le token et le fournisseur fournis (boutique derivee du JWT si non-admin). */
+async function createBonCommandeAvec(
+  request: APIRequestContext, token: string, fournisseurId: number, overrides: Record<string, any> = {}
+): Promise<number> {
+  const res = await request.post('/api/bons-commande', {
+    headers: authHeader(token),
+    data: {
+      fournisseur_id: fournisseurId,
+      lignes: [{ designation: 'Ecran fixture e2e', quantite_commandee: 2, prix_achat_ht: 30 }],
+      ...overrides,
+    },
+  })
+  if (!res.ok()) throw new Error(`creation bon failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un bon de commande cote boutique 1 via l'API admin, avec fournisseur dedie. */
+async function createBonCommandeBoutique1(request: APIRequestContext): Promise<number> {
+  const token          = await loginSeedAdmin(request)
+  const fournisseurId  = await createFournisseurBoutique1(request)
+  return createBonCommandeAvec(request, token, fournisseurId, { boutique_id: 1 })
+}
+
+/** Recupere l'id de la premiere ligne d'un bon de commande (le lecteur doit y avoir acces). */
+async function getPremiereLigneId(request: APIRequestContext, token: string, bonId: number): Promise<number> {
+  const res = await request.get(`/api/bons-commande/${bonId}`, { headers: authHeader(token) })
+  if (!res.ok()) throw new Error(`lecture bon failed: ${res.status()} ${await res.text()}`)
+  const body = await res.json()
+  return body.data.lignes[0].id
+}
+
+test.describe('Isolation — Bons de commande (detail + reception)', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un bon de commande qui ne lui appartient pas', async ({ request }) => {
+    const bonId    = await createBonCommandeBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/bons-commande/${bonId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime lit son propre bon de commande', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const auth    = authHeader(proprio.accessToken)
+    const fournisseurRes = await request.post('/api/fournisseurs', {
+      headers: auth,
+      data: { nom: 'Fournisseur pour bon detail proprietaire' },
+    })
+    expect(fournisseurRes.status()).toBe(201)
+    const fournisseurId = (await fournisseurRes.json()).id
+    const bonId = await createBonCommandeAvec(request, proprio.accessToken, fournisseurId)
+
+    const res = await request.get(`/api/bons-commande/${bonId}`, { headers: auth })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le bon de commande de n\'importe quelle boutique', async ({ request }) => {
+    const bonId = await createBonCommandeBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/bons-commande/${bonId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('un manager d\'une autre boutique ne peut pas receptionner un bon de commande qui ne lui appartient pas', async ({ request }) => {
+    const bonId    = await createBonCommandeBoutique1(request)
+    const token    = await loginSeedAdmin(request)
+    const ligneId  = await getPremiereLigneId(request, token, bonId)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/bons-commande/${bonId}/receptionner`, {
+      headers: authHeader(etranger.accessToken),
+      data: { lignes_recues: [{ ligne_id: ligneId, quantite_recue: 1 }] },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime receptionne son propre bon de commande', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const auth    = authHeader(proprio.accessToken)
+    const fournisseurRes = await request.post('/api/fournisseurs', {
+      headers: auth,
+      data: { nom: 'Fournisseur pour reception proprietaire' },
+    })
+    expect(fournisseurRes.status()).toBe(201)
+    const fournisseurId = (await fournisseurRes.json()).id
+    const bonId   = await createBonCommandeAvec(request, proprio.accessToken, fournisseurId)
+    const ligneId = await getPremiereLigneId(request, proprio.accessToken, bonId)
+
+    const res = await request.post(`/api/bons-commande/${bonId}/receptionner`, {
+      headers: auth,
+      data: { lignes_recues: [{ ligne_id: ligneId, quantite_recue: 1 }] },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme receptionne le bon de commande de n\'importe quelle boutique', async ({ request }) => {
+    const bonId   = await createBonCommandeBoutique1(request)
+    const token   = await loginSeedAdmin(request)
+    const ligneId = await getPremiereLigneId(request, token, bonId)
+
+    const res = await request.post(`/api/bons-commande/${bonId}/receptionner`, {
+      headers: authHeader(token),
+      data: { lignes_recues: [{ ligne_id: ligneId, quantite_recue: 1 }] },
+    })
+    expect(res.status()).toBe(200)
+  })
+})
