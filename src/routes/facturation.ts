@@ -253,9 +253,8 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
   // Isolation multi-tenant : ne jamais convertir le devis d'une autre boutique.
   // Même patron que POST /devis/:id/acompte ci-dessous (faille trouvée le 2026-07-30).
   const devisAControler = await getDevis(c.get('db'), devisId)
-  if (!devisAControler) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
-  if (user.role !== 'admin' && devisAControler.boutique_id !== user.boutique_id)
-    return c.json({ success: false, error: 'Accès refusé.' }, 403)
+  const deny = assertBoutiqueOwnership(user, devisAControler, 'Devis')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
@@ -295,10 +294,8 @@ facturation.post('/devis/:id/acompte', requireRole('admin', 'manager'), async (c
   const devisId = parseInt(c.req.param('id'), 10)
 
   const devis = await getDevis(c.get('db'), devisId)
-  if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
-  if (user.role !== 'admin' && devis.boutique_id !== user.boutique_id) {
-    return c.json({ success: false, error: 'Accès refusé.' }, 403)
-  }
+  const denyAcompte = assertBoutiqueOwnership(user, devis, 'Devis')
+  if (denyAcompte) return c.json({ success: false, error: denyAcompte.error }, denyAcompte.status)
 
   const { montant_ht, tva_taux, mode_paiement, reference } = await c.req.json().catch(() => ({}))
   // typeof/isNaN, pas juste `<= 0` : voir routes/tickets.ts (même acompte, commit c7abcc4)
@@ -366,6 +363,11 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
   try {
     // ── Chemin devis : délégation, jamais de seconde implémentation ────────
     if (body.devis_id) {
+      // Volontairement PAS `assertBoutiqueOwnership()` ici : ce contrôle est plus strict.
+      // Le helper laisse l'admin plateforme traverser ; ici on exige que le devis soit dans
+      // la boutique *effectivement ciblée* (`boutiqueId`, issu de getBoutiqueId), pour qu'un
+      // admin qui poste `boutique_id: 3` ne puisse pas facturer le devis de la boutique 7
+      // dans la 3. Ne pas « uniformiser » sans transposer cette contrainte.
       const devis = await getDevis(c.get('db'), body.devis_id)
       if (!devis) return c.json({ success: false, error: 'Devis introuvable.' }, 404)
       if (devis.boutique_id !== boutiqueId)

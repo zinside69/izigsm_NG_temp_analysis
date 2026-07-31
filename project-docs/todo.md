@@ -17,6 +17,15 @@ Détail complet + effets démontrés endpoint par endpoint : `bugs.md`. **Pas en
 Les 3 sites d'isolation antérieurs (`facturation.ts:257`, `:299`, `:371`) n'ont pas été migrés
 vers le helper (code déjà validé) — migration optionnelle, à faire seulement si on retouche ces routes.
 
+## 🔴 PRIORITÉ CRITIQUE — 18 routes par ID sans isolation `boutique_id` (audit 2026-07-31, PAS corrigé)
+Rapport complet : `project-docs/audit-isolation-2026-07-31.md` (84 routes par ID analysées → 47 suspectes → 18 candidates).
+**3 vérifiées manuellement, 3 confirmées** : `GET /produits/:id` (prix d'achat/marge/fournisseur d'autrui),
+`PUT /employes/:id` (modification d'une fiche RH d'une autre boutique), `POST /tickets/:id/archiver`
+(route oubliée par la campagne du 2026-07-19 dans un fichier pourtant audité).
+- [ ] Vérifier une par une les 15 candidates restantes (liste dans le rapport)
+- [ ] Corriger les confirmées avec `assertBoutiqueOwnership()`, RED Playwright d'abord
+- [ ] Trancher la piste de fond : helper systématique vs garde par défaut sur toute route `/:id` (voir § Lecture d'ensemble du rapport)
+
 ## 🟡 `addMonthsParis()` — mois précédent faux les 31 (trouvé 2026-07-31, PAS corrigé)
 `statsService.ts:45` : le décalage de mois via `Date.setUTCMonth()` déborde les 31 (2026-06-31 → 2026-07-01),
 donc `ca_mois_precedent` = CA du mois courant et `evolution_ca_pct` = 0 % les 31 mai / juillet / octobre / décembre,
