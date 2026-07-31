@@ -1,3 +1,29 @@
+# Recovery Prompt — iziGSM — 2026-07-31 (checkpoint 66 — clôture sécurité, garde-fou durci, supervision admin plateforme cadrée)
+
+## Reprendre ici
+
+**Chantier en cours : supervision admin plateforme.** Le grilling est terminé, la spec ne l'est pas.
+Reprendre à **`/to-spec`** (chaîne `mattpocock-skills` : `/grill-with-docs` ✅ → `/to-spec` → `/to-tickets` → `/implement`), pour le **chantier 1** seulement.
+
+**Document de reprise, à lire en premier** :
+`%TEMP%\claude\C--Users-Said-Downloads-claude-test\bcb00703-48cf-4d79-9d24-6eff3a1257c4\scratchpad\handoff-supervision-superadmin.md`
+Il contient le diagnostic, les 6 décisions du grilling, les points laissés ouverts et les pièges d'environnement. Ne pas relire l'historique de la session précédente.
+
+Puis, dans cet ordre : `docs/adr/0001-journal-separe-actions-plateforme.md` · `CONTEXT.md` § Multi-tenant · `project-docs/todo.md` § Supervision superadmin.
+
+⚠️ Les étapes spec → tickets tiennent dans **une seule fenêtre de contexte** — ne pas compacter avant `/to-tickets`.
+⚠️ Un plugin installé pendant une session n'est invocable qu'après redémarrage : `Unknown skill` alors que les fichiers existent, c'est cela.
+
+## Rien n'est en attente d'une action humaine
+
+Les trois points bloquants du checkpoint 65 sont traités et vérifiés en production : rotation du superadmin (les identifiants publiés renvoient `401`), déploiement des 4 chantiers (migration `0038` puis Worker, isolation confirmée en réel), ménage (boutiques de test désactivées). Aucune migration en attente, aucun correctif non déployé.
+
+## État du dépôt
+
+`main` propre et poussé sur les deux dépôts. Baselines : `npx vitest run` → **873/875** (2 échecs permanents de fuseau `agendaService`), `npx tsc --noEmit` → **32**. Le garde-fou `tests/routes-isolation-conformite.test.ts` est vert et **durci** — charger un `boutique_id` ne vaut plus preuve de l'avoir comparé.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-31 (checkpoint 65 — isolation multi-tenant de 36 routes, déploiement cp64, FK service_modeles)
 
 ## ⚠️ À TRAITER AVANT TOUT NOUVEAU CHANTIER

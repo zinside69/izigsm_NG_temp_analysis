@@ -21,6 +21,21 @@ filtre est une **faille d'isolation**, pas un oubli de confort.
 consolidé et transferts de stock/personnel entre elles. Confirmé en roadmap, distinct
 du multi-tenant. ⚠ Non implémenté à ce jour.
 
+**Admin plateforme** — l'exploitant du SaaS, pas un client. Seul rôle qui traverse
+toutes les boutiques, par conception : son `boutique_id` est `NULL` et
+`assertBoutiqueOwnership()` le laisse passer. Il supervise et dépanne les boutiques
+clientes ; il ne produit pas dans une boutique à lui. En base, le rôle porte le nom
+`admin` (`roles.id = 1`) — nom conservé, les gardes d'isolation en dépendent.
+
+**Manager** — le dirigeant d'une boutique cliente (`roles.id = 2`). C'est le compte que
+le client appelle spontanément « son admin ». Il ne traverse rien : son `boutique_id`
+le borne à sa propre boutique.
+
+> ⚠️ **« Admin » seul est ambigu et ne doit plus être employé dans une spec** : selon le
+> locuteur, il désigne l'admin plateforme (qui voit tout) ou le manager d'une boutique
+> (qui ne voit que la sienne) — deux rôles opposés. Écrire **admin plateforme** ou
+> **manager**, jamais « admin » tout court. *(Tranché le 2026-07-31.)*
+
 ## Réparation
 
 **Ticket** — un dossier de réparation : un appareil confié par un client, suivi de la

@@ -1,3 +1,33 @@
+# iziGSM — État courant (MàJ : 2026-07-31, checkpoint 66 — clôture sécurité + cadrage de la supervision admin plateforme)
+
+## Checkpoint 66 — Clôture de la journée : 3 actions humaines faites, garde-fou durci, nouveau chantier cadré (2026-07-31)
+
+Suite directe du checkpoint 65, même journée.
+
+### Les 3 actions humaines en attente sont faites et vérifiées en production
+
+1. **Rotation du superadmin** — compte rattaché à `support@soteli.fr`, mot de passe tourné par lien de réinitialisation. Vérifié : `admin@izigsm.fr` **et** `support@soteli.fr` avec le mot de passe publié dans le dépôt renvoient tous deux `401`. Le compte reste actif.
+2. **Déploiement** — migration `0038` à distance **puis** Worker. Vérifié depuis un compte manager tiers : `403` sur les factures/produits/employés d'une autre boutique, `200` sur les siens, et `POST /services/modeles/:id/services` répond `200` après avoir renvoyé 500 depuis le Sprint 2.39.
+3. **Ménage** — boutiques 4 et 5 (test) et comptes `%isotest%` désactivés (`actif = 0`) plutôt que supprimés : réversible et sans risque sur les 30 tables portant `boutique_id`.
+
+### Garde-fou de conformité durci (commit `73ef419`)
+
+`propageAUnService()` avait **trois** défauts, dont deux se compensaient — le test passait pour la mauvaise raison. `if (...)` était compté comme un appel de fonction (or tout handler du patron JWT commence par `if (!boutiqueId) return`), les parenthèses imbriquées n'étaient pas franchies, et corriger le second a révélé un troisième cas : l'appel englobant de déclaration de route matchait à son tour. **Preuve par mutation refaite sur le code réel** : retirer `boutiqueId` de `services.ts:583` fait désormais échouer le test en nommant la route ; avant, la même mutation passait inaperçue.
+
+### Nouveau chantier cadré — supervision admin plateforme
+
+Constat de l'utilisateur en production : connecté avec le compte de supervision, il ne voit aucune boutique cliente. L'API sait le faire (les 36 gardes laissent passer le rôle `admin`), le frontend n'a jamais été construit pour — `apiGet` injecte `boutique_id` depuis la session, or l'admin plateforme n'en a pas.
+
+**Grilling mené** (`/grill-with-docs`, chaîne `mattpocock-skills`), 6 décisions prises. **Spec non écrite** — la session était saturée, `/to-spec` est reporté.
+- Livrables : `docs/adr/0001-journal-separe-actions-plateforme.md` · `CONTEXT.md` § Multi-tenant enrichi (admin plateforme, manager, avertissement sur « admin » ambigu) · `todo.md` § Supervision superadmin.
+- **Handoff** : `%TEMP%\claude\...\scratchpad\handoff-supervision-superadmin.md` — à lire en premier à la reprise.
+
+### Correction documentaire
+
+Deux entrées de `todo.md` affichaient « PAS corrigé » alors que le travail était fait (migration `service_modeles` en doublon, et `addMonthsParis()`). Corrigées — une documentation qui ment sur son propre état a failli faire renoncer à un déploiement légitime.
+
+---
+
 # iziGSM — État courant (MàJ : 2026-07-31, checkpoint 65 — déploiement cp64, isolation multi-tenant de 36 routes, FK service_modeles)
 
 ## Checkpoint 65 — Session humaine : déploiement, chantier isolation complet, faille superadmin découverte (2026-07-31)
