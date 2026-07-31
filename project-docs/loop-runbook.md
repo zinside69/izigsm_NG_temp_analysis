@@ -393,6 +393,24 @@ prompt libre transmis à `claude -p` — chaque commande fait une action précis
 prévisible, les gardes-fous `loop-policy.md` s'appliquent toujours intégralement, quelle
 que soit la source du déclenchement (planifié ou Telegram).
 
+> ⚠ **DÉSACTIVÉ depuis le 2026-07-31 — les commandes Telegram ne répondent plus.**
+> La tâche planifiée **"iziGSM Loop Telegram Listener"** a été stoppée et désactivée
+> pour éviter les auto-commits concurrents pendant le chantier isolation `boutique_id`
+> (deux sessions Claude Code travaillaient alors sur le même checkout).
+>
+> Motif précis : désactiver la tâche **"iziGSM Loop Engineering"** ne suffit pas.
+> `telegram-listener.mjs:160` fait `spawn(powershell -File run-loop.ps1)` — **un simple
+> message Telegram déclenche un run complet**, avec auto-commit et push sur `main` si
+> tous les gates passent. Les deux canaux doivent être fermés, pas seulement la
+> planification.
+>
+> Réarmement :
+> ```powershell
+> Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
+> ```
+> Le "iziGSM Loop Watchdog" a été laissé actif : il ne fait que notifier, il ne relance
+> rien (vérifié — aucun `Enable-ScheduledTask`/`Start-ScheduledTask` dans `watchdog.ps1`).
+
 **Mécanisme d'écoute** : `scripts/loop/telegram-listener.mjs` (+ wrapper
 `telegram-listener.ps1`), tâche planifiée séparée **"iziGSM Loop Telegram Listener"**,
 polling toutes les 5 min (`getUpdates`, pas de webhook — cohérent avec le choix

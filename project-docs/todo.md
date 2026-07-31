@@ -1,5 +1,20 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## ⚠ NOTE (pas une tâche) — listener Telegram désactivé le 2026-07-31
+
+Volontairement rédigé **sans case à cocher** : `pick-task.mjs` ne retient que les lignes
+`- [ ] …`, et la loop piocherait sinon une tâche qui consiste à réarmer son propre
+déclencheur.
+
+Tâche planifiée **"iziGSM Loop Telegram Listener"** stoppée et désactivée pour la durée
+du chantier isolation `boutique_id`. À réarmer une fois le chantier clos :
+
+```powershell
+Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
+```
+
+Détail et motif : `loop-runbook.md` § 11.
+
 ## ✅ PRIORITÉ CRITIQUE — Écritures cross-tenant sur 5 endpoints facture/avoir (revue finale 2026-07-30, CORRIGÉ le 2026-07-31)
 Trouvé par la revue finale du chantier facture. **Dette antérieure, pas une régression de ce chantier**, mais même classe que les failles `GET /tickets/:id` et `PUT/DELETE /tickets/:id` déjà corrigées le 2026-07-19 (`bugs.md`) — et sur l'objet que ce chantier vient d'enrichir de données réglementaires irrécupérables.
 

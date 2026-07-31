@@ -1,5 +1,20 @@
 # iziGSM — Bugs connus
 
+## Piège outillage — `wrangler pages dev` s'empile sans tuer l'instance précédente (trouvé 2026-07-31)
+
+**20 processus `workerd` vivants simultanément**, soit **2 Go de RAM**, plus une cinquantaine de processus `node` associés. Issus de redémarrages répétés du serveur dev : 09:33, 09:41, 10:26, 11:09, 11:20, 11:36, 11:37, 11:49, 11:50, 11:51, 11:58, 11:59, 12:07, 12:15, 12:42, 12:46, 12:59, 13:00, 13:50, 13:51.
+
+Une seule instance peut détenir le port 3000 — toutes les autres tournent pour rien, sans jamais s'arrêter ni signaler d'erreur visible.
+
+**Cause de l'empilement** : le serveur dev était déjà coincé (socket en `Listen` sur `127.0.0.1:3000`, mais aucune réponse HTTP même après 25 s d'attente) et il a été relancé encore et encore sans tuer le précédent. Chaque relance échoue silencieusement à prendre le port et laisse un arbre de processus derrière elle.
+
+**How to apply** :
+- Avant de lancer `wrangler pages dev`, vérifier l'existant : `Get-Process workerd`
+- Si le serveur ne répond pas, **ne pas relancer par-dessus** — tuer d'abord, c'est exactement ce geste manquant qui produit l'empilement
+- Nettoyage : `Get-Process workerd | Stop-Process -Force` puis les `node.exe` dont la ligne de commande contient `wrangler`
+
+Nettoyage effectué le 2026-07-31 (51 `node` + 17 `workerd` tués, ~1,7 Go de `workerd` récupérés, instance la plus récente préservée). L'instance survivante restait coincée — non traitée, laissée à la session propriétaire.
+
 ## FAILLE — 5 endpoints facture/avoir sans isolation `boutique_id` (2026-07-31) — CORRIGÉE
 
 Dette antérieure trouvée par la revue finale du chantier facture (2026-07-30), corrigée
