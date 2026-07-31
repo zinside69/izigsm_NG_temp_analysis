@@ -247,3 +247,187 @@ test.describe('Isolation — Tickets', () => {
     expect([200, 409]).toContain(res.status())
   })
 })
+
+/** Cree un fournisseur cote boutique 1 via l'API (aucun fournisseur dans seed.sql). */
+async function createFournisseurBoutique1(request: APIRequestContext): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  const res = await request.post('/api/fournisseurs', {
+    headers: authHeader(token),
+    data: { nom: 'Fournisseur Boutique 1 (fixture e2e)', boutique_id: 1 },
+  })
+  if (!res.ok()) throw new Error(`creation fournisseur failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+test.describe('Isolation — Fournisseurs', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un fournisseur etranger', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/fournisseurs/${fournisseurId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas modifier un fournisseur etranger', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/fournisseurs/${fournisseurId}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { nom: 'Renomme par un tenant etranger' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas desactiver un fournisseur etranger', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.delete(`/api/fournisseurs/${fournisseurId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas changer le statut d\'un bon de commande etranger', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const creation = await request.post('/api/bons-commande', {
+      headers: authHeader(token),
+      data: {
+        fournisseur_id: fournisseurId,
+        boutique_id: 1,
+        lignes: [{ designation: 'Ecran de test', quantite_commandee: 2, prix_achat_ht: 30 }],
+      },
+    })
+    if (!creation.ok()) throw new Error(`creation bon failed: ${creation.status()} ${await creation.text()}`)
+    const bonId = (await creation.json()).id
+
+    const etranger = await createTenantAdmin(request)
+    const res = await request.patch(`/api/bons-commande/${bonId}/statut`, {
+      headers: authHeader(etranger.accessToken),
+      data: { statut: 'cancelled' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('l\'admin plateforme lit le fournisseur de n\'importe quelle boutique', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/fournisseurs/${fournisseurId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime lit son propre fournisseur', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/fournisseurs', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Fournisseur du proprietaire' },
+    })
+    expect(creation.status()).toBe(201)
+    const fournisseurId = (await creation.json()).id
+
+    const res = await request.get(`/api/fournisseurs/${fournisseurId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime modifie son propre fournisseur', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/fournisseurs', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Fournisseur a modifier' },
+    })
+    expect(creation.status()).toBe(201)
+    const fournisseurId = (await creation.json()).id
+
+    const res = await request.put(`/api/fournisseurs/${fournisseurId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Fournisseur modifie par son proprietaire' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme modifie le fournisseur de n\'importe quelle boutique', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/fournisseurs/${fournisseurId}`, {
+      headers: authHeader(token),
+      data: { nom: 'Fournisseur modifie par admin' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime desactive son propre fournisseur', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/fournisseurs', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Fournisseur a desactiver' },
+    })
+    expect(creation.status()).toBe(201)
+    const fournisseurId = (await creation.json()).id
+
+    const res = await request.delete(`/api/fournisseurs/${fournisseurId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme desactive le fournisseur de n\'importe quelle boutique', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/fournisseurs', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Fournisseur pour admin delete' },
+    })
+    expect(creation.status()).toBe(201)
+    const fournisseurId = (await creation.json()).id
+
+    const token = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/fournisseurs/${fournisseurId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime change le statut de son propre bon de commande', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const auth = authHeader(proprio.accessToken)
+    const fournisseurRes = await request.post('/api/fournisseurs', {
+      headers: auth,
+      data: { nom: 'Fournisseur pour bon proprietaire' },
+    })
+    expect(fournisseurRes.status()).toBe(201)
+    const fournisseurId = (await fournisseurRes.json()).id
+
+    const bonRes = await request.post('/api/bons-commande', {
+      headers: auth,
+      data: {
+        fournisseur_id: fournisseurId,
+        lignes: [{ designation: 'Ecran proprietaire', quantite_commandee: 1, prix_achat_ht: 20 }],
+      },
+    })
+    expect(bonRes.status()).toBe(201)
+    const bonId = (await bonRes.json()).id
+
+    const res = await request.patch(`/api/bons-commande/${bonId}/statut`, {
+      headers: auth,
+      data: { statut: 'cancelled' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme change le statut du bon de commande de n\'importe quelle boutique', async ({ request }) => {
+    const fournisseurId = await createFournisseurBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const bonRes = await request.post('/api/bons-commande', {
+      headers: authHeader(token),
+      data: {
+        fournisseur_id: fournisseurId,
+        boutique_id: 1,
+        lignes: [{ designation: 'Ecran admin', quantite_commandee: 1, prix_achat_ht: 20 }],
+      },
+    })
+    expect(bonRes.status()).toBe(201)
+    const bonId = (await bonRes.json()).id
+
+    const res = await request.patch(`/api/bons-commande/${bonId}/statut`, {
+      headers: authHeader(token),
+      data: { statut: 'cancelled' },
+    })
+    expect(res.status()).toBe(200)
+  })
+})

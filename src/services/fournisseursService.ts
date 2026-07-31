@@ -321,6 +321,23 @@ export async function getBonCommande(
 }
 
 /**
+ * Retourne uniquement le `boutique_id` d'un bon de commande.
+ * Utilisé par la garde d'isolation de `PATCH /bons-commande/:id/statut`
+ * (`routes/fournisseurs.ts`), sur le modèle de `getTicketBoutiqueId()`
+ * (`services/ticketService.ts`) — évite de charger lignes et fournisseur
+ * (`getBonCommande()`) juste pour vérifier l'appartenance.
+ *
+ * @param db  Port Database
+ * @param id  Identifiant du bon de commande
+ * @returns   `{ boutique_id }` ou `null` si introuvable
+ */
+export async function getBonCommandeBoutiqueId(
+  db: Database, id: number
+): Promise<{ boutique_id: number } | null> {
+  return db.get<{ boutique_id: number }>('SELECT boutique_id FROM bons_commande WHERE id = ?', [id])
+}
+
+/**
  * Crée un bon de commande avec ses lignes d'articles.
  *
  * Numérotation : `BC-AAAA-NNNNN` calculée par `MAX(seq)` sur la table

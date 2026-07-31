@@ -19,13 +19,13 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import { validateFournisseur, validateBonCommande } from '../lib/validators'
 import type { Database } from '../ports/database'
 import {
   listFournisseurs, getFournisseur, createFournisseur, updateFournisseur, deleteFournisseur,
   listBonsCommande, getBonCommande, createBonCommande, updateStatutBonCommande,
-  receptionnerBonCommande, getKpisFournisseurs, getProduitsACommander
+  receptionnerBonCommande, getKpisFournisseurs, getProduitsACommander, getBonCommandeBoutiqueId
 } from '../services/fournisseursService'
 
 type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
@@ -88,7 +88,11 @@ fournisseurs.post('/fournisseurs', requireRole('admin', 'manager'), async (c) =>
 fournisseurs.get('/fournisseurs/:id', async (c) => {
   const id   = parseInt(c.req.param('id'), 10)
   const data = await getFournisseur(c.get('db'), id)
-  if (!data) return c.json({ success: false, error: 'Fournisseur introuvable.' }, 404)
+
+  // Isolation multi-tenant : ne jamais servir le fournisseur d'une autre boutique
+  const deny = assertBoutiqueOwnership(c.get('user'), data, 'Fournisseur')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   return c.json({ success: true, data })
 })
 
@@ -102,6 +106,11 @@ fournisseurs.put('/fournisseurs/:id', requireRole('admin', 'manager'), async (c)
   const error = validateFournisseur(body)
   if (error) return c.json({ success: false, error }, 400)
 
+  // Isolation multi-tenant : ne jamais modifier le fournisseur d'une autre boutique
+  const fournisseur = await getFournisseur(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, fournisseur, 'Fournisseur')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await updateFournisseur(c.env.DB, id, body, user.sub)
   return c.json({ success: true, message: 'Fournisseur mis à jour.' })
 })
@@ -111,6 +120,12 @@ fournisseurs.put('/fournisseurs/:id', requireRole('admin', 'manager'), async (c)
 fournisseurs.delete('/fournisseurs/:id', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : ne jamais désactiver le fournisseur d'une autre boutique
+  const fournisseur = await getFournisseur(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, fournisseur, 'Fournisseur')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await deleteFournisseur(c.env.DB, id, user.sub)
   return c.json({ success: true, message: 'Fournisseur désactivé.' })
 })
@@ -168,6 +183,12 @@ fournisseurs.patch('/bons-commande/:id/statut', requireRole('admin', 'manager'),
 
   // La réception se fait via /receptionner, pas via ce endpoint
   if (statut === 'received') return c.json({ success: false, error: 'Utilisez /receptionner pour réceptionner un bon.' }, 400)
+
+  // Isolation multi-tenant : la garde précède le service, qui applique ensuite
+  // ses propres règles de transition d'état (ne pas les modifier).
+  const bon = await getBonCommandeBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, bon, 'Bon de commande')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
     await updateStatutBonCommande(c.env.DB, id, statut, user.sub)
