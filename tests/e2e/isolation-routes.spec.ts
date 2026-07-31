@@ -86,6 +86,10 @@ test.describe('Isolation — Personnel', () => {
     expect([403, 404]).toContain(res.status())
   })
 
+  // Body partiel volontaire ({ poste }) : ce test n'exerce jamais updateEmploye() car la
+  // garde court-circuite avant la mutation — sans la garde, la route renverrait 500 (bug
+  // NOT NULL sur prenom/nom dans updateEmploye()), jamais 200, donc ce refus seul ne prouve
+  // pas que la garde compare le bon champ (voir tests propriétaire/admin ci-dessous).
   test('un manager d\'une autre boutique ne peut pas modifier la fiche d\'un employe etranger', async ({ request }) => {
     const etranger = await createTenantAdmin(request)
     const res = await request.put(`/api/employes/${EMPLOYE_BOUTIQUE_1}`, {
@@ -119,6 +123,68 @@ test.describe('Isolation — Personnel', () => {
     const employeId = (await creation.json()).id
 
     const res = await request.get(`/api/employes/${employeId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime modifie la fiche de son propre employe', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'AModifier', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    // Body complet (prenom/nom obligatoires) pour ne pas retomber sur le bug NOT NULL
+    // de updateEmploye() et prouver que la garde laisse bien passer le proprietaire.
+    const res = await request.put(`/api/employes/${employeId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: {
+        prenom: 'Employe', nom: 'Modifie', poste: 'vendeur',
+        email: 'employe.modifie@e2e-test.local', telephone: '0600000000',
+        taux_horaire: 12, commission_pct: 5,
+      },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme modifie la fiche employe de n\'importe quelle boutique', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'PourAdmin', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/employes/${employeId}`, {
+      headers: authHeader(token),
+      data: {
+        prenom: 'Employe', nom: 'ModifieParAdmin', poste: 'vendeur',
+        email: 'employe.admin@e2e-test.local', telephone: '0600000001',
+        taux_horaire: 15, commission_pct: 3,
+      },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime lit le pointage de son propre employe', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/employes', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'Employe', nom: 'Pointage', poste: 'technicien' },
+    })
+    expect(creation.status()).toBe(201)
+    const employeId = (await creation.json()).id
+
+    const res = await request.get(`/api/pointage/${employeId}/aujourd-hui`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le pointage d\'un employe de n\'importe quelle boutique', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/pointage/${EMPLOYE_BOUTIQUE_1}/aujourd-hui`, { headers: authHeader(token) })
     expect(res.status()).toBe(200)
   })
 })
