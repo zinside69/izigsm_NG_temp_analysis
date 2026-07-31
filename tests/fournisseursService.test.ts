@@ -125,7 +125,14 @@ const SQL_GET_LIGNE_FOR_RECEPTION = 'SELECT * FROM lignes_bon_commande WHERE id 
 
 const SQL_UPDATE_LIGNE_QTY = 'UPDATE lignes_bon_commande SET quantite_recue = quantite_recue + ? WHERE id = ?'
 
-const SQL_GET_PRODUIT_FOR_CUMP = 'SELECT id, stock_actuel, prix_achat_cump, boutique_id FROM produits WHERE id = ?'
+// Isolation multi-tenant (2026-07-31) : le SELECT porte désormais `AND boutique_id = ?`
+// — c'est ce filtre qui empêche la réception d'un bon de muter le stock d'une autre
+// boutique. Le mock matche sur le SQL, pas sur les params : le test dédié
+// « produit d'une autre boutique » ci-dessous s'appuie sur __setResponseFn().
+const SQL_GET_PRODUIT_FOR_CUMP = 'SELECT id, stock_actuel, prix_achat_cump, boutique_id FROM produits WHERE id = ? AND boutique_id = ?'
+
+/** SELECT de la garde d'isolation de createBonCommande() (produit_id de ligne). */
+const SQL_GET_PRODUIT_BOUTIQUE = 'SELECT boutique_id FROM produits WHERE id = ?'
 
 const SQL_UPDATE_PRODUIT_CUMP = 'UPDATE produits SET stock_actuel = ?, prix_achat_cump = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
 
@@ -579,6 +586,53 @@ describe('createBonCommande()', () => {
       lignes: [{ designation: 'Test', quantite_commandee: 1, prix_achat_ht: 10 }],
     }, 5)).rejects.toThrow('Échec création bon de commande.')
   })
+
+  // ── Isolation multi-tenant : produit_id de ligne ────────────────────────────
+  // Un produit_id étranger accepté ici deviendrait, à la réception, une écriture sur
+  // le stock/CUMP d'un concurrent. Rejet à la création, avant toute écriture.
+
+  it('accepte une ligne dont le produit appartient bien à la boutique du bon', async () => {
+    db.__setResponse(SQL_GET_PRODUIT_BOUTIQUE, { boutique_id: 1 })
+
+    const id = await createBonCommande(db, {
+      boutique_id: 1, fournisseur_id: 1,
+      lignes: [{ produit_id: 7, designation: 'Écran', quantite_commandee: 1, prix_achat_ht: 10 }],
+    }, 5)
+
+    expect(id).toBe(10)
+  })
+
+  it('rejette une ligne dont le produit appartient à une autre boutique', async () => {
+    db.__setResponse(SQL_GET_PRODUIT_BOUTIQUE, { boutique_id: 2 })
+
+    await expect(createBonCommande(db, {
+      boutique_id: 1, fournisseur_id: 1,
+      lignes: [{ produit_id: 7, designation: 'Écran', quantite_commandee: 1, prix_achat_ht: 10 }],
+    }, 5)).rejects.toThrow('Produit 7 introuvable dans cette boutique.')
+  })
+
+  it('rejette une ligne dont le produit n\'existe pas', async () => {
+    db.__setNotFound(SQL_GET_PRODUIT_BOUTIQUE)
+
+    await expect(createBonCommande(db, {
+      boutique_id: 1, fournisseur_id: 1,
+      lignes: [{ produit_id: 999, designation: 'Fantôme', quantite_commandee: 1, prix_achat_ht: 10 }],
+    }, 5)).rejects.toThrow('Produit 999 introuvable dans cette boutique.')
+  })
+
+  it('n\'écrit RIEN quand une ligne est rejetée (ni séquence, ni bon, ni lignes)', async () => {
+    db.__setResponse(SQL_GET_PRODUIT_BOUTIQUE, { boutique_id: 2 })
+
+    await expect(createBonCommande(db, {
+      boutique_id: 1, fournisseur_id: 1,
+      lignes: [{ produit_id: 7, designation: 'Écran', quantite_commandee: 1, prix_achat_ht: 10 }],
+    }, 5)).rejects.toThrow()
+
+    const calls = db.__getCalls()
+    expect(calls.filter(c => c.sql.startsWith('INSERT INTO bons_commande'))).toHaveLength(0)
+    expect(calls.filter(c => c.sql.startsWith('INSERT INTO lignes_bon_commande'))).toHaveLength(0)
+    expect(calls.filter(c => c.sql.includes('SUBSTR(numero, -5)'))).toHaveLength(0)
+  })
 })
 
 // ─── updateStatutBonCommande ──────────────────────────────────────────────────
@@ -750,6 +804,39 @@ describe('receptionnerBonCommande()', () => {
     const calls = db.__getCalls()
     const auditCall = calls.find(c => c.sql.startsWith('INSERT INTO audit_log'))
     expect(auditCall?.params).toContain('RECEPTION_BON_COMMANDE')
+  })
+
+  // ── Isolation multi-tenant : la mutation ne sort jamais de la boutique du bon ──
+  // Seconde barrière (la première est le rejet à la création) : elle couvre les bons
+  // créés avant le correctif. Le mock reproduit le filtre SQL `AND boutique_id = ?` :
+  // le produit n'est retourné que si le boutique_id lié correspond au bon.
+  it('ne mute PAS un produit d\'une autre boutique (bon hérité d\'avant le correctif)', async () => {
+    db.__setResponse(SQL_GET_BC_FOR_RECEPTION, { ...BC_ROW, statut: 'awaiting_delivery', boutique_id: 1 })
+    db.__setResponse(SQL_GET_LIGNE_FOR_RECEPTION, LIGNE_ROW)
+    // Produit 5 appartient à la boutique 2 : le filtre SQL ne le retourne pas au bon
+    // de la boutique 1.
+    db.__setResponseFn(SQL_GET_PRODUIT_FOR_CUMP, (params) =>
+      params[1] === 2 ? { ...PRODUIT, boutique_id: 2 } : null
+    )
+
+    const result = await receptionnerBonCommande(db, 10, [{ ligne_id: 1, quantite_recue: 2 }], 5)
+
+    const calls = db.__getCalls()
+    // Aucune écriture sur le produit étranger, ni stock/CUMP ni mouvement de stock
+    expect(calls.filter(c => c.sql.startsWith('UPDATE produits'))).toHaveLength(0)
+    expect(calls.filter(c => c.sql.startsWith('INSERT INTO mouvements_stock'))).toHaveLength(0)
+    expect(result.nb_produits_mis_a_jour).toBe(0)
+  })
+
+  it('le SELECT produit est bien filtré sur la boutique du bon', async () => {
+    setupReception()
+
+    await receptionnerBonCommande(db, 10, [{ ligne_id: 1, quantite_recue: 2 }], 5)
+
+    const selectProduit = db.__getCalls().find(c => c.sql.startsWith('SELECT id, stock_actuel'))
+    expect(selectProduit?.sql).toContain('AND boutique_id = ?')
+    // params : [produit_id, boutique_id du bon]
+    expect(selectProduit?.params[1]).toBe(1)
   })
 })
 

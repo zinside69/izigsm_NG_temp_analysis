@@ -1168,6 +1168,85 @@ test.describe('Isolation — Bons de commande (detail + reception)', () => {
     })
     expect(res.status()).toBe(200)
   })
+
+  // ── Chaine d'attaque : reception d'un bon dont une ligne pointe le produit d'autrui ──
+  //
+  // La garde de route (assertBoutiqueOwnership sur le bon) ne couvre PAS cette
+  // attaque : le bon appartient bien a l'attaquant, ce sont les PRODUITS designes
+  // par ses lignes qui sont etrangers. Avant correctif, receptionnerBonCommande()
+  // ecrivait `stock_actuel` et `prix_achat_cump` du produit de la victime.
+  //
+  // L'invariant teste est le stock de la victime, pas un code HTTP : un test qui ne
+  // verifierait que le statut ne prouverait rien ici (l'attaque renvoyait 200).
+  // Deux barrieres existent desormais — rejet a la creation du bon, et filtre
+  // `boutique_id` a la reception — ce test passe quelle que soit celle qui arrete
+  // l'attaque, mais echoue si le stock de la victime bouge.
+  test('receptionner un bon referencant le produit d\'un autre tenant ne touche pas son stock', async ({ request }) => {
+    // Victime : cree un produit dans SA boutique
+    const victime = await createTenantAdmin(request)
+    const creation = await request.post('/api/produits', {
+      headers: authHeader(victime.accessToken),
+      data: { nom: 'Produit de la victime', prix_vente_ht: 100, tva_taux: 20, stock_actuel: 7, prix_achat_ht: 40 },
+    })
+    expect(creation.status()).toBe(201)
+    const produitVictimeId = (await creation.json()).id
+
+    const avantRes = await request.get(`/api/produits/${produitVictimeId}`, {
+      headers: authHeader(victime.accessToken),
+    })
+    expect(avantRes.status()).toBe(200)
+    const avant = (await avantRes.json()).data
+    const stockAvant = avant.stock_actuel
+    const cumpAvant  = avant.prix_achat_cump
+
+    // Attaquant : bon de commande dans SA boutique, mais ligne pointant le produit de la victime
+    const attaquant = await createTenantAdmin(request)
+    const fournisseurRes = await request.post('/api/fournisseurs', {
+      headers: authHeader(attaquant.accessToken),
+      data: { nom: 'Fournisseur de l\'attaquant' },
+    })
+    expect(fournisseurRes.status()).toBe(201)
+    const fournisseurId = (await fournisseurRes.json()).id
+
+    const bonRes = await request.post('/api/bons-commande', {
+      headers: authHeader(attaquant.accessToken),
+      data: {
+        fournisseur_id: fournisseurId,
+        lignes: [{
+          produit_id: produitVictimeId,
+          designation: 'Ligne pointant le produit d\'un concurrent',
+          quantite_commandee: 100,
+          prix_achat_ht: 999,
+        }],
+      },
+    })
+
+    // Barriere 1 : la creation refuse la ligne etrangere (422). Si elle passait, on
+    // poursuit jusqu'a la reception pour exercer la barriere 2.
+    if (bonRes.ok()) {
+      const bonId   = (await bonRes.json()).id
+      const ligneId = await getPremiereLigneId(request, attaquant.accessToken, bonId)
+      const receptionRes = await request.post(`/api/bons-commande/${bonId}/receptionner`, {
+        headers: authHeader(attaquant.accessToken),
+        data: { lignes_recues: [{ ligne_id: ligneId, quantite_recue: 100 }] },
+      })
+      // La reception du propre bon de l'attaquant reste legitime cote bon...
+      expect(receptionRes.status()).toBe(200)
+      // ...mais aucun produit etranger ne doit avoir ete mis a jour
+      expect((await receptionRes.json()).nb_produits_mis_a_jour).toBe(0)
+    } else {
+      expect(bonRes.status()).toBe(422)
+    }
+
+    // Invariant central : le stock et le CUMP de la victime n'ont pas bouge
+    const apresRes = await request.get(`/api/produits/${produitVictimeId}`, {
+      headers: authHeader(victime.accessToken),
+    })
+    expect(apresRes.status()).toBe(200)
+    const apres = (await apresRes.json()).data
+    expect(apres.stock_actuel).toBe(stockAvant)
+    expect(apres.prix_achat_cump).toBe(cumpAvant)
+  })
 })
 
 test.describe('Isolation — Pointage (pointer)', () => {
