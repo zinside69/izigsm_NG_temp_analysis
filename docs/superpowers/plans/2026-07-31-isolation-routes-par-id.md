@@ -21,6 +21,8 @@
 - Aucun fichier `public/**` n'est touché par ce chantier → **pas de bump `CACHE_VERSION`**.
 - Ne jamais déployer : `npm run deploy` est un geste humain explicite.
 - Le helper renvoie `404` si la ressource est absente, `403` si elle appartient à une autre boutique, et laisse passer le rôle `admin`.
+- **Aucun SQL inline dans un controller.** `CLAUDE.md` pose que `src/routes/*.ts` ne contient aucune requête SQL — tout le SQL vit dans `src/services/*.ts`. Les blocs de code des tâches ci-dessous montrent parfois une lecture ciblée `c.get('db').get('SELECT boutique_id FROM …')` : **c'est une erreur de rédaction du plan, ne pas la reproduire.** Cherchez d'abord une fonction de service existante (ex. `getTicketBoutiqueId()` dans `ticketService.ts`) ; s'il n'y en a pas, ajoutez-en une au service du domaine. *(Écart relevé en revue de la tâche 3 ; contrainte remontée ici le 2026-07-31.)*
+- **Couverture exigée par route, pas par domaine** (critère de succès de la spec : « les 13 routes renvoient 403 à un manager étranger **et 200 à leur propriétaire** »). Chaque route corrigée doit donc avoir : un test de refus (manager étranger), un test d'accès du propriétaire légitime, et un test d'accès de l'admin plateforme. Les blocs de code de chaque tâche ci-dessous illustrent le patron mais ne listent pas systématiquement les trois cas pour chaque route — les compléter fait partie de la tâche. Sans le cas « propriétaire », une garde trop stricte renvoyant 403 aux ayants droit resterait invisible : tous les tests de refus seraient verts. *(Écart relevé en revue de la tâche 2, corrigé ; contrainte remontée ici le 2026-07-31.)*
 
 ### Démarrage du serveur local (prérequis de toute tâche avec Playwright)
 

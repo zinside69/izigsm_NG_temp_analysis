@@ -38,10 +38,17 @@ quatorzième ».**
 | `DELETE /produits/:id` | `stocks.ts:193` | `produits` |
 | `POST /tickets/:id/archiver` | `tickets.ts:135` | `tickets` |
 
-### B. Changement de rôle (3 routes)
+### B. Changement de rôle (4 routes)
 
-`PUT /services/marques/:id`, `PUT /services/modeles/:id`, `DELETE /services/modeles/:id`
-passent de `requireRole('admin','manager')` à `requireRole('admin')`.
+`PUT /services/marques/:id`, `DELETE /services/marques/:id`, `PUT /services/modeles/:id`,
+`DELETE /services/modeles/:id` passent de `requireRole('admin','manager')` à
+`requireRole('admin')`.
+
+*(`DELETE /services/marques/:id` a été ajoutée le 2026-07-31, après la revue de la tâche 6 :
+elle manquait à l'énumération initiale alors qu'elle relève de la même intention. Elle est
+même la plus dommageable des quatre — `deleteMarque()` désactive la marque **et tous ses
+modèles en cascade**. La restreindre est cohérent avec la justification déjà écrite : « un
+manager renomme **ou désactive** une entrée visible par tous les autres tenants ».)*
 
 Justification : la migration `0031_marques_modeles_global.sql` (Sprint 2.39) a délibérément
 rendu ces tables **globales**, sans `boutique_id`. Ce n'est donc pas un problème d'isolation
