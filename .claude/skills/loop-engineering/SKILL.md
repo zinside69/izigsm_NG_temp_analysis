@@ -1,6 +1,6 @@
 ---
 name: loop-engineering
-description: "Use when triggered by a local scheduled task (cron/Task Scheduler calling scripts/loop/run-loop.sh|.ps1) or a manual run to execute exactly one backlog item autonomously end-to-end: pick, plan (via superpowers), implement in an isolated worktree, verify (unit + typecheck + Playwright + browser-use), and either auto-commit/push (low risk, all gates green) or escalate to the human with a full report. Governed by project-docs/loop-policy.md (autonomy level L2)."
+description: "Use when triggered by a local scheduled task (cron/Task Scheduler calling scripts/loop/run-loop.sh|.ps1) or a manual run to execute exactly one backlog item autonomously end-to-end: pick, plan (via mattpocock-skills /implement), implement in an isolated worktree, verify (unit + typecheck + Playwright + browser-use), and either auto-commit/push (low risk, all gates green) or escalate to the human with a full report. Governed by project-docs/loop-policy.md (autonomy level L2)."
 risk: high
 source: internal
 date_added: "2026-07-19"
@@ -12,10 +12,14 @@ Cette skill implémente une **loop d'ingénierie autonome** pour iziGSM, inspir�
 https://github.com/cobusgreyling/loop-engineering (5 blocs : automations/scheduling,
 worktrees, skills, plugins/MCP, sub-agents maker/checker, + mémoire/état durable).
 
-**Elle n'invente pas de nouveau workflow de dev** : elle automatise l'enchaînement des
-skills `superpowers` déjà utilisés manuellement sur ce repo (`brainstorming` →
-`writing-plans` → `subagent-driven-development` / `executing-plans`), et y ajoute
-des gates de vérification + une politique de commit/escalade explicite.
+**Elle n'invente pas de nouveau workflow de dev** : elle automatise la partie
+exécutable du workflow `mattpocock-skills` retenu sur ce repo — `/implement`, qui
+pilote `tdd` puis `code-review` — et y ajoute des gates de vérification + une politique
+de commit/escalade explicite.
+
+Les phases de cadrage (`/grill-with-docs` → `/to-spec` → `/to-tickets`) sont des
+entretiens : elles restent manuelles. **La loop consomme des tickets, elle n'en produit
+pas** (voir Étape 4).
 
 **Avant toute chose : lire `project-docs/loop-policy.md` en entier.** Ce document est
 la source de vérité du niveau d'autonomie (L2), de la classification du risque, et de
@@ -198,25 +202,34 @@ Si `.claude/worktrees/<slug-tache>` échoue aussi à l'écriture (nouvel environ
 contrainte différente) → replier sur le checkout principal comme avant, en le
 signalant explicitement dans le rapport (Étape 7), ne pas insister sur le chemin frère.
 
-## Étape 4 — Planifier et implémenter via superpowers
+## Étape 4 — Planifier et implémenter via mattpocock-skills
 
-Choisir le mode selon la taille de la tâche (même logique que l'usage manuel documenté
-dans `project-docs/current-state.md`) :
+Toolkit de référence : `mattpocock-skills` (voir `CLAUDE.md` § Workflow de
+développement). Choisir le mode selon l'état de cadrage de la tâche, pas sa taille :
 
-- **Bug isolé / correction ciblée (< ~3 fichiers, comportement attendu déjà clair)** :
-  invoquer directement `superpowers:executing-plans` en mode inline sur un mini-plan
-  d'une tâche, ou implémenter directement avec le sous-agent implémenteur +
-  sous-agent reviewer (maker/checker), sans passer par `brainstorming`/`writing-plans`
-  complets — ce serait disproportionné.
-- **Feature nouvelle / ambiguë / touchant plusieurs fichiers** : suivre le pipeline
-  complet — `superpowers:brainstorming` (si la tâche du backlog est sous-spécifiée)
-  → `superpowers:writing-plans` (écrit le plan dans `docs/superpowers/plans/`) →
-  `superpowers:subagent-driven-development` (un sous-agent implémenteur + un
-  sous-agent reviewer par tâche du plan, dans ce worktree).
-  - Si `brainstorming` révèle une ambiguïté qu'un humain doit trancher (plusieurs
-    interprétations valables, pas juste un détail technique) → **escalader avant
-    d'écrire le spec**, ne pas deviner. C'est le hard-gate déjà en place manuellement
-    sur ce repo (voir checkpoint 26-27 dans `current-state.md`).
+- **Tâche cadrée — comportement attendu sans ambiguïté, critères d'acceptation
+  dérivables du backlog** : invoquer `/implement` sur la tâche, dans ce worktree.
+  `/implement` pilote `tdd` en interne (une tranche rouge → verte à la fois) puis clôt
+  par `code-review` (axes Standards + Spec) sur le diff avant de rendre la main.
+  Ne pas ajouter de couche de planification par-dessus : `/implement` en contient déjà
+  une, l'empiler serait disproportionné.
+- **Ticket existant sous `.scratch/<feature>/issues/`** — cas nominal quand l'humain a
+  déjà fait passer un chantier par `/grill-with-docs` → `/to-spec` → `/to-tickets`.
+  Ne prendre qu'un ticket au statut `ready-for-agent` dont **tous** les `bloque-par`
+  sont `done` (voir `docs/agents/issue-tracker.md`). Un ticket = une exécution de loop.
+  Passer son statut à `done` uniquement après le gate de vérification (Étape 5).
+- **Tâche sous-spécifiée — plusieurs interprétations valables, pas juste un détail
+  technique** : **escalader immédiatement** (Étape 7), ne rien écrire.
+  Le cadrage passe par `/grill-with-docs`, qui est un entretien : il exige un humain et
+  ne peut pas tourner en autonomie. Idem pour `/to-spec` et `/to-tickets`, qui
+  condensent une conversation que la loop n'a pas eue. C'est le hard-gate déjà en place
+  manuellement sur ce repo (voir checkpoint 26-27 dans `current-state.md`) — il devient
+  ici une frontière nette : **la loop consomme des tickets, elle n'en produit pas.**
+
+`superpowers` reste disponible en appoint pour ce que `mattpocock-skills` ne couvre pas
+(`subagent-driven-development` si un découpage maker/checker est explicitement voulu,
+`using-git-worktrees`). Les plans existants sous `docs/superpowers/plans/` restent
+valides et lisibles — ne pas les migrer.
 
 Le fichier `.superpowers/sdd/<slug-tache>-graph-context.md` (créé à l'Étape 3) est
 disponible dans le worktree — le sous-agent implémenteur/reviewer le lit comme
@@ -297,7 +310,7 @@ résultat, pas de silence en fin de run.
 - Jamais de `wrangler pages deploy` automatique.
 - Jamais de force-push, jamais de réécriture d'historique.
 - Jamais de modification d'un spec déjà approuvé sans repasser par
-  `superpowers:brainstorming`.
+  `/grill-with-docs` — donc jamais par la loop, qui ne peut pas mener l'entretien.
 - Jamais de suppression de fichier sous `docs/` ou `project-docs/`.
 - Jamais de lecture/écriture de secrets (`.dev.vars`, `wrangler secret`).
 - **Jamais de fichier de dump/debug laissé dans le repo** (ex. `pick-task.mjs --all >

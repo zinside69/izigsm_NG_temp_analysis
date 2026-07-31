@@ -87,15 +87,37 @@ Lire avant toute modification non triviale :
 Convention : ces fichiers s'accumulent (nouvelle entrée en haut/en dessous selon le
 fichier), jamais d'écrasement de l'historique.
 
-## Workflow de développement (superpowers)
+## Agent skills
 
-Chantiers non triviaux : `superpowers:brainstorming` (design, hard-gate — pas de code
-avant spec approuvée) → `superpowers:writing-plans` (plan dans `docs/superpowers/plans/`)
-→ `superpowers:subagent-driven-development` (un sous-agent implémenteur + un sous-agent
-reviewer par tâche) ou `superpowers:executing-plans` (exécution inline). Specs dans
-`docs/superpowers/specs/`.
+Config lue par les skills du plugin `mattpocock-skills` :
+- `docs/agents/issue-tracker.md` — où vivent les tickets (markdown local `.scratch/`)
+- `docs/agents/domain.md` — où vit le domaine (`CONTEXT.md` + `docs/adr/`)
+- `docs/agents/triage-labels.md` — vocabulaire de statuts des tickets
 
-Règles déjà établies sur ce repo, à respecter :
+Glossaire du domaine : `CONTEXT.md` (racine). Décisions dures à inverser : `docs/adr/`.
+
+## Workflow de développement
+
+Chantier feature non trivial → chaîne `mattpocock-skills`, prioritaire :
+`/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement` (un ticket = un contexte
+neuf). Tickets sous `.scratch/<feature>/issues/`. `/implement` pilote `tdd` puis
+`code-review` avant commit.
+
+Les étapes grilling → spec → tickets tiennent dans **une seule fenêtre de contexte** :
+pas de `/compact` ni `/clear` avant `/to-tickets`. Si la fenêtre sature avant la fin,
+`/handoff` vers une session neuve — ne pas continuer sur un contexte dégradé.
+
+Bug coriace, flake ou régression → `/diagnosing-bugs` (exige une boucle de feedback
+déjà rouge sur ce bug avant toute théorie), pas `superpowers:systematic-debugging`.
+
+`superpowers` en appoint uniquement, pour ce que mattpocock ne couvre pas :
+`subagent-driven-development`, `using-git-worktrees`, `finishing-a-development-branch`.
+Les plans et specs existants sous `docs/superpowers/` restent valides — ne pas migrer.
+
+`context-guardian` inchangé : checkpoints et recovery multi-sessions (voir § Mémoire
+projet).
+
+Règles de vérification — s'appliquent quel que soit le toolkit :
 - Chaque tâche backend se termine par `npx vitest run` vert avant la suivante
 - Chaque tâche frontend se valide en local live (`wrangler pages dev` + vraies données),
   pas juste par relecture de code

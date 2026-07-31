@@ -10,7 +10,7 @@ Référence conceptuelle : https://github.com/cobusgreyling/loop-engineering (5 
   1. Tests unitaires 100 % verts (`npm test`) — pas de régression, y compris sur les échecs pré-existants connus (fuseau horaire) qui doivent rester stables en nombre.
   2. `tsc --noEmit` sans nouvelle erreur.
   3. Gate Playwright (`npm run test:e2e`) 100 % verte.
-  4. Revue par le sous-agent "checker" (`superpowers:subagent-driven-development`) sans finding bloquant.
+  4. Revue `code-review` (axes Standards + Spec, exécutée en clôture de `/implement`) sans finding bloquant.
   5. Tâche classée **risque faible** (voir ci-dessous).
 - Dans tous les autres cas → **pause et escalade** (rapport écrit + notification), aucun commit ni push. La tâche reste ouverte, non cochée dans `todo.md`.
 - Le rôle de la loop est de préparer un maximum de travail vérifié, pas de forcer un déploiement. Rien n'est déployé en prod (`wrangler pages deploy`) automatiquement — le déploiement reste un geste humain explicite, comme aujourd'hui (voir `current-state.md`, chaque déploiement est déclenché "sur confirmation explicite de l'utilisateur").
@@ -61,7 +61,8 @@ Ce rapport est écrit dans `.superpowers/sdd/loop-runs.md` (ledger, append-only)
 
 - Ne déploie jamais en prod (`wrangler pages deploy`) — décision humaine systématique, aucune exception.
 - Ne force-push jamais, ne réécrit jamais l'historique.
-- Ne modifie jamais `docs/superpowers/specs/*.md` déjà approuvés sans passer par une nouvelle itération de `superpowers:brainstorming`.
+- Ne modifie jamais un spec approuvé (`docs/superpowers/specs/*.md`, ou spec issue de `/to-spec`) sans passer par une nouvelle itération de `/grill-with-docs` — un entretien, donc hors de portée de la loop.
+- Ne produit jamais de ticket : `/grill-with-docs`, `/to-spec` et `/to-tickets` sont manuels. La loop consomme des tickets `ready-for-agent` sous `.scratch/<feature>/issues/`.
 - Ne supprime jamais de fichier dans `docs/` ou `project-docs/` — uniquement ajout/complément (cohérent avec la règle workspace "historiques de version toujours accumulés, jamais écrasés").
 - Ne touche jamais aux secrets (`.dev.vars`, `wrangler secret`).
 
