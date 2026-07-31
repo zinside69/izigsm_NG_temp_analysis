@@ -41,11 +41,26 @@ function addDaysParis(dateParis: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Ajoute (ou retranche) N mois à une date "YYYY-MM-DD", en arithmétique UTC pure. */
+/**
+ * Décale une date "YYYY-MM-DD" de N mois, en arithmétique pure sur (année, mois).
+ *
+ * Renvoie toujours le **1er du mois cible** : les deux appelants ne consomment que la
+ * partie `YYYY-MM`, et c'est la seule façon d'avoir un résultat défini pour tous les
+ * jours d'entrée.
+ *
+ * Ne jamais revenir à `Date.setUTCMonth()` ici : décaler un 31 vers un mois de 30 jours
+ * fait déborder JavaScript sur le mois suivant (2026-07-31 −1 mois → 2026-06-31 →
+ * normalisé en 2026-07-01). Le "mois précédent" retombait alors sur le mois courant, et
+ * le KPI `ca_mois_precedent` du dashboard affichait le CA du mois en cours avec une
+ * évolution de 0 % — les 31 mai, 31 juillet, 31 octobre et 31 décembre, pour toutes les
+ * boutiques. Constaté en production le 2026-07-31 (voir `project-docs/bugs.md`).
+ */
 function addMonthsParis(dateParis: string, months: number): string {
-  const d = new Date(`${dateParis}T00:00:00Z`)
-  d.setUTCMonth(d.getUTCMonth() + months)
-  return d.toISOString().slice(0, 10)
+  const [annee, mois] = dateParis.split('-').map(Number)
+  const total  = annee * 12 + (mois - 1) + months
+  const cible  = Math.floor(total / 12)
+  const moisIx = ((total % 12) + 12) % 12
+  return `${cible}-${String(moisIx + 1).padStart(2, '0')}-01`
 }
 
 // ─── KPIs dashboard ───────────────────────────────────────────────────────────
