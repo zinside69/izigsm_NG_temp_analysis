@@ -1213,3 +1213,410 @@ test.describe('Isolation — Pointage (pointer)', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/**
+ * Tache 11-13 : les 9 dernieres routes vulnerables de ce chantier — voir
+ * task-11-13-report.md. Regroupees par domaine : catalogue services, liaison
+ * service<->modele, mouvement de stock, appareils client, photos de tickets.
+ */
+
+/** Cree un service cote boutique 1 via l'API admin (aucun service dans seed.sql). */
+async function createServiceBoutique1(request: APIRequestContext): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  const res = await request.post('/api/services', {
+    headers: authHeader(token),
+    data: { nom: `Service Boutique 1 (fixture e2e) ${uniqueSuffix()}`, prix_ht: 50, boutique_id: 1 },
+  })
+  if (!res.ok()) throw new Error(`creation service failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+/** Cree un service avec le token fourni (boutique derivee du JWT si non-admin). */
+async function createServiceAvecToken(
+  request: APIRequestContext, token: string, overrides: Record<string, any> = {}
+): Promise<number> {
+  const res = await request.post('/api/services', {
+    headers: authHeader(token),
+    data: { nom: `Service e2e ${uniqueSuffix()}`, prix_ht: 50, ...overrides },
+  })
+  if (!res.ok()) throw new Error(`creation service failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+test.describe('Isolation — Services (catalogue)', () => {
+  test('un manager d\'une autre boutique ne peut pas lire un service etranger', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/services/${serviceId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime lit son propre service', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const serviceId = await createServiceAvecToken(request, proprio.accessToken)
+    const res = await request.get(`/api/services/${serviceId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme lit le service de n\'importe quelle boutique', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.get(`/api/services/${serviceId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('un manager d\'une autre boutique ne peut pas modifier un service etranger', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/services/${serviceId}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { nom: 'Renomme par un tenant etranger', prix_ht: 60 },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime modifie son propre service', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const serviceId = await createServiceAvecToken(request, proprio.accessToken)
+    const res = await request.put(`/api/services/${serviceId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Renomme par son proprietaire', prix_ht: 70 },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme modifie le service de n\'importe quelle boutique', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/services/${serviceId}`, {
+      headers: authHeader(token),
+      data: { nom: 'Renomme par l\'admin plateforme', prix_ht: 80 },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : DELETE desactive reellement le service (actif = 0).
+  test('un manager d\'une autre boutique ne peut pas desactiver un service etranger', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.delete(`/api/services/${serviceId}`, { headers: authHeader(etranger.accessToken) })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime desactive son propre service', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const serviceId = await createServiceAvecToken(request, proprio.accessToken)
+    const res = await request.delete(`/api/services/${serviceId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme desactive le service de n\'importe quelle boutique', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/services/${serviceId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+})
+
+test.describe('Isolation — Liaison service <-> modele', () => {
+  // Le modele est global (referentiel partage, migration 0031) : c'est
+  // l'appartenance du SERVICE lie qui doit etre gardee, pas celle du modele.
+  test('un manager d\'une autre boutique ne peut pas lier un service etranger a un modele', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const marqueId  = await createMarqueGlobal(request, 'MarqueLiaisonManager')
+    const modeleId  = await createModeleGlobal(request, marqueId, 'ModeleLiaisonManager')
+    const etranger  = await createTenantAdmin(request)
+    const res = await request.post(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(etranger.accessToken),
+      data: { service_id: serviceId },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  // BUG PRE-EXISTANT DECOUVERT EN VERIFICATION (independant de cette garde d'isolation,
+  // voir task-11-13-report.md) : service_modeles.modele_id reference encore la table
+  // "modeles_appareils_old" supprimee par la migration 0031 — `ALTER TABLE ... RENAME`
+  // a propage la FK de service_modeles vers le nouveau nom de la table renommee, puis
+  // la migration a DROP cette table renommee, laissant une FK pendante. Consequence :
+  // TOUT INSERT dans service_modeles (donc TOUT appel a POST .../services, y compris
+  // pour un appelant legitime ou l'admin plateforme) echoue avec un 500 D1_ERROR "no
+  // such table: main.modeles_appareils_old" — un bug de schema, pas une regression de
+  // cette garde. On verifie ici que la garde elle-meme ne bloque pas le proprietaire
+  // ni l'admin (pas de 403/404) plutot que d'affirmer un 200 que le bug SQL empeche
+  // structurellement d'obtenir dans cet environnement (et vraisemblablement en prod).
+  test('le proprietaire legitime n\'est pas bloque par la garde en liant son propre service a un modele', async ({ request }) => {
+    const proprio   = await createTenantAdmin(request)
+    const serviceId = await createServiceAvecToken(request, proprio.accessToken)
+    const marqueId  = await createMarqueGlobal(request, 'MarqueLiaisonProprio')
+    const modeleId  = await createModeleGlobal(request, marqueId, 'ModeleLiaisonProprio')
+    const res = await request.post(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(proprio.accessToken),
+      data: { service_id: serviceId },
+    })
+    expect(res.status()).not.toBe(403)
+    expect(res.status()).not.toBe(404)
+  })
+
+  test('l\'admin plateforme n\'est pas bloque par la garde en liant le service de n\'importe quelle boutique a un modele', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const marqueId   = await createMarqueGlobal(request, 'MarqueLiaisonAdmin')
+    const modeleId   = await createModeleGlobal(request, marqueId, 'ModeleLiaisonAdmin')
+    const token      = await loginSeedAdmin(request)
+    const res = await request.post(`/api/services/modeles/${modeleId}/services`, {
+      headers: authHeader(token),
+      data: { service_id: serviceId },
+    })
+    expect(res.status()).not.toBe(403)
+    expect(res.status()).not.toBe(404)
+  })
+
+  // DELETE (unlinkServiceModele) fait un simple UPDATE ... SET actif = 0 sans toucher
+  // aux colonnes de la FK service_id/modele_id : il ne declenche jamais la validation
+  // FK et n'est donc pas affecte par le bug ci-dessus, meme sans liaison prealable
+  // reellement existante (UPDATE sans ligne correspondante = no-op silencieux, 200).
+  test('un manager d\'une autre boutique ne peut pas dissocier un service etranger d\'un modele', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const marqueId  = await createMarqueGlobal(request, 'MarqueDelLiaisonManager')
+    const modeleId  = await createModeleGlobal(request, marqueId, 'ModeleDelLiaisonManager')
+    const etranger  = await createTenantAdmin(request)
+    const res = await request.delete(`/api/services/modeles/${modeleId}/services/${serviceId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime dissocie son propre service d\'un modele', async ({ request }) => {
+    const proprio   = await createTenantAdmin(request)
+    const serviceId = await createServiceAvecToken(request, proprio.accessToken)
+    const marqueId  = await createMarqueGlobal(request, 'MarqueDelLiaisonProprio')
+    const modeleId  = await createModeleGlobal(request, marqueId, 'ModeleDelLiaisonProprio')
+    const res = await request.delete(`/api/services/modeles/${modeleId}/services/${serviceId}`, {
+      headers: authHeader(proprio.accessToken),
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme dissocie le service de n\'importe quelle boutique d\'un modele', async ({ request }) => {
+    const serviceId = await createServiceBoutique1(request)
+    const marqueId   = await createMarqueGlobal(request, 'MarqueDelLiaisonAdmin')
+    const modeleId   = await createModeleGlobal(request, marqueId, 'ModeleDelLiaisonAdmin')
+    const token      = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/services/modeles/${modeleId}/services/${serviceId}`, {
+      headers: authHeader(token),
+    })
+    expect(res.status()).toBe(200)
+  })
+})
+
+test.describe('Isolation — Mouvement de stock', () => {
+  test('un manager d\'une autre boutique ne peut pas enregistrer un mouvement sur un produit etranger', async ({ request }) => {
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/produits/${PRODUIT_BOUTIQUE_1}/mouvement`, {
+      headers: authHeader(etranger.accessToken),
+      data: { type_mouvement: 'entree', quantite: 1 },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  // Ressource fraiche par test : un mouvement modifie stock_actuel de facon persistante.
+  test('le proprietaire legitime enregistre un mouvement sur son propre produit', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/produits', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Produit mouvement proprietaire', prix_vente_ht: 10, tva_taux: 20 },
+    })
+    expect(creation.status()).toBe(201)
+    const produitId = (await creation.json()).id
+
+    const res = await request.post(`/api/produits/${produitId}/mouvement`, {
+      headers: authHeader(proprio.accessToken),
+      data: { type_mouvement: 'entree', quantite: 1 },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme enregistre un mouvement sur le produit de n\'importe quelle boutique', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const creation = await request.post('/api/produits', {
+      headers: authHeader(token),
+      data: { nom: 'Produit mouvement admin', prix_vente_ht: 10, tva_taux: 20, boutique_id: 1 },
+    })
+    expect(creation.status()).toBe(201)
+    const produitId = (await creation.json()).id
+
+    const res = await request.post(`/api/produits/${produitId}/mouvement`, {
+      headers: authHeader(token),
+      data: { type_mouvement: 'entree', quantite: 1 },
+    })
+    expect(res.status()).toBe(200)
+  })
+})
+
+test.describe('Isolation — Clients (appareils)', () => {
+  test('un manager d\'une autre boutique ne peut pas ajouter un appareil a un client etranger', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const clientRes = await request.post('/api/clients', {
+      headers: authHeader(token),
+      data: { prenom: 'E2E', nom: `ClientAppareilEtranger-${uniqueSuffix()}`, boutique_id: 1 },
+    })
+    expect(clientRes.status()).toBe(201)
+    const clientId = (await clientRes.json()).id
+
+    const etranger = await createTenantAdmin(request)
+    const res = await request.post(`/api/clients/${clientId}/appareils`, {
+      headers: authHeader(etranger.accessToken),
+      data: { marque: 'Apple', modele: 'iPhone 13' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime ajoute un appareil a son propre client', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const clientRes = await request.post('/api/clients', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'E2E', nom: `ClientAppareilProprietaire-${uniqueSuffix()}` },
+    })
+    expect(clientRes.status()).toBe(201)
+    const clientId = (await clientRes.json()).id
+
+    const res = await request.post(`/api/clients/${clientId}/appareils`, {
+      headers: authHeader(proprio.accessToken),
+      data: { marque: 'Apple', modele: 'iPhone 13' },
+    })
+    expect(res.status()).toBe(201)
+  })
+
+  test('l\'admin plateforme ajoute un appareil au client de n\'importe quelle boutique', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const clientRes = await request.post('/api/clients', {
+      headers: authHeader(proprio.accessToken),
+      data: { prenom: 'E2E', nom: `ClientAppareilAdmin-${uniqueSuffix()}` },
+    })
+    expect(clientRes.status()).toBe(201)
+    const clientId = (await clientRes.json()).id
+
+    const token = await loginSeedAdmin(request)
+    const res = await request.post(`/api/clients/${clientId}/appareils`, {
+      headers: authHeader(token),
+      data: { marque: 'Apple', modele: 'iPhone 13' },
+    })
+    expect(res.status()).toBe(201)
+  })
+})
+
+/**
+ * Photos de tickets — necessitent un upload R2 reel. `wrangler pages dev --local`
+ * emule R2 localement (miniflare), donc l'upload multipart fonctionne dans cet
+ * environnement de test comme n'importe quelle autre route ; PNG 1x1 minimal pour
+ * rester sous TAILLE_MAX et passer la validation MIME (photosService.ts).
+ */
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+/** Uploade une photo PNG 1x1 sur un ticket existant, avec le token fourni. Retourne l'ID de la photo. */
+async function uploadPngPhoto(request: APIRequestContext, token: string, ticketId: number): Promise<number> {
+  const res = await request.post(`/api/tickets/${ticketId}/photos`, {
+    headers: authHeader(token),
+    multipart: {
+      // @ts-ignore Buffer (node) type non disponible sans @types/node dans ce tsconfig — voir
+      // le meme contournement en tete de tests/routes-isolation-conformite.test.ts.
+      photo: { name: 'test-e2e.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1_BASE64, 'base64') },
+      type:  'autre',
+    },
+  })
+  if (!res.ok()) throw new Error(`upload photo failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).data.id
+}
+
+/** Cree un client + ticket avec le token fourni, puis y uploade une photo. */
+async function createTicketAvecPhoto(
+  request: APIRequestContext, token: string
+): Promise<{ ticketId: number; photoId: number }> {
+  const clientRes = await request.post('/api/clients', {
+    headers: authHeader(token),
+    data: { prenom: 'E2E', nom: `ClientPhoto-${uniqueSuffix()}` },
+  })
+  if (!clientRes.ok()) throw new Error(`creation client failed: ${clientRes.status()} ${await clientRes.text()}`)
+  const clientId = (await clientRes.json()).id
+
+  const ticketRes = await request.post('/api/tickets', {
+    headers: authHeader(token),
+    data: {
+      client_id: clientId,
+      appareil_marque: 'Apple',
+      appareil_modele: 'iPhone 12',
+      description_panne: 'Test photo e2e',
+    },
+  })
+  if (!ticketRes.ok()) throw new Error(`creation ticket failed: ${ticketRes.status()} ${await ticketRes.text()}`)
+  const ticketId = (await ticketRes.json()).id
+
+  const photoId = await uploadPngPhoto(request, token, ticketId)
+  return { ticketId, photoId }
+}
+
+test.describe('Isolation — Photos de tickets (view/delete)', () => {
+  test('un manager d\'une autre boutique ne peut pas visualiser la photo d\'un ticket qui ne lui appartient pas', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const photoId = await uploadPngPhoto(request, token, TICKET_BOUTIQUE_1)
+
+    const etranger = await createTenantAdmin(request)
+    const res = await request.get(`/api/tickets/${TICKET_BOUTIQUE_1}/photos/${photoId}/view`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime visualise la photo de son propre ticket', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const { ticketId, photoId } = await createTicketAvecPhoto(request, proprio.accessToken)
+
+    const res = await request.get(`/api/tickets/${ticketId}/photos/${photoId}/view`, {
+      headers: authHeader(proprio.accessToken),
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme visualise la photo d\'un ticket de n\'importe quelle boutique', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const photoId = await uploadPngPhoto(request, token, TICKET_BOUTIQUE_1)
+
+    const res = await request.get(`/api/tickets/${TICKET_BOUTIQUE_1}/photos/${photoId}/view`, {
+      headers: authHeader(token),
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  // Ressource fraiche par test : DELETE supprime reellement la photo (R2 + D1).
+  test('un manager d\'une autre boutique ne peut pas supprimer la photo d\'un ticket qui ne lui appartient pas', async ({ request }) => {
+    const token = await loginSeedAdmin(request)
+    const photoId = await uploadPngPhoto(request, token, TICKET_BOUTIQUE_1)
+
+    const etranger = await createTenantAdmin(request)
+    const res = await request.delete(`/api/tickets/${TICKET_BOUTIQUE_1}/photos/${photoId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('le proprietaire legitime supprime la photo de son propre ticket', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const { ticketId, photoId } = await createTicketAvecPhoto(request, proprio.accessToken)
+
+    const res = await request.delete(`/api/tickets/${ticketId}/photos/${photoId}`, {
+      headers: authHeader(proprio.accessToken),
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme supprime la photo d\'un ticket de n\'importe quelle boutique', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const { ticketId, photoId } = await createTicketAvecPhoto(request, proprio.accessToken)
+
+    const token = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/tickets/${ticketId}/photos/${photoId}`, {
+      headers: authHeader(token),
+    })
+    expect(res.status()).toBe(200)
+  })
+})
