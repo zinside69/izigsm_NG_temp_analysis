@@ -1552,7 +1552,7 @@ test.describe('Isolation — Services suggeres d\'un modele (lecture)', () => {
     const serviceAId  = await createServiceAvecToken(request, tenantA.accessToken, {
       nom: nomServiceA, prix_ht: 1234,
     })
-    lierServiceAModele(serviceAId, modeleId)
+    await lierServiceAModele(request, tenantA.accessToken, modeleId, serviceAId)
 
     // Le proprietaire, lui, voit bien son service (sinon le test ci-dessous serait
     // vert par simple absence de donnee)
@@ -1583,7 +1583,7 @@ test.describe('Isolation — Services suggeres d\'un modele (lecture)', () => {
 
     const tenantA  = await createTenantAdmin(request)
     const serviceAId = await createServiceAvecToken(request, tenantA.accessToken, { prix_ht: 4321 })
-    lierServiceAModele(serviceAId, modeleId)
+    await lierServiceAModele(request, tenantA.accessToken, modeleId, serviceAId)
 
     const token = await loginSeedAdmin(request)
 

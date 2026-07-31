@@ -1,71 +1,42 @@
 /**
  * @file tests/e2e/fixtures/service-modele-link.ts
- * @description Helper E2E — crée une liaison `service_modeles` directement dans la
- * base D1 locale (miniflare), en contournant l'API.
+ * @description Helper E2E — lie un service à un modèle d'appareil du référentiel
+ * global, via l'API publique.
  *
- * Pourquoi ne pas passer par `POST /api/services/modeles/:id/services` :
- * un bug de schéma PRÉ-EXISTANT rend cet endpoint inutilisable dans tous les cas —
- * `service_modeles.modele_id` référence encore `modeles_appareils_old`, table
- * renommée puis supprimée par la migration 0031, laissant une FK pendante. Tout
- * INSERT dans `service_modeles` échoue donc en 500 `no such table:
- * main.modeles_appareils_old`, y compris pour un appelant parfaitement légitime
- * (constaté et documenté dans `isolation-routes.spec.ts`, describe « Liaison
- * service <-> modele », et re-vérifié le 2026-07-31).
+ * Historique : ce helper écrivait initialement en direct dans le SQLite de D1 local,
+ * avec `PRAGMA foreign_keys = OFF`, parce que `POST /api/services/modeles/:id/services`
+ * était inutilisable — `service_modeles.modele_id` référençait `modeles_appareils_old`,
+ * table renommée puis supprimée par la migration 0031, laissant une clé étrangère
+ * pendante et faisant échouer tout INSERT en 500, y compris pour un appelant légitime.
  *
- * Sans ce contournement, aucun test ne pourrait démontrer la fuite de tarifs
- * inter-tenants sur `GET /api/services/modeles/:id/services` : la table resterait
- * vide et les deux tenants verraient une liste vide, ce qui ne prouve rien.
- *
- * Ce helper n'est utilisable que contre un `wrangler pages dev --local` (même
- * contrainte que `createTenantAdmin`, qui dépend d'`otpDemo`). Il n'a aucun effet
- * en dehors du poste de développement.
+ * La migration `0038_service_modeles_fk_reconstruction.sql` (2026-07-31) a reconstruit
+ * la table avec la bonne référence. Le contournement n'a plus lieu d'être : ce helper
+ * passe désormais par la vraie route, comme le reste des fixtures E2E — un test qui
+ * écrit en base par la porte de derrière ne peut pas détecter une régression de schéma.
  */
-// @ts-ignore node:fs types not available without @types/node
-import { readdirSync } from 'node:fs'
-// @ts-ignore node:path types not available without @types/node
-import { join } from 'node:path'
-// @ts-ignore node:sqlite types not available without @types/node
-import { DatabaseSync } from 'node:sqlite'
-
-/** Répertoire de persistance D1 de miniflare (créé par `wrangler pages dev --local`). */
-const D1_DIR = join(
-  // @ts-ignore process types not available without @types/node
-  process.cwd(), '.wrangler', 'state', 'v3', 'd1', 'miniflare-D1DatabaseObject'
-)
+import type { APIRequestContext } from '@playwright/test'
 
 /**
- * Résout le fichier SQLite de la base D1 locale.
- * Son nom est un hash SHA-256 propre à chaque poste — d'où la reconnaissance par
- * motif (64 caractères hexadécimaux), qui écarte au passage le `metadata.sqlite`
- * interne de miniflare présent dans le même répertoire.
+ * Lie un service à un modèle d'appareil, avec le compte propriétaire du service.
+ *
+ * La route vérifie que le service appartient bien à la boutique de l'appelant
+ * (le modèle, lui, est global) : le token passé doit donc être celui du tenant
+ * propriétaire du service, sans quoi la liaison est refusée en 403.
  */
-function resolveD1File(): string {
-  const fichiers = readdirSync(D1_DIR).filter((f: string) => /^[0-9a-f]{64}\.sqlite$/.test(f))
-  if (fichiers.length !== 1) {
+export async function lierServiceAModele(
+  request: APIRequestContext,
+  accessToken: string,
+  modeleId: number,
+  serviceId: number,
+  prixHtSpecifique: number | null = null
+): Promise<void> {
+  const res = await request.post(`/api/services/modeles/${modeleId}/services`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { service_id: serviceId, prix_ht_specifique: prixHtSpecifique },
+  })
+  if (!res.ok()) {
     throw new Error(
-      `Base D1 locale introuvable ou ambigue dans ${D1_DIR} (${fichiers.length} fichier(s) .sqlite). ` +
-      `Lancer les migrations locales avant les tests E2E.`
+      `liaison service ${serviceId} <-> modele ${modeleId} echouee: ${res.status()} ${await res.text()}`
     )
-  }
-  return join(D1_DIR, fichiers[0])
-}
-
-/**
- * Lie un service à un modèle d'appareil (référentiel global) en écrivant
- * directement dans D1 local.
- *
- * `PRAGMA foreign_keys = OFF` : uniquement pour contourner la FK pendante décrite
- * en tête de fichier — la liaison écrite est par ailleurs parfaitement valide.
- */
-export function lierServiceAModele(serviceId: number, modeleId: number, prixHtSpecifique: number | null = null): void {
-  const db = new DatabaseSync(resolveD1File())
-  try {
-    db.exec('PRAGMA foreign_keys = OFF')
-    db.prepare(`
-      INSERT OR REPLACE INTO service_modeles (service_id, modele_id, prix_ht_specifique, actif)
-      VALUES (?, ?, ?, 1)
-    `).run(serviceId, modeleId, prixHtSpecifique)
-  } finally {
-    db.close()
   }
 }

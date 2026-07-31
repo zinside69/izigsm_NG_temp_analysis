@@ -15,6 +15,15 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## ✅ P1 — Migration de reconstruction `service_modeles` (trouvé et CORRIGÉ le 2026-07-31)
+Migration `0038_service_modeles_fk_reconstruction.sql`. Table recréée avec `REFERENCES modeles_appareils(id)`,
+données reprises (9/9 en local, aucun orphelin), 2 index restaurés. Vérifié en local live : `POST /api/services/modeles/:id/services`
+répond **200** là où il renvoyait 500 — la relecture confirme la liaison. La fixture de test `service-modele-link.ts`
+est repassée par l'API, le contournement `PRAGMA foreign_keys = OFF` a été supprimé.
+**⚠ À appliquer en distant AVANT le prochain déploiement** : `npx wrangler d1 migrations apply DB --remote`.
+
+<details><summary>Diagnostic d'origine (conservé)</summary>
+
 ## 🔴 P1 — Migration de reconstruction `service_modeles` (trouvé 2026-07-31, PAS corrigé)
 `service_modeles.modele_id` référence `modeles_appareils_old`, table supprimée par la migration `0031`
 (`ALTER TABLE RENAME` puis `DROP` dans le même fichier). Conséquence : **`POST /api/services/modeles/:id/services`
@@ -22,6 +31,7 @@ renvoie 500 pour tout appelant, admin compris, très probablement en production 
 - [ ] Migration de reconstruction de la table (recréation + copie des données, patron SQLite de la migration 0031)
 - [ ] À appliquer **en distant avant** tout déploiement du Worker (`CLAUDE.md` § Déploiement)
 - [ ] Remplacer alors la fixture `tests/e2e/fixtures/service-modele-link.ts` (écriture directe en SQLite local, `PRAGMA foreign_keys = OFF`) par un appel API normal
+</details>
 
 ## 🟡 Suivis du chantier isolation (revue finale 2026-07-31, PAS corrigés)
 - [ ] `propageAUnService()` (`tests/routes-isolation-conformite.test.ts`) matche `if (...)` comme un appel de fonction et ne franchit pas les parenthèses imbriquées. Conséquence : retirer `boutiqueId` de `getModeleWithServices(...)` — donc rouvrir la fuite de tarifs corrigée le 2026-07-31 — laisse le garde-fou vert. Exclure `if`/`while`/`for`/`switch`/`return` et gérer l'imbrication.
