@@ -170,6 +170,24 @@ export async function deleteCategorie(
   await auditLog(db, { user_id: userId, action: 'DELETE_CATEGORIE_SERVICE', entite_type: 'categorie_service', entite_id: id })
 }
 
+/**
+ * Retourne uniquement le `boutique_id` d'une catégorie de services.
+ * Utilisé par la garde d'isolation de `PUT/DELETE /services/categories/:id`
+ * (`routes/services.ts`), sur le modèle de `getBonCommandeBoutiqueId()`
+ * (`services/fournisseursService.ts`) et `getTicketBoutiqueId()`
+ * (`services/ticketService.ts`) — évite de charger une catégorie complète
+ * juste pour vérifier l'appartenance.
+ *
+ * @param db  Port Database
+ * @param id  Identifiant de la catégorie
+ * @returns   `{ boutique_id }` ou `null` si introuvable
+ */
+export async function getCategorieBoutiqueId(
+  db: Database, id: number
+): Promise<{ boutique_id: number } | null> {
+  return db.get<{ boutique_id: number }>('SELECT boutique_id FROM categories_services WHERE id = ?', [id])
+}
+
 // ─── Services (prestations) ───────────────────────────────────────────────────
 
 /**

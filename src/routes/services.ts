@@ -47,10 +47,10 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, requireRole, getBoutiqueId } from '../lib/middleware'
+import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import { validateService, validateCategorieService } from '../lib/validators'
 import {
-  listCategories, createCategorie, updateCategorie, deleteCategorie,
+  listCategories, createCategorie, updateCategorie, deleteCategorie, getCategorieBoutiqueId,
   listServices, getService, createService, updateService, deleteService,
   getCatalogueArbre,
   listMarques, createMarque, updateMarque, deleteMarque,
@@ -181,6 +181,11 @@ services.put('/services/categories/:id', requireRole('admin', 'manager'), async 
   const error = validateCategorieService(body)
   if (error) return c.json({ success: false, error }, 400)
 
+  // Isolation multi-tenant : ne jamais modifier la catégorie d'une autre boutique
+  const categorie = await getCategorieBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, categorie, 'Catégorie')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await updateCategorie(c.env.DB, id, body, user.sub)
   return c.json({ success: true, message: 'Catégorie mise à jour.' })
 })
@@ -199,6 +204,12 @@ services.put('/services/categories/:id', requireRole('admin', 'manager'), async 
 services.delete('/services/categories/:id', requireRole('admin', 'manager'), async (c) => {
   const user = c.get('user')
   const id   = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la désactivation cascade sur les services liés,
+  // ne jamais désactiver la catégorie d'une autre boutique
+  const categorie = await getCategorieBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, categorie, 'Catégorie')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   await deleteCategorie(c.env.DB, id, user.sub)
   return c.json({ success: true, message: 'Catégorie désactivée (et ses services).' })

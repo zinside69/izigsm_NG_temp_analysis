@@ -431,3 +431,81 @@ test.describe('Isolation — Fournisseurs', () => {
     expect(res.status()).toBe(200)
   })
 })
+
+/** Cree une categorie de services cote boutique 1 (aucune dans seed.sql). */
+async function createCategorieBoutique1(request: APIRequestContext): Promise<number> {
+  const token = await loginSeedAdmin(request)
+  const res = await request.post('/api/services/categories', {
+    headers: authHeader(token),
+    data: { nom: 'Categorie Boutique 1 (fixture e2e)', boutique_id: 1 },
+  })
+  if (!res.ok()) throw new Error(`creation categorie failed: ${res.status()} ${await res.text()}`)
+  return (await res.json()).id
+}
+
+test.describe('Isolation — Categories de services', () => {
+  test('un manager d\'une autre boutique ne peut pas modifier une categorie etrangere', async ({ request }) => {
+    const categorieId = await createCategorieBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.put(`/api/services/categories/${categorieId}`, {
+      headers: authHeader(etranger.accessToken),
+      data: { nom: 'Renommee par un tenant etranger' },
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('un manager d\'une autre boutique ne peut pas desactiver une categorie etrangere', async ({ request }) => {
+    const categorieId = await createCategorieBoutique1(request)
+    const etranger = await createTenantAdmin(request)
+    const res = await request.delete(`/api/services/categories/${categorieId}`, {
+      headers: authHeader(etranger.accessToken),
+    })
+    expect([403, 404]).toContain(res.status())
+  })
+
+  test('l\'admin plateforme modifie la categorie de n\'importe quelle boutique', async ({ request }) => {
+    const categorieId = await createCategorieBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.put(`/api/services/categories/${categorieId}`, {
+      headers: authHeader(token),
+      data: { nom: 'Renommee par l\'admin plateforme' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime modifie sa propre categorie', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/services/categories', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Categorie du proprietaire' },
+    })
+    expect(creation.status()).toBe(201)
+    const categorieId = (await creation.json()).id
+
+    const res = await request.put(`/api/services/categories/${categorieId}`, {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Renommee par son proprietaire' },
+    })
+    expect(res.status()).toBe(200)
+  })
+
+  test('le proprietaire legitime desactive sa propre categorie', async ({ request }) => {
+    const proprio = await createTenantAdmin(request)
+    const creation = await request.post('/api/services/categories', {
+      headers: authHeader(proprio.accessToken),
+      data: { nom: 'Categorie a desactiver par son proprietaire' },
+    })
+    expect(creation.status()).toBe(201)
+    const categorieId = (await creation.json()).id
+
+    const res = await request.delete(`/api/services/categories/${categorieId}`, { headers: authHeader(proprio.accessToken) })
+    expect(res.status()).toBe(200)
+  })
+
+  test('l\'admin plateforme desactive la categorie de n\'importe quelle boutique', async ({ request }) => {
+    const categorieId = await createCategorieBoutique1(request)
+    const token = await loginSeedAdmin(request)
+    const res = await request.delete(`/api/services/categories/${categorieId}`, { headers: authHeader(token) })
+    expect(res.status()).toBe(200)
+  })
+})
