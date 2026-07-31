@@ -6,12 +6,14 @@
 `admin@izigsm.fr` / `Admin@2026!` fonctionnait en production (rôle `admin` plateforme, les 5 boutiques) alors que ces identifiants sont publiés dans un dépôt GitHub public. Compte rattaché à `support@soteli.fr` puis mot de passe tourné par lien de réinitialisation. **Vérifié : les deux combinaisons (ancien email et nouvel email avec l'ancien mot de passe) renvoient `401`**, et le compte reste actif pour le dépannage.
 Reste à faire à froid, pas urgent : retirer les identifiants de `seed.sql`/`CLAUDE.md` et générer le mot de passe de démo à l'installation. Le secret demeure dans l'historique git — sans conséquence maintenant qu'il ne vaut plus rien en production.
 
-**2. Quatre chantiers prêts, non déployés**, dans cet ordre impératif :
-```bash
-npx wrangler d1 migrations apply DB --remote   # migration 0038 obligatoire d'abord
-npm run deploy
-```
-`c59d59c` (statsService — le dashboard affiche un CA du mois précédent faux), `1f99e4a` (migration helper), `52c041f` (36 routes isolées), `f1bc6dc` (migration 0038). Le token Cloudflare de session n'a pas les droits D1 distants (7403) : ces commandes sont à lancer par l'utilisateur.
+**2. ✅ Les quatre chantiers sont DÉPLOYÉS (2026-07-31).**
+Migration `0038` appliquée à distance **puis** Worker, dans le bon ordre. `c59d59c` (statsService), `1f99e4a` (migration helper), `52c041f` (36 routes isolées), `f1bc6dc` (migration 0038).
+**Vérifié en production** depuis un compte manager d'une boutique tierce : `GET /factures/1` et `/2` (étrangères) → **403**, `GET /factures/3` (la sienne) → **200**, `GET /produits/1` et `/employes/1` (étrangers) → **403**, et `POST /services/modeles/:id/services` → **200** là où il renvoyait 500 depuis le Sprint 2.39.
+
+**3. ✅ Ménage de production fait (2026-07-31).**
+Boutiques 4 (« ZZ Test Isolation ») et 5 (« ZZ Audit Isolation 2026 ») et les comptes `%isotest%` (users 7 et 8) désactivés (`actif = 0`), pas supprimés — réversible, et sans risque de contrainte de clé étrangère sur les 30 tables portant `boutique_id`. Vérifié : le compte de test reçoit « Compte désactivé ».
+
+Note : le token Cloudflare de session n'a pas les droits D1 distants (erreur 7403) — toute commande `--remote` est à lancer par l'utilisateur.
 
 ## Vue d'ensemble (checkpoint 65)
 SaaS Hono/TypeScript + Cloudflare (Pages + D1 + R2) multi-tenant, `izigsm/webapp/`, branche `main`. Session de 30 commits : déploiement du cp64, correction des 5 endpoints facture/avoir avec **validation en production réelle**, puis un chantier complet d'isolation multi-tenant mené en `brainstorming` → `writing-plans` → `subagent-driven-development` (14 tâches, 28 commits, branche mergée et supprimée).

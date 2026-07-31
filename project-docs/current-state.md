@@ -34,9 +34,17 @@ Livré sur branche `feat/isolation-routes-par-id`, mergée (`52c041f`) : 36 rout
 
 La migration `0031` avait renommé `modeles_appareils` puis supprimé l'ancienne table dans le même fichier ; SQLite avait propagé le renommage dans `service_modeles.modele_id`, laissant une FK vers une table inexistante. `POST /api/services/modeles/:id/services` renvoyait **500 pour tout appelant, admin compris, depuis le Sprint 2.39**. Table reconstruite, 9/9 liaisons reprises, route vérifiée en local live (200 + relecture).
 
-## Reste ouvert
+## Clôture de session (2026-07-31, fin de journée) — les 3 actions humaines sont faites
 
-### 🔴 Faille critique NON corrigée — accès superadmin publié
+1. **Rotation du superadmin ✅** — compte rattaché à `support@soteli.fr`, mot de passe tourné par lien de réinitialisation. Vérifié : `admin@izigsm.fr` **et** `support@soteli.fr` avec le mot de passe du dépôt renvoient tous deux `401`. Le compte reste actif pour le dépannage.
+2. **Déploiement ✅** — migration `0038` à distance puis Worker. Isolation confirmée en production depuis un compte manager tiers (403 sur les ressources étrangères, 200 sur les siennes), et `POST /services/modeles/:id/services` répond 200 après avoir renvoyé 500 depuis le Sprint 2.39.
+3. **Ménage ✅** — boutiques 4 et 5 et comptes `%isotest%` désactivés (`actif = 0`) plutôt que supprimés : réversible, et sans risque sur les 30 tables portant `boutique_id`. Le compte de test reçoit « Compte désactivé ».
+
+Les sections ci-dessous décrivent l'état **au moment du checkpoint**, avant ces trois actions — conservées telles quelles pour l'historique.
+
+## Reste ouvert (état au checkpoint, avant clôture)
+
+### ✅ ~~Faille critique NON corrigée~~ — accès superadmin publié — FERMÉE en fin de journée, voir § Clôture ci-dessus
 `admin@izigsm.fr` / `Admin@2026!` **fonctionne en production** (rôle `admin`, `boutique_id` NULL, accès aux 5 boutiques), et ces identifiants sont écrits en clair dans `CLAUDE.md` et `seed.sql` du dépôt **`zinside69/izigsm_NG_temp_analysis`, qui est public sur GitHub** (`visibility=public`, vérifié par appel non authentifié). Aucune des 36 gardes ne protège contre un identifiant publié.
 
 Procédure décidée, **non exécutée** : créer et tester la boîte `support@soteli.fr`, puis `UPDATE users SET email = 'support@soteli.fr' WHERE id = 1`, puis `POST /api/auth/reset-password-request`. `zinside@gmail.com` est déjà pris (user id 6). Rendre le dépôt privé ne suffit pas — seule la rotation du secret ferme l'accès.
