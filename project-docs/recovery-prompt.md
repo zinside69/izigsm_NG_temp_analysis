@@ -1,6 +1,50 @@
-# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 73 — les écritures suivent la boutique consultée)
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 75 — les 19 pages du menu)
 
 ## Reprendre ici
+
+⚠️ **`021bed6` n'est pas déployé** (barre latérale sur les 19 pages, `CACHE_VERSION`
+`izigsm-v2.88`). Aucune migration. `npm run deploy` enchaîne désormais lui-même la fenêtre
+de propagation et le contrôle — ne jamais ouvrir le domaine avant qu'il ait rendu la main.
+
+Priorités, dans cet ordre :
+
+1. **🔴 P1 — 4 fichiers lisent l'enveloppe API au mauvais niveau** (`todo.md`).
+   `reconditionnement.js` (11 sites), `kanban.js` (5), `services.js` (5 fautifs contre 3
+   corrects → revue site par site), et **`caisse.js` en dernier** (9 sites, mais il porte
+   vente, encaissement et chaînage NF525 : un faux succès y serait financier). Ces pages
+   n'affichent rien, pour **aucun rôle**. Méthode validée sur `fournisseurs.js` : déballer
+   une fois au point d'appel — `const res = (await apiGet(…)).data` — plutôt que corriger
+   35 lectures en aval.
+2. **Garde-fou statique** contre `r.success` sur un résultat d'`api*()`, sur le modèle de
+   `tests/routes-isolation-conformite.test.ts`. Le balayage E2E **ne voit pas** cette classe
+   (200, aucune exception, page vide).
+3. **Audit XSS** des autres gabarits qui interpolent une donnée d'API dans
+   `innerHTML`/`outerHTML`. Seule la barre latérale est traitée.
+4. **Chantier 2 de la supervision** : le journal s'écrit depuis le ticket 04 et **rien ne
+   le lit**. Requête SQL de dépannage dans `todo.md`.
+
+## Ce qu'il ne faut pas re-découvrir (checkpoints 73-75)
+
+- **Vérifier qu'une chose existe n'est pas vérifier qu'elle fonctionne.** Trois défauts du
+  jour viennent de là, dont un livré en production : une barre latérale présente mais **sans
+  style** (`position: static`, `width: 1920px`), parce que 9 pages chargeaient `style.css`
+  — **49 octets**, une règle sur `h1` — au lieu de `main.css`. Toute page appelant
+  `buildSidebar()` doit charger `main.css`.
+- **Un diagnostic recopié de checkpoint en checkpoint n'est pas une observation.** « Refonte
+  d'interface » a survécu trois checkpoints ; à la mesure, deux pages demandaient **une
+  ligne**.
+- **`_routes.json` déclare `include: ["/api/*"]`** : Cloudflare Pages sert `/static/*` sans
+  jamais invoquer le Worker. Un correctif d'assets écrit dans Hono est du code mort. La
+  parade est `public/404.html`.
+- **Mesurer à travers un service worker, c'est mesurer le service worker** : le même chemin
+  renvoyait `200` depuis la page et `404` hors navigateur. Toujours doubler hors navigateur.
+- **`CACHE_VERSION` s'incrémente après chaque lot frontend**, pas une fois par journée.
+- La suite E2E tourne avec `serviceWorkers: 'block'` : elle ne parcourt **jamais** le chemin
+  de requête réel de la production. Piloter le navigateur pour ce qui en dépend.
+
+Détail complet et méthode : `project-docs/modop-tests.md`.
+
+## Contexte antérieur (checkpoint 73)
 
 **Le chantier 1 de la supervision est terminé, déployé et vérifié en production** (4 tickets
 `done`). **Le résolveur de boutique est corrigé** (checkpoint 73, commit `01ff760`) : les

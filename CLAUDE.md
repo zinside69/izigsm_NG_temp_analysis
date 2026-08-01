@@ -236,6 +236,51 @@ Depuis le checkpoint 73 (2026-08-01), la boutique portée par les **écritures**
   compte n'ayant pas coché « se souvenir de moi ».
 - `apiPostPublic` reste **hors** de ce mécanisme : les endpoints publics (inscription,
   connexion) n'ont pas de session à interroger.
+- **`apiGet` choisit son séparateur** (`?` ou `&`) selon l'URL reçue. Concaténer `'?'` sans
+  regarder produisait `…?page=1&limit=15?boutique_id=1` — `limit` valait « 15?boutique_id=1 »
+  et *aucun* `boutique_id` n'existait : `400` sur **toutes les listes paginées** pour un
+  admin plateforme. Invisible pour un manager, dont le serveur retrouve la boutique dans le
+  jeton. Défaut ancien, trouvé en production le 2026-08-01.
+
+## Barre latérale — règles de câblage (depuis 2026-08-01, checkpoint 75)
+
+Les 19 entrées du menu portent désormais la barre du socle. Pour toute page future :
+
+- **`buildSidebar()` cible `#sidebar-placeholder`, et rien d'autre.** Le dépôt a hébergé
+  cinq conventions concurrentes (`app-sidebar`, `sidebar-container`, `sidebar-root`,
+  `#sidebar`, `sidebar-placeholder`) : deux pages appelaient le socle sans jamais recevoir
+  de barre, en silence. `buildSidebar()` émet désormais un `console.warn` quand le conteneur
+  manque — ne pas le supprimer.
+- **Une page qui appelle `buildSidebar()` doit charger `main.css`.** `style.css` fait
+  **49 octets** (une règle sur `h1`) : la barre y était injectée sans style, en
+  `position: static` et `width: 1920px`. Parti en production le 2026-08-01.
+- **Ne pas remplacer une cale de flux par la barre.** Les pages en flexbox réservent la
+  largeur par un conteneur (`.sidebar-espace`). La barre injectée est `position: fixed`,
+  donc **hors flux** : supprimer la cale ferait passer le contenu dessous. Et son `id` ne
+  doit pas être `sidebar`, que le `<nav>` injecté porte déjà.
+- **Aucun `hidden md:block` sur la cale** : `hidden` l'emporte jusqu'en 1920 px, et un parent
+  en `display: none` masque toute la barre. Les pages du socle n'ont pas de repli mobile.
+- **Lier la marge du contenu à `--sidebar-w`**, jamais à un `ml-64` en dur : 256 px contre
+  260 px, soit 4 px de contenu sous la barre.
+- **Le test assertionne la géométrie**, pas la présence : largeur < 400 px, `x` proche de 0,
+  ≥ 10 entrées de navigation. Une barre présente mais non stylée passait le test précédent.
+  Toute entrée ajoutée à `buildSidebar()` va dans `PAGES_AVEC_SOCLE`.
+
+## Enveloppe des réponses API — le piège le plus coûteux du frontend
+
+`apiGet`/`apiPost`/… renvoient `{ ok, status, data, error }` où **`data` est le corps JSON
+complet**, lui-même de la forme `{ success, data, error, pagination }`. Il faut donc lire
+`r.data.success` et `r.data.data`.
+
+Lire `r.success` donne `undefined` — la page sort par un `return` silencieux, l'API répond
+`200`, et **rien ne s'affiche**. Aucune exception, aucun log : le balayage E2E ne le voit
+pas. `fournisseurs.js` et `caisse.js` n'avaient jamais rien affiché, pour aucun rôle.
+
+- **Parade au point d'appel** : `const res = (await apiGet(…)).data`. Un site au lieu de
+  trente-cinq, et `api()` parsant le corps même sur une réponse en erreur, `success` et
+  `error` survivent au déballage.
+- **Reste à corriger** (`todo.md`) : `reconditionnement.js`, `kanban.js`, `services.js`
+  (mixte), et `caisse.js` **en dernier** — il porte vente, encaissement et chaînage NF525.
 
 ## Mémoire projet (context-guardian)
 

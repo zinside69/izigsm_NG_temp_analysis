@@ -1,4 +1,87 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 74 — le défaut que 176 tests verts n'ont pas vu)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 75 — les 19 pages du menu, et trois régressions de ma main)
+
+## Checkpoint 75 — Barre latérale sur tout le menu, page 404, XSS du socle (2026-08-01)
+
+Suite directe du checkpoint 74, même journée, **piloté par les constats de l'exploitant à
+l'écran**. Commits `6eb8c5b`, `99c17e6`, `021bed6` (+ `1f372bd` pour le cache). Les deux
+premiers sont **déployés** ; `021bed6` ne l'est pas encore.
+
+### Ce qui est livré
+
+- **Les 19 entrées du menu ont une barre latérale stylée.** Le socle expose déjà le
+  bandeau « Vous consultez la boutique X » depuis `buildSidebar()` : le câblage l'a donc
+  livré du même coup sur toutes ces pages.
+- **`fournisseurs.js`** : enveloppe API corrigée (12 sites), la page affichait `—` partout
+  depuis toujours, pour tous les rôles.
+- **`public/404.html`** : un asset absent répond enfin `404` au lieu de `200 + HTML`.
+- **XSS stockée fermée** dans `buildSidebar()`.
+- **Trois parades de déploiement** : le `404.html`, `scripts/verifier-deploiement.mjs`
+  chaîné à `npm run deploy` (fenêtre de 25 s + contrôle, arrêt en erreur), et la règle en
+  dur dans `CLAUDE.md`.
+
+### Trois choses fausses que j'ai crues, et une que j'ai livrée
+
+1. **« Passer ces pages au socle est une refonte d'interface »** — repris du checkpoint 71
+   pendant trois checkpoints sans vérification. Mesure faite : `agenda` et `modules` avaient
+   déjà le conteneur et n'appelaient simplement pas `buildSidebar()` (une ligne) ; `caisse`
+   le nommait `app-sidebar` ; `services` le nommait `sidebar-container` et **appelait bien
+   le socle** — l'injection échouait en silence. `buildSidebar()` prévient désormais.
+2. **Le correctif `404` dans le Worker était du code mort.** `_routes.json` déclare
+   `include: ["/api/*"]` : Pages sert `/static/*` sans jamais invoquer Hono. Trouvé **en
+   pilotant le navigateur avant de déployer** — sinon il partait en production avec un
+   commentaire affirmant le contraire.
+3. **J'ai livré une régression visible.** Le premier câblage n'a pas vérifié que la barre
+   était *stylée* : 9 pages chargent `style.css` (**49 octets**, une règle sur `h1`) au lieu
+   de `main.css`. En production, la barre était injectée en `position: static`,
+   `width: 1920px` — 21 liens bruts empilés au-dessus du contenu. Mon test n'assertait que
+   la présence de `#sidebar`.
+
+**Le fil commun des trois** : j'ai vérifié qu'une chose *existe* au lieu de vérifier
+qu'elle *fonctionne*. C'est exactement le piège 1 de `modop-tests.md`, écrit le matin même.
+Le test assertionne maintenant la **géométrie** de la barre sur les 19 pages.
+
+### L'incident de production, et ce qu'il a coûté
+
+Après le déploiement du checkpoint 74, j'ai chargé la page **pendant la fenêtre de
+propagation**. Un edge a mis en cache le catch-all HTML pour `/static/js/app.<hash>.js` ;
+les assets hashés étant `immutable`, la réponse est restée figée. `app.js` ne définissait
+plus rien : **tout le site mort, pour tous les rôles**, une dizaine de minutes. Rétabli en
+forçant un nouveau hash.
+
+C'est l'incident documenté du 2026-07-30, que j'ai reproduit. D'où les trois parades — dont
+la seule qui supprime la classe de défaut, le `404.html`.
+
+### Pièges de mesure appris aujourd'hui
+
+- **Mesurer à travers un service worker, c'est mesurer le service worker.** Le même
+  `/static/js/app.js` renvoyait `200` depuis la page et `404` hors navigateur : une entrée
+  périmée du cache du SW. Toujours doubler la mesure hors navigateur.
+- **Le filtre de sécurité de Claude in Chrome masque les query strings** (`[BLOCKED]`) :
+  dériver ce qu'on cherche (compter les `?`, lire un `searchParams.get()`) plutôt que
+  restituer l'URL.
+- **`CACHE_VERSION` doit être incrémenté après *chaque* lot frontend**, pas une fois par
+  journée : je l'ai oublié une fois, un visiteur revenant aurait reçu l'ancien HTML malgré
+  un déploiement « réussi ».
+
+### Reste ouvert, mesuré et priorisé dans `todo.md`
+
+**4 fichiers lisent encore l'enveloppe API au mauvais niveau** — `caisse.js` (9 sites, à
+faire **en dernier** : vente, encaissement, NF525), `reconditionnement.js` (11),
+`kanban.js` (5), `services.js` (5 fautifs contre 3 corrects, donc revue site par site). La
+méthode est validée sur `fournisseurs.js` : déballer une fois au point d'appel.
+
+**Le gate ne voit pas cette classe** (200, aucune exception, page vide). Piste retenue, non
+implémentée : un garde-fou statique sur le modèle de `routes-isolation-conformite.test.ts`.
+
+**L'audit XSS des autres gabarits** n'est pas fait — seule la barre latérale est traitée.
+
+### Vérifications
+
+**180/180 E2E**, `tsc` à la baseline de 32, `vitest` 891/893. Vérifié à l'écran sur le
+serveur local **avec service worker actif** (l'angle mort de la suite) : barre et bandeau
+sur les pages câblées, `fournisseurs` affichant ses compteurs.
+
+## Checkpoint 74 — le défaut que 176 tests verts n'ont pas vu (2026-08-01)
 
 ## Checkpoint 74 — `apiGet` doublait le « ? », et un mode opératoire de test (2026-08-01)
 

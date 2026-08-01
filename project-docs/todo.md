@@ -148,7 +148,30 @@ personne ne le voie.
 Couvert par `tests/e2e/…§ les pages câblées sur le socle affichent bien la barre latérale`,
 sur 13 pages. **Déplacer une page dans `PAGES_AVEC_SOCLE` au fur et à mesure du câblage.**
 
-- [ ] Câbler les 6 pages restantes : `sav`, `stats`, `settings`, `kanban`, `personnel`, `notifications` (ajouter le conteneur + l'appel ; `personnel` est en `flex-1` et non `ml-64`, sa marge est à vérifier)
+- [x] Câbler les pages restantes — **les 19 entrées du menu ont désormais une barre latérale stylée** (`personnel` l'avait déjà via `main.css`)
+
+**Ce que le câblage a coûté, et qui n'était pas prévu** :
+
+- `style.css` fait **49 octets** (une règle sur `h1`) : 9 pages le chargeaient au lieu de
+  `main.css`. La barre y était injectée **sans aucun style** — `position: static`,
+  `width: 1920px`, 21 liens bruts au-dessus du contenu. **Livré en production**, parce que
+  le test n'assertait que la présence de `#sidebar`.
+- `stats` et `notifications` portaient `hidden md:block` sur leur conteneur. La classe
+  `hidden` l'emporte sur `md:block` jusqu'en 1920 px, et un parent en `display: none`
+  masque la barre `fixed` qu'il contient.
+- Quatre pages réservent la largeur par **flexbox**, pas par `ml-64` : leur `<div
+  id="sidebar">` devient une cale `.sidebar-espace`. Le remplacer aurait fait passer le
+  contenu sous la barre (un élément `fixed` est hors flux), et créé un `id` en double avec
+  le `<nav id="sidebar">` injecté.
+- `ml-64` = 256 px alors que `--sidebar-w` = 260 px : 4 px de contenu sous la barre. La
+  marge suit désormais la variable.
+- `notifications` abandonnait définitivement si la session n'était pas prête en 150 ms.
+
+Le test assertionne maintenant la **géométrie** (largeur < 400 px, `x` proche de 0, ≥ 10
+entrées), pas la seule présence d'un élément.
+
+- [ ] `personnel` est en `flex-1` sans cale : vérifier qu'aucun chevauchement ne subsiste à
+      l'écran (le test ne mesure que la barre, pas le contenu)
 
 ## ✅ 🔴 Sécurité — XSS stockée sur le nom de boutique dans la barre latérale (2026-08-01, **CORRIGÉ**)
 
