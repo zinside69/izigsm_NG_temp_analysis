@@ -1,3 +1,72 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 70 — ticket 02 livré, reprendre au ticket 03)
+
+## Reprendre ici
+
+**Chantier en cours : supervision admin plateforme, chantier 1.** Tickets 01 et 02 `done`.
+
+Reprendre à **`/implement`** sur le **ticket 03** :
+`.scratch/supervision-admin-plateforme/issues/03-bandeau-permanent-retour-console.md`
+
+**Frontière** : 03 et 04 sont désormais parallèles — les deux étaient bloqués par 02. Un ticket =
+**une fenêtre de contexte neuve** ; chaque ticket est autoportant. Ne pas relire la conversation
+précédente ; en cas de doute sur une décision, la source est
+`.scratch/supervision-admin-plateforme/spec.md`, pas `project-docs/`.
+
+⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` / `code-review`
+sont `disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md` sous
+`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
+et suivre le processus.
+
+## Ce que le ticket 02 a posé, dont le ticket 03 hérite
+
+- **`getBoutiqueId()` (`app.js`) est le résolveur unique** : boutique sélectionnée, puis boutique de
+  session, puis `null`. Ne jamais le redéfinir dans un fichier de page — c'est ce qui figeait
+  `/agenda` sur la boutique 1 (`bugs.md`).
+- **`sessionCourante()` / `_stockageSession()` / `selectionnerBoutique(id, nom)`** (`app.js`) : la
+  boutique consultée vit dans l'objet de session existant, jamais dans une clé à part. Le bandeau
+  du ticket 03 lit son nom depuis là.
+- **`nomBoutiqueAffichee(session)`** (`app.js`) donne déjà le libellé attendu : « Console
+  plateforme » sans sélection, sinon le nom de la boutique consultée (repli « MyDesk » si elle n'a
+  pas de nom). Le bandeau doit s'appuyer dessus, pas refaire la logique.
+- **`buildSidebar()`** est le socle partagé qui rend l'en-tête — c'est le point naturel pour poser
+  une bannière présente sur toute page, sans intervention page par page.
+- La console (`console-boutiques.js`) navigue vers `/dashboard` après sélection
+  (`PAGE_APRES_SELECTION`). `landingPageFor()` ne convient pas ici : il renverrait vers la console,
+  puisque `isAdminPlateforme()` ne dépend pas de la sélection.
+- Tests : `tests/e2e/selection-boutique.spec.ts` (12 cas) et `tests/e2e/fixtures/comptes.ts`
+  (identifiants du seed + `seConnecter()` + `obtenirToken()`, à réutiliser).
+
+## À ne pas oublier au ticket 03
+
+- **C'est la dernière tâche frontend du chantier → incrémenter `CACHE_VERSION`** dans `public/sw.js`
+  (actuellement `izigsm-v2.83`). Sans ça, les navigateurs déjà venus serviront l'ancien socle.
+- **`serviceWorkers: 'block'`** est désormais dans `playwright.config.ts` : tout stub réseau E2E en
+  dépend. Ne pas le retirer.
+- Après `npm run build`, **tuer et relancer** `wrangler pages dev` — il ne recharge pas `dist/`.
+
+## Rien n'est en attente d'une action humaine
+
+Aucune migration en attente. **Rien n'est déployé et rien ne doit l'être** : déploiement groupé
+après le ticket 04, l'état « 02 sans bandeau » ne doit pas atteindre la production. Le ticket 04
+introduira une migration, à appliquer **à distance avant** le Worker, par l'utilisateur (jeton de
+session sans droits D1 distants, erreur 7403).
+
+## Deux points hors périmètre, à ne pas redécouvrir
+
+- **Aucun manager ne voit jamais le nom de sa boutique** : `boutique_name` n'existe nulle part côté
+  serveur, `session.company` est toujours vide, tout manager lit « MyDesk ». Comportement antérieur,
+  verrouillé par un test. Mérite un ticket à part.
+- **4 `fetch` écrits à la main** (`clients.js` 1153/1190, `tickets.js` 1578/1823) n'injectent pas de
+  `boutique_id` — **ce ne sont pas des défauts** : routes `:id` où la boutique vient de la ressource
+  et où l'admin plateforme traverse par son rôle. Vérifié au checkpoint 70.
+
+## État du dépôt
+
+`main` : `c72fabf`. Baselines : `npx vitest run` → **875/877** (2 échecs permanents de fuseau
+`agendaService`), `npx tsc --noEmit` → **32**, `npx playwright test` → **157/157**.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 69 — base D1 locale purgée, reprendre au ticket 02)
 
 ## Reprendre ici

@@ -63,8 +63,10 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 >
 > - [x] Ticket 01 — console des boutiques (lecture seule) — **fait le 2026-08-01**, commit `2a8c007`,
 >   checkpoint 68. Non poussé, non déployé.
-> - [ ] Ticket 02 — sélection et bascule des 29 pages *(débloqué — prenable)*
-> - [ ] Ticket 03 — bandeau permanent et retour console *(bloqué par 02)*
+> - [x] Ticket 02 — sélection et bascule des 29 pages — **fait le 2026-08-01**, commit `c72fabf`,
+>   checkpoint 70. Non déployé.
+> - [ ] Ticket 03 — bandeau permanent et retour console *(débloqué — prenable ; **c'est lui qui
+>   incrémente `CACHE_VERSION`**, dernière tâche frontend du chantier)*
 > - [ ] Ticket 04 — journal des actions de plateforme *(bloqué par 02)*
 >
 > **Décisions de conduite du chantier (2026-08-01) :**

@@ -1,4 +1,85 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 69 — base D1 locale purgée des tenants E2E)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 70 — ticket 02 supervision livré)
+
+## Checkpoint 70 — Sélection d'une boutique et bascule des 29 pages (2026-08-01)
+
+Ticket 02 du chantier supervision : `statut: done`, commit `c72fabf` sur `main`.
+**Non déployé** — le déploiement du chantier reste groupé après le ticket 04.
+
+### Ce qui a été livré
+
+Cliquer une boutique dans la console fait entrer l'admin plateforme dans son contexte. Les 29 pages
+métier affichent les données de cette boutique, le choix tient toute la session et survit à la
+navigation — **aucune page métier n'a été adaptée pour ça** (une exception, voir plus bas).
+
+- **`getBoutiqueId()` (`app.js`) devient le point de passage unique** : boutique sélectionnée, puis
+  boutique de la session, puis `null`. C'est ce qui fait basculer les 29 pages sans les toucher :
+  elles passent toutes par les mêmes helpers d'appel API.
+- **Le choix vit dans l'objet de session existant** (`boutique_selectionnee_id` / `_nom`), pas dans
+  une clé de stockage à part. Il hérite ainsi du support choisi à la connexion (« se souvenir de
+  moi ») et surtout de la purge à la déconnexion — aucun code de nettoyage à écrire, ni à oublier
+  le jour où un chemin de déconnexion de plus apparaîtra.
+- **En-tête** : « Console plateforme » tant qu'aucune boutique n'est choisie, puis le nom de la
+  boutique consultée. Le repli « MyDesk » ne s'affiche plus à un compte sans boutique.
+- **Console** : ligne cliquable au pointeur, bouton pour le clavier, délégation d'événement sur le
+  conteneur (les lignes sont réécrites à chaque recherche).
+
+### Deux défauts trouvés en chemin, corrigés (détail dans `bugs.md`)
+
+1. **`/agenda` visait toujours la boutique 1, en dur.** `agenda.js` définissait sa **propre**
+   `getBoutiqueId()` ; `agenda.html` chargeant `app.js` **puis** `agenda.js`, elle écrasait le
+   résolveur partagé sur cette page seule. Elle lisait une clé `localStorage['user']` qu'aucun code
+   du dépôt n'écrit, et retombait donc systématiquement sur `|| 1`. Sans effet jusqu'ici (le serveur
+   ignore le paramètre pour un non-admin), bloquant à partir de ce ticket. 6 lignes supprimées, sur
+   décision explicite de l'utilisateur — traité comme le défaut que la note du ticket prévoyait, pas
+   comme une adaptation de page.
+2. **Les stubs réseau Playwright étaient court-circuités par le service worker.** `sw.js` fait
+   `skipWaiting()` + `clients.claim()` et intercepte `/api/*` ; or `page.route()` ne voit pas les
+   requêtes émises par un service worker. Le test « aucune boutique active » du ticket 01 échouait
+   **2 suites complètes sur 3** tout en passant en isolation. `serviceWorkers: 'block'` dans
+   `playwright.config.ts`. Aucune couverture perdue : aucun test n'observe le service worker.
+
+### Ce que la revue en deux axes a rattrapé
+
+- **L'en-tête mentait sur une boutique sans nom** : `boutique_selectionnee_nom || 'Console
+  plateforme'` réaffichait « Console plateforme » alors qu'une boutique **était** sélectionnée et
+  accessible en écriture. L'absence de sélection se lit désormais sur l'**identifiant**, jamais sur
+  le nom. C'est exactement le contresens que le bandeau du ticket 03 est censé rendre impossible.
+- **Un test API était tautologique** : `expect(t.boutique_id ?? SEED).toBe(SEED)` passe sur une
+  liste vide comme sur un champ absent. Remplacé par la comparaison des deux réponses (avec et sans
+  paramètre étranger), qui échoue dès que le paramètre a le moindre effet.
+- **`boutiqueSelectionnee()` n'avait aucun appelant** — généralité spéculative écrite pour le
+  ticket 03, supprimée.
+
+**Un constat de la revue vérifié puis écarté** : 4 `fetch` écrits à la main (`clients.js` 1153/1190,
+`tickets.js` 1578/1823) n'injectent pas de `boutique_id`. Ce ne sont pas des défauts — ce sont des
+routes `:id` où la boutique vient de la ressource et où l'admin plateforme traverse par son rôle
+(`canAccessClient` l.67, `user.role !== 'admin'` l.415/450). Ne pas les re-signaler.
+
+### Vérifications
+
+`npx playwright test` → **157/157**, trois exécutions complètes consécutives (12 nouveaux cas :
+navigateur + API). `npx vitest run` → **875/877** (les 2 échecs de fuseau `agendaService`).
+`npx tsc --noEmit` → **32**. Validation live sur **4 pages métier** (`/dashboard`, `/clients`,
+`/tickets`, `/agenda`) dans un Chromium réel contre `wrangler pages dev` + D1 local, avec deux
+boutiques aux données distinctes créées pour l'occasion.
+
+Helpers d'authentification E2E extraits dans `tests/e2e/fixtures/comptes.ts` — trois suites
+recopiaient les mêmes identifiants de seed.
+
+### Laissé de côté, volontairement
+
+- **`CACHE_VERSION` reste à `izigsm-v2.83`.** À incrémenter sur la **dernière** tâche frontend du
+  chantier, donc au ticket 03 — pas ici. Rien ne le rappellera automatiquement.
+- **Aucun manager ne voit jamais le nom de sa boutique.** `boutique_name` n'existe **nulle part**
+  côté serveur (vérifié : 0 occurrence dans `src/`), donc `session.company` est toujours vide et
+  tout manager lit le repli « MyDesk ». C'est le comportement antérieur, verrouillé par un test —
+  le ticket 02 exigeait que rien ne change pour un manager. Mérite un ticket à part.
+
+### Environnement (hors dépôt)
+
+7 instances `wrangler pages dev` étaient empilées (le leak documenté dans `bugs.md`) ; toutes tuées
+sur décision de l'utilisateur, une seule tourne désormais. **Après `npm run build`, tuer et relancer
+le serveur** : il ne recharge pas `dist/`.
 
 ## Checkpoint 69 — Ménage de la base D1 **locale** (2026-08-01)
 
