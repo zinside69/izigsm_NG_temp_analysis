@@ -1,5 +1,36 @@
 # iziGSM — Décisions
 
+## 2026-08-01 — Suppression de l'auto-sélection de boutique à la connexion (ticket 01)
+
+**Décision** : `login.html` ne va plus chercher la première boutique venue pour pré-remplir la
+session d'un compte sans `boutique_id`. Un admin plateforme se connecte désormais avec
+`boutique_id: null` et choisit explicitement depuis la console des boutiques.
+
+**Pourquoi** : le code retiré prenait `bData.data[0]` — la première boutique par ordre
+alphabétique. L'exploitant travaillait donc sur un client tiré au sort, sans l'avoir choisi et sans
+que rien à l'écran ne le lui dise. Sur un accès qui reste complet en écriture, c'est le pire défaut
+possible : agir sur les données d'un client en croyant être ailleurs. La spec du chantier en fait
+d'ailleurs le motif du bandeau permanent (ticket 03).
+
+**Conséquence assumée** : entre la connexion et la sélection (ticket 02), un admin plateforme n'a
+aucun `boutique_id` injecté — comportement identique à celui d'avant l'auto-sélection. La console
+étant le point d'entrée, ce cas se limite à celui qui n'a pas encore choisi.
+
+## 2026-08-01 — `GET /api/boutiques` expose `boutique_id` **et** `id` sur le chemin admin plateforme
+
+**Décision** : `listAllBoutiques()` fait `SELECT b.*, b.id AS boutique_id, (…) AS nb_comptes`. La
+colonne `id` est donc renvoyée deux fois, sous deux noms.
+
+**Pourquoi** : la convention issue du chantier d'isolation (`CLAUDE.md` § Invariants) impose
+d'aliaser la clé primaire de `boutiques` dès qu'une requête l'expose. Mais des consommateurs
+existants lisent encore `id` sur cette réponse — la retirer serait une régression sans rapport avec
+le ticket. Les deux coexistent : les nouveaux consommateurs (à commencer par la console) prennent
+`boutique_id`, les anciens continuent de fonctionner. À trancher le jour où plus rien ne lit `id`.
+
+**Chemin manager non touché** : `listBoutiqueForUser()` garde son `SELECT *`, sans `nb_comptes`. Un
+test E2E verrouille cette forme — l'enrichir n'apporterait rien à un manager et toucherait au
+chemin tenant sans contrepartie.
+
 ## 2026-07-30 — Fiche client (`clients.html`) : coordonnées obligatoires (sauf Notes)
 
 **Décision** : dans le formulaire "Nouveau client"/"Modifier" de `/clients`, tous les champs deviennent obligatoires — Prénom, Nom, Email, Téléphone, Adresse, Code postal, Ville, Pays. Seul **Notes** reste optionnel (note interne libre, pas une coordonnée client). Demandé par l'utilisateur suite à la fiche client vide observée en capture d'écran.

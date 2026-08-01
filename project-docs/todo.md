@@ -43,8 +43,9 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 > tranchés** dans la spec — ne pas les rouvrir. Le handoff `%TEMP%\...\handoff-supervision-superadmin.md`
 > est **périmé** : son contenu est absorbé par la spec versionnée.
 >
-> - [ ] Ticket 01 — console des boutiques (lecture seule)
-> - [ ] Ticket 02 — sélection et bascule des 29 pages *(bloqué par 01)*
+> - [x] Ticket 01 — console des boutiques (lecture seule) — **fait le 2026-08-01**, commit `2a8c007`,
+>   checkpoint 68. Non poussé, non déployé.
+> - [ ] Ticket 02 — sélection et bascule des 29 pages *(débloqué — prenable)*
 > - [ ] Ticket 03 — bandeau permanent et retour console *(bloqué par 02)*
 > - [ ] Ticket 04 — journal des actions de plateforme *(bloqué par 02)*
 >

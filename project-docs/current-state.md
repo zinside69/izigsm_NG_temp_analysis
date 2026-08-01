@@ -1,3 +1,85 @@
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 68 — ticket 01 livré : console des boutiques)
+
+## Checkpoint 68 — Supervision, ticket 01 : la console des boutiques existe (2026-08-01)
+
+Première session d'implémentation du chantier. `/implement` sur le ticket 01, en contexte neuf,
+conformément à `docs/agents/issue-tracker.md`. Commit `2a8c007` sur `main`, **non poussé, non
+déployé**. Ticket passé à `statut: done` → le ticket 02 est prenable.
+
+### Ce qui est livré
+
+L'admin plateforme se connecte et arrive sur `/console-boutiques` : la liste des enseignes
+clientes actives, chacune avec son nom, son slug et son nombre de comptes, avec recherche par nom
+et un état vide explicite. Écran **en lecture seule** — cliquer une boutique ne fait rien, la
+sélection appartient au ticket 02.
+
+| Fichier | Changement |
+|---|---|
+| `src/services/boutiqueService.ts` | `listAllBoutiques()` → `nb_comptes` (sous-requête `COUNT(*)` sur `users`) + alias `b.id AS boutique_id`. Nouveau type `BoutiqueAvecComptes`. |
+| `src/routes/boutiques.ts` | JSDoc et commentaires seulement — aucun changement de logique. |
+| `public/console-boutiques.html` + `static/js/console-boutiques.js` | Nouvelle page, sans barre latérale (aucune boutique sélectionnée → les liens du socle n'auraient aucun contexte). |
+| `public/static/js/app.js` | `isAdminPlateforme()` et `landingPageFor()`. |
+| `public/login.html` | Les 3 redirections passent par `landingPageFor()`. Auto-sélection de boutique **supprimée**. |
+| `public/_redirects`, `public/sw.js` | Règle `/console-boutiques.html` → `/console-boutiques` ; `CACHE_VERSION` v2.82 → **v2.83**. |
+| `tests/` | `boutiqueService.test.ts` (+2 cas), `e2e/console-boutiques.spec.ts` (8 cas, 2 seams), `e2e/auth.spec.ts` bascule sur le compte manager. |
+
+### Le chemin manager n'a pas été touché
+
+`listBoutiqueForUser()` est inchangé, et un test E2E vérifie que sa réponse garde exactement sa
+forme d'avant le chantier — 1 boutique, `id` présent, **pas** de `nb_comptes`. C'était la
+contrainte explicite du ticket : toute retouche du chemin tenant serait une prise de risque
+d'isolation sans contrepartie.
+
+### Un défaut latent fermé au passage
+
+Le chemin Google One Tap traitait « pas de `boutique_id` » comme « onboarding inachevé » et
+poussait vers l'écran de création d'atelier. Un admin plateforme n'a **jamais** de boutique : il
+serait tombé sur cet écran. Voir `bugs.md`.
+
+### Deux défauts trouvés par les tests, corrigés à la source
+
+Aucun des deux n'a été contourné dans le test — c'est le code qui a changé.
+
+1. Les lignes du tableau restaient dans le DOM quand un message les remplaçait : un « aucun
+   résultat » qui contenait encore des résultats, lisibles par une technologie d'assistance.
+2. Les quatre états du bloc message (chargement / vide / aucun résultat / erreur) partagent un
+   seul conteneur et n'étaient distinguables que par leur texte — « en cours de chargement » se
+   lisait comme « il n'y a rien ». Ils portent désormais `data-etat` et `aria-busy`. C'est ce qui
+   rendait un test intermittent : il attendait la présence d'un bloc déjà présent dans le HTML
+   initial.
+
+### Vérifications
+
+| Gate | Résultat | Baseline |
+|---|---|---|
+| `npx vitest run` | **875/877** | ≥ 873/875 (2 échecs de fuseau `agendaService` permanents) |
+| `npx tsc --noEmit` | **32** | ≤ 32 |
+| `npx playwright test` | **145/145**, deux runs complets consécutifs | — |
+| Local live | `wrangler pages dev` + données réelles, puis reprise manuelle sous Chrome | exigé par le ticket |
+
+Contrôle manuel refait sous Chrome après coup, à la demande de l'utilisateur : atterrissage par
+rôle, recherche, état sans résultat, absence d'erreur applicative en console (les 2 erreurs vues
+viennent d'une extension Chrome tierce), et session de l'admin plateforme confirmée à
+`boutique_id: null` — l'auto-sélection est bien morte.
+
+### Écarts signalés, non traités
+
+- **Pas de pagination** : la console rend la liste entière. Sans effet en production (peu de
+  boutiques) ; très visible en local où les runs E2E ont accumulé **~1 700** boutiques de test. La
+  recherche est le mécanisme prévu par la spec ; une pagination relèverait du chantier 2.
+- **La garde de la console est côté client.** Ce n'est pas une faille d'isolation — l'API ne
+  renvoie à un manager que sa propre boutique — mais c'est un choix, pas un oubli.
+- **Base D1 locale polluée** par ~1 700 boutiques issues des runs E2E successifs. Sans incidence
+  sur les tests (ils ciblent la boutique 1 du seed ou créent leur propre tenant), mais toute
+  lecture d'écran en local doit en tenir compte.
+
+### Reste du chantier
+
+02 (sélection + bascule des 29 pages + en-tête « Console plateforme ») → puis 03 (bandeau) et 04
+(journal) en parallèle. Déploiement **groupé après le 04**, jamais ticket par ticket.
+
+---
+
 # iziGSM — État courant (MàJ : 2026-08-01, checkpoint 67 — spec et tickets de la supervision admin plateforme)
 
 ## Checkpoint 67 — Cadrage terminé : spec écrite, chantier 1 découpé en 4 tickets (2026-08-01)

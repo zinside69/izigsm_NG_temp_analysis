@@ -1,3 +1,62 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 68 — ticket 01 livré, reprendre au ticket 02)
+
+## Reprendre ici
+
+**Chantier en cours : supervision admin plateforme, chantier 1.** Le **ticket 01 est terminé**
+(`statut: done`, commit `2a8c007`).
+
+Reprendre à **`/implement`** sur le **ticket 02** :
+`.scratch/supervision-admin-plateforme/issues/02-selection-boutique-bascule-pages.md`
+
+**Frontière** : **02 seul**. Puis 03 et 04 deviennent parallèles.
+
+Un ticket = **une fenêtre de contexte neuve**. Chaque ticket est autoportant. Ne pas relire cette
+conversation ; en cas de doute sur une décision, la source est
+`.scratch/supervision-admin-plateforme/spec.md`, pas `project-docs/`.
+
+⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` /
+`code-review` sont `disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md`
+sous `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
+et suivre le processus.
+
+## Ce que le ticket 01 a posé, dont le ticket 02 hérite
+
+- **`landingPageFor(session)` / `isAdminPlateforme(session)`** dans `public/static/js/app.js` :
+  point de passage unique de l'atterrissage par rôle. Les 3 redirections de `login.html` (mot de
+  passe, Google, fin d'onboarding) y passent. Ne pas réintroduire de `/dashboard` en dur.
+- **`/console-boutiques`** (`public/console-boutiques.html` + `static/js/console-boutiques.js`) :
+  lecture seule, sans barre latérale. Les lignes portent `data-boutique-id` — c'est là que le
+  ticket 02 branche la sélection.
+- **`listAllBoutiques()`** renvoie `nb_comptes` **et** `boutique_id` (alias de `b.id`, `id` étant
+  conservé pour les consommateurs existants). `listBoutiqueForUser()` est intact, et un test E2E
+  verrouille sa forme.
+- **L'auto-sélection de la première boutique venue à la connexion a été supprimée.** Un compte sans
+  boutique repart désormais avec `boutique_id: null`. C'est l'état d'entrée du ticket 02.
+- Le bloc de message de la console porte `data-etat` (`chargement` | `vide` | `aucun-resultat` |
+  `erreur`) et `aria-busy` — s'appuyer dessus dans les tests plutôt que sur la présence du bloc,
+  qui existe dès le HTML initial.
+
+## Rien n'est en attente d'une action humaine
+
+Aucune migration en attente. **Rien n'est déployé et rien ne doit l'être** : le déploiement du
+chantier est **groupé après le ticket 04** — l'état « 02 sans bandeau » ne doit pas atteindre la
+production. Le ticket 04 introduira une migration, à appliquer **à distance avant** le Worker, par
+l'utilisateur (jeton de session sans droits D1 distants, erreur 7403).
+
+## État du dépôt
+
+`main` : commit `2a8c007`, **non poussé**. Baselines après le ticket 01 : `npx vitest run` →
+**875/877** (2 échecs permanents de fuseau `agendaService`), `npx tsc --noEmit` → **32**,
+`npx playwright test` → **145/145**.
+
+⚠️ **Base D1 locale polluée** : ~1 700 boutiques accumulées par les runs E2E successifs. Sans
+incidence sur les tests (ils ciblent la boutique 1 du seed ou créent leur propre tenant), mais une
+lecture d'écran en local en est affectée — filtrer par le nom du seed (« Paris »).
+
+⚠️ Après `npm run build`, **tuer et relancer** `wrangler pages dev` : il ne recharge pas `dist/`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 67 — spec et 4 tickets de la supervision admin plateforme)
 
 ## Reprendre ici

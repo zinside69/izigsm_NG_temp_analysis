@@ -114,6 +114,31 @@ contenait un signal d'isolation quelque part, sans vérifier que ce signal étai
 — faux négatif qui a laissé 23 routes invisibles jusqu'à l'écriture du garde-fou actuel. Ne jamais
 réintroduire ce raccourci dans un futur audit ou script.
 
+## Atterrissage par rôle & console plateforme (depuis 2026-08-01, ticket 01 supervision)
+
+Chantier `.scratch/supervision-admin-plateforme/`. Règles à respecter pour toute page ou tout
+chemin d'authentification futur :
+
+- **Point de passage unique de la redirection post-connexion** : `landingPageFor(session)`
+  (`public/static/js/app.js`) → `/console-boutiques` pour un admin plateforme, `/dashboard` sinon.
+  Les trois chemins de `login.html` (mot de passe, Google One Tap, fin d'onboarding) l'appellent.
+  **Ne jamais réintroduire un `/dashboard` en dur** : l'écran d'arrivée dépendrait alors du chemin
+  d'authentification emprunté.
+- **`isAdminPlateforme(session)`** = `role === 'admin'` **et** `boutique_id` absent. C'est la seule
+  définition opérationnelle ; le rôle en base reste `admin`, la distinction est portée par le
+  `boutique_id` NULL, qui est voulu (ADR 0001) et non un accident de données.
+- **`!boutique_id` ne signifie pas « compte incomplet ».** Trois cas distincts partagent cette
+  valeur nulle : admin plateforme, onboarding Google inachevé, données corrompues. Toute branche
+  sur cette condition doit dire lequel elle vise — un défaut réel de cette classe a été corrigé le
+  2026-08-01 (`bugs.md`).
+- **Aucune auto-sélection de boutique.** Le code qui pré-remplissait la session avec la première
+  boutique renvoyée par l'API a été supprimé : il faisait travailler l'exploitant sur un client
+  tiré au sort. Ne pas le réintroduire sous une autre forme.
+- **Chemin manager intact** : `listBoutiqueForUser()` n'est pas enrichi et sa forme de réponse est
+  verrouillée par un test E2E. Tout enrichissement se fait sur `listAllBoutiques()` seul.
+- Vocabulaire imposé (`CONTEXT.md` § Multi-tenant) : « admin plateforme » / « manager », jamais
+  « admin » seul — ni dans le code, ni dans les commentaires, ni à l'écran.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :

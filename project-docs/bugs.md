@@ -1,5 +1,42 @@
 # iziGSM — Bugs connus
 
+## Connexion Google : un admin plateforme était envoyé sur l'écran de création d'atelier (trouvé et CORRIGÉ le 2026-08-01)
+
+Trouvé en écrivant le ticket 01, jamais remonté par un utilisateur — le compte de supervision se
+connectait par mot de passe, pas par Google.
+
+**Root cause** : `handleGoogleCredential()` (`public/login.html`) traitait l'absence de
+`boutique_id` comme un onboarding inachevé et affichait le panneau « Votre atelier ». L'inférence
+est fausse pour un admin plateforme, qui n'a **jamais** de boutique par conception — c'est
+précisément ce qui lui permet de traverser les boutiques clientes. Il se serait vu proposer de
+créer un atelier au lieu d'entrer dans l'application.
+
+**Correctif** : la condition teste d'abord `isAdminPlateforme()`. Le panneau d'onboarding ne
+s'affiche plus que pour un compte Google réellement sans atelier.
+
+**Classe de défaut à retenir** : `!boutique_id` ne veut pas dire « compte incomplet ». Trois
+significations distinctes se cachent derrière la même valeur nulle — admin plateforme, onboarding
+inachevé, données corrompues. Toute nouvelle branche sur cette condition doit dire laquelle elle
+vise.
+
+## Console des boutiques : lignes fantômes et états indistinguables (trouvés par les tests et CORRIGÉS le 2026-08-01)
+
+Deux défauts de la page livrée au ticket 01, tous deux trouvés par Playwright avant toute
+relecture, et corrigés **dans le code** — aucun test n'a été assoupli pour les faire passer.
+
+1. **Lignes fantômes** : afficher un message (« aucun résultat », erreur) masquait le tableau en
+   CSS sans vider son `<tbody>`. Les lignes précédentes restaient dans le DOM, lisibles par une
+   technologie d'assistance et par tout ce qui interroge le document — un « aucun résultat » qui
+   contenait encore des résultats.
+2. **États indistinguables** : les quatre messages (chargement / vide / aucun résultat / erreur)
+   partagent un seul conteneur et ne se distinguaient que par leur texte. Conséquence directe : un
+   test intermittent, qui attendait la *présence* d'un bloc déjà présent dans le HTML initial et
+   confondait donc « en cours de chargement » avec « il n'y a rien ». Corrigé par `data-etat` +
+   `aria-busy` sur le conteneur.
+
+**À retenir** : une assertion sur la présence d'un élément servi dans le HTML initial ne prouve
+rien sur l'état de la page. Faire porter l'état par un attribut, et asserter dessus.
+
 ## FAILLE — 36 routes par ID sans isolation `boutique_id`, dont 23 invisibles à l'audit statique initial (2026-07-31) — CORRIGÉES
 
 Chantier `feat/isolation-routes-par-id`. Point de départ : un audit manuel avait identifié **13 failles**
