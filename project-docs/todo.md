@@ -17,10 +17,13 @@ Détail et motif : `loop-runbook.md` § 11.
 
 ## 🔴 P1 — Pages hors socle partagé : la moitié de l'application ignore la boutique sélectionnée (constaté 2026-08-01, ticket 03)
 
-Sur ~20 pages internes, **10 seulement appellent `buildSidebar()`** (`clients`, `dashboard`,
-`devis`, `factures`, `qualirepar`, `rachats`, `reconditionnement`, `services`, `stock`,
-`tickets`). Les 10 autres — `settings`, `stats`, `caisse`, `kanban`, `personnel`, `sav`,
-`notifications`, `fournisseurs`, `agenda`, `modules` — portent leur propre mise en page.
+> **10 des ~20 pages internes n'appellent pas `buildSidebar()`** (`settings`, `stats`, `caisse`,
+> `kanban`, `personnel`, `sav`, `notifications`, `fournisseurs`, `agenda`, `modules`). Le critère
+> du ticket est tenu ; l'intention « toute page » ne l'est pas.
+
+Les 10 qui passent bien par le socle partagé : `clients`, `dashboard`, `devis`, `factures`,
+`qualirepar`, `rachats`, `reconditionnement`, `services`, `stock`, `tickets`. Les autres portent
+leur propre mise en page.
 
 Deux conséquences, la seconde bien plus grave que la première :
 

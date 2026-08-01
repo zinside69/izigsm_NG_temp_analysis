@@ -1,3 +1,67 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 71 — ticket 03 livré, reprendre au ticket 04)
+
+## Reprendre ici
+
+**Chantier en cours : supervision admin plateforme, chantier 1.** Tickets 01, 02 et 03 `done`.
+
+Reprendre à **`/implement`** sur le **ticket 04**, le dernier :
+`.scratch/supervision-admin-plateforme/issues/04-journal-actions-plateforme.md`
+
+**Frontière** : 04 seul, plus rien après lui dans ce chantier. Un ticket = **une fenêtre de
+contexte neuve** ; chaque ticket est autoportant. Ne pas relire la conversation précédente ; en cas
+de doute sur une décision, la source est `.scratch/supervision-admin-plateforme/spec.md`, pas
+`project-docs/`.
+
+⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` / `code-review`
+sont `disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md` sous
+`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
+et suivre le processus.
+
+## Ce que le ticket 04 doit savoir
+
+- **C'est lui qui introduit une migration** (nouvelle table de journal, distincte d'`audit_logs`,
+  ADR 0001) — donc lui qui ouvre le déploiement groupé du chantier.
+- **Ordre impératif au déploiement** : `npx wrangler d1 migrations apply DB --remote` **puis**
+  `npm run deploy`. La commande distante est à lancer **par l'utilisateur** (jeton de session sans
+  droits D1 distants, erreur 7403). La migration `0038` est elle aussi en attente d'application
+  distante depuis le 2026-07-31.
+- **`CACHE_VERSION` est à `izigsm-v2.84`** et n'a plus à bouger : le ticket 03 était la dernière
+  tâche frontend. Le ticket 04 est du backend.
+- Tests : `tests/e2e/bandeau-plateforme.spec.ts` et `selection-boutique.spec.ts` ; helpers dans
+  `tests/e2e/fixtures/` (`comptes.ts` → `seConnecter`/`seDeconnecter`/`obtenirToken`,
+  `console-plateforme.ts` → `seConnecterAdminPlateforme`/`creerBoutique`/`choisirBoutique`).
+
+## Le point le plus important à ne pas perdre
+
+**10 des ~20 pages internes n'appellent pas `buildSidebar()`** et lisent `session.boutique_id`
+en direct : `settings`, `stats`, `caisse`, `kanban`, `personnel`, `sav`, `notifications`,
+`fournisseurs`, `agenda`, `modules`. Pour un admin plateforme ce champ est NULL ⇒ **ces écrans
+sont inutilisables, sélection faite ou non**. Le bandeau ne les couvre donc pas — volontairement,
+puisqu'il mentirait sur la boutique réellement visée. 🔴 P1 dans `todo.md` § « Pages hors socle
+partagé ». **Corriger le résolveur avant de poser le bandeau**, et cadrer par
+`/grill-with-docs` → `/to-spec` → `/to-tickets` : c'est une refonte d'interface.
+
+## Pièges d'outillage vérifiés
+
+- `tsconfig` n'inclut pas la lib `dom` : `page.evaluate(() => document…)` dans un test E2E casse la
+  baseline `tsc ≤ 32`. Mesurer par `locator.boundingBox()`, prouver une occultation par un clic.
+- `serviceWorkers: 'block'` (`playwright.config.ts`) : tout stub réseau E2E en dépend, ne pas
+  le retirer.
+- Après `npm run build`, **tuer et relancer** `wrangler pages dev` — il ne recharge pas `dist/`.
+- La suite E2E recrée ~40 tenants par passage : **1 074 boutiques** dans la console locale au
+  moment de ce checkpoint. Méthode de purge dans `current-state.md` § Checkpoint 69.
+
+## Rien n'est en attente d'une action humaine
+
+**Rien n'est déployé et rien ne doit l'être** avant la fin du ticket 04.
+
+## État du dépôt
+
+`main` : `7d2e9f6`, poussé. Baselines : `npx vitest run` → **875/877** (2 échecs permanents de
+fuseau `agendaService`), `npx tsc --noEmit` → **32**, `npx playwright test` → **167/167**.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 70 — ticket 02 livré, reprendre au ticket 03)
 
 ## Reprendre ici

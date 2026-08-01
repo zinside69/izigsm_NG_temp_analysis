@@ -166,6 +166,28 @@ Depuis le ticket 02 (2026-08-01), la boutique consultée :
   `playwright.config.ts`) : `sw.js` intercepte `/api/*` et `page.route()` ne voit pas les requêtes
   d'un service worker.
 
+Depuis le ticket 03 (2026-08-01), le bandeau de la boutique consultée :
+
+- **`renderBandeauPlateforme()` est appelé par `buildSidebar()`**, jamais par une page. Toute page
+  future qui construit son interface avec le socle partagé hérite du bandeau sans rien écrire.
+- **Le bandeau passe au-dessus des modals** (`z-index: 900` contre 500 pour `.modal-overlay`) : un
+  modal de saisie est justement l'écran où l'on écrit chez le client. Ne pas l'abaisser sous 500,
+  et ne pas introduire d'élément d'interface au-dessus de 900 sans se demander s'il a le droit de
+  masquer ce rappel.
+- **Tout élément collé en haut de l'écran doit être décalé** sous `body.avec-bandeau-plateforme`
+  (comme `.sidebar` et `.dash-topbar` dans `main.css`) : un `padding` sur `body` ne déplace ni un
+  `fixed` ni un `sticky`.
+- **Le bandeau est enfant direct de `body`**, hors de `.app-layout` : il doit donc être masqué
+  explicitement en `@media print`, car `_triggerPrint()` ne masque que `body > .app-layout`. Même
+  vigilance pour tout futur élément posé au même niveau, sous peine d'entamer le budget A4.
+- **Il ne couvre volontairement que les 10 pages passant par le socle.** Les 10 autres lisent
+  `session.boutique_id` en direct et ignorent la sélection : leur poser le bandeau les ferait
+  mentir sur la boutique réellement visée. Corriger le résolveur **avant** d'étendre le bandeau
+  (🔴 P1 dans `project-docs/todo.md`).
+- Les tests E2E ne peuvent pas utiliser `document` dans `page.evaluate()` : `tsconfig` n'inclut pas
+  la lib `dom` et la baseline `tsc ≤ 32` saute. Mesurer par `locator.boundingBox()` ; prouver
+  qu'un élément n'est pas recouvert par un **clic** (Playwright vérifie la cible du pointeur).
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :

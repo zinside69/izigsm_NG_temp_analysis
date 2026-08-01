@@ -1,4 +1,81 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 70 — ticket 02 supervision livré)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 71 — ticket 03 supervision livré)
+
+## Checkpoint 71 — Bandeau permanent de la boutique consultée (2026-08-01)
+
+Ticket 03 du chantier supervision : `statut: done`, commit `7d2e9f6` sur `main`.
+**Non déployé** — le déploiement du chantier reste groupé après le ticket 04.
+
+### Ce qui a été livré
+
+Un admin plateforme qui consulte une boutique cliente voit en permanence, en haut de l'écran,
+« Vous consultez la boutique **X** » et un retour à la console. Ni masquable, ni refermable.
+
+- **`renderBandeauPlateforme()` (`app.js`)**, appelé par `buildSidebar()` : le bandeau vient du
+  socle partagé, aucune page n'a été touchée individuellement. Construit par nœuds DOM (le nom de
+  boutique vient de l'API et serait interprété comme du balisage par `innerHTML`).
+- **Décalage du socle plutôt que recouvrement** : `body.avec-bandeau-plateforme` décale `body`,
+  `.sidebar` (fixed) et `.dash-topbar` (sticky) de `--bandeau-h`. Un simple `padding` sur `body`
+  aurait laissé les deux premiers sous le bandeau.
+- **`CACHE_VERSION` → `izigsm-v2.84`** — dernière tâche frontend du chantier, comme prévu au
+  checkpoint 70. Vérifié à l'écran : le navigateur affiche bien « Mise à jour disponible ».
+- **`tests/e2e/bandeau-plateforme.spec.ts`** (10 cas) + helpers de console extraits dans
+  `tests/e2e/fixtures/console-plateforme.ts`, `seDeconnecter()` dans `comptes.ts`.
+
+### Trois décisions prises en cours de route, hors ticket
+
+1. **Le bandeau passe au-dessus des modals** (`z-index: 900` contre 500 pour `.modal-overlay`).
+   Trouvé en revue : un modal de saisie — soit exactement l'écran où l'on écrit chez le client —
+   recouvrait intégralement le bandeau, qui devenait masquable par le premier geste d'écriture.
+   Le test correspondant vérifie l'occultation par un **clic** (Playwright échoue si quoi que ce
+   soit s'interpose), et la mutation a été jouée : remis à `z-index: 200`, le test vire au rouge.
+2. **Masqué à l'impression.** Le bandeau est enfant direct de `body`, or `_triggerPrint()` ne
+   masque que `body > .app-layout` : sans règle `@media print` il volait ~44 mm au budget d'une
+   page A4, garanti par ailleurs.
+3. **Portée limitée aux 10 pages qui appellent `buildSidebar()`** — voir ci-dessous.
+
+### Le constat qui compte : la moitié de l'application est hors socle
+
+**10 des ~20 pages internes n'appellent pas `buildSidebar()`** : `settings`, `stats`, `caisse`,
+`kanban`, `personnel`, `sav`, `notifications`, `fournisseurs`, `agenda`, `modules`. Le critère du
+ticket 03 (« pages qui construisent leur interface avec le socle partagé ») est tenu ; l'intention
+« toute page » ne l'est pas.
+
+Le bandeau manquant est le moindre des deux problèmes. Ces pages lisent
+`JSON.parse(localStorage.getItem('izigsm_session')).boutique_id` **en direct**, pas
+`getBoutiqueId()` — vérifié sur `settings.html` et `stats.html`. Pour un admin plateforme ce champ
+est NULL : **ces écrans sont inutilisables, sélection faite ou non** (`settings` affiche « Compte
+admin global — sélectionnez une boutique »). C'est précisément le cas que la spec du chantier
+annonçait à traiter comme un défaut.
+
+**L'ordre compte** : corriger le résolveur d'abord, poser le bandeau ensuite. Un bandeau sur une
+page qui travaille en réalité ailleurs est pire que pas de bandeau. Tracé en 🔴 P1 dans `todo.md`
+§ « Pages hors socle partagé ».
+
+Corollaire à ne pas oublier : l'affirmation « les 29 pages basculent » du checkpoint 70 vaut pour
+les pages qui passent par les helpers d'appel API partagés — pas pour ces 10-là.
+
+### Ce que la revue en deux axes a rattrapé
+
+- Le recouvrement par les modals (point 1 ci-dessus) — le seul défaut fonctionnel réel.
+- Une assertion fragile : `bandeau.width === viewportSize().width` compare un élément `fixed` à
+  une largeur incluant la barre de défilement. Comparé désormais à la largeur de `body`.
+- `role="status"` sur un repère permanent : région live réannoncée à chaque changement de page.
+  Remplacé par `role="region"` + `aria-label`.
+- Le sélecteur de déconnexion recopié dans deux suites, en contradiction avec l'en-tête du fichier
+  qui promettait de ne pas dépendre de la structure interne du socle → `seDeconnecter()`.
+
+### Vérifications
+
+`npx playwright test` → **167/167** (10 nouveaux cas). `npx vitest run` → **875/877** (les 2
+échecs de fuseau `agendaService`). `npx tsc --noEmit` → **32**. Validation live dans un Chromium
+réel contre `wrangler pages dev` + D1 local : `/dashboard`, `/tickets`, modal ouvert, et compte
+manager (aucun bandeau, aucun décalage).
+
+### Piège d'outillage rencontré
+
+`tsconfig` n'inclut pas la lib `dom` : tout `page.evaluate(() => document…)` dans un test E2E
+ajoute des erreurs `TS2584` et fait sortir de la baseline `tsc ≤ 32`. Mesurer par
+`locator.boundingBox()` et prouver l'occultation par un clic évite complètement `document`.
 
 ## Checkpoint 70 — Sélection d'une boutique et bascule des 29 pages (2026-08-01)
 
