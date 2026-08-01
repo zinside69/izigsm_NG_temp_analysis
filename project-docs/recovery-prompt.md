@@ -11,6 +11,12 @@ Reprendre à **`/implement`** sur le **ticket 01** :
 **Frontière** (tickets dont tous les bloqueurs sont faits) : **01 seul**. Puis 02 s'ouvre, puis 03
 et 04 deviennent parallèles.
 
+**Après les 4 tickets** (décidé le 2026-08-01) : déploiement **groupé**, migration distante puis
+Worker, jamais ticket par ticket — l'état « 02 sans bandeau » ne doit pas atteindre la production.
+Puis **chantier 2 de la supervision** (console enrichie + consultation du journal), avant tout
+autre chantier du backlog : le ticket 04 écrit un journal que rien ne permet encore de lire. Pas
+d'exécution autonome sur ce chantier, un ticket = une session humaine.
+
 Un ticket = **une fenêtre de contexte neuve** (`docs/agents/issue-tracker.md`). Chaque ticket est
 autoportant — contexte, critères d'acceptation et pièges y sont écrits. Ne pas relire cette
 conversation ; en cas de doute sur une décision, la source est

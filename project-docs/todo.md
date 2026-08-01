@@ -47,6 +47,20 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 > - [ ] Ticket 02 — sélection et bascule des 29 pages *(bloqué par 01)*
 > - [ ] Ticket 03 — bandeau permanent et retour console *(bloqué par 02)*
 > - [ ] Ticket 04 — journal des actions de plateforme *(bloqué par 02)*
+>
+> **Décisions de conduite du chantier (2026-08-01) :**
+> - **Déploiement groupé après le ticket 04**, jamais avant : l'état « 02 sans bandeau » ne doit
+>   pas atteindre la production. Ordre impératif — `npx wrangler d1 migrations apply DB --remote`
+>   **puis** `npm run deploy` ; la commande distante est à lancer par l'utilisateur (jeton de
+>   session sans droits D1 distants, erreur 7403).
+> - **Suite = chantier 2 de la supervision** (console enrichie : CA, tickets ouverts, dernière
+>   activité, **consultation du journal**), avant tout autre chantier du backlog. Motif : le
+>   ticket 04 écrit un journal que personne ne peut lire tant que le chantier 2 n'existe pas.
+>   Le chantier 2 n'est cadré qu'à gros grain — repasser par `/grill-with-docs` → `/to-spec` →
+>   `/to-tickets`.
+> - **Pas d'exécution autonome sur ce chantier** : un ticket = une session humaine. Les 4 lignes
+>   ci-dessus sont volontairement en citation — `pick-task.mjs` n'accepte que des `- [ ]` en début
+>   de ligne, la loop ne les piochera donc pas.
 
 
 **Symptôme, constaté par l'utilisateur en production** : connecté avec le compte admin plateforme
