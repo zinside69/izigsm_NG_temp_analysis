@@ -731,6 +731,41 @@ function hasRole(...roles) {
 }
 
 /**
+ * Vrai si la session est celle d'un **admin plateforme** — l'exploitant du SaaS,
+ * pas un client.
+ *
+ * Critère opérationnel (spec supervision, ADR 0001) : rôle `admin` **et** aucune
+ * boutique de rattachement. Le `boutique_id` NULL n'est pas un accident de données :
+ * c'est par conception ce qui autorise ce compte à traverser les boutiques clientes.
+ * Un manager, lui, reste toujours borné à la sienne.
+ *
+ * @param {object|null} session - Session lue depuis le stockage (défaut : session courante)
+ * @returns {boolean}
+ */
+function isAdminPlateforme(session = null) {
+  const s = session ?? JSON.parse(
+    localStorage.getItem('izigsm_session') ||
+    sessionStorage.getItem('izigsm_session') ||
+    'null'
+  );
+  return !!s && s.role === 'admin' && !s.boutique_id;
+}
+
+/**
+ * Page d'atterrissage après authentification, selon le rôle.
+ *
+ * Point de passage **unique** : la page de connexion redirige depuis trois chemins
+ * distincts (mot de passe, Google One Tap, fin d'onboarding). Les faire diverger
+ * ferait dépendre l'écran d'arrivée du chemin d'authentification emprunté.
+ *
+ * @param {object|null} session - Session à évaluer (défaut : session courante)
+ * @returns {string} `/console-boutiques` pour un admin plateforme, `/dashboard` sinon
+ */
+function landingPageFor(session = null) {
+  return isAdminPlateforme(session) ? '/console-boutiques' : '/dashboard';
+}
+
+/**
  * Retourne le boutique_id depuis la session
  */
 function getBoutiqueId() {

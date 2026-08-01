@@ -1,7 +1,7 @@
 ---
 id: 001
 titre: Console des boutiques — l'admin plateforme voit ses clients à la connexion
-statut: ready-for-agent
+statut: done
 bloque-par: []
 ---
 
@@ -32,17 +32,38 @@ Cette étape est en **lecture seule** : cliquer une boutique ne fait encore rien
 
 ## Critères d'acceptation
 
-- [ ] Une connexion en admin plateforme aboutit sur la console, pas sur le tableau de bord
-- [ ] La console liste toutes les boutiques actives du seed, chacune avec nom, slug et nombre de comptes
-- [ ] Le nombre de comptes est exact (vérifié contre les données du seed)
-- [ ] Une recherche par nom filtre la liste
-- [ ] Sans aucune boutique active, un message explicite s'affiche — pas une liste vide muette, pas de bouton de création
-- [ ] Un manager atteignant l'URL de la console est renvoyé vers son tableau de bord
-- [ ] La liste renvoyée à un manager reste limitée à sa boutique, au même format qu'avant ce ticket
-- [ ] Une connexion en manager aboutit toujours sur le tableau de bord
-- [ ] `npx vitest run` ≥ 873/875 (les 2 échecs de fuseau `agendaService` sont permanents)
-- [ ] `npx tsc --noEmit` ≤ 32 erreurs
-- [ ] Validation en local live (`wrangler pages dev` + données réelles), pas seulement par relecture
+- [x] Une connexion en admin plateforme aboutit sur la console, pas sur le tableau de bord
+- [x] La console liste toutes les boutiques actives du seed, chacune avec nom, slug et nombre de comptes
+- [x] Le nombre de comptes est exact (vérifié contre les données du seed)
+- [x] Une recherche par nom filtre la liste
+- [x] Sans aucune boutique active, un message explicite s'affiche — pas une liste vide muette, pas de bouton de création
+- [x] Un manager atteignant l'URL de la console est renvoyé vers son tableau de bord
+- [x] La liste renvoyée à un manager reste limitée à sa boutique, au même format qu'avant ce ticket
+- [x] Une connexion en manager aboutit toujours sur le tableau de bord
+- [x] `npx vitest run` ≥ 873/875 (les 2 échecs de fuseau `agendaService` sont permanents)
+- [x] `npx tsc --noEmit` ≤ 32 erreurs
+- [x] Validation en local live (`wrangler pages dev` + données réelles), pas seulement par relecture
+
+## Réalisation (2026-08-01)
+
+- URL retenue : `/console-boutiques` (`public/console-boutiques.html` +
+  `public/static/js/console-boutiques.js`).
+- `listAllBoutiques()` enrichi de `nb_comptes` (agrégat sur `users`) et de l'alias
+  `b.id AS boutique_id` ; `listBoutiqueForUser()` intact.
+- Redirection de connexion factorisée dans `landingPageFor()` / `isAdminPlateforme()`
+  (`app.js`), appliquée aux trois chemins de `login.html`.
+- **Retiré** : l'auto-sélection de la première boutique venue à la connexion d'un compte
+  sans boutique — elle faisait travailler l'exploitant sur un client tiré au sort.
+- Vérifications : `vitest` 875/877, `tsc` 32 erreurs, Playwright 145/145 (deux runs
+  complets consécutifs), plus un contrôle visuel de la console et de l'état vide.
+
+Reste à traiter dans les tickets suivants : l'en-tête « Console plateforme » et le
+libellé « MyDesk » (ticket 02), le bandeau permanent (ticket 03).
+
+**Point signalé, non traité** (hors périmètre) : la console charge et rend la liste
+entière sans pagination. Sans effet en production (peu de boutiques) ; visible en local
+où les runs E2E ont accumulé ~1 300 boutiques. La recherche est le mécanisme prévu par
+la spec ; une pagination relèverait du chantier 2 si le volume le justifie.
 
 ## Notes
 

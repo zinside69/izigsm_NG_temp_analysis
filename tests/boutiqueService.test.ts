@@ -25,6 +25,7 @@ import {
   updateBoutiqueSettings,
   getStatsBoutique,
   type Boutique,
+  type BoutiqueAvecComptes,
   type BoutiqueSettings,
   type CreateBoutiqueInput,
   type UpdateBoutiqueInput,
@@ -63,10 +64,24 @@ const SETTINGS_1: BoutiqueSettings = {
 
 // ─── listAllBoutiques ─────────────────────────────────────────────────────────
 
+// SQL du chemin admin plateforme — enrichi du nombre de comptes rattachés pour
+// la console des boutiques (chantier supervision, ticket 01). Répliqué ici car
+// le mock Database matche sur la requête exacte (normalisée).
+const SQL_LIST_ALL =
+  `SELECT b.*,
+          b.id AS boutique_id,
+          (SELECT COUNT(*) FROM users u WHERE u.boutique_id = b.id) AS nb_comptes
+     FROM boutiques b
+    WHERE b.actif = 1
+    ORDER BY b.nom`
+
+const BOUTIQUE_1_COMPTES: BoutiqueAvecComptes = { ...BOUTIQUE_1, boutique_id: 1, nb_comptes: 3 }
+const BOUTIQUE_2_COMPTES: BoutiqueAvecComptes = { ...BOUTIQUE_2, boutique_id: 2, nb_comptes: 0 }
+
 describe('listAllBoutiques', () => {
   it('retourne toutes les boutiques actives triées par nom', async () => {
     const db = createMockDatabase()
-    db.__setListResponse('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom', [BOUTIQUE_1, BOUTIQUE_2])
+    db.__setListResponse(SQL_LIST_ALL, [BOUTIQUE_1_COMPTES, BOUTIQUE_2_COMPTES])
 
     const result = await listAllBoutiques(db)
 
@@ -77,11 +92,33 @@ describe('listAllBoutiques', () => {
 
   it('retourne un tableau vide si aucune boutique active', async () => {
     const db = createMockDatabase()
-    db.__setListResponse('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom', [])
+    db.__setListResponse(SQL_LIST_ALL, [])
 
     const result = await listAllBoutiques(db)
 
     expect(result).toEqual([])
+  })
+
+  it('expose le nombre de comptes et le slug de chaque boutique', async () => {
+    const db = createMockDatabase()
+    db.__setListResponse(SQL_LIST_ALL, [BOUTIQUE_1_COMPTES, BOUTIQUE_2_COMPTES])
+
+    const result = await listAllBoutiques(db)
+
+    expect(result[0].nb_comptes).toBe(3)
+    expect(result[0].slug).toBe('izigsm-paris')
+    expect(result[1].nb_comptes).toBe(0)
+  })
+
+  it('compte les comptes rattachés à chaque boutique (agrégat sur users)', async () => {
+    const db = createMockDatabase()
+
+    await listAllBoutiques(db)
+
+    // Le comptage doit être fait par la requête elle-même : sans agrégat SQL,
+    // la console afficherait un nombre inventé côté frontend.
+    const [call] = db.__getCalls()
+    expect(call.sql).toMatch(/COUNT\(\*\).*users/i)
   })
 })
 

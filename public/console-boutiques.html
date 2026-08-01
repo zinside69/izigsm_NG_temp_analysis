@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.svg">
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console des boutiques — iziGSM</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    /* ─── Console plateforme ───────────────────────────────────────────────
+       Page volontairement sans barre latérale : à ce stade aucune boutique
+       n'est sélectionnée, les liens du socle applicatif n'auraient aucun
+       contexte sur lequel travailler. */
+    .console-shell   { min-height: 100vh; display: flex; flex-direction: column; background: #f6f7fb; }
+    .console-wrap    { flex: 1; width: 100%; max-width: 1000px; margin: 0 auto; padding: 32px 24px 48px; }
+    .console-intro   { margin-bottom: 22px; }
+    .console-intro h1 { margin: 0 0 6px; font-size: 1.6rem; letter-spacing: -0.04em; color: var(--navy); }
+    .console-intro p  { margin: 0; color: var(--muted); font-size: 0.94rem; }
+    .b-slug          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86rem; color: var(--muted); }
+    .b-comptes       { font-variant-numeric: tabular-nums; }
+    .console-hint    { padding: 14px 22px; border-top: 1px solid #f3f4f6; color: var(--muted); font-size: 0.84rem; }
+  </style>
+</head>
+<body>
+  <div class="console-shell">
+    <header class="topbar simple">
+      <a class="brand" href="/console-boutiques"><span class="brand-mark">i</span><span>iziGSM</span></a>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span id="console-identite" style="font-size:0.88rem;color:var(--muted);"></span>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Se déconnecter</button>
+      </div>
+    </header>
+
+    <div class="console-wrap">
+      <div class="console-intro">
+        <p class="eyebrow" style="margin:0 0 8px;">CONSOLE PLATEFORME</p>
+        <h1>Boutiques clientes</h1>
+        <p>Les enseignes actives de la plateforme. Choisissez celle que vous devez superviser.</p>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <h3 id="console-compteur">Boutiques</h3>
+          <div class="table-actions">
+            <div class="search-input">
+              <span class="search-icon">🔎</span>
+              <input type="search" id="console-search" placeholder="Rechercher par nom…" autocomplete="off" aria-label="Rechercher une boutique par nom">
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau des boutiques — masqué tant qu'il n'y a rien à montrer -->
+        <table id="console-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Slug</th>
+              <th style="text-align:right;">Comptes</th>
+            </tr>
+          </thead>
+          <tbody id="console-list"></tbody>
+        </table>
+
+        <!-- État vide / chargement / erreur — un seul message à la fois.
+             `data-etat` distingue ces cas : le conteneur est le même, seul son
+             contenu change, et « chargement » ne doit pas se lire comme « rien ». -->
+        <div id="console-empty" class="empty-state" data-etat="chargement" aria-busy="true" style="padding:44px 22px;">
+          <div class="empty-icon">🏪</div>
+          <h3 id="console-empty-title">Chargement…</h3>
+          <p id="console-empty-text">Récupération des boutiques clientes.</p>
+        </div>
+
+        <div class="console-hint">
+          La sélection d'une boutique arrive à l'étape suivante — cet écran est en lecture seule.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/console-boutiques.js"></script>
+  <script src="/static/js/pwa.js"></script>
+</body>
+</html>

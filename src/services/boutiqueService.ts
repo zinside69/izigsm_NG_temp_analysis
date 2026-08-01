@@ -15,8 +15,8 @@ import type { Database } from '../ports/database'
  *   `routes/boutiques.ts` est un controller pur qui appelle ce service — 0 SQL direct.
  *
  * Fonctions exposées :
- *   - `listAllBoutiques()`      → toutes les boutiques actives (admin)
- *   - `listBoutiqueForUser()`   → boutique d'un utilisateur précis (non-admin)
+ *   - `listAllBoutiques()`      → toutes les boutiques actives + nb de comptes (admin plateforme)
+ *   - `listBoutiqueForUser()`   → boutique d'un utilisateur précis (manager / autres rôles)
  *   - `getBoutiqueById()`       → détail boutique par id
  *   - `getBoutiqueSettings()`   → paramètres d'une boutique
  *   - `createBoutique()`        → INSERT boutique + boutique_settings
@@ -55,6 +55,21 @@ export interface Boutique {
   description:  string | null
   logo_url:     string | null
   actif:        number
+}
+
+/**
+ * Boutique enrichie du nombre de comptes rattachés — chemin **admin plateforme**
+ * uniquement (console des boutiques, chantier supervision 2026-08-01).
+ *
+ * `boutique_id` double `id` : la convention du chantier d'isolation impose d'aliaser
+ * la clé primaire de `boutiques` dès qu'une requête l'expose (`CLAUDE.md` § Invariants
+ * isolation). `id` est conservé en parallèle car des consommateurs existants de
+ * `GET /api/boutiques` le lisent encore — le retirer serait une régression hors
+ * périmètre de ce ticket.
+ */
+export interface BoutiqueAvecComptes extends Boutique {
+  boutique_id: number
+  nb_comptes:  number
 }
 
 /**
@@ -163,16 +178,32 @@ export interface UpdateSettingsInput {
 // ─── listAllBoutiques ─────────────────────────────────────────────────────────
 
 /**
- * Liste toutes les boutiques actives (accès administrateur).
+ * Liste toutes les boutiques actives (accès **admin plateforme**).
  *
- * Retourne toutes les boutiques triées par nom.
- * Réservé aux utilisateurs avec le rôle `admin`.
+ * Retourne toutes les boutiques triées par nom, chacune enrichie du nombre de
+ * comptes qui lui sont rattachés (`nb_comptes`) — donnée affichée par la console
+ * des boutiques pour mesurer la taille d'une enseigne avant d'y entrer.
+ *
+ * Le comptage porte sur **tous** les comptes rattachés à la boutique, actifs ou
+ * non : c'est le nombre de comptes ouverts chez ce client, pas le nombre de
+ * connexions possibles aujourd'hui.
+ *
+ * Chemin admin plateforme uniquement — `listBoutiqueForUser()` (chemin manager)
+ * reste volontairement inchangé : l'information ne lui sert pas, et modifier le
+ * chemin tenant serait une prise de risque d'isolation sans contrepartie.
  *
  * @param db  Port Database
- * @returns   Tableau de boutiques actives, trié alphabétiquement
+ * @returns   Tableau de boutiques actives + `nb_comptes`, trié alphabétiquement
  */
-export async function listAllBoutiques(db: Database): Promise<Boutique[]> {
-  return db.all<Boutique>('SELECT * FROM boutiques WHERE actif = 1 ORDER BY nom')
+export async function listAllBoutiques(db: Database): Promise<BoutiqueAvecComptes[]> {
+  return db.all<BoutiqueAvecComptes>(
+    `SELECT b.*,
+            b.id AS boutique_id,
+            (SELECT COUNT(*) FROM users u WHERE u.boutique_id = b.id) AS nb_comptes
+       FROM boutiques b
+      WHERE b.actif = 1
+      ORDER BY b.nom`
+  )
 }
 
 // ─── listBoutiqueForUser ──────────────────────────────────────────────────────

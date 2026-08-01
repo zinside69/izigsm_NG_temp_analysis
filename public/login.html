@@ -126,27 +126,14 @@
           // Stocker token + session au format attendu par app.js
           const user = data.user;
 
-          // ─── Auto-sélection boutique pour l'admin ────────────────────────────
-          // L'admin n'est rattaché à aucune boutique (boutique_id: null en base).
-          // On récupère la première boutique disponible pour pré-renseigner la
-          // session et permettre aux KPIs dashboard de charger correctement.
-          let boutiqueId   = user.boutique_id   ?? null;
-          let boutiqueName = user.boutique_name ?? null;
-
-          if (!boutiqueId) {
-            try {
-              const bRes  = await fetch('/api/boutiques', {
-                headers: { Authorization: `Bearer ${data.accessToken}` },
-              });
-              const bData = await bRes.json();
-              if (bData.success && Array.isArray(bData.data) && bData.data.length > 0) {
-                boutiqueId   = bData.data[0].id;
-                boutiqueName = bData.data[0].nom;
-              }
-            } catch (_) {
-              // non bloquant — le dashboard gèrera l'absence de boutique
-            }
-          }
+          // ─── Boutique de rattachement ────────────────────────────────────────
+          // Un admin plateforme n'en a aucune (boutique_id NULL en base, par
+          // conception). L'auto-sélection de la première boutique venue qui
+          // existait ici a été retirée : elle faisait travailler l'exploitant
+          // sur un client tiré au sort sans qu'il l'ait choisi. Le choix se fait
+          // désormais explicitement depuis la console des boutiques.
+          const boutiqueId   = user.boutique_id   ?? null;
+          const boutiqueName = user.boutique_name ?? null;
 
           const session = {
             name:         `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
@@ -159,7 +146,9 @@
           localStorage.setItem('izigsm_token',         data.accessToken);
           localStorage.setItem('izigsm_refresh_token', data.refreshToken);
           localStorage.setItem('izigsm_session',       JSON.stringify(session));
-          window.location.href = '/dashboard';
+          // landingPageFor (app.js) : console pour l'admin plateforme, tableau de
+          // bord pour un manager — même règle sur les trois chemins de connexion.
+          window.location.href = landingPageFor(session);
         } else {
           throw new Error(data.error || 'Email ou mot de passe incorrect.');
         }
@@ -226,6 +215,10 @@
      * jamais de boutique (le One Tap ne collecte pas workshopName) — si boutique_id
      * est absent (première connexion Google sans passer par /register), on affiche
      * le panneau onboarding plutôt que de rediriger vers un dashboard vide/cassé.
+     *
+     * Exception : un admin plateforme n'a **jamais** de boutique, par conception.
+     * Chez lui l'absence de `boutique_id` n'est pas un onboarding inachevé — le
+     * pousser à créer un atelier serait un contresens. Il part vers la console.
      * @param {{credential: string}} response  Réponse Google One Tap
      */
     async function handleGoogleCredential(response) {
@@ -242,12 +235,12 @@
 
       storeAuthSession(res.data);
 
-      if (!res.data.user.boutique_id) {
+      if (!isAdminPlateforme() && !res.data.user.boutique_id) {
         document.getElementById('login-panel').style.display = 'none';
         document.getElementById('onboarding-panel').style.display = 'block';
         return;
       }
-      window.location.href = '/dashboard';
+      window.location.href = landingPageFor();
     }
 
     /**
@@ -357,7 +350,7 @@
       }
 
       storeAuthSession(res.data);
-      window.location.href = '/dashboard';
+      window.location.href = landingPageFor();
     }
 
     // Lancer l'init après chargement

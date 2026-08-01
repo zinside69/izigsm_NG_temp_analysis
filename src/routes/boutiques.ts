@@ -70,15 +70,19 @@ boutiques.use('*', authMiddleware)
  * Liste les boutiques actives selon le rôle de l'utilisateur.
  *
  * Isolation multi-tenant :
- *   - `admin` → retourne toutes les boutiques actives via `listAllBoutiques()`
- *   - Autres  → retourne uniquement la boutique de l'utilisateur via `listBoutiqueForUser()`
+ *   - `admin` (admin plateforme) → toutes les boutiques actives via `listAllBoutiques()`,
+ *     chacune enrichie de `nb_comptes` pour la console des boutiques
+ *   - Autres (manager, technicien…) → uniquement la boutique de l'utilisateur via
+ *     `listBoutiqueForUser()` — chemin inchangé, sans `nb_comptes`
  *
- * @returns 200 `{ success: true, data: Boutique[] }`
+ * @returns 200 `{ success: true, data: Boutique[] | BoutiqueAvecComptes[] }`
  */
 boutiques.get('/', async (c) => {
   const user = c.get('user')
 
-  // Admin voit toutes les boutiques ; les autres rôles voient uniquement la leur
+  // L'admin plateforme voit toutes les boutiques clientes ; un manager (et les
+  // autres rôles) ne voit que la sienne. Le rôle en base reste `admin` — c'est le
+  // vocabulaire qui distingue l'exploitant du responsable d'une boutique.
   const data = user.role === 'admin'
     ? await listAllBoutiques(c.get('db'))
     : await listBoutiqueForUser(c.get('db'), user.boutique_id)

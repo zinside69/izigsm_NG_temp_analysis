@@ -7,6 +7,7 @@
 /reset-password.html  /reset-password  301
 /verify-email.html    /verify-email    301
 /dashboard.html       /dashboard       301
+/console-boutiques.html /console-boutiques 301
 /tickets.html         /tickets         301
 /clients.html         /clients         301
 /stock.html           /stock           301
