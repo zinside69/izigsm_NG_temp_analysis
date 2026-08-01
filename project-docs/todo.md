@@ -34,7 +34,20 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 - [x] Fixture `tests/e2e/fixtures/service-modele-link.ts` repassée par l'API, `PRAGMA foreign_keys = OFF` supprimé
 </details>
 
-## 🔴 Supervision superadmin — l'interface manque (constaté 2026-07-31, PAS commencé)
+## 🔴 Supervision superadmin — l'interface manque (constaté 2026-07-31, CADRÉ le 2026-08-01, implémentation à faire)
+
+> **Cadrage terminé (checkpoint 67).** Spec et tickets versionnés dans
+> `.scratch/supervision-admin-plateforme/` — `spec.md` + 4 tickets `ready-for-agent` sous `issues/`.
+> **Reprendre à `/implement` sur le ticket 01**, en session neuve. Frontière : 01 seul, puis 02,
+> puis 03 et 04 en parallèle. Les 4 points « à trancher au grilling » listés plus bas **sont
+> tranchés** dans la spec — ne pas les rouvrir. Le handoff `%TEMP%\...\handoff-supervision-superadmin.md`
+> est **périmé** : son contenu est absorbé par la spec versionnée.
+>
+> - [ ] Ticket 01 — console des boutiques (lecture seule)
+> - [ ] Ticket 02 — sélection et bascule des 29 pages *(bloqué par 01)*
+> - [ ] Ticket 03 — bandeau permanent et retour console *(bloqué par 02)*
+> - [ ] Ticket 04 — journal des actions de plateforme *(bloqué par 02)*
+
 
 **Symptôme, constaté par l'utilisateur en production** : connecté avec le compte admin plateforme
 (`support@soteli.fr`), il ne voit aucune boutique cliente. Or le besoin est explicite — le superadmin

@@ -1,3 +1,75 @@
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 67 — spec et tickets de la supervision admin plateforme)
+
+## Checkpoint 67 — Cadrage terminé : spec écrite, chantier 1 découpé en 4 tickets (2026-08-01)
+
+Session de cadrage uniquement, **aucun code applicatif touché**. Reprise via `/init recover izigsm`,
+puis `/to-spec` → `/to-tickets` sur le chantier laissé ouvert au checkpoint 66. Commit `8213f9e`,
+poussé.
+
+### Ce qui est livré
+
+`.scratch/supervision-admin-plateforme/spec.md` + 4 tickets sous `issues/`, tous
+`statut: ready-for-agent`. **Frontière : le ticket 01 seul** ; 02 l'attend, 03 et 04 attendent 02
+puis deviennent parallèles.
+
+| Ticket | Livre |
+|---|---|
+| 01 | Connexion → console listant les boutiques (nom, slug, nb de comptes), état vide explicite, manager exclu |
+| 02 | Les 29 pages basculent sur la boutique choisie ; en-tête « Console plateforme » au lieu de « MyDesk » |
+| 03 | Bandeau permanent non masquable + retour console + purge à la déconnexion (`CACHE_VERSION`) |
+| 04 | Table dédiée + middleware : journalisation automatique des écritures de plateforme |
+
+### Les 4 points laissés ouverts au grilling sont tranchés
+
+- **Console sans aucune boutique** → message explicite, **aucun bouton de création** (hors périmètre).
+- **Libellé « MyDesk » pour un compte sans boutique** → « Console plateforme » avant sélection, nom
+  de la boutique ensuite. « MyDesk » reste le repli d'une boutique cliente sans nom configuré.
+- **Forme du bandeau** → bannière haute rendue par le socle partagé (donc les 29 pages sans les
+  toucher), non masquable.
+- **Schéma du journal** → auteur, boutique visée, méthode, chemin, statut HTTP, corps tronqué et
+  expurgé, IP, horodatage. `entite_type`/`donnees_avant/apres` **écartés** (un middleware ne les
+  connaît pas ; les déduire du chemin produirait un registre faux). **Sans clé étrangère** — un
+  registre de supervision doit survivre à une boutique désactivée, et le dépôt a déjà payé une FK
+  pendante (`0031` → `0038`).
+
+### Deux décisions qui portent le risque du chantier
+
+- **Point de passage unique côté frontend** : la boutique choisie est mémorisée **dans l'objet de
+  session existant**, pas dans une nouvelle clé — elle hérite du bon support (« se souvenir de moi »)
+  et de la purge à la déconnexion. Le pari « 29 pages sans les toucher » ne tient que tant que
+  chaque page emprunte les helpers d'appel partagés ; une page qui exigerait une retouche est un
+  défaut à signaler, pas un cas à contourner.
+- **Complétude avant précision** (journal) : une mutation d'admin plateforme dont la boutique visée
+  n'est pas résolue est journalisée **quand même**, cible nulle. Ne jamais taire une ligne faute de
+  pouvoir la qualifier — c'est le trou exact que l'ADR reproche à une journalisation dispersée.
+
+### Choix de découpage assumés (décisions utilisateur du 2026-08-01)
+
+- **02 et 03 restent séparés** : entre les deux, l'écriture cross-boutique existe sans bandeau
+  affiché. Accepté parce que le déploiement est manuel et groupé — cet état n'atteint jamais la
+  production.
+- **04 est bloqué par 02** pour être réellement vérifiable (il faut pouvoir cibler une boutique
+  pour observer la ligne écrite), alors que le middleware ne dépend techniquement de rien.
+- **Seam de test du journal** : vitest + mock du port `Database`, car *lire* le journal appartient
+  au chantier 2. Les 3 autres seams sont les seams Playwright existants (navigateur et API).
+
+### Fait d'outillage, à ne pas redécouvrir
+
+Les skills `mattpocock-skills` de la chaîne (`to-spec`, `to-tickets`, `implement`, `triage`) sont
+déclarés `disable-model-invocation` : l'outil `Skill` les refuse (« cannot be used with Skill
+tool »), y compris quand l'utilisateur les demande explicitement. Le contournement est de lire leur
+`SKILL.md` directement et de suivre le processus. `grill-with-docs` est dans le même cas. Noté dans
+`CLAUDE.md` § Workflow de développement.
+
+### Vérifié sans rien écrire
+
+`/setup-matt-pocock-skills` relancé : `docs/agents/{issue-tracker,triage-labels,domain}.md`,
+`CONTEXT.md`, `docs/adr/` et la section `## Agent skills` de `CLAUDE.md` sont **déjà** en place et
+cohérents. Aucun fichier de configuration modifié. `.scratch/` confirmé non ignoré par git — les
+tickets suivent bien le dépôt d'une machine à l'autre.
+
+---
+
 # iziGSM — État courant (MàJ : 2026-07-31, checkpoint 66 — clôture sécurité + cadrage de la supervision admin plateforme)
 
 ## Checkpoint 66 — Clôture de la journée : 3 actions humaines faites, garde-fou durci, nouveau chantier cadré (2026-07-31)

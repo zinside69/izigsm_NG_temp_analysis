@@ -142,6 +142,13 @@ Chantier feature non trivial → chaîne `mattpocock-skills`, prioritaire :
 neuf). Tickets sous `.scratch/<feature>/issues/`. `/implement` pilote `tdd` puis
 `code-review` avant commit.
 
+⚠️ Ces skills sont déclarés `disable-model-invocation` dans leur frontmatter : l'outil `Skill`
+les refuse (« cannot be used with Skill tool »), **même quand l'utilisateur les demande
+explicitement**. Constaté le 2026-08-01 sur `to-spec`, vaut aussi pour `to-tickets`, `implement`,
+`grill-with-docs` et `triage`. Contournement : lire directement leur `SKILL.md` sous
+`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
+et suivre le processus qu'il décrit. Ne pas conclure à un plugin mal installé.
+
 Les étapes grilling → spec → tickets tiennent dans **une seule fenêtre de contexte** :
 pas de `/compact` ni `/clear` avant `/to-tickets`. Si la fenêtre sature avant la fin,
 `/handoff` vers une session neuve — ne pas continuer sur un contexte dégradé.

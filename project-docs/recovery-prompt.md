@@ -1,3 +1,49 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 67 — spec et 4 tickets de la supervision admin plateforme)
+
+## Reprendre ici
+
+**Chantier en cours : supervision admin plateforme, chantier 1.** Le cadrage est **terminé** :
+spec écrite, 4 tickets publiés, tout versionné (`8213f9e`).
+
+Reprendre à **`/implement`** sur le **ticket 01** :
+`.scratch/supervision-admin-plateforme/issues/01-console-boutiques-lecture.md`
+
+**Frontière** (tickets dont tous les bloqueurs sont faits) : **01 seul**. Puis 02 s'ouvre, puis 03
+et 04 deviennent parallèles.
+
+Un ticket = **une fenêtre de contexte neuve** (`docs/agents/issue-tracker.md`). Chaque ticket est
+autoportant — contexte, critères d'acceptation et pièges y sont écrits. Ne pas relire cette
+conversation ; en cas de doute sur une décision, la source est
+`.scratch/supervision-admin-plateforme/spec.md`, pas `project-docs/`.
+
+⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` sont
+`disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md` directement et suivre
+le processus.
+
+## Rien n'est en attente d'une action humaine
+
+Aucune migration en attente, aucun correctif non déployé. Session de cadrage pure : **aucun code
+applicatif touché**, donc rien à déployer. Le ticket 04 introduira une migration — elle devra être
+appliquée **à distance avant** le déploiement du Worker, et cette commande est à faire lancer par
+l'utilisateur (jeton de session sans droits D1 distants, erreur 7403).
+
+## État du dépôt
+
+`main` propre et poussé (`8213f9e`, rebasé sur le backup D1 automatique du jour). Baselines
+inchangées : `npx vitest run` → **873/875** (2 échecs permanents de fuseau `agendaService`),
+`npx tsc --noEmit` → **32**.
+
+## Les décisions du cadrage, en bref
+
+Les 4 points laissés ouverts au checkpoint 66 sont tranchés (état vide, libellé « Console
+plateforme », bandeau rendu par le socle partagé, schéma du journal sans `entite_type` ni clé
+étrangère) — détail dans la spec et dans `current-state.md` § Checkpoint 67. Les deux décisions qui
+portent le risque : **point de passage unique** côté frontend (les 29 pages basculent par le
+résolveur partagé, pas page par page) et **complétude avant précision** pour le journal (jamais de
+ligne tue faute de cible résolue).
+
+---
+
 # Recovery Prompt — iziGSM — 2026-07-31 (checkpoint 66 — clôture sécurité, garde-fou durci, supervision admin plateforme cadrée)
 
 ## Reprendre ici
