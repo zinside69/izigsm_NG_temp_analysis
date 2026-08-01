@@ -3,8 +3,12 @@
 ## Checkpoint 75 — Barre latérale sur tout le menu, page 404, XSS du socle (2026-08-01)
 
 Suite directe du checkpoint 74, même journée, **piloté par les constats de l'exploitant à
-l'écran**. Commits `6eb8c5b`, `99c17e6`, `021bed6` (+ `1f372bd` pour le cache). Les deux
-premiers sont **déployés** ; `021bed6` ne l'est pas encore.
+l'écran**. Commits `6eb8c5b`, `99c17e6`, `021bed6` (+ `1f372bd` et le bump `v2.88`).
+
+**Tout est déployé et vérifié en production** (`CACHE_VERSION` `izigsm-v2.88`) : les 10 pages
+hors socle portent bien leur conteneur **et** `main.css` — 10/10 — et un asset absent répond
+`404`. Aucune migration dans ce lot. Le script de vérification a imposé sa fenêtre de 25 s à
+chacun des trois déploiements de la journée, sans incident.
 
 ### Ce qui est livré
 

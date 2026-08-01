@@ -468,8 +468,10 @@ npm run deploy
 
 **État au 2026-08-01 : aucune migration en attente.** `0039` (journal des actions de plateforme)
 a été appliquée à distance, puis le Worker déployé — chantier supervision entièrement en
-production. Le checkpoint 73 (résolveur de boutique, `01ff760`) a été déployé ensuite, sans
-migration : `30e9d734.izigsm.pages.dev` → `repairdesk.fr`. Au passage : la mention « `0038` en attente » des checkpoints 65 à 71 était fausse,
+production. Les checkpoints 73 à 75 ont été déployés ensuite, sans aucune migration :
+résolveur de boutique, correctif `apiGet`, `404.html`, XSS du socle, et la barre latérale sur
+les 19 pages du menu. **État vérifié en production : `CACHE_VERSION` `izigsm-v2.88`, les
+10 pages hors socle conformes 10/10, un asset absent répond `404`.** Au passage : la mention « `0038` en attente » des checkpoints 65 à 71 était fausse,
 `d1_migrations` distant montre qu'elle l'était depuis le 2026-07-31. **L'état d'une base distante
 se lit, il ne se recopie pas de checkpoint en checkpoint.**
 

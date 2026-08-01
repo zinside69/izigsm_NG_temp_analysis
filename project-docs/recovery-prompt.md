@@ -2,9 +2,19 @@
 
 ## Reprendre ici
 
-⚠️ **`021bed6` n'est pas déployé** (barre latérale sur les 19 pages, `CACHE_VERSION`
-`izigsm-v2.88`). Aucune migration. `npm run deploy` enchaîne désormais lui-même la fenêtre
-de propagation et le contrôle — ne jamais ouvrir le domaine avant qu'il ait rendu la main.
+**Tout est déployé, rien n'attend d'action humaine.** `CACHE_VERSION` `izigsm-v2.88` en
+production ; les 10 pages hors socle vérifiées 10/10 (conteneur + `main.css`), un asset
+absent répond `404`. Aucune migration en attente — la dernière reste `0039`.
+
+`npm run deploy` enchaîne désormais `scripts/verifier-deploiement.mjs` : fenêtre de 25 s puis
+contrôle du nom hashé, arrêt en erreur. **Ne jamais ouvrir le domaine avant qu'il ait rendu
+la main** — c'est ce geste qui a mis la production hors service le 2026-08-01.
+
+⚠️ **Vérification métier non faite** : personne n'a encore enregistré une vente en caisse
+depuis le compte de supervision. C'est le geste qui prouverait la chaîne de bout en bout, et
+il devrait laisser une ligne dans `journal_actions_plateforme`. À noter que les compteurs de
+`caisse` resteront muets tant que son enveloppe API n'est pas corrigée (priorité 1
+ci-dessous).
 
 Priorités, dans cet ordre :
 
