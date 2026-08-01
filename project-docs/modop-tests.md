@@ -131,6 +131,24 @@ de ce document. Ordre de diagnostic, du moins cher au plus cher :
 
 ---
 
+## Ce que le gate ne voit pas — l'échec silencieux
+
+Découvert le jour même de son écriture, en pilotant le navigateur : le balayage capte les
+`>= 400` et les exceptions JS, mais **pas une page qui se charge sans rien afficher**.
+
+`caisse.js` et `fournisseurs.js` lisent `r.success` sur le résultat d'`apiGet()`, alors que
+l'enveloppe est `{ ok, status, data, error }` et que le corps de l'API vit sous `r.data`.
+`r.success` vaut `undefined`, la fonction sort par un `return` — HTTP 200, aucune exception,
+page vide. Le gate est vert, la caisse POS n'affiche rien, et n'a jamais rien affiché.
+
+**Leçon** : « la page n'a pas planté » n'est pas « la page fonctionne ». Un gate de charge
+prouve l'absence de deux classes de défaut, pas la présence du service rendu.
+
+Parade retenue pour cette classe (non implémentée, voir `todo.md`) : un garde-fou
+**statique**, sur le modèle de `tests/routes-isolation-conformite.test.ts` — faire échouer la
+suite dès qu'un fichier de `public/static/js/` lit `.success` directement sur le résultat
+d'un `api*()`. Déterministe, contrairement à toute détection de « page vide » au runtime.
+
 ## Ce qui reste non couvert, sciemment
 
 - **Le service worker** (piège 3). Un second projet Playwright l'autorisant a été envisagé

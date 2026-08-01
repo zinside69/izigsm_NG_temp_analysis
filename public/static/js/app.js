@@ -603,6 +603,10 @@ async function tryRefreshToken() {
   }
 }
 
+// Empreinte de build : 2026-08-01b. Sert à forcer un nouveau hash de fichier quand un edge
+// Cloudflare a figé une mauvaise réponse (catch-all HTML en 200) sur l'ancien nom — les
+// assets hashés étant `immutable`, c'est le seul recours sans purge de cache (bugs.md).
+
 /**
  * Ajoute `boutique_id=<boutique consultée>` à une URL qui n'en porte pas déjà.
  *

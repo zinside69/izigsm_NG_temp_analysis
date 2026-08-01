@@ -72,6 +72,51 @@ CSP future produirait le même effet.
 
 - [ ] Externaliser la logique de `public/reset-password.html` dans `public/static/js/reset-password.js`
 
+## 🔴 P1 — 5 pages du menu lisent l'enveloppe API au mauvais niveau (mesuré en PRODUCTION 2026-08-01)
+
+C'est la classe de défaut annoncée par l'audit de persistance du 2026-07-30 (« 4 fichiers
+avec le pattern `r.success`/`r.data` cassé »), désormais **mesurée fichier par fichier et
+prouvée à l'écran**.
+
+`apiGet()` renvoie une **enveloppe** `{ ok, status, data, error }` où `data` est le corps
+JSON complet de l'API. Il faut donc lire `r.data.success` et `r.data.data`. Ces cinq
+fichiers lisent `r.success` — toujours `undefined` — et sortent par un `return` silencieux :
+**l'API répond 200, la page n'affiche jamais rien.**
+
+| Fichier | Lectures correctes | Lectures fautives | Vérifié à l'écran |
+|---|---|---|---|
+| `caisse.js` | 0 | **9** | ✅ oui — KPI, journal, clôtures tous muets |
+| `fournisseurs.js` | 0 | **12** | ✅ oui — tous les KPI à `—` |
+| `reconditionnement.js` | 0 | **11** | non (même signature) |
+| `kanban.js` | 0 | **5** | non (même signature) |
+| `services.js` | 3 | **5** | non — **mixte**, exige une revue site par site |
+
+Preuve relevée en production sur `/fournisseurs` :
+
+```
+r.success       → undefined     ← ce que la page teste
+r.data.success  → true          ← ce qu'il fallait lire
+```
+
+**Portée réelle** : ces pages ne fonctionnent pour **aucun rôle**, pas seulement pour
+l'admin plateforme — la caisse POS n'a jamais rien affiché. À distinguer nettement du
+défaut `boutique_id`, corrigé le même jour et qui, lui, ne touchait que la supervision.
+
+⚠️ **Ne pas traiter comme un remplacement mécanique.** `caisse.js` porte les chemins
+**vente** et **encaissement**, avec chaînage NF525 : une erreur de niveau d'enveloppe y
+produirait un faux succès sur une transaction financière. Revue site par site, et un témoin
+d'écriture par page avant de conclure.
+
+⚠️ **Le gate de balayage ne voit pas ce défaut** : HTTP 200, aucune exception JS, la page se
+charge — elle est simplement vide. Piste retenue, non implémentée : un garde-fou **statique**
+sur le modèle de `tests/routes-isolation-conformite.test.ts`, qui fait échouer la suite dès
+qu'un fichier de `public/static/js/` lit `.success` directement sur le résultat d'un
+`api*()`. C'est déterministe, contrairement à toute tentative de détecter « la page est
+vide » au runtime.
+
+- [ ] Revoir les 5 fichiers site par site et corriger le niveau d'enveloppe (commencer par `fournisseurs.js`, sans enjeu financier, pour valider la méthode ; finir par `caisse.js`)
+- [ ] Ajouter le garde-fou statique contre `r.success` sur un résultat d'`api*()`
+
 ## ✅ 🔴 P1 — `apiGet` doublait le « ? » des URL déjà paginées (constaté en PRODUCTION 2026-08-01, **CORRIGÉ**)
 
 Défaut **antérieur** au chantier supervision, trouvé en pilotant le navigateur sur
