@@ -643,9 +643,9 @@ function waitForAuth() {
   })
 }
 
-function getBoutiqueId() {
-  try {
-    const u = JSON.parse(localStorage.getItem('user') || '{}')
-    return u.boutique_id || 1
-  } catch { return 1 }
-}
+// `getBoutiqueId()` vient d'`app.js` et de nulle part ailleurs. Cette page en a
+// longtemps porté sa propre version, chargée après le socle et l'écrasant donc :
+// elle lisait une clé `user` qu'aucun code n'écrit et retombait sur la boutique 1
+// codée en dur. Supprimée le 2026-08-01 (ticket 02 supervision) — l'agenda était la
+// seule page à ne pas suivre la boutique consultée. Ne pas la réintroduire : un
+// résolveur par page rouvre exactement ce trou.

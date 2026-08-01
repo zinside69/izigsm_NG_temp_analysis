@@ -1,5 +1,52 @@
 # iziGSM — Bugs connus
 
+## `/agenda` visait toujours la boutique 1, en dur (trouvé et CORRIGÉ le 2026-08-01, ticket 02)
+
+Trouvé en implémentant la bascule multi-boutique du ticket 02, en cherchant si une page
+n'empruntait pas les helpers d'appel API partagés.
+
+**Root cause** : `public/static/js/agenda.js` définissait sa **propre** `getBoutiqueId()`. Comme
+`agenda.html` charge `app.js` **puis** `agenda.js`, cette version-là écrasait le résolveur partagé
+sur cette page seulement. Elle lisait `localStorage.getItem('user')` — une clé qu'aucun code du
+dépôt n'écrit, la session vivant sous `izigsm_session` — et retombait donc systématiquement sur son
+repli, `return u.boutique_id || 1` : **la boutique 1, codée en dur**.
+
+**Portée réelle avant ce jour** : aucune pour un manager, `getBoutiqueId(user, param)`
+(`src/lib/middleware.ts:203`) ignorant le paramètre pour un non-admin — le serveur retombait sur sa
+vraie boutique. Le défaut était donc invisible tant qu'aucun compte ne pouvait légitimement viser
+plusieurs boutiques. Il devenait bloquant avec le ticket 02 : l'agenda aurait été la seule des 29
+pages à ne pas suivre la boutique consultée par l'admin plateforme.
+
+**Correctif** : suppression des 6 lignes, remplacées par un commentaire qui dit pourquoi ne pas les
+réintroduire. Couvert par `tests/e2e/selection-boutique.spec.ts` (« l'agenda vise la boutique
+consultée, et non une boutique codée en dur »), qui observe le `boutique_id` réellement envoyé à
+`/api/agenda/kpis`.
+
+**Leçon** : un résolveur redéfini par page ne se voit ni à la lecture d'`app.js`, ni à la lecture de
+la page — seulement en croisant l'ordre de chargement des `<script>`. Un test de bascule par page
+est le seul filet fiable.
+
+## Les stubs réseau Playwright étaient court-circuités par le service worker (trouvé et CORRIGÉ le 2026-08-01)
+
+Symptôme : `console-boutiques.spec.ts` › « sans aucune boutique active, un message explicite
+s'affiche » échouait **deux exécutions de suite complète sur trois**, tout en passant
+systématiquement en isolation. Classe de flake déjà rencontrée au checkpoint 68, mécanisme différent.
+
+**Root cause** : `public/sw.js` appelle `skipWaiting()` (l.87) et `clients.claim()` (l.103) — il
+prend donc le contrôle d'une page **déjà chargée**, à un moment non déterministe, puis intercepte
+`/api/*` en Network First (l.117). Or `page.route()` de Playwright **n'intercepte pas** les requêtes
+émises par un service worker. Le `route.fulfill({ data: [] })` du test était donc contourné chaque
+fois que le service worker gagnait la course : la console recevait les vraies boutiques et l'état
+`vide` n'arrivait jamais.
+
+**Correctif** : `serviceWorkers: 'block'` dans `playwright.config.ts`. Aucune couverture perdue —
+aucun test E2E n'observe le service worker. 157/157 sur trois exécutions complètes consécutives
+après coup.
+
+**À retenir pour tout futur stub réseau E2E sur ce dépôt** : sans ce réglage, un `page.route()` sur
+`/api/*` est une course, pas une garantie. Ne jamais diagnostiquer un tel échec comme un bug
+applicatif avant d'avoir écarté le service worker.
+
 ## 2 violations de clé étrangère préexistantes en base D1 **locale** (relevées le 2026-08-01, NON traitées)
 
 Trouvées incidemment pendant la purge des tenants E2E (checkpoint 69), par un

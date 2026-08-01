@@ -147,6 +147,25 @@ chemin d'authentification futur :
 - Vocabulaire imposé (`CONTEXT.md` § Multi-tenant) : « admin plateforme » / « manager », jamais
   « admin » seul — ni dans le code, ni dans les commentaires, ni à l'écran.
 
+Depuis le ticket 02 (2026-08-01), la boutique consultée :
+
+- **`getBoutiqueId()` (`app.js`) est le résolveur unique** de la boutique sur laquelle travaillent
+  les appels API d'une page : boutique sélectionnée, puis boutique de la session, puis `null`.
+  **Ne jamais redéfinir cette fonction dans un fichier de page** — chargé après le socle, il
+  l'écrase silencieusement sur cette page seule. C'est exactement ce qui laissait `/agenda` figé
+  sur la boutique 1 (`bugs.md`).
+- **La sélection vit dans l'objet de session existant** (`boutique_selectionnee_id` /
+  `_nom`), jamais dans une clé de stockage à part : elle hérite ainsi du support choisi à la
+  connexion et de la purge à la déconnexion, sans code de nettoyage à maintenir. Toute écriture
+  dans la session passe par `_stockageSession()`, sous peine d'en créer une seconde dans l'autre
+  stockage.
+- **L'absence de sélection se lit sur l'identifiant, jamais sur le nom** : une boutique cliente sans
+  nom configuré ferait sinon réafficher « Console plateforme » alors qu'elle est sélectionnée et
+  accessible en écriture.
+- Les tests E2E stubant le réseau exigent `serviceWorkers: 'block'` (déjà dans
+  `playwright.config.ts`) : `sw.js` intercepte `/api/*` et `page.route()` ne voit pas les requêtes
+  d'un service worker.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :

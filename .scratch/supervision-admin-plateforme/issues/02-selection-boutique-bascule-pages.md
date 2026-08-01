@@ -1,7 +1,7 @@
 ---
 id: 002
 titre: Sélection d'une boutique — les 29 pages existantes basculent sur elle
-statut: ready-for-agent
+statut: done
 bloque-par: [001]
 ---
 
@@ -32,15 +32,22 @@ Rien ne change pour un manager.
 
 ## Critères d'acceptation
 
-- [ ] Sélectionner une boutique depuis la console mène à une page métier peuplée des données de cette boutique
-- [ ] Le choix persiste en naviguant vers une autre page, sans nouvelle sélection
-- [ ] Une page qui répondait `400` faute de `boutique_id` répond `200` une fois une boutique choisie
-- [ ] Changer de boutique depuis la console rebascule les pages sur la nouvelle
-- [ ] L'en-tête affiche « Console plateforme » avant toute sélection, puis le nom de la boutique consultée
-- [ ] Un manager voit toujours le nom de sa boutique (ou « MyDesk » si elle n'a pas de nom configuré) — comportement inchangé
-- [ ] Aucune des pages métier existantes n'a été modifiée pour obtenir ce résultat
-- [ ] `npx vitest run` ≥ 873/875 · `npx tsc --noEmit` ≤ 32
-- [ ] Validation en local live sur au moins trois pages métier différentes, pas seulement par relecture
+- [x] Sélectionner une boutique depuis la console mène à une page métier peuplée des données de cette boutique
+- [x] Le choix persiste en naviguant vers une autre page, sans nouvelle sélection
+- [x] Une page qui répondait `400` faute de `boutique_id` répond `200` une fois une boutique choisie
+- [x] Changer de boutique depuis la console rebascule les pages sur la nouvelle
+- [x] L'en-tête affiche « Console plateforme » avant toute sélection, puis le nom de la boutique consultée
+- [x] Un manager voit toujours le nom de sa boutique (ou « MyDesk » si elle n'a pas de nom configuré) — comportement inchangé
+- [x] Aucune des pages métier existantes n'a été modifiée pour obtenir ce résultat — **une
+  exception assumée** : `agenda.js` redéfinissait `getBoutiqueId()` et écrasait le résolveur
+  partagé, la figeant sur la boutique 1 en dur. Traité comme le défaut que la note ci-dessous
+  prévoit : 6 lignes supprimées (aucune adaptation ajoutée), consigné dans `bugs.md`, couvert par
+  un test. Décision utilisateur du 2026-08-01.
+- [x] `npx vitest run` ≥ 873/875 · `npx tsc --noEmit` ≤ 32
+- [x] Validation en local live sur au moins trois pages métier différentes, pas seulement par
+  relecture — **4 pages** (`/dashboard`, `/clients`, `/tickets`, `/agenda`) dans un Chromium réel
+  contre `wrangler pages dev` + D1 local, sur deux boutiques aux données distinctes créées pour
+  l'occasion. `npx playwright test` → 157/157, trois exécutions complètes consécutives.
 
 ## Notes
 

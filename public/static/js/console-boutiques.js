@@ -4,8 +4,9 @@
  * Point d'entrée de l'exploitant du SaaS à la connexion : la liste des enseignes
  * clientes actives, avec pour chacune son nom, son slug et son nombre de comptes.
  *
- * Périmètre volontairement en lecture seule (ticket 01 du chantier supervision) :
- * cliquer une boutique ne fait rien encore, la sélection arrive au ticket 02.
+ * Choisir une boutique fait entrer l'exploitant dans son contexte : le choix vaut pour
+ * toute la session et les pages métier existantes basculent dessus sans être modifiées
+ * (ticket 02 du chantier supervision).
  *
  * Vocabulaire (`CONTEXT.md` § Multi-tenant) : « admin plateforme » et « manager »,
  * jamais « admin » seul — le rôle en base reste `admin`, mais il désigne ici
@@ -93,13 +94,50 @@ const ConsoleBoutiques = (() => {
 
     document.getElementById('console-empty').style.display = 'none';
     document.getElementById('console-table').style.display = '';
+    // Le nom est porté par un attribut plutôt que relu dans le DOM : ce qui est
+    // mémorisé en session doit être la donnée reçue de l'API, pas le rendu.
     document.getElementById('console-list').innerHTML = liste.map(b => `
-      <tr data-boutique-id="${_esc(b.boutique_id ?? b.id)}">
-        <td class="b-nom" style="font-weight:600;">${_esc(b.nom)}</td>
+      <tr class="b-ligne" data-boutique-id="${_esc(b.boutique_id ?? b.id)}" data-boutique-nom="${_esc(b.nom)}">
+        <td class="b-nom" style="font-weight:600;">
+          <button type="button" class="b-select">${_esc(b.nom)}</button>
+        </td>
         <td class="b-slug">${_esc(b.slug || '—')}</td>
         <td class="b-comptes" style="text-align:right;">${_esc(b.nb_comptes ?? 0)}</td>
       </tr>
     `).join('');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SÉLECTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** Page métier où l'on atterrit après avoir choisi une boutique. */
+  const PAGE_APRES_SELECTION = '/dashboard';
+
+  /**
+   * Entre dans le contexte d'une boutique : le choix est mémorisé dans la session,
+   * puis les pages métier existantes basculent d'elles-mêmes dessus — elles passent
+   * toutes par le résolveur partagé d'`app.js`, aucune n'a été adaptée pour ça.
+   *
+   * @param {HTMLTableRowElement} ligne - Ligne cliquée
+   */
+  function selectionner(ligne) {
+    const id  = ligne.dataset.boutiqueId;
+    const nom = ligne.dataset.boutiqueNom || '';
+    if (!id) return;
+
+    if (!selectionnerBoutique(id, nom)) {
+      // Sans session ouverte, mémoriser le choix n'aurait aucun effet et la page
+      // suivante repartirait sans boutique : le dire plutôt que naviguer dans le vide.
+      _afficherMessage(
+        'erreur',
+        'Session introuvable',
+        'Votre session a expiré. Reconnectez-vous pour choisir une boutique.'
+      );
+      return;
+    }
+
+    window.location.href = PAGE_APRES_SELECTION;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -150,6 +188,15 @@ const ConsoleBoutiques = (() => {
 
     document.getElementById('console-identite').textContent = session.name || session.email || '';
     document.getElementById('console-search')?.addEventListener('input', rendre);
+
+    // Délégation sur le conteneur : les lignes sont réécrites à chaque recherche,
+    // un écouteur par ligne serait à recâbler à chaque rendu. Le bouton porte
+    // l'accessibilité (focus, clavier), la ligne entière reste cliquable au pointeur.
+    document.getElementById('console-list').addEventListener('click', (e) => {
+      const ligne = e.target.closest('tr.b-ligne');
+      if (ligne) selectionner(ligne);
+    });
+
     charger();
   }
 

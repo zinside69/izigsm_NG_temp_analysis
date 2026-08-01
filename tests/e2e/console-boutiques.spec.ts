@@ -12,29 +12,12 @@
  * Comptes seed.sql : `admin@izigsm.fr` est l'**admin plateforme** (boutique_id NULL),
  * `manager@izigsm.fr` est le **manager** de la boutique 1 « iziGSM Paris 11 ».
  */
-import { test, expect, type Page } from '@playwright/test'
-
-const ADMIN_PLATEFORME = { email: 'admin@izigsm.fr',   password: 'Admin@2026!' }
-const MANAGER          = { email: 'manager@izigsm.fr', password: 'Admin@2026!' }
+import { test, expect } from '@playwright/test'
+import { ADMIN_PLATEFORME, MANAGER, seConnecter, obtenirToken } from './fixtures/comptes'
 
 // Boutique du seed — 3 comptes rattachés (manager + 2 techniciens ; l'admin
 // plateforme n'est rattaché à aucune boutique, il ne compte donc nulle part).
 const SEED_BOUTIQUE = { nom: 'iziGSM Paris 11', slug: 'izigsm-paris-11', nbComptes: 3 }
-
-/** Connexion par le formulaire réel, sans présumer de la page d'arrivée. */
-async function seConnecter(page: Page, { email, password }: { email: string; password: string }) {
-  await page.goto('/login.html')
-  await page.fill('#login-email', email)
-  await page.fill('#login-password', password)
-  await page.click('#login-form button[type="submit"]')
-}
-
-/** Jeton d'accès obtenu par l'API — pour les tests du seam API. */
-async function obtenirToken(request: any, compte: { email: string; password: string }) {
-  const res = await request.post('/api/auth/login', { data: compte })
-  expect(res.status()).toBe(200)
-  return (await res.json()).accessToken as string
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SEAM 1 — NAVIGATEUR

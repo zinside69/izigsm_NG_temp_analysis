@@ -24,7 +24,9 @@ function buildSidebar(activePage) {
   if (!session) return;
 
   const initials = ((session.name || 'JD').split(' ').map(w => w[0]).join('').toUpperCase()).slice(0,2);
-  const company = session.company || 'MyDesk';
+  // Nom de boutique du socle : « Console plateforme » ou la boutique consultée pour
+  // un admin plateforme, sa propre boutique pour un manager (voir nomBoutiqueAffichee).
+  const company = nomBoutiqueAffichee(session);
 
   const pages = [
     { id:'dashboard', icon:'🏠', label:'Tableau de bord', href:'dashboard', section:'principal', badge: null },
@@ -743,11 +745,7 @@ function hasRole(...roles) {
  * @returns {boolean}
  */
 function isAdminPlateforme(session = null) {
-  const s = session ?? JSON.parse(
-    localStorage.getItem('izigsm_session') ||
-    sessionStorage.getItem('izigsm_session') ||
-    'null'
-  );
+  const s = session ?? sessionCourante();
   return !!s && s.role === 'admin' && !s.boutique_id;
 }
 
@@ -766,15 +764,102 @@ function landingPageFor(session = null) {
 }
 
 /**
- * Retourne le boutique_id depuis la session
+ * Retourne la boutique sur laquelle travaillent les appels API de la page.
+ *
+ * **Point de passage unique** de la bascule multi-boutique : les pages métier
+ * n'ont pas à connaître le rôle de l'appelant, elles demandent « quelle boutique ? »
+ * et obtiennent la bonne. Ordre de résolution :
+ *   1. la boutique qu'un admin plateforme a explicitement choisie dans la console ;
+ *   2. à défaut, celle à laquelle son compte est rattaché (cas du manager).
+ *
+ * Aucune sélection et aucun rattachement → `null`, et rien n'est injecté : c'est
+ * l'état d'un admin plateforme qui n'a pas encore choisi, pas une erreur.
+ *
+ * @returns {number|null}
  */
 function getBoutiqueId() {
-  const session = JSON.parse(
-    localStorage.getItem('izigsm_session') ||
-    sessionStorage.getItem('izigsm_session') ||
-    'null'
-  );
-  return session?.boutique_id ?? null;
+  const session = sessionCourante();
+  return session?.boutique_selectionnee_id ?? session?.boutique_id ?? null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BOUTIQUE CONSULTÉE — sélection de l'admin plateforme
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Le stockage qui porte la session courante, ou `null` s'il n'y en a pas.
+ *
+ * La session vit dans `localStorage` ou dans `sessionStorage` selon que « se
+ * souvenir de moi » a été coché à la connexion. Tout ce qui écrit dans la session
+ * doit passer par ici, sous peine d'en créer une seconde dans l'autre stockage —
+ * elles ne seraient alors plus purgées ensemble à la déconnexion.
+ *
+ * @returns {Storage|null}
+ */
+function _stockageSession() {
+  if (localStorage.getItem('izigsm_session'))   return localStorage;
+  if (sessionStorage.getItem('izigsm_session')) return sessionStorage;
+  return null;
+}
+
+/**
+ * Session courante désérialisée, ou `null`.
+ * @returns {object|null}
+ */
+function sessionCourante() {
+  const stockage = _stockageSession();
+  if (!stockage) return null;
+  try { return JSON.parse(stockage.getItem('izigsm_session')); }
+  catch { return null; }
+}
+
+/**
+ * Mémorise la boutique que l'admin plateforme vient de choisir.
+ *
+ * Le choix est écrit **dans l'objet de session existant**, pas dans une clé à part :
+ * il hérite ainsi du bon support de stockage et surtout de la purge à la déconnexion,
+ * sans code de nettoyage à écrire — ni à oublier le jour où un chemin de déconnexion
+ * de plus apparaîtra.
+ *
+ * @param {number|string} id  - Identifiant de la boutique à consulter
+ * @param {string}        nom - Nom affiché en en-tête pendant la consultation
+ * @returns {boolean} `false` si aucune session n'est ouverte
+ */
+function selectionnerBoutique(id, nom) {
+  const stockage = _stockageSession();
+  const session  = sessionCourante();
+  if (!stockage || !session) return false;
+
+  session.boutique_selectionnee_id  = Number(id);
+  session.boutique_selectionnee_nom = nom || '';
+  stockage.setItem('izigsm_session', JSON.stringify(session));
+  return true;
+}
+
+/**
+ * Nom de boutique à afficher dans le socle applicatif.
+ *
+ * Un admin plateforme n'a pas de boutique : lui afficher le repli « MyDesk » lui
+ * ferait lire le nom d'une enseigne qui n'existe pas. Il lit donc « Console
+ * plateforme » tant qu'il n'a rien choisi, puis le nom de la boutique consultée.
+ * Pour un manager, rien ne change.
+ *
+ * L'absence de sélection se lit sur l'**identifiant**, jamais sur le nom : une
+ * boutique cliente sans nom configuré ferait sinon réafficher « Console plateforme »
+ * alors qu'elle est bel et bien sélectionnée, et accessible en écriture. Elle retombe
+ * sur « MyDesk », le repli d'une boutique sans nom, comme pour un manager.
+ *
+ * @param {object|null} session - Session à évaluer (défaut : session courante)
+ * @returns {string}
+ */
+function nomBoutiqueAffichee(session = null) {
+  const s = session ?? sessionCourante();
+  if (!s) return 'MyDesk';
+  if (isAdminPlateforme(s)) {
+    if (!s.boutique_selectionnee_id) return 'Console plateforme';
+    return s.boutique_selectionnee_nom || 'MyDesk';
+  }
+  return s.company || 'MyDesk';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

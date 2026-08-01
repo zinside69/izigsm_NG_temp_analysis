@@ -23,6 +23,12 @@
     .b-slug          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86rem; color: var(--muted); }
     .b-comptes       { font-variant-numeric: tabular-nums; }
     .console-hint    { padding: 14px 22px; border-top: 1px solid #f3f4f6; color: var(--muted); font-size: 0.84rem; }
+    /* Ligne entière cliquable au pointeur ; le bouton porte le focus clavier et
+       reste rendu comme du texte pour ne pas alourdir le tableau. */
+    .b-ligne         { cursor: pointer; }
+    .b-ligne:hover   { background: #f9fafb; }
+    .b-select        { all: unset; cursor: pointer; font: inherit; color: inherit; }
+    .b-select:focus-visible { outline: 2px solid var(--primary, #6366f1); outline-offset: 2px; border-radius: 3px; }
   </style>
 </head>
 <body>
@@ -75,7 +81,8 @@
         </div>
 
         <div class="console-hint">
-          La sélection d'une boutique arrive à l'étape suivante — cet écran est en lecture seule.
+          Choisir une boutique vous place dans son contexte pour toute la session : les écrans de
+          l'application afficheront ses données. Revenez ici pour en changer.
         </div>
       </div>
     </div>

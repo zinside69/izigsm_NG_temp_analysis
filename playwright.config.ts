@@ -22,6 +22,14 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+
+    // `sw.js` fait skipWaiting() + clients.claim() : il prend le contrôle d'une page
+    // déjà chargée à un moment non déterministe, puis intercepte /api/* en Network
+    // First. Or page.route() n'intercepte pas les requêtes émises par un service
+    // worker — tout stub réseau devient donc une course perdue une fois sur deux
+    // (constaté le 2026-08-01 sur le test « aucune boutique active »). Le bloquer rend
+    // les stubs fiables ; aucun test n'observe le service worker lui-même.
+    serviceWorkers: 'block',
   },
 
   projects: [
