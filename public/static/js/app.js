@@ -18,6 +18,27 @@ function logout() {
   window.location.href = '/login';
 }
 
+/**
+ * Échappe une valeur destinée à être interpolée dans du balisage.
+ *
+ * Le socle construit la barre latérale par gabarit de chaîne puis `outerHTML` : toute
+ * donnée venant de l'API doit donc passer ici. Le cas qui compte est le **nom de boutique**
+ * affiché à un admin plateforme — c'est le client qui le choisit. Sans échappement, un
+ * commerçant nommant sa boutique `<img src=x onerror=…>` exécute du script dans la session
+ * du compte de supervision, qui a accès à toutes les boutiques.
+ *
+ * Le bandeau de plateforme (ticket 03) évitait déjà ce risque en construisant ses nœuds
+ * DOM ; le même raisonnement n'avait pas été appliqué ici. Corrigé le 2026-08-01.
+ *
+ * @param {unknown} valeur
+ * @returns {string}
+ */
+function echapperHtml(valeur) {
+  return String(valeur ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 // ======================== SIDEBAR ========================
 function buildSidebar(activePage) {
   const session = requireAuth();
@@ -82,10 +103,10 @@ function buildSidebar(activePage) {
       <div class="sidebar-nav">${navHtml}</div>
       <div class="sidebar-footer">
         <div class="sidebar-user" onclick="window.location.href='/settings'">
-          <div class="user-avatar">${initials}</div>
+          <div class="user-avatar">${echapperHtml(initials)}</div>
           <div class="user-info">
-            <div class="u-name">${session.name || 'Utilisateur'}</div>
-            <div class="u-role">${company}</div>
+            <div class="u-name">${echapperHtml(session.name || 'Utilisateur')}</div>
+            <div class="u-role">${echapperHtml(company)}</div>
           </div>
           <span class="user-chevron">›</span>
         </div>
@@ -95,8 +116,16 @@ function buildSidebar(activePage) {
       </div>
     </nav>`;
 
+  // Sans conteneur, la page se retrouve **sans aucune navigation** : l'exploitant n'a plus
+  // que le bouton « précédent ». Le silence d'origine a laissé `services.html` (conteneur
+  // nommé `sidebar-container`) et `caisse.html` (`app-sidebar`) dans cet état sans que
+  // personne ne le voie — les deux appelaient pourtant bien le socle. On prévient.
   const placeholder = document.getElementById('sidebar-placeholder');
-  if (placeholder) placeholder.outerHTML = html;
+  if (!placeholder) {
+    console.warn(`[socle] buildSidebar('${activePage}') : aucun #sidebar-placeholder dans la page — barre latérale non injectée.`);
+    return;
+  }
+  placeholder.outerHTML = html;
 
   // Topbar avatar
   const av = document.getElementById('topbar-avatar');

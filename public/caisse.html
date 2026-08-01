@@ -31,8 +31,11 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
 
-<!-- Sidebar injectée par app.js -->
-<div id="app-sidebar"></div>
+<!-- Sidebar injectée par app.js (`buildSidebar`, appelée depuis caisse.js).
+     L'identifiant doit rester `sidebar-placeholder` : c'est celui que le socle cible.
+     Il valait `app-sidebar` jusqu'au 2026-08-01 — le conteneur et la marge `ml-64` étaient
+     donc en place, mais la barre n'était jamais injectée. -->
+<div id="sidebar-placeholder"></div>
 
 <main class="ml-64 p-6">
 

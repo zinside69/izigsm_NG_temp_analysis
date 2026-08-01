@@ -449,6 +449,38 @@ avertissement préalable — constaté avec la migration `0037` (`date_execution
 et création en brouillon), ainsi que la conversion de devis en facture, lèvent tous une
 erreur SQL en prod.
 
+### Fenêtre de propagation — règle dure (depuis l'incident du 2026-08-01)
+
+**Ne jamais ouvrir le domaine dans un navigateur avant que la vérification soit passée.**
+C'est ce geste, et lui seul, qui a mis toute la production hors service ce jour-là : une page
+chargée sur `repairdesk.fr` juste après « Deployment complete! », donc avant que l'origine
+ne dispose de l'asset hashé. L'edge a reçu le catch-all HTML en `200`, l'a mis en cache — et
+comme les assets hashés sont servis `immutable`, cette réponse est restée **figée**. `app.js`
+ne définissait plus aucune fonction : toutes les pages mortes, pour tous les rôles, sans la
+moindre erreur visible.
+
+Trois parades, posées ensemble :
+
+1. **Le Worker répond `404` sur un asset absent** (`src/index.tsx`, `app.notFound`) au lieu
+   de retomber sur le HTML. Un `404` n'est ni figé comme `immutable`, ni exécuté en silence.
+   C'est la seule parade qui supprime la classe de défaut — les deux autres la contiennent.
+2. **`npm run deploy` chaîne `scripts/verifier-deploiement.mjs`** : fenêtre d'attente de
+   25 s, puis contrôle que le domaine sert bien du JavaScript et non du HTML, sur le nom
+   hashé lu dans `dist/static/manifest.json`. Le script **s'arrête en erreur** ; il ne
+   reforge jamais de hash tout seul (ce serait un déploiement automatique, que ce projet
+   interdit).
+3. **Vérifier l'URL d'aperçu avant le domaine.** Elle ne partage pas le cache de l'apex :
+   l'interroger ne peut rien empoisonner, et elle dit si le déploiement lui-même est bon.
+   Interroger l'apex en premier est exactement le geste fautif.
+
+Si l'apex renvoie du HTML pour un asset hashé : **ne pas réessayer** — un edge qui a figé une
+réponse `immutable` ne se corrige pas. La purge de cache n'est pas disponible sur ce jeton.
+Le seul recours est de **forcer un nouveau nom de fichier** (modifier l'empreinte de build en
+tête de `public/static/js/app.js`) puis redéployer.
+
+Ne jamais contrôler `/static/js/app.js` : ce nom n'existe pas dans `dist/`. Toujours le nom
+hashé du manifeste.
+
 **Commande à utiliser : `npm run deploy`** (= `npm run build && wrangler pages deploy`,
 script défini dans `package.json`). Constaté le 2026-07-24 : l'appel direct `npx
 wrangler pages deploy dist --project-name izigsm` est bloqué par une règle de

@@ -77,6 +77,10 @@
   // ── Init ────────────────────────────────────────────────────────────────────
 
   function init() {
+    // La page réservait déjà la place de la barre (`ml-64`) et portait un conteneur, mais
+    // n'appelait jamais le socle : l'exploitant perdait toute navigation en entrant ici.
+    buildSidebar('caisse')
+
     // Date par défaut = aujourd'hui
     const today = new Date().toISOString().slice(0, 10)
     const fd = document.getElementById('filtre-date-journal')

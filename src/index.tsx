@@ -254,12 +254,29 @@ app.get('/robots.txt', (c) =>
   c.text(ROBOTS_TXT, 200, { 'Content-Type': 'text/plain; charset=utf-8' })
 )
 
-// ─── 404 fallback API ─────────────────────────────────────────────────────────
+// ─── 404 fallback ─────────────────────────────────────────────────────────────
 app.notFound((c) => {
   if (c.req.path.startsWith('/api/')) {
     return c.json({ success: false, error: `Route API introuvable : ${c.req.method} ${c.req.path}` }, 404)
   }
-  // Pour les routes non-API, laisser Cloudflare Pages servir le HTML
+
+  // Un asset absent doit échouer **bruyamment**, jamais retomber sur le HTML de
+  // l'application.
+  //
+  // Incident du 2026-08-01 : `/static/js/app.<hash>.js` demandé pendant la fenêtre de
+  // propagation d'un déploiement répondait `200` + le HTML du catch-all. Un edge
+  // Cloudflare l'a mis en cache — et comme les assets hashés sont servis `immutable`,
+  // cette réponse est restée **figée** sur cet edge. `app.js` ne définissait plus aucune
+  // fonction : toutes les pages du site étaient mortes, pour tous les rôles, sans la
+  // moindre erreur visible. Un `404` n'aurait été ni figé ainsi, ni exécuté en silence.
+  //
+  // Même raisonnement pour les autres extensions d'assets : un `<img>` ou une feuille de
+  // style qui reçoit du HTML en 200 masque son propre échec.
+  if (/^\/static\//.test(c.req.path) || /\.(js|css|map|png|jpe?g|svg|webp|ico|woff2?)$/i.test(c.req.path)) {
+    return c.text(`Asset introuvable : ${c.req.path}`, 404)
+  }
+
+  // Pour les vraies routes de navigation, laisser Cloudflare Pages servir le HTML
   return c.notFound()
 })
 

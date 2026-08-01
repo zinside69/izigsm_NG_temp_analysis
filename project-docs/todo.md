@@ -86,7 +86,7 @@ fichiers lisent `r.success` — toujours `undefined` — et sortent par un `retu
 | Fichier | Lectures correctes | Lectures fautives | Vérifié à l'écran |
 |---|---|---|---|
 | `caisse.js` | 0 | **9** | ✅ oui — KPI, journal, clôtures tous muets |
-| `fournisseurs.js` | 0 | **12** | ✅ oui — tous les KPI à `—` |
+| ~~`fournisseurs.js`~~ | — | ~~12~~ | ✅ **CORRIGÉ le 2026-08-01** |
 | `reconditionnement.js` | 0 | **11** | non (même signature) |
 | `kanban.js` | 0 | **5** | non (même signature) |
 | `services.js` | 3 | **5** | non — **mixte**, exige une revue site par site |
@@ -114,8 +114,57 @@ qu'un fichier de `public/static/js/` lit `.success` directement sur le résultat
 `api*()`. C'est déterministe, contrairement à toute tentative de détecter « la page est
 vide » au runtime.
 
-- [ ] Revoir les 5 fichiers site par site et corriger le niveau d'enveloppe (commencer par `fournisseurs.js`, sans enjeu financier, pour valider la méthode ; finir par `caisse.js`)
+**Méthode validée sur `fournisseurs.js`** (2026-08-01) : plutôt que corriger 35 lectures en
+aval, **déballer une fois au point d'appel** — `const res = (await apiGet(…)).data`. 12 sites
+au lieu de 35, et `api()` parsant le corps même sur une réponse en erreur, `success` et
+`error` survivent au déballage. Prouvé par mutation : remettre la ligne fautive fait échouer
+`tests/e2e/…§ fournisseurs affiche ses compteurs` en affichant `Received: "—"`.
+
+- [x] `fournisseurs.js` — 12 sites déballés, rendu prouvé à l'écran par un test dédié
+- [ ] `reconditionnement.js` (11 sites) et `kanban.js` (5 sites) — même méthode
+- [ ] `services.js` (5 fautifs contre 3 corrects) — **mixte**, revue site par site obligatoire
+- [ ] `caisse.js` (9 sites) — **en dernier** : porte vente, encaissement et chaînage NF525
 - [ ] Ajouter le garde-fou statique contre `r.success` sur un résultat d'`api*()`
+
+## ✅ 🔴 P1 — Quatre pages n'avaient aucune barre latérale (constaté à l'écran 2026-08-01, **CORRIGÉ**)
+
+« On perd tout l'affichage en entrant dans la caisse » : sans barre, l'exploitant n'a plus
+aucune navigation, seulement le bouton « précédent » du navigateur.
+
+La note du checkpoint 71 annonçait « une refonte d'interface, à cadrer ». **C'était faux**, et
+répété trois checkpoints durant sans vérification — la même faute que le diagnostic
+`boutique_id`. Mesure faite :
+
+| Page | Cause réelle | Correctif |
+|---|---|---|
+| `agenda`, `modules` | `#sidebar-placeholder` **déjà présent**, `buildSidebar()` jamais appelé | 1 ligne |
+| `caisse` | conteneur nommé `app-sidebar`, et `ml-64` réservait déjà la place | renommage + 1 ligne |
+| `services` | conteneur nommé `sidebar-container` — `buildSidebar()` **était appelé** et échouait en silence | renommage |
+
+`buildSidebar()` **prévient désormais** (`console.warn`) quand le conteneur manque, au lieu de
+ne rien faire. C'est ce silence qui a laissé `services` et `caisse` sans barre sans que
+personne ne le voie.
+
+Couvert par `tests/e2e/…§ les pages câblées sur le socle affichent bien la barre latérale`,
+sur 13 pages. **Déplacer une page dans `PAGES_AVEC_SOCLE` au fur et à mesure du câblage.**
+
+- [ ] Câbler les 6 pages restantes : `sav`, `stats`, `settings`, `kanban`, `personnel`, `notifications` (ajouter le conteneur + l'appel ; `personnel` est en `flex-1` et non `ml-64`, sa marge est à vérifier)
+
+## ✅ 🔴 Sécurité — XSS stockée sur le nom de boutique dans la barre latérale (2026-08-01, **CORRIGÉ**)
+
+`buildSidebar()` interpolait `${company}` brut dans du balisage posé par `outerHTML`. Pour un
+admin plateforme, `company` est le **nom de la boutique cliente** — donnée choisie par le
+client. Un commerçant nommant sa boutique `<img src=x onerror="…">` exécutait du script dans
+la session du compte de supervision, qui a accès à toutes les boutiques.
+
+Le bandeau du ticket 03 avait explicitement écarté ce risque en construisant ses nœuds DOM ;
+le même raisonnement n'avait jamais été appliqué au socle. Corrigé par `echapperHtml()`,
+appliqué à `company`, `initials` et `session.name`.
+
+⚠️ **Reste à auditer** : les autres gabarits du dépôt qui interpolent une donnée d'API dans
+`innerHTML`/`outerHTML`. Ce correctif ne couvre que la barre latérale.
+
+- [ ] Auditer les interpolations `innerHTML`/`outerHTML` des fichiers de `public/static/js/` pour la même classe de défaut
 
 ## ✅ 🔴 P1 — `apiGet` doublait le « ? » des URL déjà paginées (constaté en PRODUCTION 2026-08-01, **CORRIGÉ**)
 

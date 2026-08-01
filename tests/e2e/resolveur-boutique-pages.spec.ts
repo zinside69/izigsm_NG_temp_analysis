@@ -176,6 +176,57 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     expect(anomalies, 'pages du menu de gauche en échec pour un admin plateforme').toEqual([])
   })
 
+  /**
+   * Pages câblées sur le socle le 2026-08-01. Les autres entrées du menu portent encore
+   * leur propre mise en page et n'ont pas de barre latérale — chantier ouvert
+   * (`todo.md`). Déplacer une page ici au fur et à mesure qu'elle est câblée.
+   */
+  const PAGES_AVEC_SOCLE = [
+    'dashboard', 'clients', 'tickets', 'devis', 'factures', 'qualirepar', 'rachats',
+    'reconditionnement', 'services', 'stock',
+    'agenda', 'modules', 'caisse',
+  ]
+
+  test('les pages câblées sur le socle affichent bien la barre latérale', async ({ page, request }) => {
+    // Sans barre latérale, l'exploitant qui entre sur la page perd toute navigation — il
+    // n'a plus que le bouton « précédent » du navigateur. Constaté à l'écran sur `/caisse`
+    // le 2026-08-01.
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+
+    const sansBarre: string[] = []
+    for (const nom of PAGES_AVEC_SOCLE) {
+      await page.goto(`/${nom}`)
+      const barre = page.locator('#sidebar, .sidebar').first()
+      if (!(await barre.isVisible().catch(() => false))) sansBarre.push(nom)
+    }
+
+    expect(sansBarre, 'pages qui devraient porter la barre latérale et ne l\'affichent pas').toEqual([])
+  })
+
+  test('fournisseurs affiche ses compteurs, et non des tirets', async ({ page, request }) => {
+    // L'échec silencieux que le balayage ne peut pas voir : HTTP 200, aucune exception, et
+    // pourtant rien à l'écran. `fournisseurs.js` lisait `res.success` au niveau de
+    // l'enveloppe d'`apiGet` — toujours `undefined` — et sortait par un `return` sur
+    // 12 sites. La page n'avait jamais rien affiché, pour aucun rôle.
+    //
+    // On assertionne donc le **rendu**, pas la requête : c'est la seule façon de distinguer
+    // « la page n'a pas planté » de « la page fonctionne ».
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+    await page.goto('/fournisseurs')
+
+    // Une boutique neuve a bien zéro fournisseur : la valeur attendue est « 0 », pas le
+    // tiret cadratin qui sert de gabarit avant chargement.
+    const compteur = page.locator('#kpi-nb-fournisseurs')
+    await expect(compteur).not.toHaveText('—', { timeout: 15_000 })
+    await expect(compteur).toHaveText(/^\d+$/)
+  })
+
   test('sans sélection, aucune page hors socle ne vise une boutique au hasard', async ({ page }) => {
     // Le pendant du test précédent : la règle « aucune auto-sélection » (CLAUDE.md) vaut
     // aussi ici. Une page qui retomberait sur la boutique 1 du seed ferait travailler

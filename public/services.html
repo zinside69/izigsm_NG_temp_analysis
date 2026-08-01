@@ -106,7 +106,10 @@
 </head>
 <body>
   <div class="app-layout">
-    <div id="sidebar-container"></div>
+    <!-- Doit rester `sidebar-placeholder` : c'est l'identifiant que `buildSidebar()` cible.
+         Il valait `sidebar-container` jusqu'au 2026-08-01 — la page appelait bien le socle,
+         mais l'injection ne trouvait rien et échouait en silence. -->
+    <div id="sidebar-placeholder"></div>
 
     <main class="main-content" style="padding:0; display:flex; flex-direction:column;">
       <!-- Topbar -->

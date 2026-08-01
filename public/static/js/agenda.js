@@ -43,6 +43,9 @@ const TYPE_META = {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await waitForAuth()
+  // Le `#sidebar-placeholder` existait dans la page depuis toujours, mais personne
+  // n'appelait le socle : l'exploitant perdait toute navigation en entrant ici.
+  buildSidebar('agenda')
   await Promise.all([
     loadKpis(),
     loadClients(),

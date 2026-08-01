@@ -118,6 +118,10 @@
 
   <script src="/static/js/app.js"></script>
   <script>
+    // Le `#sidebar-placeholder` existait dans la page depuis toujours, mais personne
+    // n'appelait le socle : l'exploitant perdait toute navigation en entrant ici.
+    document.addEventListener('DOMContentLoaded', () => buildSidebar('modules'));
+
     function toggleModule(name, active) {
       const msg = active ? `✓ Module ${name} activé !` : `Module ${name} désactivé`;
       const type = active ? 'success' : 'info';

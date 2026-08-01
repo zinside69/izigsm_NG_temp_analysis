@@ -2,6 +2,20 @@
  * fournisseurs.js — Fournisseurs, Bons de commande, Réceptions (CUMP)
  * Sprint 2.5 — MOD-10 Achats/Approvisionnement
  * Architecture : tous les appels réseau via ApiService (Principe 5)
+ *
+ * ⚠️ Niveau d'enveloppe — corrigé le 2026-08-01.
+ *
+ * `apiGet`/`apiPost`/… (`app.js`) renvoient une **enveloppe** `{ ok, status, data, error }`
+ * dans laquelle `data` est le corps JSON complet de l'API — lui-même de la forme
+ * `{ success, data, error, pagination }`. Ce fichier lisait `res.success` au niveau de
+ * l'enveloppe : toujours `undefined`, donc `return` silencieux sur **12 sites**. L'API
+ * répondait 200, la page n'affichait jamais rien — pour tous les rôles, depuis toujours.
+ *
+ * Parade retenue : **déballer une fois au point d'appel** (`(await apiGet(…)).data`) plutôt
+ * que corriger 35 lectures en aval. `api()` parse le corps même sur une réponse en erreur,
+ * donc `success` et `error` survivent au déballage.
+ *
+ * Ne jamais réintroduire `const res = await apiGet(...)` suivi de `res.success` ici.
  */
 
 'use strict'
@@ -90,7 +104,7 @@ function initEventListeners() {
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
 async function loadKpis() {
-  const res = await apiGet(`/api/fournisseurs/kpis?boutique_id=${boutiqueId}`)
+  const res = (await apiGet(`/api/fournisseurs/kpis?boutique_id=${boutiqueId}`)).data
   if (!res?.success) return
   const d = res.data
   document.getElementById('kpi-nb-fournisseurs').textContent = d.nb_fournisseurs      ?? 0
@@ -116,7 +130,7 @@ async function loadBons() {
   if (search) url += `&search=${encodeURIComponent(search)}`
   if (statut) url += `&statut=${statut}`
 
-  const res = await apiGet(url)
+  const res = (await apiGet(url)).data
   const tbody = document.getElementById('table-bons')
   const empty = document.getElementById('bons-empty')
 
@@ -184,7 +198,7 @@ function badgePaiementBC(statut) {
 
 /** Voir / ouvrir un bon de commande (futur : page dédiée ou modal détail) */
 async function voirBC(id) {
-  const res = await apiGet(`/api/bons-commande/${id}`)
+  const res = (await apiGet(`/api/bons-commande/${id}`)).data
   if (!res?.success) { showFlash('Erreur chargement bon de commande.', 'error'); return }
   const { bc, lignes } = res.data
   alert(`Bon ${bc.numero}\nFournisseur : ${bc.fournisseur_nom}\nStatut : ${bc.statut}\n\n${lignes.length} ligne(s)\nTotal HT : ${formatCurrency(bc.montant_ht)}`)
@@ -193,7 +207,7 @@ async function voirBC(id) {
 /** Passer un bon de draft → awaiting_delivery */
 async function envoyerBC(id) {
   if (!confirm('Passer ce bon en statut "En attente de livraison" ?')) return
-  const res = await apiPatch(`/api/bons-commande/${id}/statut`, { statut: 'awaiting_delivery' })
+  const res = (await apiPatch(`/api/bons-commande/${id}/statut`, { statut: 'awaiting_delivery' })).data
   if (res?.success) { showFlash('Bon envoyé au fournisseur.', 'success'); loadBons(); loadKpis() }
   else showFlash(res?.error ?? 'Erreur.', 'error')
 }
@@ -311,7 +325,7 @@ async function saveBonCommande() {
     lignes
   }
 
-  const res = await apiPost('/api/bons-commande', body)
+  const res = (await apiPost('/api/bons-commande', body)).data
   if (res?.success) {
     closeModal('modal-bc')
     showFlash(`Bon de commande créé (#${res.id}).`, 'success')
@@ -323,7 +337,7 @@ async function saveBonCommande() {
 
 // ─── Réception ────────────────────────────────────────────────────────────────
 async function ouvrirReception(bcId) {
-  const res = await apiGet(`/api/bons-commande/${bcId}`)
+  const res = (await apiGet(`/api/bons-commande/${bcId}`)).data
   if (!res?.success) { showFlash('Erreur chargement bon.', 'error'); return }
 
   const { bc, lignes } = res.data
@@ -369,7 +383,7 @@ async function confirmerReception() {
     return
   }
 
-  const res = await apiPost(`/api/bons-commande/${bcId}/receptionner`, { lignes_recues: lignesRecues })
+  const res = (await apiPost(`/api/bons-commande/${bcId}/receptionner`, { lignes_recues: lignesRecues })).data
   if (res?.success) {
     closeModal('modal-reception')
     showFlash(res.message, 'success')
@@ -383,7 +397,7 @@ async function confirmerReception() {
 
 /** Cache fournisseurs pour les selects */
 async function loadFournisseursCache() {
-  const res = await apiGet(`/api/fournisseurs?boutique_id=${boutiqueId}&limit=200`)
+  const res = (await apiGet(`/api/fournisseurs?boutique_id=${boutiqueId}&limit=200`)).data
   if (res?.success) fournisseursList = res.data ?? []
 }
 
@@ -392,7 +406,7 @@ async function loadFournisseurs() {
   let url = `/api/fournisseurs?boutique_id=${boutiqueId}&page=${pageFournisseurs}&limit=20`
   if (search) url += `&search=${encodeURIComponent(search)}`
 
-  const res = await apiGet(url)
+  const res = (await apiGet(url)).data
   const tbody = document.getElementById('table-fournisseurs')
   const empty = document.getElementById('f-empty')
 
@@ -476,9 +490,9 @@ async function saveFournisseur() {
     notes:     document.getElementById('f-notes').value.trim()     || null,
   }
 
-  const res = id
+  const res = (id
     ? await apiPut(`/api/fournisseurs/${id}`, body)
-    : await apiPost('/api/fournisseurs', body)
+    : await apiPost('/api/fournisseurs', body)).data
 
   if (res?.success) {
     closeModal('modal-fournisseur')
@@ -491,7 +505,7 @@ async function saveFournisseur() {
 
 async function deleteFournisseur(id) {
   if (!confirm('Désactiver ce fournisseur ?')) return
-  const res = await apiDelete(`/api/fournisseurs/${id}`)
+  const res = (await apiDelete(`/api/fournisseurs/${id}`)).data
   if (res?.success) { showFlash('Fournisseur désactivé.', 'success'); loadFournisseurs(); loadKpis() }
   else showFlash(res?.error ?? 'Erreur.', 'error')
 }
@@ -500,7 +514,7 @@ async function deleteFournisseur(id) {
 let produitsACommander = []
 
 async function loadACommander() {
-  const res = await apiGet(`/api/fournisseurs/a-commander?boutique_id=${boutiqueId}`)
+  const res = (await apiGet(`/api/fournisseurs/a-commander?boutique_id=${boutiqueId}`)).data
   const tbody = document.getElementById('table-a-commander')
   const empty = document.getElementById('ac-empty')
 
