@@ -374,13 +374,20 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**État au 2026-08-01 : les migrations `0038` (reconstruction de `service_modeles`) et `0039`
-(journal des actions de plateforme) sont committées mais PAS appliquées à distance.** Le
-chantier supervision se déploie **groupé** après le ticket 04 : migrations distantes d'abord,
-Worker ensuite. La commande `--remote` est à faire lancer par l'utilisateur (jeton de session
-sans droits D1 distants, erreur 7403).
+**État au 2026-08-01 : seule la migration `0039` (journal des actions de plateforme) reste à
+appliquer à distance.** Vérifié ce jour en interrogeant `d1_migrations` distant : la dernière
+migration appliquée est `0038` — la mention « `0038` en attente » des checkpoints 65 à 71 était
+fausse. Le chantier supervision se déploie **groupé** après le ticket 04 : `0039` à distance
+d'abord, Worker ensuite.
 
-Rappel sur `0038` : Elle répare une clé étrangère laissée pendante
+**Erreur `7403` sur une commande `--remote`** : ce n'est pas le compte, c'est le jeton employé.
+`.dev.vars` définit un `CLOUDFLARE_API_TOKEN` (destiné au Worker) ; s'il se retrouve exporté dans
+le shell, wrangler le préfère à la session OAuth et échoue faute de droit D1. Vérifier par
+`npx wrangler whoami` : la session OAuth `contact@soteli.fr` (compte `88cfb31e…`) porte bien
+`d1 (write)` et passe. Contournement : vider `CLOUDFLARE_API_TOKEN` du shell, ou ajouter le droit
+« D1:Edit » à ce jeton dans le tableau de bord.
+
+Rappel sur `0038` (appliquée) : Elle répare une clé étrangère laissée pendante
 par la migration `0031` (`ALTER TABLE RENAME` puis `DROP` dans le même fichier), qui rend
 `POST /api/services/modeles/:id/services` inutilisable en production — 500 pour tout
 appelant, admin compris, depuis le Sprint 2.39. Sans elle appliquée en distant, déployer le
