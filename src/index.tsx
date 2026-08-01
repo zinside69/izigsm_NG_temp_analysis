@@ -261,17 +261,14 @@ app.notFound((c) => {
   }
 
   // Un asset absent doit échouer **bruyamment**, jamais retomber sur le HTML de
-  // l'application.
+  // l'application (incident de propagation du 2026-08-01, voir `public/404.html`).
   //
-  // Incident du 2026-08-01 : `/static/js/app.<hash>.js` demandé pendant la fenêtre de
-  // propagation d'un déploiement répondait `200` + le HTML du catch-all. Un edge
-  // Cloudflare l'a mis en cache — et comme les assets hashés sont servis `immutable`,
-  // cette réponse est restée **figée** sur cet edge. `app.js` ne définissait plus aucune
-  // fonction : toutes les pages du site étaient mortes, pour tous les rôles, sans la
-  // moindre erreur visible. Un `404` n'aurait été ni figé ainsi, ni exécuté en silence.
-  //
-  // Même raisonnement pour les autres extensions d'assets : un `<img>` ou une feuille de
-  // style qui reçoit du HTML en 200 masque son propre échec.
+  // ⚠️ Cette garde ne s'exécute **pas** pour `/static/*` aujourd'hui : `_routes.json`
+  // déclare `include: ["/api/*"]`, donc Cloudflare Pages sert ces chemins sans jamais
+  // invoquer le Worker. La parade effective est `public/404.html` — vérifié à l'écran, la
+  // version « corrigée dans Hono » ne changeait rien. Ce qui suit ne couvre que le cas d'un
+  // chemin d'apparence asset arrivant sous `/api/*`, et sert de filet le jour où
+  // `_routes.json` cesserait d'exclure les statiques.
   if (/^\/static\//.test(c.req.path) || /\.(js|css|map|png|jpe?g|svg|webp|ico|woff2?)$/i.test(c.req.path)) {
     return c.text(`Asset introuvable : ${c.req.path}`, 404)
   }

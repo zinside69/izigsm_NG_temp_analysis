@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Page introuvable — iziGSM</title>
+  <!--
+    Page 404 de Cloudflare Pages.
+
+    Elle n'existe pas pour l'esthétique : sans elle, Pages répondait **200 + le HTML de
+    l'accueil** pour n'importe quel chemin absent, y compris un asset. Le 2026-08-01, un
+    `/static/js/app.<hash>.js` demandé pendant la fenêtre de propagation d'un déploiement a
+    donc reçu du HTML en 200 ; un edge Cloudflare l'a mis en cache, et comme les assets
+    hashés sont servis `immutable`, la réponse est restée **figée**. `app.js` ne définissait
+    plus aucune fonction : tout le site était mort, pour tous les rôles, sans erreur visible.
+
+    Avec ce fichier, Pages répond un vrai 404 — qui n'est ni figé comme `immutable`, ni
+    exécuté en silence par un `<script src>`.
+
+    Deux règles pour la maintenir :
+      · aucune dépendance externe (CSS, police, image). Une page d'erreur qui dépend d'un
+        asset échoue précisément quand les assets manquent.
+      · ne pas la supprimer en croyant que le Worker s'en charge : `_routes.json` déclare
+        `include: ["/api/*"]`, donc Hono ne voit **jamais** `/static/*`.
+  -->
+  <style>
+    :root { --texte: #1f2937; --doux: #6b7280; --accent: #4f46e5; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc; color: var(--texte); padding: 24px;
+    }
+    .carte { max-width: 30rem; text-align: center; }
+    .code { font-size: 4rem; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); margin: 0; }
+    h1 { font-size: 1.35rem; margin: 8px 0 12px; }
+    p { color: var(--doux); line-height: 1.6; margin: 0 0 24px; }
+    a {
+      display: inline-block; padding: 10px 20px; border-radius: 10px;
+      background: var(--accent); color: #fff; text-decoration: none; font-weight: 600;
+    }
+    a:hover { filter: brightness(0.92); }
+  </style>
+</head>
+<body>
+  <main class="carte">
+    <p class="code">404</p>
+    <h1>Cette page n'existe pas</h1>
+    <p>Le lien est peut-être périmé, ou l'adresse comporte une faute de frappe.</p>
+    <a href="/dashboard">Retour au tableau de bord</a>
+  </main>
+</body>
+</html>
