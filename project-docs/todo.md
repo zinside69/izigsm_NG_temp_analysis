@@ -15,6 +15,63 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
+
+Depuis le déploiement du ticket 04, `journal_actions_plateforme` se remplit — et **aucune
+interface ne permet de le consulter**. Un exploitant qui veut répondre à « qu'avez-vous fait sur
+ma facture ? » n'a aujourd'hui que la console D1 du tableau de bord Cloudflare. C'était le
+découpage prévu (le chantier 1 écrit, le chantier 2 lit), mais l'écart ne doit pas s'installer :
+un registre que l'on ne peut pas produire ne tranche aucun litige.
+
+Requête de dépannage en attendant, à coller dans **Cloudflare → D1 → `izigsm-production` →
+Console** :
+
+```sql
+SELECT j.created_at AS quand,
+       COALESCE(u.prenom || ' ' || u.nom, 'compte #' || j.user_id) AS qui,
+       COALESCE(b.nom, CASE WHEN j.boutique_id IS NULL THEN '(non resolue)'
+                            ELSE 'boutique #' || j.boutique_id END)  AS chez_qui,
+       j.methode || ' ' || j.chemin AS quoi,
+       j.statut_http AS statut,
+       j.corps_expurge
+  FROM journal_actions_plateforme j
+  LEFT JOIN users     u ON u.id = j.user_id
+  LEFT JOIN boutiques b ON b.id = j.boutique_id
+ ORDER BY j.created_at DESC
+ LIMIT 50;
+```
+
+`LEFT JOIN` obligatoire : la table n'a aucune clé étrangère, et c'est voulu (ADR 0001) — un
+compte supprimé ou une boutique désactivée laissent leurs lignes intactes.
+
+À cadrer avec le reste du chantier 2 (console enrichie : CA, tickets ouverts, dernière activité).
+
+## 🟠 P2 — Boutique visée « non résolue » sur les routes par ID (constaté en production, 2026-08-01)
+
+Le middleware résout la boutique visée par le paramètre de requête puis par le corps — donc une
+route `/:id` (`DELETE /api/clients/20`, `PUT /api/factures/9`…) laisse une cible **nulle**.
+Constaté en production dès la deuxième ligne écrite. La ligne existe bien (« complétude avant
+précision », jamais de ligne tue) mais elle ne dit pas chez qui l'action a eu lieu, ce qui est
+précisément ce qu'un client veut savoir.
+
+Piste : les services exposent déjà `getTicketBoutiqueId()`, `getBonCommandeBoutiqueId()`, etc.
+pour les gardes d'isolation — un troisième niveau de résolution pourrait s'appuyer dessus. Prendre
+garde à ne pas transformer le middleware en carte des routes : c'est exactement ce que l'ADR
+écarte. À trancher avec le chantier 2, qui est le premier à lire ces lignes.
+
+> Volontairement **sans case à cocher** : à cadrer, pas à prendre tel quel par la loop.
+
+## 🟡 P3 — `/reset-password` tient dans un seul bloc de script inline (constaté 2026-08-01)
+
+Toute la logique de la page — détection du token, bascule d'étape, envoi du nouveau mot de passe —
+vit dans un unique `<script>` inline. Le reste du frontend est en fichiers externes
+(`static/js/*.js`), hashés et versionnés. Conséquence vécue ce jour : une extension navigateur qui
+bloque l'inline (NoScript) rend la réinitialisation **silencieusement inopérante** — la page
+redemande l'email alors que le token est bien dans l'URL, sans le moindre message d'erreur. Une
+CSP future produirait le même effet.
+
+- [ ] Externaliser la logique de `public/reset-password.html` dans `public/static/js/reset-password.js`
+
 ## 🔴 P1 — Pages hors socle partagé : la moitié de l'application ignore la boutique sélectionnée (constaté 2026-08-01, ticket 03)
 
 > **10 des ~20 pages internes n'appellent pas `buildSidebar()`** (`settings`, `stats`, `caisse`,

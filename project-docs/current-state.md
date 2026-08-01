@@ -1,4 +1,86 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 71 — ticket 03 supervision livré)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 72 — chantier 1 supervision clos et déployé)
+
+## Checkpoint 72 — Journal des actions de plateforme, chantier 1 clos et **déployé** (2026-08-01)
+
+Ticket 04 : `statut: done`, commit `4404052`. Migration `0039` appliquée à distance, puis Worker
+déployé (`5b38572e.izigsm.pages.dev` → `repairdesk.fr`). **Le chantier 1 de la supervision est
+entièrement en production et vérifié en réel.**
+
+### Ce qui a été livré
+
+Toute mutation d'un admin plateforme sur une boutique cliente laisse une ligne dans
+`journal_actions_plateforme` (migration `0039`), registre dédié distinct de l'`audit_logs` du
+client, alimenté par `journalPlateformeMiddleware` posé **globalement** sur `/api/*` : une route
+écrite demain est journalisée sans que personne n'y pense (ADR 0001).
+
+- `src/services/journalPlateformeService.ts` — SQL + expurgation + troncature (2 000 caractères).
+- `journalPlateformeMiddleware` + `isAdminPlateforme()` dans `src/lib/middleware.ts`.
+- `tests/journalPlateforme.test.ts` — 16 tests, dont un qui traverse **l'application réelle**
+  (`src/index.tsx`, vrai `authMiddleware`, route métier existante) : c'est lui qui démontre le
+  critère « une route non prévue par le middleware est journalisée quand même ».
+- Table **sans aucune clé étrangère**, index `(boutique_id, created_at)` et `(user_id)`.
+
+### Les deux défauts trouvés en revue de code
+
+1. 🔴 **Une ligne pouvait être perdue.** La journalisation vivait après un simple `await next()`.
+   64 des 107 handlers mutants n'attrapent pas leurs erreurs et `index.tsx` ne déclare aucun
+   `app.onError` : une intervention qui échoue en 500 sur une facture — le cas de litige même que
+   l'ADR invoque — ne laissait aucune trace. Corrigé par `try/finally`, statut 500, test dédié.
+   Ne pas lire `c.res` dans ce cas : le getter de Hono fabrique une 404 au passage.
+2. **L'expurgation était faite par l'appelant** — donc oubliable par le prochain. Déplacée dans
+   `enregistrerActionPlateforme()`, hors d'atteinte.
+
+Écartés en revue, sciemment : bump de `@version` dans `index.tsx` et mise à jour de
+`docs/JOURNAL_MODIFICATIONS.md`, conventions dormantes depuis le Sprint 2.41 que les tickets 01
+à 03 n'ont pas suivies non plus.
+
+### Vérification en production, à l'écran
+
+Connecté en admin plateforme sur `repairdesk.fr`, boutique « iziGSM Paris 11 » choisie dans la
+console, création d'un client de test (supprimé depuis) :
+
+```
+user_id 1 · boutique_id 1 · POST /api/clients · 201 · ip 159.26.112.36 · corps complet, sans secret
+```
+
+**Une seule ligne** : toute la navigation qui a précédé (console, dashboard, liste clients,
+statistiques) n'a rien écrit. Les lectures sont muettes, comme voulu. Vérifiés au passage : la
+console liste les 3 enseignes (ticket 01), le clic bascule les pages sur la boutique (ticket 02),
+le bandeau est présent **et passe au-dessus du modal de saisie** (ticket 03, `z-index: 900`).
+
+### La migration `0038` était déjà appliquée — les checkpoints 65 à 71 se trompaient
+
+`d1_migrations` distant interrogé ce jour : la dernière migration appliquée avant aujourd'hui était
+bien `0038`. La mention « `0038` en attente d'application distante » traînait depuis le
+checkpoint 65 et a été recopiée de checkpoint en checkpoint sans être vérifiée. Leçon : l'état
+d'une base distante se lit, il ne se recopie pas.
+
+### Trois pièges d'outillage, dont un qui a coûté une demi-heure
+
+1. **`TaskStop` tue wrangler mais pas `workerd.exe`.** Six processus orphelins écoutaient
+   simultanément sur `:3000` (Windows l'autorise) et servaient l'**ancien** bundle : le middleware
+   semblait ne pas s'exécuter alors qu'il fonctionnait. Complément indispensable au piège déjà
+   connu (« `wrangler pages dev` ne recharge pas `dist/` ») :
+   `taskkill //F //IM workerd.exe` **avant** chaque relance.
+2. **`c.header()` après `next()` ne remonte pas** de façon fiable, et `console.log` du Worker
+   n'apparaît pas dans la sortie redirigée de `wrangler pages dev` : pour instrumenter un
+   middleware en local, passer par un état en mémoire exposé dans une réponse existante.
+3. **Erreur `7403` sur une commande `--remote`** : ce n'est pas le compte. La session OAuth
+   (`contact@soteli.fr`, compte `88cfb31e…`) porte `d1 (write)` et passe ; c'est le
+   `CLOUDFLARE_API_TOKEN` de `.dev.vars`, s'il se retrouve exporté dans le shell, que wrangler
+   préfère — sans droit D1.
+
+### Hors dépôt, mais utile à savoir
+
+Le pilotage du navigateur a longuement échoué sur `repairdesk.fr` : **NoScript** bloque les
+scripts d'un onglet non explicitement approuvé, et ses autorisations sont temporaires et par
+onglet. Symptômes trompeurs : page de réinitialisation qui redemande l'email alors que le token
+est bien dans l'URL, console des boutiques figée sur « Chargement… », `logout is not defined`.
+Les assets étaient sains (`200`, `application/javascript`) — ce n'était pas le piège CDN de
+`bugs.md`. Approuver le site en **TRUSTED** (permanent) débloque tout.
+
+Cela dit, `/reset-password` fait dépendre **toute** la réinitialisation d'un unique bloc de script
+inline : une CSP future la casserait de la même manière. Tâche ouverte dans `todo.md`.
 
 ## Checkpoint 71 — Bandeau permanent de la boutique consultée (2026-08-01)
 

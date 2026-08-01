@@ -374,11 +374,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**État au 2026-08-01 : seule la migration `0039` (journal des actions de plateforme) reste à
-appliquer à distance.** Vérifié ce jour en interrogeant `d1_migrations` distant : la dernière
-migration appliquée est `0038` — la mention « `0038` en attente » des checkpoints 65 à 71 était
-fausse. Le chantier supervision se déploie **groupé** après le ticket 04 : `0039` à distance
-d'abord, Worker ensuite.
+**État au 2026-08-01 : aucune migration en attente.** `0039` (journal des actions de plateforme)
+a été appliquée à distance, puis le Worker déployé — chantier supervision entièrement en
+production. Au passage : la mention « `0038` en attente » des checkpoints 65 à 71 était fausse,
+`d1_migrations` distant montre qu'elle l'était depuis le 2026-07-31. **L'état d'une base distante
+se lit, il ne se recopie pas de checkpoint en checkpoint.**
 
 **Erreur `7403` sur une commande `--remote`** : ce n'est pas le compte, c'est le jeton employé.
 `.dev.vars` définit un `CLOUDFLARE_API_TOKEN` (destiné au Worker) ; s'il se retrouve exporté dans

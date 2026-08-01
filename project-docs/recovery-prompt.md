@@ -1,3 +1,72 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 72 — chantier 1 supervision clos et déployé)
+
+## Reprendre ici
+
+**Le chantier 1 de la supervision admin plateforme est terminé, déployé et vérifié en
+production.** Les 4 tickets sont `done`. Rien de ce chantier n'attend quoi que ce soit.
+
+Deux suites possibles, dans cet ordre de priorité :
+
+1. **🔴 P1 — Pages hors socle partagé** (`todo.md` § dédié). **10 des ~20 pages internes**
+   (`settings`, `stats`, `caisse`, `kanban`, `personnel`, `sav`, `notifications`, `fournisseurs`,
+   `agenda`, `modules`) n'appellent pas `buildSidebar()` **et** lisent `session.boutique_id` en
+   direct au lieu de `getBoutiqueId()`. Pour un admin plateforme ce champ est NULL ⇒ **ces écrans
+   sont inutilisables, sélection faite ou non**. Corriger le résolveur **avant** d'y poser le
+   bandeau — un bandeau qui ment sur la boutique visée est pire que pas de bandeau. À cadrer par
+   `/grill-with-docs` → `/to-spec` → `/to-tickets` : c'est une refonte d'interface.
+2. **Chantier 2 de la supervision** : console enrichie (CA, tickets ouverts, dernière activité) et
+   **consultation du journal de plateforme**. Le chantier 1 écrit le journal, rien ne le lit
+   encore — c'est la raison pour laquelle le grilling voulait ce chantier 2 avant tout autre sujet
+   du backlog.
+
+⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` / `code-review`
+sont `disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md` sous
+`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
+et suivre le processus.
+
+## Rien n'est en attente d'une action humaine
+
+Migration `0039` appliquée à distance **puis** Worker déployé, dans le bon ordre. Vérifié en
+production depuis le compte admin plateforme : la ligne de journal est écrite (auteur, boutique
+visée, `POST /api/clients`, `201`), et **elle est seule** — aucune lecture n'écrit. Le client de
+test créé pour la démonstration a été supprimé.
+
+`0038` était déjà appliquée depuis le 2026-07-31, contrairement à ce qu'affirmaient les
+checkpoints 65 à 71. Ne pas recopier l'état d'une base distante : l'interroger.
+
+## Ce que le prochain chantier doit savoir du journal
+
+- **`journalPlateformeMiddleware` est global sur `/api/*`** et journalise dans un `finally` : une
+  route qui lève est journalisée en `500`. Ne jamais revenir à un simple `await next()`.
+- **L'expurgation des secrets vit dans `enregistrerActionPlateforme()`**, pas chez l'appelant.
+  Tout nouveau champ sensible s'ajoute aux motifs de `journalPlateformeService.ts`.
+- La table n'a **aucune clé étrangère** : les jointures du chantier 2 devront tolérer un
+  `user_id` ou un `boutique_id` qui ne correspond plus à rien.
+- Colonnes : `user_id`, `boutique_id` (nullable), `methode`, `chemin`, `statut_http`,
+  `corps_expurge`, `ip_address`, `created_at`. Ni `entite_type` ni `donnees_avant` — un middleware
+  ne les connaît pas, les inventer produirait un registre faux.
+
+## Pièges d'outillage vérifiés
+
+- **`taskkill //F //IM workerd.exe` avant toute relance de `wrangler pages dev`** : `TaskStop` tue
+  wrangler, pas workerd, et les orphelins continuent de servir l'ancien bundle sur `:3000`.
+- `console.log` d'un Worker n'apparaît pas dans la sortie redirigée de `wrangler pages dev`, et
+  `c.header()` après `next()` ne remonte pas : instrumenter par un état en mémoire exposé dans une
+  réponse existante.
+- Erreur `7403` sur `--remote` : c'est le `CLOUDFLARE_API_TOKEN` de `.dev.vars` exporté dans le
+  shell qui prend le pas sur la session OAuth, laquelle a bien `d1 (write)`.
+- `tsconfig` sans lib `dom` : pas de `document` dans un `page.evaluate()` de test E2E.
+- Le pilotage du navigateur sur ce site exige que **NoScript** approuve `repairdesk.fr` en
+  permanent — sinon aucun script de page ne s'exécute et les symptômes imitent un bug applicatif.
+
+## État du dépôt
+
+`main` : `4404052` (ticket 04) + `a72268c` (correction de doc) + le commit de ce checkpoint.
+Baselines : `npx vitest run` → **891/893** (2 échecs permanents de fuseau `agendaService`),
+`npx tsc --noEmit` → **32**, `npx playwright test` → **167/167**.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 71 — ticket 03 livré, reprendre au ticket 04)
 
 ## Reprendre ici
