@@ -1,4 +1,93 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 72 — chantier 1 supervision clos et déployé)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 73 — les écritures suivent la boutique consultée)
+
+## Checkpoint 73 — Résolveur de boutique : les écritures suivent enfin la sélection (2026-08-01)
+
+Commit `01ff760` sur `main`. **Non déployé** — le déploiement n'est jamais automatique et
+n'a pas été demandé.
+
+### Le diagnostic du checkpoint 71 était faux pour moitié, et c'est le test qui l'a montré
+
+Le todo annonçait « 10 pages lisent `session.boutique_id` en direct au lieu de
+`getBoutiqueId()` ⇒ écrans inutilisables ». La spec E2E écrite en rouge d'abord a montré
+autre chose : **6 des 8 pages visées passaient déjà**. `apiGet` (`app.js`) injectait
+`boutique_id` depuis `getBoutiqueId()` **de longue date** — les *lectures* suivaient donc
+la boutique consultée partout, y compris sur les pages accusées.
+
+Ce qui ne suivait pas, ce sont les **écritures** : `apiPost`, `apiPut`, `apiPatch` et
+`apiDelete` n'injectaient rien. Un admin plateforme pouvait **consulter** la caisse d'un
+client sans pouvoir y **enregistrer une vente**. Et l'écriture est précisément ce que le
+journal des actions de plateforme (ADR 0001, ticket 04) existe pour tracer : le chantier
+précédent journalisait des mutations que l'exploitant ne pouvait pas faire.
+
+**Leçon de méthode** : un diagnostic recopié de checkpoint en checkpoint (celui-ci datait
+du ticket 03) n'est pas une observation. Écrire le test avant le correctif l'a corrigé en
+une minute — la même erreur que « `0038` en attente » au checkpoint 72, dans une autre
+matière.
+
+### Ce qui a été livré
+
+- **`_avecBoutique(url)` (`app.js`)** — ajoute `?boutique_id=<boutique consultée>` aux URL
+  des 4 helpers de mutation, par symétrie avec `apiGet`. Point de passage unique :
+  `caisse.js` et `sav.js` n'ont eu **aucun appel à changer**, et une page future en hérite.
+- **5 pages passées sur le socle** : `settings.html`, `stats.html`, `notifications.html`,
+  `kanban.js`, `personnel.js` — `getBoutiqueId()` et `sessionCourante()` au lieu de
+  `JSON.parse(localStorage.getItem('izigsm_session'))`.
+- **`personnel.js`** pose aussi `boutique_id: getBoutiqueId()` dans le corps :
+  `POST /api/employes` (`personnel.ts:72`) résout depuis le corps, la query n'y suffit pas.
+- **`tests/e2e/resolveur-boutique-pages.spec.ts`** — 9 cas : les 7 pages, plus un témoin
+  d'écriture (`POST /api/garanties/expire`), plus le pendant « sans sélection, aucune page
+  ne vise une boutique au hasard » qui verrouille la règle d'absence d'auto-sélection.
+- `CACHE_VERSION` → `izigsm-v2.85`.
+
+### Trois défauts corrigés sans les avoir cherchés
+
+1. **Page morte pour qui décoche « se souvenir de moi »** : `settings`, `stats` et `kanban`
+   ne lisaient que `localStorage`. Session dans `sessionStorage` ⇒ boucle
+   `setTimeout(init, 100)` **infinie**, écran vide sans message. `sessionCourante()` lit
+   les deux supports.
+2. `notifications.html` construisait des URL `/api/boutiques/null/settings`.
+3. La 🟠 P2 « boutique visée non résolue sur les routes par ID » (journal) est **atténuée** :
+   les mutations portant désormais la query, `resoudreBoutiqueVisee()` a une cible sur des
+   routes `/:id` qui n'en avaient pas.
+
+### Ce que la revue de code a rattrapé — deux commentaires qui mentaient
+
+1. Le JSDoc de `_avecBoutique` affirmait « **toutes** les routes résolvent par la query ».
+   Faux : une dizaine de handlers d'écriture lisent le **corps** (`employes`, `devis`,
+   `factures`, `rachats`, `fournisseurs`, `services`, `users/permissions`, et `agenda.ts`
+   qui n'appelle même pas `getBoutiqueId()`). Les pages concernées posent déjà la valeur
+   dans le corps — vérifié une par une — mais le commentaire aurait rassuré à tort le
+   prochain auteur. **Un helper qui promet l'universalité doit énumérer ses trous.**
+2. Le même JSDoc promettait « aucun moyen de viser la boutique d'autrui ». Or
+   `middleware.ts:208` teste `user.role === 'admin'` **seul** : un admin *de boutique* voit
+   son paramètre honoré lui aussi, et quelques routes d'`agenda.ts` lisent la query brute
+   sans filtre de rôle. Le socle n'envoie jamais que la boutique de la session, donc rien
+   n'est aggravé — mais c'est une approximation, pas un invariant serveur. La reformuler en
+   garantie était le raccourci qui a produit la faille superadmin du checkpoint 65.
+
+### 🔴 P1 ouvert par la revue, hors périmètre
+
+`public/static/js/reconditionnement.js` appelle **`getCurrentBoutiqueId()` 11 fois**
+(l. 135, 156, 261, 365, 415, 469, 490, 528, 572, 617, 663). Cette fonction n'est définie
+**nulle part** dans `public/`. `ReferenceError` au premier appel ⇒ la page est
+**entièrement hors service, pour tous les rôles**. Vérifié à la main, pas seulement
+rapporté. Tâche ouverte dans `todo.md`.
+
+### Vérifications
+
+**176/176 E2E** dont les 155 tests d'isolation multi-tenant — le vrai risque d'un
+changement du socle, puisqu'il touche les écritures des 29 pages. `tsc` à la baseline de
+32. `vitest` 891/893, les 2 échecs `agendaService` étant antérieurs et sur du backend que
+le diff ne touche pas.
+
+### Fait d'exploitation
+
+**36 processus `wrangler` orphelins** (9 grappes `pages dev --port 3000` lancées entre
+15h27 et 16h22, aucune n'écoutant réellement) occupaient **3 480 Mo**. Tués. C'est la
+suite directe de la leçon du checkpoint 72 (`TaskStop` ne tue pas l'arbre de processus) :
+le symptôme n'est pas seulement « l'ancien bundle est servi », c'est aussi plusieurs Go de
+mémoire. Commande de diagnostic :
+`Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'wrangler' }`.
 
 ## Checkpoint 72 — Journal des actions de plateforme, chantier 1 clos et **déployé** (2026-08-01)
 

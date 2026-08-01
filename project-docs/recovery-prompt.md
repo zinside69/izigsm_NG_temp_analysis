@@ -1,23 +1,56 @@
-# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 72 — chantier 1 supervision clos et déployé)
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 73 — les écritures suivent la boutique consultée)
 
 ## Reprendre ici
 
-**Le chantier 1 de la supervision admin plateforme est terminé, déployé et vérifié en
-production.** Les 4 tickets sont `done`. Rien de ce chantier n'attend quoi que ce soit.
+**Le chantier 1 de la supervision est terminé, déployé et vérifié en production** (4 tickets
+`done`). **Le résolveur de boutique est corrigé** (checkpoint 73, commit `01ff760`) : les
+écritures suivent désormais la boutique consultée, comme les lectures le faisaient déjà.
 
-Deux suites possibles, dans cet ordre de priorité :
+⚠️ **`01ff760` n'est pas déployé.** Aucune migration en attente ; c'est un chantier
+purement frontend. À déployer par `npm run deploy` sur confirmation explicite.
 
-1. **🔴 P1 — Pages hors socle partagé** (`todo.md` § dédié). **10 des ~20 pages internes**
-   (`settings`, `stats`, `caisse`, `kanban`, `personnel`, `sav`, `notifications`, `fournisseurs`,
-   `agenda`, `modules`) n'appellent pas `buildSidebar()` **et** lisent `session.boutique_id` en
-   direct au lieu de `getBoutiqueId()`. Pour un admin plateforme ce champ est NULL ⇒ **ces écrans
-   sont inutilisables, sélection faite ou non**. Corriger le résolveur **avant** d'y poser le
-   bandeau — un bandeau qui ment sur la boutique visée est pire que pas de bandeau. À cadrer par
-   `/grill-with-docs` → `/to-spec` → `/to-tickets` : c'est une refonte d'interface.
-2. **Chantier 2 de la supervision** : console enrichie (CA, tickets ouverts, dernière activité) et
-   **consultation du journal de plateforme**. Le chantier 1 écrit le journal, rien ne le lit
-   encore — c'est la raison pour laquelle le grilling voulait ce chantier 2 avant tout autre sujet
-   du backlog.
+Trois suites possibles, dans cet ordre de priorité :
+
+1. **🔴 P1 — `reconditionnement.js` est entièrement hors service** (`todo.md` § dédié).
+   Il appelle `getCurrentBoutiqueId()` **11 fois** ; cette fonction n'est définie **nulle
+   part** dans `public/`. `ReferenceError` au premier appel, pour **tous les rôles**, pas
+   seulement l'admin plateforme. Le socle expose `getBoutiqueId()` — c'est
+   vraisemblablement lui qui était visé. Tâche mécanique, avec un test à écrire sur le
+   modèle de `tests/e2e/resolveur-boutique-pages.spec.ts`.
+2. **Chantier 2 de la supervision** : console enrichie (CA, tickets ouverts, dernière
+   activité) et **consultation du journal de plateforme**. Le chantier 1 écrit le journal,
+   **rien ne le lit encore** — c'est la raison pour laquelle le grilling voulait ce
+   chantier 2 avant tout autre sujet du backlog. Requête SQL de dépannage dans `todo.md`
+   en attendant.
+3. **Pages hors socle partagé — le volet interface**, ce qui reste du P1 d'origine. Les 10
+   pages qui portent leur propre mise en page n'appellent toujours pas `buildSidebar()` et
+   n'ont donc **pas le bandeau « Vous consultez la boutique X »**. La condition posée à
+   l'époque — « corriger le résolveur d'abord, poser le bandeau ensuite » — est **remplie**
+   depuis le checkpoint 73 : ces pages visent la bonne boutique, le bandeau ne mentirait
+   plus. Reste une refonte d'interface, à cadrer par `/grill-with-docs` → `/to-spec` →
+   `/to-tickets`.
+
+## Ce qu'il ne faut pas re-découvrir sur le résolveur (checkpoint 73)
+
+- **`apiGet` injectait `boutique_id` depuis toujours** ; seules les mutations ne le
+  faisaient pas. Le diagnostic « ces pages lisent `session.boutique_id` en direct ⇒ écrans
+  inutilisables » était **faux pour 6 pages sur 8** — recopié de checkpoint en checkpoint
+  depuis le ticket 03 sans être revérifié. Écrire le test avant le correctif l'a montré en
+  une minute.
+- **Le paramètre d'URL ne couvre pas tout.** Une dizaine de handlers d'écriture résolvent
+  la boutique depuis le **corps** et ignorent la query : `POST /api/employes`,
+  `/api/devis`, `/api/factures`, `/api/rachats`, `/api/fournisseurs`, `/api/services`,
+  `PUT /api/users/:id/permissions`, et les routes d'`agenda.ts` (qui n'appellent même pas
+  `getBoutiqueId()`). Une page qui appelle l'une d'elles doit **aussi** poser
+  `boutique_id: getBoutiqueId()` dans le corps. Énuméré dans le JSDoc de `_avecBoutique()`.
+- **`getBoutiqueId()` côté serveur teste le rôle seul** (`middleware.ts:208`) : un admin
+  *de boutique* voit son `?boutique_id=` honoré, pas seulement l'admin plateforme. Ne pas
+  écrire que ce paramètre « ne permet pas de viser autrui » — ce n'est pas une garantie
+  serveur.
+- **Ne jamais lire `localStorage.getItem('izigsm_session')` dans une page.**
+  `sessionCourante()` lit les deux supports ; la lecture directe rendait `settings`,
+  `stats` et `kanban` **définitivement muettes** pour un compte n'ayant pas coché « se
+  souvenir de moi » (boucle `setTimeout(init, 100)` infinie).
 
 ⚠️ Les skills `to-spec` / `to-tickets` / `implement` / `triage` / `grill-with-docs` / `code-review`
 sont `disable-model-invocation` : l'outil `Skill` les refuse. Lire leur `SKILL.md` sous

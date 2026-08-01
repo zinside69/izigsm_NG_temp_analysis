@@ -213,6 +213,30 @@ Depuis le ticket 04 (2026-08-01), le journal des actions de plateforme (ADR 0001
   payé le prix d'une FK pendante (migration `0031`, réparée par `0038`).
 - **Le journal n'est lu par aucune interface** : sa consultation appartient au chantier 2.
 
+Depuis le checkpoint 73 (2026-08-01), la boutique portée par les **écritures** :
+
+- **`apiGet` **et** les quatre helpers de mutation** (`apiPost`, `apiPut`, `apiPatch`,
+  `apiDelete`) posent `boutique_id=<boutique consultée>` sur l'URL, via `_avecBoutique()`
+  (`app.js`). L'asymétrie inverse laissait un admin plateforme lire chez un client sans pouvoir
+  y écrire. Ne pas la réintroduire en ajoutant un cinquième helper qui l'oublierait.
+- **Ce paramètre ne suffit pas partout.** Une dizaine de handlers d'écriture résolvent la
+  boutique depuis le **corps** et ignorent la query : `POST /api/employes`, `/api/devis`,
+  `/api/factures`, `/api/rachats`, `/api/fournisseurs`, `/api/services`,
+  `PUT /api/users/:id/permissions`, et les routes d'`agenda.ts` (qui n'appellent pas
+  `getBoutiqueId()` du tout). Une page qui appelle l'une d'elles doit **aussi** poser
+  `boutique_id: getBoutiqueId()` dans le corps. La liste vit dans le JSDoc de `_avecBoutique()`.
+- **`getBoutiqueId()` côté serveur (`middleware.ts`) teste le rôle seul** : un admin *de
+  boutique* voit son `?boutique_id=` honoré, pas seulement l'admin plateforme. Ne jamais écrire
+  que ce paramètre « ne permet pas de viser la boutique d'autrui » — ce n'est pas une garantie
+  serveur, et transformer une approximation en invariant est ce qui a produit la faille
+  superadmin du checkpoint 65.
+- **Aucune page ne lit `localStorage.getItem('izigsm_session')`.** Le socle expose
+  `sessionCourante()`, qui lit les **deux** supports. La lecture directe rendait `settings`,
+  `stats` et `kanban` définitivement muettes (boucle `setTimeout(init, 100)` infinie) pour un
+  compte n'ayant pas coché « se souvenir de moi ».
+- `apiPostPublic` reste **hors** de ce mécanisme : les endpoints publics (inscription,
+  connexion) n'ont pas de session à interroger.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :
