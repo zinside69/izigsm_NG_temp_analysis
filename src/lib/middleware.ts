@@ -20,10 +20,15 @@
  *   - `requirePin`       : middleware Hono — session PIN KV
  *   - `hasPermission()`  : helper async — permission granulaire DB
  *   - `getBoutiqueId()`  : helper sync — isolation boutique par rôle
+ *   - `assertBoutiqueOwnership()` : helper sync — appartenance d'une ressource par ID
+ *   - `isAdminPlateforme()`       : helper sync — rôle `admin` sans boutique (ADR 0001)
+ *   - `journalPlateformeMiddleware` : middleware Hono — journal des actions de plateforme
  */
 
 import { createMiddleware } from 'hono/factory'
 import { validateAccessToken, type JwtPayload } from './auth'
+import type { Database } from '../ports/database'
+import { enregistrerActionPlateforme } from '../services/journalPlateformeService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -246,3 +251,94 @@ export function assertBoutiqueOwnership(
 
   return null
 }
+
+// ─── Journal des actions de plateforme (ADR 0001) ─────────────────────────────
+
+/** Méthodes considérées comme mutantes — une lecture n'écrit jamais dans le journal. */
+const METHODES_MUTANTES = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
+ * Vrai si l'appelant est un **admin plateforme** : rôle `admin` **et** aucune boutique.
+ *
+ * Pendant serveur de `isAdminPlateforme()` (`public/static/js/app.js`). C'est la seule
+ * définition opérationnelle : le rôle en base reste `admin`, la distinction est portée par le
+ * `boutique_id` NULL, voulu par l'ADR 0001 et non un accident de données. L'ADR interdit
+ * d'attribuer une boutique à un tel compte — sans quoi ses actions deviendraient
+ * indistinguables de celles d'un client sur cette boutique-là.
+ *
+ * @param user Payload JWT décodé, ou `undefined` sur une route non authentifiée
+ */
+export function isAdminPlateforme(user: JwtPayload | undefined): boolean {
+  return !!user && user.role === 'admin' && !user.boutique_id
+}
+
+/** Boutique visée : paramètre de requête, puis corps de requête, sinon non résolue. */
+function resoudreBoutiqueVisee(paramBoutiqueId: string | undefined, corps: unknown): number | null {
+  const depuisParam = paramBoutiqueId ? Number.parseInt(paramBoutiqueId, 10) : Number.NaN
+  if (Number.isFinite(depuisParam)) return depuisParam
+
+  const brut = (corps as { boutique_id?: unknown } | null)?.boutique_id
+  const depuisCorps = typeof brut === 'string' ? Number.parseInt(brut, 10) : brut
+  return typeof depuisCorps === 'number' && Number.isFinite(depuisCorps) ? depuisCorps : null
+}
+
+/**
+ * Middleware de journalisation des actions de l'admin plateforme (ADR 0001).
+ *
+ * À appliquer **globalement** sur `/api/*` : c'est le seul garant de complétude. Une route
+ * écrite demain est journalisée sans que personne n'y pense — la journalisation par appels
+ * dispersés a déjà montré qu'elle laisse des trous.
+ *
+ * Déclenchement : requête **mutante** (POST/PUT/PATCH/DELETE) **et** appelant admin plateforme.
+ * Un manager agissant chez lui n'écrit rien ; une lecture n'écrit rien.
+ *
+ * Le corps de la logique s'exécute **après** `next()`, pour deux raisons : l'identité n'est
+ * posée par `authMiddleware` que dans les sous-routeurs, et le statut de la réponse fait partie
+ * de ce qu'on enregistre.
+ *
+ * Complétude avant précision : la ligne est écrite même si la boutique visée n'est pas résolue
+ * (cible nulle) et **même si le handler a levé** — d'où le `finally`. La plupart des handlers
+ * mutants du dépôt n'attrapent pas leurs erreurs : sans lui, une intervention qui échoue en 500
+ * sur une facture, soit exactement le cas de litige invoqué par l'ADR, ne laisserait aucune
+ * trace. Jamais de ligne tue.
+ *
+ * L'écriture est différée par `executionCtx.waitUntil()` et ses échecs sont avalés : le
+ * registre est un moyen de preuve, jamais une condition de service.
+ */
+export const journalPlateformeMiddleware = createMiddleware<{
+  Bindings: Bindings
+  Variables: { user?: JwtPayload; db: Database }
+}>(async (c, next) => {
+  let aLeve = false
+  try {
+    await next()
+  } catch (e) {
+    aLeve = true
+    throw e            // la requête métier garde son comportement d'erreur, journal ou pas
+  } finally {
+    const user = c.get('user')
+    if (isAdminPlateforme(user) && METHODES_MUTANTES.has(c.req.method)) {
+      // Lecture du corps *après* le handler : Hono sert celui qu'il a déjà mis en cache si la
+      // route l'a lu, et consomme le flux intact sinon. Seul le JSON est capturé — parser un
+      // envoi multipart (photos de ticket) consommerait le flux pour rien.
+      const corps = c.req.header('Content-Type')?.includes('application/json')
+        ? await c.req.json().catch(() => null)
+        : null
+
+      const ecriture = enregistrerActionPlateforme(c.get('db'), {
+        user_id:     user!.sub,
+        boutique_id: resoudreBoutiqueVisee(c.req.query('boutique_id'), corps),
+        methode:     c.req.method,
+        chemin:      c.req.path,
+        // Ne pas lire `c.res` quand le handler a levé : Hono fabriquerait une réponse 404 au
+        // passage. Le gestionnaire d'erreur du framework renverra 500.
+        statut_http: aLeve ? 500 : c.res.status,
+        corps,
+        ip_address:  c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      }).catch(() => {})   // un journal indisponible ne fait pas échouer la requête métier
+
+      // `executionCtx` n'existe pas hors runtime Workers (tests, dev) — l'écriture part alors seule.
+      try { c.executionCtx.waitUntil(ecriture) } catch { /* rien à différer */ }
+    }
+  }
+})

@@ -188,6 +188,31 @@ Depuis le ticket 03 (2026-08-01), le bandeau de la boutique consultée :
   la lib `dom` et la baseline `tsc ≤ 32` saute. Mesurer par `locator.boundingBox()` ; prouver
   qu'un élément n'est pas recouvert par un **clic** (Playwright vérifie la cible du pointeur).
 
+Depuis le ticket 04 (2026-08-01), le journal des actions de plateforme (ADR 0001) :
+
+- **`journalPlateformeMiddleware` (`src/lib/middleware.ts`) est global sur `/api/*`** et c'est le
+  seul garant de complétude : toute route écrite plus tard est journalisée sans que personne n'y
+  pense. Ne jamais journaliser une action de plateforme depuis une route — la journalisation par
+  appels dispersés est précisément ce que l'ADR écarte (77 appels à `auditLog()`, aucun point
+  unique).
+- **La journalisation est dans un `finally`, jamais après un simple `await next()`.** La majorité
+  des handlers mutants du dépôt n'attrapent pas leurs erreurs et `index.tsx` ne déclare aucun
+  `app.onError` : sans `finally`, une intervention qui échoue en 500 sur une facture — le cas de
+  litige de l'ADR — ne laisserait aucune trace. Défaut trouvé en revue le 2026-08-01.
+- **Ne pas lire `c.res` quand le handler a levé** : le getter de Hono fabrique une réponse 404 au
+  passage. Le statut à journaliser est alors 500, celui que renverra le framework.
+- **L'expurgation des secrets vit dans `enregistrerActionPlateforme()`**, pas chez l'appelant :
+  un futur appelant ne peut donc pas l'oublier. Ajouter tout nouveau champ sensible aux motifs de
+  `journalPlateformeService.ts`, jamais au point d'appel.
+- **Complétude avant précision** : une action dont la boutique visée n'est pas résolue est écrite
+  avec une cible nulle. Jamais de ligne tue, sous aucun prétexte.
+- **Le corps n'est capturé qu'en `application/json`** : parser un envoi multipart (photos de
+  ticket) consommerait le flux de la requête pour rien.
+- La table **ne porte aucune clé étrangère** (ni vers `boutiques`, ni vers `users`) : un registre
+  de supervision doit survivre à une boutique désactivée et à un compte supprimé. Le dépôt a déjà
+  payé le prix d'une FK pendante (migration `0031`, réparée par `0038`).
+- **Le journal n'est lu par aucune interface** : sa consultation appartient au chantier 2.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :
@@ -349,8 +374,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**État au 2026-07-31 : la migration `0038` (reconstruction de `service_modeles`) est
-committée mais PAS appliquée à distance.** Elle répare une clé étrangère laissée pendante
+**État au 2026-08-01 : les migrations `0038` (reconstruction de `service_modeles`) et `0039`
+(journal des actions de plateforme) sont committées mais PAS appliquées à distance.** Le
+chantier supervision se déploie **groupé** après le ticket 04 : migrations distantes d'abord,
+Worker ensuite. La commande `--remote` est à faire lancer par l'utilisateur (jeton de session
+sans droits D1 distants, erreur 7403).
+
+Rappel sur `0038` : Elle répare une clé étrangère laissée pendante
 par la migration `0031` (`ALTER TABLE RENAME` puis `DROP` dans le même fichier), qui rend
 `POST /api/services/modeles/:id/services` inutilisable en production — 500 pour tout
 appelant, admin compris, depuis le Sprint 2.39. Sans elle appliquée en distant, déployer le

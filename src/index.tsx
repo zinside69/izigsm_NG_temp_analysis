@@ -24,8 +24,10 @@ import { getOrCreateIcalToken, generateIcal } from './services/agendaService'
 import { getPhotoById } from './services/photosService'
 import { verifyPhotoToken } from './lib/photoToken'
 import { createD1KV, d1KvCleanup } from './lib/d1kv'
+import { journalPlateformeMiddleware } from './lib/middleware'
 import { D1DatabaseAdapter } from './adapters/cloudflare/d1Database'
 import type { Database } from './ports/database'
+import type { JwtPayload } from './lib/auth'
 
 /**
  * @module index
@@ -66,8 +68,11 @@ type Bindings = {
 
 // Variables de contexte Hono injectées par le middleware global (voir plus bas) :
 // 'db' expose le port Database (architecture ports & adapters) découplé de D1.
+// 'user' est posé plus bas dans la chaîne par authMiddleware (dans chaque sous-routeur) :
+// il est donc absent à l'aller et présent au retour, ce dont dépend la journalisation.
 type Variables = {
-  db: Database
+  db:    Database
+  user?: JwtPayload
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -89,6 +94,12 @@ app.use('*', async (c, next) => {
   }
   await next()
 })
+
+// ─── Journal des actions de plateforme (ADR 0001) ────────────────────────────
+// Global et en amont de tous les routeurs : c'est le seul garant de complétude —
+// toute route ajoutée plus tard est journalisée sans que personne n'y pense.
+// Le middleware n'agit qu'au retour (identité posée par authMiddleware, statut connu).
+app.use('/api/*', journalPlateformeMiddleware)
 
 // ─── Health check (AVANT les routes avec :id dynamiques) ─────────────────────
 app.get('/api/health', (c) => {

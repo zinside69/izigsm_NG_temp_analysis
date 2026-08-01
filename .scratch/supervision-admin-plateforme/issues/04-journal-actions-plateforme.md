@@ -1,7 +1,7 @@
 ---
 id: 004
 titre: Journal des actions de plateforme — middleware + table dédiée
-statut: ready-for-agent
+statut: done
 bloque-par: [002]
 ---
 
@@ -34,16 +34,31 @@ chantier 2.
 
 ## Critères d'acceptation
 
-- [ ] Une mutation (POST/PUT/PATCH/DELETE) d'un admin plateforme sur une boutique cliente écrit une ligne portant l'auteur, la boutique visée, la méthode, le chemin et le statut de la réponse
-- [ ] Une lecture (GET) n'écrit aucune ligne
-- [ ] Une mutation d'un manager sur sa propre boutique n'écrit aucune ligne
-- [ ] Une mutation d'admin plateforme dont la boutique visée n'est pas résolue écrit une ligne avec une cible nulle — jamais de ligne tue
-- [ ] Aucun secret n'apparaît dans la capture du corps de requête (mot de passe, jeton, code de déverrouillage, code SIM)
-- [ ] Un échec d'écriture du journal ne fait pas échouer la requête métier
-- [ ] La table ne porte aucune contrainte de clé étrangère, et une boutique désactivée laisse ses lignes intactes
-- [ ] Une route ajoutée après ce ticket est journalisée sans modification du middleware (vérifié sur une route existante non prévue au départ)
-- [ ] Le garde-fou `tests/routes-isolation-conformite.test.ts` reste vert
-- [ ] `npx vitest run` ≥ 873/875 · `npx tsc --noEmit` ≤ 32
+- [x] Une mutation (POST/PUT/PATCH/DELETE) d'un admin plateforme sur une boutique cliente écrit une ligne portant l'auteur, la boutique visée, la méthode, le chemin et le statut de la réponse
+- [x] Une lecture (GET) n'écrit aucune ligne
+- [x] Une mutation d'un manager sur sa propre boutique n'écrit aucune ligne
+- [x] Une mutation d'admin plateforme dont la boutique visée n'est pas résolue écrit une ligne avec une cible nulle — jamais de ligne tue
+- [x] Aucun secret n'apparaît dans la capture du corps de requête (mot de passe, jeton, code de déverrouillage, code SIM)
+- [x] Un échec d'écriture du journal ne fait pas échouer la requête métier
+- [x] La table ne porte aucune contrainte de clé étrangère, et une boutique désactivée laisse ses lignes intactes
+- [x] Une route ajoutée après ce ticket est journalisée sans modification du middleware (vérifié sur une route existante non prévue au départ)
+- [x] Le garde-fou `tests/routes-isolation-conformite.test.ts` reste vert
+- [x] `npx vitest run` ≥ 873/875 · `npx tsc --noEmit` ≤ 32
+
+## Livré le 2026-08-01
+
+`migrations/0039_journal_actions_plateforme.sql` · `src/services/journalPlateformeService.ts` ·
+`journalPlateformeMiddleware` + `isAdminPlateforme()` (`src/lib/middleware.ts`) · branchement
+global `/api/*` (`src/index.tsx`) · `tests/journalPlateforme.test.ts` (16 tests).
+
+Portes : `npx vitest run` **891/893** (2 échecs permanents de fuseau `agendaService`) ·
+`npx tsc --noEmit` **32** · `npx playwright test` **167/167**. Vérifié en local sur
+l'application réelle : ligne écrite avec `password` expurgé, lecture et manager sans trace.
+
+Deux points relevés en revue et corrigés : la journalisation vivait **après** `next()` sans
+`finally` — un handler qui lève (la majorité n'attrape rien) faisait perdre la ligne, soit
+exactement le cas de litige de l'ADR ; et l'expurgation, faite par le middleware, pouvait être
+oubliée par un futur appelant — elle est désormais dans le service, hors d'atteinte.
 
 ## Notes
 
