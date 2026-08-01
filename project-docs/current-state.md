@@ -1,3 +1,62 @@
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 69 — base D1 locale purgée des tenants E2E)
+
+## Checkpoint 69 — Ménage de la base D1 **locale** (2026-08-01)
+
+Aucun code applicatif touché. Suite directe du checkpoint 68, même journée.
+
+### Ce qui a été fait
+
+1 672 boutiques → **2**. Fichier `.sqlite` : 4,5 Mo → 2,9 Mo (après `VACUUM`).
+
+| id | nom | comptes | tickets | clients |
+|---|---|---|---|---|
+| 1 | iziGSM Paris 11 (seed) | 3 | 25 | 183 |
+| 2 | TestBoutique2 | 0 | 2 | 2 |
+
+Les 1 670 boutiques `e2e-boutique-*` et leurs 1 670 comptes venaient des runs Playwright
+successifs — `createTenantAdmin()` crée un tenant par test et **rien ne nettoie derrière**. Les
+deux boutiques conservées le sont délibérément : le ticket 02 doit démontrer qu'une page métier
+bascule d'un jeu de données à un autre, ce qui demande deux boutiques peuplées et distinctes.
+
+### Méthode, reproductible sans le script
+
+Le `.sql` généré n'est pas versionné (choix explicite de l'utilisateur : purge ponctuelle, pas
+d'outillage). La méthode, elle, l'est — c'est elle qu'il faut rejouer :
+
+1. **Ordre par tri topologique des clés étrangères**, jamais à la main : lire
+   `sqlite_master.sql`, extraire les `REFERENCES`, trier les enfants avant les parents. 31 tables
+   portent `boutique_id`, plus 8 tables enfants atteintes par fermeture transitive (`appareils`,
+   `lignes_avoir`, `commissions`, `service_modeles`…). `lignes_document` n'a **aucune FK déclarée**
+   et se nettoie à part, par `document_type` + `document_id`.
+2. **Répétition à blanc avec `ROLLBACK`** avant toute écriture. Deux passes ont échoué et ont été
+   corrigées sans jamais toucher la base — les FK sont actives en local (`PRAGMA foreign_keys` = 1),
+   donc toute erreur d'ordre annule la transaction entière au lieu de laisser des orphelins.
+3. `PRAGMA foreign_key_check` **avant et après**, comparés.
+4. Sauvegarde du `.sqlite` avant exécution.
+
+`node:sqlite` (built-in depuis Node 22) permet de faire tout cela en une seconde sur le fichier
+miniflare, wrangler arrêté — là où chaque `wrangler d1 execute` coûte ~6 s.
+
+### Le point qui a demandé un arbitrage
+
+7 lignes de la **boutique 1** avaient été créées par des comptes E2E pendant les runs d'isolation :
+2 `paiements` et 5 `journal_nf525`. Elles bloquaient la suppression de ces comptes.
+
+Décision (utilisateur) : **réattribuer** leur `user_id` au compte admin, pas les supprimer. Les 5
+entrées `journal_nf525` sont des maillons d'une **chaîne de hash** — en retirer aurait rompu
+`verifyChain()` en local. Seul le `user_id` a bougé ; montants et hashs sont intacts. Voir
+`decisions.md`.
+
+### Vérifications
+
+`npx playwright test` → **145/145**. `npx vitest run` → **875/877**. Aucun test ne dépendait des
+tenants accumulés : chacun crée le sien.
+
+**2 violations FK préexistantes** relevées au passage, identiques avant et après la purge — elles
+ne viennent pas d'elle et n'ont pas été traitées. Détail dans `bugs.md`.
+
+---
+
 # iziGSM — État courant (MàJ : 2026-08-01, checkpoint 68 — ticket 01 livré : console des boutiques)
 
 ## Checkpoint 68 — Supervision, ticket 01 : la console des boutiques existe (2026-08-01)

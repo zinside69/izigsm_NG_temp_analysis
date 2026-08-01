@@ -15,6 +15,24 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## P3 — La suite E2E n'a aucun nettoyage de ses tenants (constaté 2026-08-01)
+
+`createTenantAdmin()` crée une boutique + un compte par test, rien ne les supprime : ~40 tenants
+par passage complet, 1 670 accumulés avant la purge du checkpoint 69. Sans effet sur la correction
+des tests — c'est la lisibilité de la base locale qui se dégrade, et donc toute validation à
+l'écran.
+
+Piste, **non tranchée** : un `globalTeardown` Playwright supprimant les boutiques `e2e-boutique-%`.
+L'ordre de suppression doit venir d'un tri topologique des FK (voir `current-state.md`
+§ Checkpoint 69), et le cas des lignes créées par un compte E2E dans une boutique conservée doit
+être traité — c'est ce qui a demandé un arbitrage humain lors de la purge manuelle (`decisions.md`).
+
+> Volontairement **sans case à cocher** : `pick-task.mjs` ne retient que les lignes `- [ ] …`, et
+> c'est un arbitrage de conception (que faire des lignes créées par un compte E2E dans une boutique
+> conservée ?), pas une tâche mécanique — la loop ne doit pas s'en saisir seule.
+>
+> À décider : la suite E2E nettoie-t-elle ses tenants, ou la purge reste-t-elle manuelle ?
+
 ## ✅ P1 — Migration de reconstruction `service_modeles` (trouvé et CORRIGÉ le 2026-07-31)
 Migration `0038_service_modeles_fk_reconstruction.sql`. Table recréée avec `REFERENCES modeles_appareils(id)`,
 données reprises (9/9 en local, aucun orphelin), 2 index restaurés. Vérifié en local live : `POST /api/services/modeles/:id/services`

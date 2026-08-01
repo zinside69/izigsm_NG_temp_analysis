@@ -1,3 +1,36 @@
+# Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 69 — base D1 locale purgée, reprendre au ticket 02)
+
+## Reprendre ici
+
+Inchangé par rapport au checkpoint 68 ci-dessous : **`/implement` sur le ticket 02**
+(`.scratch/supervision-admin-plateforme/issues/02-selection-boutique-bascule-pages.md`).
+Aucun code applicatif n'a bougé depuis. Dernier commit de code : `2a8c007`.
+
+## Ce qui a changé : la base D1 locale est propre
+
+L'avertissement « ~1 700 boutiques de test » du checkpoint 68 **ne vaut plus**. La base locale
+contient exactement **2 boutiques** :
+
+| id | nom | comptes | tickets | clients |
+|---|---|---|---|---|
+| 1 | iziGSM Paris 11 (seed) | 3 | 25 | 183 |
+| 2 | TestBoutique2 | 0 | 2 | 2 |
+
+Deux jeux de données distincts — c'est précisément ce dont le ticket 02 a besoin pour démontrer
+qu'une page métier bascule bien sur la boutique choisie.
+
+⚠️ **Le déchet revient** : chaque passage complet de la suite E2E recrée ~40 tenants
+(`createTenantAdmin()` en crée un par test, rien ne nettoie derrière). Après quelques runs, refaire
+une lecture d'écran en local redevient pénible. Méthode de purge dans `current-state.md`
+§ Checkpoint 69 — le script n'est volontairement pas versionné, mais la méthode l'est.
+
+## État du dépôt
+
+`main` : `2a8c007` (code) puis les commits de checkpoint. Baselines inchangées après purge :
+`npx vitest run` → **875/877**, `npx tsc --noEmit` → **32**, `npx playwright test` → **145/145**.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 68 — ticket 01 livré, reprendre au ticket 02)
 
 ## Reprendre ici
@@ -52,6 +85,7 @@ l'utilisateur (jeton de session sans droits D1 distants, erreur 7403).
 ⚠️ **Base D1 locale polluée** : ~1 700 boutiques accumulées par les runs E2E successifs. Sans
 incidence sur les tests (ils ciblent la boutique 1 du seed ou créent leur propre tenant), mais une
 lecture d'écran en local en est affectée — filtrer par le nom du seed (« Paris »).
+*(Purgé depuis, au checkpoint 69 — voir en tête de ce fichier.)*
 
 ⚠️ Après `npm run build`, **tuer et relancer** `wrangler pages dev` : il ne recharge pas `dist/`.
 

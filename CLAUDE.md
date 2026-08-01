@@ -40,6 +40,14 @@ npm run build
 npx wrangler pages dev dist --local --port 3000
 ```
 
+**La suite E2E accumule des tenants dans la base locale** : `createTenantAdmin()`
+(`tests/e2e/fixtures/tenant.ts`) crée une boutique + un compte par test, et **rien ne nettoie
+derrière** — ~40 tenants par passage complet. Sans effet sur les tests (chacun crée le sien, ou
+cible la boutique 1 du seed), mais après quelques dizaines de runs toute lecture d'écran en local
+devient illisible. Purge ponctuelle faite le 2026-08-01 (1 672 boutiques → 2) ; méthode
+reproductible dans `project-docs/current-state.md` § Checkpoint 69 — l'ordre de suppression **doit**
+venir d'un tri topologique des clés étrangères, jamais d'une liste écrite à la main.
+
 **Ne jamais ajouter `--d1=DB` à `wrangler pages dev`** : ce flag crée une base D1
 locale distincte de celle utilisée par `wrangler d1 migrations`/`execute` (persistance
 indexée différemment) — symptôme classique : `no such table: users` alors que les

@@ -1,5 +1,26 @@
 # iziGSM — Décisions
 
+## 2026-08-01 — Purge des tenants E2E en local : réattribuer plutôt que supprimer les lignes NF525
+
+**Décision** : lors du ménage de la base D1 locale (checkpoint 69), les 7 lignes de la boutique 1
+créées par des comptes E2E — 2 `paiements`, 5 `journal_nf525` — ont vu leur `user_id` réattribué au
+compte admin, au lieu d'être supprimées avec les comptes.
+
+**Pourquoi** : `journal_nf525` est une **chaîne de hash** (`lib/nf525.ts`). Chaque entrée chaîne la
+précédente ; en retirer cinq aurait rompu la chaîne de la boutique 1 et fait échouer
+`GET /api/boutiques/:id/nf525/verify` en local — on aurait perdu la capacité de tester la
+conformité sur le seul jeu de données qui la porte. La réattribution ne touche ni les montants ni
+les hashs, seulement l'auteur.
+
+**Ce que la décision coûte** : elle réécrit l'auteur d'entrées d'un registre conçu pour être
+immuable. Acceptable **uniquement** parce qu'il s'agit d'une base locale de développement, sans
+valeur probante. Ne jamais transposer ce geste en production : là, une entrée NF525 fausse ou
+réattribuée est un problème de conformité, pas un détail d'hygiène.
+
+**Deux boutiques conservées, pas une** : le seed n'en peuple qu'une. Le ticket 02 doit démontrer
+qu'une page bascule d'un jeu de données à un autre — sans seconde boutique peuplée, le critère
+d'acceptation n'est pas vérifiable. `TestBoutique2` est donc gardée délibérément.
+
 ## 2026-08-01 — Suppression de l'auto-sélection de boutique à la connexion (ticket 01)
 
 **Décision** : `login.html` ne va plus chercher la première boutique venue pour pré-remplir la

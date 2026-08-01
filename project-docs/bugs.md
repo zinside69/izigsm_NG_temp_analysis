@@ -1,5 +1,30 @@
 # iziGSM — Bugs connus
 
+## 2 violations de clé étrangère préexistantes en base D1 **locale** (relevées le 2026-08-01, NON traitées)
+
+Trouvées incidemment pendant la purge des tenants E2E (checkpoint 69), par un
+`PRAGMA foreign_key_check` passé **avant et après** — les deux violations sont identiques dans les
+deux relevés, elles ne viennent donc pas de la purge :
+
+```
+tickets                    rowid 13 → parent clients   (fkid 2)
+tickets_statuts_historique rowid 5  → parent tickets   (fkid 1)
+```
+
+Deux lignes pointant vers un parent inexistant, rattachées à la boutique 2 « TestBoutique2 » —
+elle-même un résidu de test ancien (`slug` NULL, 0 compte). **Non traitées** : hors du périmètre de
+la purge, et sans effet sur les tests (145/145 Playwright, 875/877 vitest après coup).
+
+**Origine non établie.** SQLite n'applique les FK que si `PRAGMA foreign_keys` est actif *au moment
+de l'écriture* — ces lignes ont probablement été insérées par un chemin où il ne l'était pas (une
+ancienne fixture de test utilisait `PRAGMA foreign_keys = OFF`, contournement supprimé depuis).
+**À ne pas confondre avec un bug applicatif** : rien n'indique que le code de production puisse
+produire cet état.
+
+**Si ces violations gênent un jour** : elles disparaissent d'un reset complet de la base locale
+(`npx wrangler d1 migrations apply DB --local` + `seed.sql` sur un `.sqlite` neuf), au prix de
+`TestBoutique2` — dont le ticket 02 a l'usage.
+
 ## Connexion Google : un admin plateforme était envoyé sur l'écran de création d'atelier (trouvé et CORRIGÉ le 2026-08-01)
 
 Trouvé en écrivant le ticket 01, jamais remonté par un utilisateur — le compte de supervision se
