@@ -32,6 +32,17 @@ export async function seConnecter(page: Page, { email, password }: Compte) {
   await page.click('#login-form button[type="submit"]')
 }
 
+/**
+ * Déconnexion par le socle applicatif, jusqu'au retour au formulaire.
+ *
+ * Le sélecteur du lien est le seul endroit du dépôt qui dépende de la structure interne
+ * du socle : concentré ici, il ne coûte qu'une correction le jour où l'en-tête change.
+ */
+export async function seDeconnecter(page: Page) {
+  await page.click('.sidebar-footer a[onclick="logout()"]')
+  await expect(page.locator('#login-form')).toBeVisible({ timeout: 15_000 })
+}
+
 /** Jeton d'accès obtenu par l'API — pour les tests du seam API. */
 export async function obtenirToken(request: APIRequestContext, compte: Compte): Promise<string> {
   const res = await request.post('/api/auth/login', { data: compte })

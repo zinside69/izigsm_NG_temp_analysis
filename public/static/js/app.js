@@ -101,6 +101,10 @@ function buildSidebar(activePage) {
   // Topbar avatar
   const av = document.getElementById('topbar-avatar');
   if (av) av.textContent = initials;
+
+  // Bandeau « Vous consultez la boutique X » — rendu ici, donc sur toute page qui
+  // construit son interface avec ce socle, sans intervention page par page.
+  renderBandeauPlateforme(session);
 }
 
 function getTicketBadge() {
@@ -860,6 +864,66 @@ function nomBoutiqueAffichee(session = null) {
     return s.boutique_selectionnee_nom || 'MyDesk';
   }
   return s.company || 'MyDesk';
+}
+
+/**
+ * Affiche le bandeau permanent nommant la boutique consultée par l'admin plateforme.
+ *
+ * C'est la contrepartie de l'accès en écriture accordé sur une boutique cliente : à
+ * tout instant, l'exploitant doit savoir chez qui il agit. Le bandeau n'offre donc
+ * aucun moyen de le refermer — sa présence ne peut pas dépendre du confort de celui
+ * qu'il signale, et il passe même au-dessus des modals, qui sont précisément les
+ * écrans où l'on écrit chez le client.
+ *
+ * Rendu par nœuds DOM plutôt que par `innerHTML` : le nom de boutique vient de l'API
+ * et finirait interprété comme du balisage.
+ *
+ * Appelé par `buildSidebar()` : le bandeau apparaît donc sur toute page construite
+ * avec le socle partagé, sans intervention page par page.
+ *
+ * @param {object|null} session - Session à évaluer (défaut : session courante)
+ */
+function renderBandeauPlateforme(session = null) {
+  const s = session ?? sessionCourante();
+
+  // Reconstruction complète : la même page peut rappeler le socle après un changement
+  // de boutique, et un bandeau périmé serait pire que pas de bandeau du tout.
+  document.getElementById('bandeau-plateforme')?.remove();
+  document.body.classList.remove('avec-bandeau-plateforme');
+
+  // Un manager n'a jamais de bandeau ; un admin plateforme n'en a pas tant qu'il n'a
+  // rien choisi — il ne consulte alors aucune boutique.
+  if (!isAdminPlateforme(s) || !s.boutique_selectionnee_id) return;
+
+  const bandeau = document.createElement('div');
+  bandeau.id        = 'bandeau-plateforme';
+  bandeau.className = 'bandeau-plateforme';
+  // `region` et non `status` : le bandeau est un repère permanent, pas un message
+  // qui vient d'arriver — une région live serait réannoncée à chaque reconstruction
+  // du socle, donc à chaque changement de page.
+  bandeau.setAttribute('role', 'region');
+  bandeau.setAttribute('aria-label', 'Boutique consultée');
+
+  const texte = document.createElement('span');
+  texte.className   = 'bp-texte';
+  texte.textContent = 'Vous consultez la boutique ';
+
+  const nom = document.createElement('strong');
+  nom.className   = 'bp-boutique';
+  nom.textContent = nomBoutiqueAffichee(s);
+  texte.appendChild(nom);
+
+  const action = document.createElement('a');
+  action.className   = 'bp-action';
+  action.href        = '/console-boutiques';
+  action.textContent = '← Retour à la console';
+
+  bandeau.append(texte, action);
+
+  // En tête de `body`, pas dans la page : le bandeau surplombe la sidebar comme le
+  // contenu, et la classe portée par `body` décale le reste du socle d'autant.
+  document.body.prepend(bandeau);
+  document.body.classList.add('avec-bandeau-plateforme');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

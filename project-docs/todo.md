@@ -15,6 +15,33 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## 🔴 P1 — Pages hors socle partagé : la moitié de l'application ignore la boutique sélectionnée (constaté 2026-08-01, ticket 03)
+
+Sur ~20 pages internes, **10 seulement appellent `buildSidebar()`** (`clients`, `dashboard`,
+`devis`, `factures`, `qualirepar`, `rachats`, `reconditionnement`, `services`, `stock`,
+`tickets`). Les 10 autres — `settings`, `stats`, `caisse`, `kanban`, `personnel`, `sav`,
+`notifications`, `fournisseurs`, `agenda`, `modules` — portent leur propre mise en page.
+
+Deux conséquences, la seconde bien plus grave que la première :
+
+1. **Pas de bandeau « Vous consultez la boutique X »** sur ces pages (ticket 03).
+2. **Elles ne suivent pas la boutique sélectionnée** : plusieurs lisent
+   `JSON.parse(localStorage.getItem('izigsm_session')).boutique_id` en direct au lieu du
+   résolveur `getBoutiqueId()` — vérifié sur `settings.html` (« Compte admin global —
+   sélectionnez une boutique. ») et `stats.html`. Pour un admin plateforme, `boutique_id` est
+   NULL : ces écrans sont donc **inutilisables**, sélection faite ou non. C'est exactement le cas
+   que la spec du chantier annonçait à traiter comme un défaut (« tout appel écrit à la main
+   ailleurs continuerait d'ignorer la sélection — à traiter comme un défaut s'il en existe »).
+
+L'ordre compte : **corriger le résolveur d'abord, poser le bandeau ensuite**. Un bandeau sur une
+page qui travaille en réalité sur une autre boutique (ou sur aucune) est pire que pas de bandeau.
+
+À cadrer par `/grill-with-docs` → `/to-spec` → `/to-tickets` : passer ces pages au socle partagé
+est une refonte d'interface, pas un remplacement mécanique d'appel.
+
+> Volontairement **sans case à cocher** : `pick-task.mjs` ne retient que les lignes `- [ ] …`,
+> et c'est un chantier à cadrer, pas une tâche mécanique que la loop puisse prendre seule.
+
 ## P3 — La suite E2E n'a aucun nettoyage de ses tenants (constaté 2026-08-01)
 
 `createTenantAdmin()` crée une boutique + un compte par test, rien ne les supprime : ~40 tenants
@@ -65,9 +92,10 @@ renvoyait 500 pour tout appelant, admin compris, depuis le Sprint 2.39.
 >   checkpoint 68. Non poussé, non déployé.
 > - [x] Ticket 02 — sélection et bascule des 29 pages — **fait le 2026-08-01**, commit `c72fabf`,
 >   checkpoint 70. Non déployé.
-> - [ ] Ticket 03 — bandeau permanent et retour console *(débloqué — prenable ; **c'est lui qui
->   incrémente `CACHE_VERSION`**, dernière tâche frontend du chantier)*
-> - [ ] Ticket 04 — journal des actions de plateforme *(bloqué par 02)*
+> - [x] Ticket 03 — bandeau permanent et retour console — **fait le 2026-08-01**,
+>   `CACHE_VERSION` → `izigsm-v2.84`. Non déployé.
+> - [ ] Ticket 04 — journal des actions de plateforme *(débloqué — prenable ; dernier du chantier,
+>   c'est lui qui introduit une migration et ouvre le déploiement groupé)*
 >
 > **Décisions de conduite du chantier (2026-08-01) :**
 > - **Déploiement groupé après le ticket 04**, jamais avant : l'état « 02 sans bandeau » ne doit

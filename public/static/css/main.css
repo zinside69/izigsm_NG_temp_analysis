@@ -37,6 +37,7 @@
   --sidebar-text: #c8c8e8;
   --sidebar-active: #6c47ff;
   --topbar-h: 64px;
+  --bandeau-h: 44px;
 }
 
 /* ---- Reset ---- */
@@ -648,6 +649,47 @@ input, select, textarea { font-family: inherit; }
   flex: 1; display: flex; flex-direction: column; min-height: 100vh;
 }
 .page-content { padding: 28px; flex: 1; }
+
+/* =============================================
+   BANDEAU PLATEFORME — boutique consultée par l'admin plateforme
+   ============================================= */
+/* Fixé au-dessus de tout — sidebar (z-index 100) et modals (500) compris : un modal
+   est précisément l'écran où l'on écrit chez le client, c'est là que le rappel de la
+   boutique consultée compte le plus. Le laisser passer dessous rendrait le bandeau
+   masquable par la première saisie venue. */
+.bandeau-plateforme {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+  height: var(--bandeau-h);
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  padding: 0 20px;
+  background: linear-gradient(90deg, #b45309, #d97706);
+  color: #fff; font-size: 0.88rem; font-weight: 600;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+}
+.bandeau-plateforme .bp-boutique { font-weight: 800; }
+.bandeau-plateforme .bp-action {
+  padding: 5px 12px; border-radius: 999px;
+  background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.45);
+  font-size: 0.82rem; font-weight: 700; white-space: nowrap;
+  transition: background .18s;
+}
+.bandeau-plateforme .bp-action:hover { background: rgba(255,255,255,0.32); }
+
+/* Le socle est décalé d'autant, jamais recouvert : la sidebar et la topbar sont
+   respectivement fixed et sticky en haut, un simple padding sur body les laisserait
+   sous le bandeau. */
+body.avec-bandeau-plateforme { padding-top: var(--bandeau-h); }
+body.avec-bandeau-plateforme .app-layout { min-height: calc(100vh - var(--bandeau-h)); }
+body.avec-bandeau-plateforme .main-content { min-height: calc(100vh - var(--bandeau-h)); }
+body.avec-bandeau-plateforme .sidebar { top: var(--bandeau-h); }
+body.avec-bandeau-plateforme .dash-topbar { top: var(--bandeau-h); }
+
+/* À l'impression, le bandeau n'a pas de sens et volerait de la hauteur au document
+   (les fiches et factures visent une seule page A4, voir _triggerPrint). */
+@media print {
+  .bandeau-plateforme { display: none !important; }
+  body.avec-bandeau-plateforme { padding-top: 0 !important; }
+}
 
 /* =============================================
    COMPOSANTS DASHBOARD

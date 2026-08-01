@@ -14,23 +14,13 @@
  * réponse de l'API, le libellé lu à l'écran — jamais la clé de stockage employée ni la
  * signature d'une fonction : ces choix doivent pouvoir changer sans casser la suite.
  */
-import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
 import { createTenantAdmin, type TenantAdmin } from './fixtures/tenant'
-import { ADMIN_PLATEFORME, MANAGER, seConnecter, obtenirToken } from './fixtures/comptes'
+import { ADMIN_PLATEFORME, MANAGER, seConnecter, seDeconnecter, obtenirToken } from './fixtures/comptes'
+import { seConnecterAdminPlateforme, creerBoutique, choisirBoutique } from './fixtures/console-plateforme'
 
 /** Boutique du seed, celle du manager. */
 const SEED_BOUTIQUE = { id: 1, nom: 'iziGSM Paris 11' }
-
-/**
- * Connexion en admin plateforme, **puis attente de la console**.
- *
- * Attendre est indispensable : `seConnecter` rend la main dès le clic, et naviguer
- * avant que la session ne soit posée renvoie au formulaire de connexion.
- */
-async function seConnecterAdminPlateforme(page: Page) {
-  await seConnecter(page, ADMIN_PLATEFORME)
-  await expect(page.locator('#console-table')).toBeVisible({ timeout: 15_000 })
-}
 
 /**
  * Crée un tenant jetable et lui donne un client au nom unique.
@@ -43,13 +33,7 @@ async function creerBoutiqueTemoin(request: APIRequestContext): Promise<{
   nomBoutique: string
   nomClient: string
 }> {
-  const tenant = await createTenantAdmin(request)
-
-  const boutiquesRes = await request.get('/api/boutiques', {
-    headers: { Authorization: `Bearer ${tenant.accessToken}` },
-  })
-  expect(boutiquesRes.status()).toBe(200)
-  const nomBoutique = (await boutiquesRes.json()).data[0].nom as string
+  const { tenant, nomBoutique } = await creerBoutique(request)
 
   const nomClient = `Temoin${Date.now()}`
   const clientRes = await request.post('/api/clients', {
@@ -65,17 +49,6 @@ async function creerBoutiqueTemoin(request: APIRequestContext): Promise<{
   expect(clientRes.ok(), `création du client témoin : ${await clientRes.text()}`).toBe(true)
 
   return { tenant, nomBoutique, nomClient }
-}
-
-/** Choisit une boutique depuis la console, en la retrouvant par son nom. */
-async function choisirBoutique(page: Page, nomBoutique: string) {
-  await page.goto('/console-boutiques')
-  await expect(page.locator('#console-table')).toBeVisible({ timeout: 15_000 })
-  await page.fill('#console-search', nomBoutique)
-
-  const ligne = page.locator('#console-list tr', { hasText: nomBoutique }).first()
-  await expect(ligne).toBeVisible()
-  await ligne.click()
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -200,8 +173,7 @@ test.describe('Sélection d\'une boutique — navigateur', () => {
     await page.goto('/clients')
     await expect(page.locator('.sidebar-user .u-role')).toHaveText(nomBoutique, { timeout: 15_000 })
 
-    await page.click('.sidebar-footer a[onclick="logout()"]')
-    await expect(page.locator('#login-form')).toBeVisible({ timeout: 15_000 })
+    await seDeconnecter(page)
 
     await seConnecterAdminPlateforme(page)
     await expect(page.locator('#console-table')).toBeVisible({ timeout: 15_000 })
