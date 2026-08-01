@@ -604,6 +604,40 @@ async function tryRefreshToken() {
 }
 
 /**
+ * Ajoute `boutique_id=<boutique consultée>` à une URL qui n'en porte pas déjà.
+ *
+ * **Ce paramètre ne suffit pas partout.** Une dizaine de handlers d'écriture résolvent
+ * leur boutique depuis le **corps** et ignorent la query — `POST /api/employes`
+ * (`personnel.ts`), `/api/devis` et `/api/factures` (`facturation.ts`), `/api/rachats`,
+ * `/api/fournisseurs`, `/api/services`, `PUT /api/users/:id/permissions`, et les routes
+ * d'`agenda.ts` qui exigent `body.boutique_id` sans appeler `getBoutiqueId()` du tout.
+ * Une page qui appelle l'une d'elles doit **aussi** poser `boutique_id: getBoutiqueId()`
+ * dans le corps. Ne pas se fier à ce helper seul pour une écriture.
+ *
+ * Pour tout le reste (`caisse.ts`, `sav.ts`, `stats.ts`, `tickets.ts`, `notifications.ts`,
+ * `stocks.ts`…), la query est bien le canal de résolution, quel que soit le verbe.
+ *
+ * Aucun effet pour un manager : `getBoutiqueId()` côté serveur (`middleware.ts`) ne lit
+ * le paramètre que pour le rôle `admin`. La réserve : ce test porte sur le rôle **seul**,
+ * donc un admin de boutique le voit honoré lui aussi — et quelques routes d'`agenda.ts`
+ * lisent la query brute sans filtre de rôle. Ce helper n'aggrave rien (le socle n'envoie
+ * jamais que la boutique de la session), mais ce n'est pas la garantie serveur que la
+ * formulation « seul l'admin plateforme peut viser ailleurs » laisserait croire.
+ *
+ * Une URL qui porte déjà `boutique_id=` est rendue telle quelle : un appelant qui a
+ * délibérément visé une boutique garde la main.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function _avecBoutique(url) {
+  if (url.includes('boutique_id=')) return url;
+  const bid = getBoutiqueId();
+  if (!bid) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'boutique_id=' + encodeURIComponent(bid);
+}
+
+/**
  * GET helper
  */
 async function apiGet(url, params = {}) {
@@ -620,30 +654,35 @@ async function apiGet(url, params = {}) {
 
 /**
  * POST helper
+ *
+ * Porte la boutique consultée comme `apiGet` : l'asymétrie inverse laissait un admin
+ * plateforme lire chez un client sans pouvoir y écrire (caisse, SAV et notifications
+ * répondaient 400, corrigé le 2026-08-01). Voir `_avecBoutique()` pour les routes que
+ * ce canal ne couvre pas.
  */
 async function apiPost(url, body) {
-  return api('POST', url, body);
+  return api('POST', _avecBoutique(url), body);
 }
 
 /**
  * PUT helper
  */
 async function apiPut(url, body) {
-  return api('PUT', url, body);
+  return api('PUT', _avecBoutique(url), body);
 }
 
 /**
  * DELETE helper
  */
 async function apiDelete(url) {
-  return api('DELETE', url);
+  return api('DELETE', _avecBoutique(url));
 }
 
 /**
  * PATCH helper — mise à jour partielle d'une ressource
  */
 async function apiPatch(url, body) {
-  return api('PATCH', url, body);
+  return api('PATCH', _avecBoutique(url), body);
 }
 
 /**

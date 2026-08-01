@@ -72,6 +72,66 @@ CSP future produirait le même effet.
 
 - [ ] Externaliser la logique de `public/reset-password.html` dans `public/static/js/reset-password.js`
 
+## 🔴 P1 — `reconditionnement.js` appelle une fonction qui n'existe pas (constaté 2026-08-01, en revue)
+
+`public/static/js/reconditionnement.js` appelle `getCurrentBoutiqueId()` **11 fois**
+(lignes 135, 156, 261, 365, 415, 469, 490, 528, 572, 617, 663). Cette fonction **n'est
+définie nulle part** dans `public/` — ni dans `app.js`, ni dans le fichier lui-même. Le
+premier appel lève un `ReferenceError` : la page est **entièrement hors service**, pour
+tout rôle, pas seulement pour un admin plateforme.
+
+Trouvé par la revue de code du chantier « résolveur de boutique », dont c'est la même
+famille — mais un cran plus grave : ici la page ne se trompe pas de boutique, elle ne
+fonctionne pas du tout. Le socle expose `getBoutiqueId()` ; c'est vraisemblablement lui
+qui était visé.
+
+- [ ] Remplacer les 11 appels à `getCurrentBoutiqueId()` par `getBoutiqueId()` dans `public/static/js/reconditionnement.js`, et couvrir la page par un test comme les 7 autres
+
+## ✅ 🔴 P1 — Résolveur de boutique des pages hors socle (constaté 2026-08-01 ticket 03, **CORRIGÉ le 2026-08-01**)
+
+**Le diagnostic d'origine ci-dessous était partiellement faux**, et c'est le test qui l'a
+montré : 6 des 8 pages visées passaient déjà. `apiGet` (`app.js`) injectait `boutique_id`
+depuis `getBoutiqueId()` **depuis longtemps** — donc les *lectures* suivaient la boutique
+consultée partout. Ce qui ne suivait pas, ce sont les *écritures* : `apiPost`, `apiPut`,
+`apiPatch` et `apiDelete` n'injectaient rien. Un admin plateforme pouvait **consulter** la
+caisse d'un client sans pouvoir y **enregistrer une vente** — et l'écriture est justement
+ce que le journal des actions de plateforme (ADR 0001) existe pour tracer.
+
+Corrigé par symétrie, au point de passage unique : `_avecBoutique(url)` dans `app.js`,
+appliqué aux 4 helpers de mutation. Aucun appel de page n'a eu à changer pour `caisse.js`
+et `sav.js`. Les 5 pages qui lisaient `session.boutique_id` en direct passent sur
+`getBoutiqueId()` / `sessionCourante()` : `settings.html`, `stats.html`,
+`notifications.html`, `kanban.js`, `personnel.js`.
+
+Trois gains non prévus, constatés en revue :
+1. `settings.html`, `stats.html` et `kanban.js` ne lisaient que `localStorage` : un compte
+   n'ayant pas coché « se souvenir de moi » (session dans `sessionStorage`) tombait dans
+   une boucle `setTimeout(init, 100)` **infinie**, page morte. `sessionCourante()` lit les
+   deux supports.
+2. La 🟠 P2 « boutique visée non résolue sur les routes par ID » s'en trouve **atténuée** :
+   les mutations portant désormais la query, `resoudreBoutiqueVisee()` a une cible sur des
+   routes `/:id` qui n'en avaient pas.
+3. `notifications.html` construisait des URL `/api/boutiques/null/settings`.
+
+⚠️ **Le paramètre d'URL ne couvre pas tout** : une dizaine de handlers d'écriture
+résolvent la boutique depuis le **corps** (`POST /api/employes`, `/api/devis`,
+`/api/factures`, `/api/rachats`, `/api/fournisseurs`, `/api/services`,
+`PUT /api/users/:id/permissions`, et les routes d'`agenda.ts`). Les pages concernées
+posent déjà `boutique_id: getBoutiqueId()` dans le corps — vérifié une par une — mais une
+page future devra le faire aussi. C'est écrit dans le JSDoc de `_avecBoutique()`.
+
+Vérifié : **176/176 E2E vert** (dont les 155 tests d'isolation multi-tenant), `tsc` à la
+baseline de 32, `vitest` 891/893 (les 2 échecs `agendaService` sont antérieurs).
+`CACHE_VERSION` → `izigsm-v2.85`. Test : `tests/e2e/resolveur-boutique-pages.spec.ts`.
+
+**Ce qui reste ouvert** de l'entrée d'origine : le passage de ces pages au **socle
+partagé** (`buildSidebar()`) et donc le bandeau « Vous consultez la boutique X ». C'est
+une refonte d'interface, toujours à cadrer par `/grill-with-docs` → `/to-spec` →
+`/to-tickets`. La condition posée à l'époque — « corriger le résolveur d'abord » — est
+désormais remplie.
+
+<details><summary>Diagnostic d'origine (conservé pour mémoire — voir la rectification ci-dessus)</summary>
+
 ## 🔴 P1 — Pages hors socle partagé : la moitié de l'application ignore la boutique sélectionnée (constaté 2026-08-01, ticket 03)
 
 > **10 des ~20 pages internes n'appellent pas `buildSidebar()`** (`settings`, `stats`, `caisse`,
@@ -101,6 +161,8 @@ est une refonte d'interface, pas un remplacement mécanique d'appel.
 
 > Volontairement **sans case à cocher** : `pick-task.mjs` ne retient que les lignes `- [ ] …`,
 > et c'est un chantier à cadrer, pas une tâche mécanique que la loop puisse prendre seule.
+
+</details>
 
 ## P3 — La suite E2E n'a aucun nettoyage de ses tenants (constaté 2026-08-01)
 

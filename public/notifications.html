@@ -280,19 +280,13 @@
   window.addEventListener('DOMContentLoaded', async () => {
     // Petit délai pour laisser app.js initialiser la session
     await new Promise(r => setTimeout(r, 150))
-    const user = waitForUser()
-    if (!user) return
-    _boutiqueId = user.boutique_id
+    if (!sessionCourante()) return
+    // Boutique consultée résolue par le socle (`app.js`). La lecture directe de
+    // `session.boutique_id` qui vivait ici laissait un admin plateforme construire des
+    // URL `/api/boutiques/null/settings`, sélection faite ou non.
+    _boutiqueId = getBoutiqueId()
     await Promise.all([loadStats(), loadConfig(), loadLogs()])
   })
-
-  function waitForUser() {
-    // Lecture directe session localStorage (même pattern que les autres pages)
-    try {
-      const raw = localStorage.getItem('izigsm_session')
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
-  }
 
   // ─── Stats ────────────────────────────────────────────────────────────────────
 

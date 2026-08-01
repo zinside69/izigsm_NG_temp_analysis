@@ -417,7 +417,6 @@ async function submitAddEmploye(event) {
 
   const form    = event.target;
   const btn     = form.querySelector('[type="submit"]');
-  const session = getSession();
 
   const data = {
     prenom:         form.prenom.value.trim(),
@@ -427,7 +426,9 @@ async function submitAddEmploye(event) {
     telephone:      form.telephone.value.trim() || undefined,
     taux_horaire:   form.taux_horaire.value ? parseFloat(form.taux_horaire.value) : undefined,
     commission_pct: form.commission_pct.value ? parseFloat(form.commission_pct.value) : 0,
-    boutique_id:    session?.boutique_id,
+    // `POST /api/employes` résout la boutique depuis le **corps** (`personnel.ts`), pas
+    // depuis la query : le paramètre posé par le socle sur l'URL ne suffit pas ici.
+    boutique_id:    getBoutiqueId(),
   };
 
   if (!data.prenom || !data.nom) {

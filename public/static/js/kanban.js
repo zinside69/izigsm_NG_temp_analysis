@@ -28,10 +28,10 @@ const KanbanApp = (() => {
 
   // ─── Init ───────────────────────────────────────────────────────────────────
   async function init() {
-    const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null');
-    if (!user) { setTimeout(init, 100); return; }
-    if (!user) { window.location.href = '/index'; return; }
-    _boutiqueId = user.boutique_id;
+    // Boutique consultée résolue par le socle (`app.js`), jamais lue en direct dans la
+    // session : sinon la page ignore la sélection d'un admin plateforme.
+    if (!sessionCourante()) { setTimeout(init, 100); return; }
+    _boutiqueId = getBoutiqueId();
     await refresh();
   }
 

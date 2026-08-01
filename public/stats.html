@@ -415,9 +415,11 @@
     // ─── Init ─────────────────────────────────────────────────────────────────
 
     async function init() {
-      const user = JSON.parse(localStorage.getItem('izigsm_session') || 'null')
-      if (!user) { setTimeout(init, 150); return; }
-      _boutiqueId = user.boutique_id
+      // Boutique consultée résolue par le socle (`app.js`), jamais lue en direct dans
+      // la session : sinon la page ignore la sélection d'un admin plateforme.
+      const session = sessionCourante()
+      if (!session) { setTimeout(init, 150); return; }
+      _boutiqueId = getBoutiqueId()
 
       // Initialiser filtres date : mois courant par défaut
       const now  = new Date()
