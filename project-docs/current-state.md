@@ -2,8 +2,12 @@
 
 ## Checkpoint 73 — Résolveur de boutique : les écritures suivent enfin la sélection (2026-08-01)
 
-Commit `01ff760` sur `main`. **Non déployé** — le déploiement n'est jamais automatique et
-n'a pas été demandé.
+Commit `01ff760` sur `main`, **déployé** le jour même (`30e9d734.izigsm.pages.dev` →
+`repairdesk.fr`). Aucune migration dans ce chantier : la dernière reste `0039`, appliquée à
+distance au checkpoint 72. Vérifié après déploiement — `repairdesk.fr` sert bien
+`static/js/app.a0d346cc.js` contenant `_avecBoutique` (`cf-cache-status: MISS`, donc pas le
+piège de l'edge qui fige une réponse HTML sur un asset hashé, cf. `bugs.md`), et `sw.js`
+annonce `izigsm-v2.85`.
 
 ### Le diagnostic du checkpoint 71 était faux pour moitié, et c'est le test qui l'a montré
 

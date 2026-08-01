@@ -6,8 +6,15 @@
 `done`). **Le résolveur de boutique est corrigé** (checkpoint 73, commit `01ff760`) : les
 écritures suivent désormais la boutique consultée, comme les lectures le faisaient déjà.
 
-⚠️ **`01ff760` n'est pas déployé.** Aucune migration en attente ; c'est un chantier
-purement frontend. À déployer par `npm run deploy` sur confirmation explicite.
+**Tout est déployé et rien n'attend d'action humaine.** `01ff760` est en production
+(`30e9d734.izigsm.pages.dev` → `repairdesk.fr`), vérifié : l'`app.js` hashé servi contient
+`_avecBoutique`, `sw.js` annonce `izigsm-v2.85`. Aucune migration en attente — la dernière
+est `0039`, appliquée à distance au checkpoint 72.
+
+⚠️ **Vérification à l'écran non faite** : personne ne s'est encore connecté en admin
+plateforme sur `repairdesk.fr` pour enregistrer une vente en caisse chez une boutique
+cliente. C'est le geste qui prouverait le chantier de bout en bout (et qui devrait laisser
+une ligne dans `journal_actions_plateforme`). Les 176 tests E2E le couvrent en local.
 
 Trois suites possibles, dans cet ordre de priorité :
 

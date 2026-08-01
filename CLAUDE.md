@@ -400,7 +400,8 @@ npm run deploy
 
 **État au 2026-08-01 : aucune migration en attente.** `0039` (journal des actions de plateforme)
 a été appliquée à distance, puis le Worker déployé — chantier supervision entièrement en
-production. Au passage : la mention « `0038` en attente » des checkpoints 65 à 71 était fausse,
+production. Le checkpoint 73 (résolveur de boutique, `01ff760`) a été déployé ensuite, sans
+migration : `30e9d734.izigsm.pages.dev` → `repairdesk.fr`. Au passage : la mention « `0038` en attente » des checkpoints 65 à 71 était fausse,
 `d1_migrations` distant montre qu'elle l'était depuis le 2026-07-31. **L'état d'une base distante
 se lit, il ne se recopie pas de checkpoint en checkpoint.**
 
