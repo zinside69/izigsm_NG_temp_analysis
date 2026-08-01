@@ -70,6 +70,43 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     })
   }
 
+  test("une URL portant déjà une query reçoit la boutique sans abîmer ses paramètres", async ({ page, request }) => {
+    // Défaut constaté en production le 2026-08-01, **antérieur** au chantier :
+    // `apiGet` concaténait `'?' + params` sans regarder si l'URL avait déjà une query.
+    //
+    //   apiGet('/api/garanties?page=1&limit=20')
+    //     → /api/garanties?page=1&limit=20?boutique_id=1   (deux « ? »)
+    //
+    // `limit` valait alors « 20?boutique_id=1 » et **aucun** `boutique_id` n'existait :
+    // 400 pour un admin plateforme sur toutes les listes paginées du dépôt. Invisible
+    // pour un manager, dont le serveur retrouve la boutique dans le jeton.
+    //
+    // Le test précédent ne l'a pas attrapé parce qu'il visait `/api/sav/kpis` — le seul
+    // appel de cette page **sans** query préexistante.
+    const { tenant, nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+
+    const requete = page.waitForRequest(
+      r => r.url().includes('/api/garanties') && r.url().includes('page='),
+      { timeout: 15_000 }
+    )
+    await page.goto('/sav')
+    const brute = (await requete).url()
+
+    expect(
+      (brute.match(/\?/g) ?? []).length,
+      'une URL ne doit porter qu\'un seul séparateur de query'
+    ).toBe(1)
+
+    const params = new URL(brute).searchParams
+    expect(params.get('boutique_id')).toBe(String(tenant.boutiqueId))
+    // 15 est la pagination de `sav.js` : c'est bien la valeur émise par la page, et non
+    // « 15?boutique_id=… » comme avant correctif.
+    expect(params.get('limit'), 'le paramètre préexistant ne doit pas être absorbé').toBe('15')
+  })
+
   test("une écriture vise la boutique consultée, pas seulement les lectures", async ({ page, request }) => {
     // Le vrai défaut du chantier : `apiGet` résolvait la boutique, `apiPost`/`apiPut`/
     // `apiDelete` non. Un admin plateforme pouvait donc *consulter* la boutique d'un
@@ -97,6 +134,46 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
       emise.searchParams.get('boutique_id'),
       "l'écriture doit désigner la boutique consultée, comme le fait déjà la lecture"
     ).toBe(String(tenant.boutiqueId))
+  })
+
+  /**
+   * Les 20 entrées du menu de gauche, dans l'ordre de `buildSidebar()` (`app.js`).
+   * Toute entrée ajoutée là doit l'être ici : c'est le filet qui dit si l'exploitant peut
+   * réellement travailler sur la boutique qu'il consulte, page par page.
+   */
+  const MENU_GAUCHE = [
+    'dashboard', 'clients', 'tickets', 'kanban', 'stats', 'sav', 'devis', 'factures',
+    'caisse', 'qualirepar', 'stock', 'services', 'fournisseurs', 'agenda', 'rachats',
+    'reconditionnement', 'personnel', 'notifications', 'settings', 'modules',
+  ]
+
+  test('aucune page du menu de gauche ne casse pour un admin plateforme', async ({ page, request }) => {
+    // Balayage demandé après le constat en production du 2026-08-01 : deux défauts
+    // distincts rendaient des pages inutilisables et aucun test ne les couvrait — une
+    // réponse d'API en erreur (`apiGet` et sa query doublée), et une exception JS qui tue
+    // la page avant tout appel (`reconditionnement.js`). On capte donc les deux.
+    const { tenant, nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+
+    let courante = ''
+    const anomalies: string[] = []
+
+    page.on('response', r => {
+      const u = new URL(r.url())
+      if (!u.pathname.startsWith('/api/')) return
+      if (r.status() >= 400) anomalies.push(`${courante} — HTTP ${r.status()} sur ${u.pathname}${u.search}`)
+    })
+    page.on('pageerror', e => anomalies.push(`${courante} — exception JS : ${e.message}`))
+
+    for (const nom of MENU_GAUCHE) {
+      courante = nom
+      await page.goto(`/${nom}`)
+      await page.waitForTimeout(1_200)
+    }
+
+    expect(anomalies, 'pages du menu de gauche en échec pour un admin plateforme').toEqual([])
   })
 
   test('sans sélection, aucune page hors socle ne vise une boutique au hasard', async ({ page }) => {

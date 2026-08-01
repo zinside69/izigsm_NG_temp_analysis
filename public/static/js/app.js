@@ -646,8 +646,14 @@ async function apiGet(url, params = {}) {
     const bid = getBoutiqueId();
     if (bid) params = { boutique_id: bid, ...params };
   }
+  // Le séparateur dépend de l'URL reçue : `?` si elle est nue, `&` si elle porte déjà
+  // une query. Concaténer `'?'` sans regarder produisait `…?page=1&limit=20?boutique_id=1`
+  // — `limit` valait « 20?boutique_id=1 » et *aucun* `boutique_id` n'existait, donc 400
+  // sur toutes les listes paginées pour un admin plateforme. Défaut antérieur au chantier
+  // supervision, constaté en production le 2026-08-01 ; invisible pour un manager, dont le
+  // serveur retrouve la boutique dans le jeton.
   const qs = Object.keys(params).length
-    ? '?' + new URLSearchParams(params).toString()
+    ? (url.includes('?') ? '&' : '?') + new URLSearchParams(params).toString()
     : '';
   return api('GET', url + qs);
 }

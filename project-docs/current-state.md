@@ -1,4 +1,80 @@
-# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 73 — les écritures suivent la boutique consultée)
+# iziGSM — État courant (MàJ : 2026-08-01, checkpoint 74 — le défaut que 176 tests verts n'ont pas vu)
+
+## Checkpoint 74 — `apiGet` doublait le « ? », et un mode opératoire de test (2026-08-01)
+
+Suite directe du checkpoint 73, **même journée, déclenché par l'exploitant**. Le chantier
+73 avait été annoncé vérifié et déployé ; à l'écran, la caisse et le SAV répondaient
+`boutique_id requis.` à un admin plateforme, boutique pourtant sélectionnée.
+
+### La cause était antérieure au chantier
+
+```
+apiGet('/api/garanties?page=1&limit=15')
+  →  /api/garanties?page=1&limit=15?boutique_id=1
+                                   ↑ deuxième « ? »
+```
+
+`apiGet` concaténait `'?' + params` **sans regarder si l'URL portait déjà une query**.
+`limit` valait donc `"15?boutique_id=1"` et **aucun** `boutique_id` n'existait ⇒ `400` sur
+**toutes les listes paginées du dépôt**. Invisible pour un manager (le serveur retrouve sa
+boutique dans le jeton), fatal pour l'admin plateforme — d'où un défaut ancien jamais
+signalé, que la supervision a rendu visible.
+
+Corrigé par le séparateur conditionnel que `_avecBoutique()` appliquait déjà.
+
+### Comment il a été trouvé : en pilotant le vrai navigateur
+
+Aucune théorie n'a tenu. Ce qui a tranché, dans l'ordre :
+
+1. Le hash de l'`app.<hash>.js` réellement chargé (`a0d346cc`) a **écarté le cache**, seule
+   hypothèse plausible jusque-là.
+2. `getBoutiqueId()` évalué dans la page renvoyait bien `1`.
+3. **Rejouer les appels de la page un par un** : `kpis` → 200, `garanties?page=…` → 400.
+   La différence entre les deux *était* la réponse.
+
+Le filtre de sécurité de Claude in Chrome masque les query strings (`[BLOCKED]`) : il faut
+**dériver** ce qu'on cherche plutôt que restituer l'URL (compter les `?`, lire un
+`searchParams.get()`).
+
+### `reconditionnement.js` corrigé — la page était morte pour tout le monde
+
+11 appels à `getCurrentBoutiqueId()`, définie nulle part, remplacés par `getBoutiqueId()`.
+`ReferenceError` au premier appel : la page ne fonctionnait **pour aucun rôle**. Trouvée en
+revue de code au cp73, prouvée par le balayage aujourd'hui.
+
+### L'échec de méthode, et sa parade — `project-docs/modop-tests.md`
+
+**176 tests verts, production cassée.** Trois erreurs, toutes miennes :
+
+1. **Tester le mécanisme qu'on vient d'écrire** plutôt que le résultat visible : j'assertais
+   « l'URL porte `boutique_id` », pas « la page affiche les garanties ».
+2. **Choisir un point d'observation commode** : pour `caisse` et `sav`, j'ai visé
+   `/api/*/kpis` — les deux **seuls** appels de ces pages sans query préexistante, donc les
+   deux seuls que le défaut épargnait. Échantillon de taille 1.
+3. **Oublier ce que la config neutralise** : `serviceWorkers: 'block'`
+   (`playwright.config.ts:32`) fait que la suite ne parcourt jamais le chemin de requête
+   réel de la production.
+
+Parade retenue, **en gate** : `tests/e2e/resolveur-boutique-pages.spec.ts` § « aucune page
+du menu de gauche ne casse pour un admin plateforme » visite les **20** entrées de
+`buildSidebar()` et capte **deux** classes de défaut — `page.on('response')` pour les
+`>= 400` sur `/api/*`, `page.on('pageerror')` pour les exceptions qui tuent la page **avant**
+tout appel. C'est ce second filet qui prouve `reconditionnement` ; aucun test réseau ne
+l'aurait vu, la page mourant avant d'émettre quoi que ce soit.
+
+**Toute entrée ajoutée à `buildSidebar()` doit l'être à `MENU_GAUCHE`.**
+
+### Reste ouvert, constaté à l'écran
+
+`caisse.html` et `sav.html` n'appellent pas `buildSidebar()` : **plus aucune barre latérale**
+une fois qu'on y entre — l'exploitant « perd tout l'affichage » et ne peut plus naviguer.
+C'est le volet interface du P1 d'origine, toujours à cadrer.
+
+### Vérifications
+
+**178/178 E2E** (balayage compris), `tsc` à la baseline de 32, `vitest` 891/893.
+
+## Checkpoint 73 — les écritures suivent la boutique consultée (2026-08-01)
 
 ## Checkpoint 73 — Résolveur de boutique : les écritures suivent enfin la sélection (2026-08-01)
 

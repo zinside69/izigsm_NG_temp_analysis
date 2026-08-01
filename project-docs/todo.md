@@ -72,6 +72,35 @@ CSP future produirait le même effet.
 
 - [ ] Externaliser la logique de `public/reset-password.html` dans `public/static/js/reset-password.js`
 
+## ✅ 🔴 P1 — `apiGet` doublait le « ? » des URL déjà paginées (constaté en PRODUCTION 2026-08-01, **CORRIGÉ**)
+
+Défaut **antérieur** au chantier supervision, trouvé en pilotant le navigateur sur
+`repairdesk.fr` après un signalement de l'exploitant. `apiGet` concaténait `'?' + params`
+sans regarder si l'URL portait déjà une query :
+
+```
+apiGet('/api/garanties?page=1&limit=15')
+  →  /api/garanties?page=1&limit=15?boutique_id=1
+```
+
+`limit` valait `"15?boutique_id=1"` et **aucun** `boutique_id` n'existait ⇒ `400` sur
+**toutes les listes paginées du dépôt** pour un admin plateforme. Invisible pour un manager,
+dont le serveur retrouve la boutique dans le jeton — d'où des années sans signalement.
+
+Corrigé par un séparateur conditionnel (`url.includes('?') ? '&' : '?'`), la logique que
+`_avecBoutique()` appliquait déjà. Couvert par un test vu rouge d'abord.
+
+**Ce défaut a révélé un échec de méthode**, documenté dans `project-docs/modop-tests.md` :
+176 tests verts pendant que la production était cassée. Les tests visaient `/api/*/kpis`,
+les deux seuls appels de ces pages **sans** query préexistante.
+
+## ✅ 🔴 P1 — `reconditionnement.js` appelait une fonction inexistante (constaté 2026-08-01, **CORRIGÉ**)
+
+11 appels à `getCurrentBoutiqueId()` remplacés par `getBoutiqueId()`. Prouvé par le
+balayage du menu (`page.on('pageerror')`), qui reste vert désormais.
+
+<details><summary>Diagnostic d'origine</summary>
+
 ## 🔴 P1 — `reconditionnement.js` appelle une fonction qui n'existe pas (constaté 2026-08-01, en revue)
 
 `public/static/js/reconditionnement.js` appelle `getCurrentBoutiqueId()` **11 fois**
@@ -85,7 +114,9 @@ famille — mais un cran plus grave : ici la page ne se trompe pas de boutique, 
 fonctionne pas du tout. Le socle expose `getBoutiqueId()` ; c'est vraisemblablement lui
 qui était visé.
 
-- [ ] Remplacer les 11 appels à `getCurrentBoutiqueId()` par `getBoutiqueId()` dans `public/static/js/reconditionnement.js`, et couvrir la page par un test comme les 7 autres
+- [x] Remplacer les 11 appels à `getCurrentBoutiqueId()` par `getBoutiqueId()` dans `public/static/js/reconditionnement.js`, et couvrir la page par un test comme les 7 autres
+
+</details>
 
 ## ✅ 🔴 P1 — Résolveur de boutique des pages hors socle (constaté 2026-08-01 ticket 03, **CORRIGÉ le 2026-08-01**)
 

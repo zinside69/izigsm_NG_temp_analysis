@@ -132,7 +132,7 @@ function _renderPageActions() {
  * Utilise apiGet() de app.js (P2 — 0 fetch direct).
  */
 async function loadKpis() {
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const res  = await apiGet(`/api/reconditionnement/kpis?boutique_id=${bId}`);
   if (!res?.success) return;
 
@@ -153,7 +153,7 @@ async function loadKpis() {
  */
 async function loadOrdres(page = 1) {
   _pageOrdres = page;
-  const bId    = getCurrentBoutiqueId();
+  const bId    = getBoutiqueId();
   const search = document.getElementById('search-ordres')?.value.trim() ?? '';
   const statut = document.getElementById('filter-statut-ordre')?.value ?? '';
   const grade  = document.getElementById('filter-grade')?.value ?? '';
@@ -258,7 +258,7 @@ function debounceSearchOrdres() {
  */
 async function loadBons(page = 1) {
   _pageBons = page;
-  const bId    = getCurrentBoutiqueId();
+  const bId    = getBoutiqueId();
   const search = document.getElementById('search-bons')?.value.trim() ?? '';
   const statut = document.getElementById('filter-statut-bon')?.value ?? '';
 
@@ -362,7 +362,7 @@ function openNewOrdre() {
  * @param {number} id - ID de l'ordre à modifier
  */
 async function openEditOrdre(id) {
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const res  = await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`);
   if (!res?.success) return showToast('Erreur lors du chargement de l\'ordre.', 'error');
 
@@ -412,7 +412,7 @@ function updateCoutRevient() {
  */
 async function submitOrdre(e) {
   e.preventDefault();
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const fd   = new FormData(e.target);
 
   const payload = {
@@ -466,7 +466,7 @@ async function changerStatutOrdre(id, statut) {
 
   if (!confirm(`Confirmer l'action : ${label} cet ordre ?`)) return;
 
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const res  = await apiPatch(`/api/reconditionnement/${id}/statut`, { boutique_id: bId, statut });
 
   if (res?.success) {
@@ -487,7 +487,7 @@ async function changerStatutOrdre(id, statut) {
  * @param {number} id - ID de l'ordre à clôturer
  */
 async function openTerminerOrdre(id) {
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const res  = await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`);
   if (!res?.success) return showToast('Erreur de chargement de l\'ordre.', 'error');
 
@@ -525,7 +525,7 @@ function closeModalTerminer() {
  */
 async function submitTerminer(e) {
   e.preventDefault();
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const id   = document.getElementById('terminer-id').value;
   const fd   = new FormData(e.target);
 
@@ -569,7 +569,7 @@ function closeModalBon() {
  */
 async function submitBon(e) {
   e.preventDefault();
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const fd   = new FormData(e.target);
 
   const payload = {
@@ -614,7 +614,7 @@ function closeModalVerifier() {
  */
 async function doVerifierBon() {
   const code    = document.getElementById('verifier-code').value.trim();
-  const bId     = getCurrentBoutiqueId();
+  const bId     = getBoutiqueId();
   const resultEl = document.getElementById('verifier-result');
 
   if (!code) return showToast('Saisissez un code.', 'error');
@@ -660,7 +660,7 @@ async function doVerifierBon() {
 async function annulerBon(id) {
   if (!confirm('Annuler ce bon d\'achat ? Cette action est irréversible.')) return;
 
-  const bId = getCurrentBoutiqueId();
+  const bId = getBoutiqueId();
   const res  = await apiPost(`/api/bons-achat/${id}/annuler`, { boutique_id: bId });
 
   if (res?.success) {

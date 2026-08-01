@@ -286,6 +286,29 @@ Les plans et specs existants sous `docs/superpowers/` restent valides — ne pas
 `context-guardian` inchangé : checkpoints et recovery multi-sessions (voir § Mémoire
 projet).
 
+### Mode opératoire de vérification — `project-docs/modop-tests.md`
+
+**À lire avant d'annoncer « vérifié ».** Écrit le 2026-08-01 après un échec réel : 176 tests
+verts, production cassée. Il nomme trois pièges vécus et leur parade — tester le mécanisme
+qu'on vient d'écrire plutôt que le résultat visible, choisir un point d'observation commode
+(les deux seuls appels qu'un défaut épargnait), et oublier que `serviceWorkers: 'block'`
+neutralise le chemin de requête réel de la production.
+
+Trois règles qui en découlent, non négociables :
+
+- **Le balayage du menu de gauche est un gate.**
+  `tests/e2e/resolveur-boutique-pages.spec.ts` § « aucune page du menu de gauche ne casse
+  pour un admin plateforme » visite les 20 entrées de `buildSidebar()` et capte deux classes
+  de défaut : `page.on('response')` pour les `>= 400` sur `/api/*`, `page.on('pageerror')`
+  pour les exceptions qui tuent la page **avant** tout appel. C'est le second filet qui a
+  trouvé `reconditionnement.js`. **Toute entrée ajoutée à `buildSidebar()` doit l'être à
+  `MENU_GAUCHE`** — une page absente de cette liste n'est couverte par rien.
+- **Un test doit avoir été vu rouge avant son correctif.** Écrit après, il décrit le code au
+  lieu de le contraindre.
+- **Un test local ne prouve jamais « vérifié en production ».** Il faut l'asset hashé
+  réellement servi (jamais `/static/js/app.js`, qui renvoie le catch-all HTML en 200) et le
+  geste métier dans un vrai navigateur.
+
 Règles de vérification — s'appliquent quel que soit le toolkit :
 - Chaque tâche backend se termine par `npx vitest run` vert avant la suivante
 - Chaque tâche frontend se valide en local live (`wrangler pages dev` + vraies données),
