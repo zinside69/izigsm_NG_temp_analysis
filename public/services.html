@@ -10,6 +10,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Catalogue services — iziGSM</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <!-- CSS du socle : indispensable dès qu'une page appelle `buildSidebar()`.
+       Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
+       bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
+  <link rel="stylesheet" href="/static/css/main.css">
   <style>
     /* ── Layout catalogue ── */
     .catalogue-layout { display: grid; grid-template-columns: 280px 1fr; gap: 0; height: calc(100vh - 60px); overflow: hidden; }

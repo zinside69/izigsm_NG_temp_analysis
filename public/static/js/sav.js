@@ -416,6 +416,7 @@ const SavApp = (() => {
   function init() {
     // Vérif auth
     if (!getToken()) { window.location.href = '/login'; return }
+    buildSidebar('sav')
     // Charger KPIs + données initiales
     loadKpis()
     refreshGaranties()

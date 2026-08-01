@@ -184,26 +184,45 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
   const PAGES_AVEC_SOCLE = [
     'dashboard', 'clients', 'tickets', 'devis', 'factures', 'qualirepar', 'rachats',
     'reconditionnement', 'services', 'stock',
-    'agenda', 'modules', 'caisse',
+    'agenda', 'modules', 'caisse', 'sav', 'fournisseurs',
+    'stats', 'settings', 'notifications', 'kanban',
   ]
 
-  test('les pages câblées sur le socle affichent bien la barre latérale', async ({ page, request }) => {
-    // Sans barre latérale, l'exploitant qui entre sur la page perd toute navigation — il
-    // n'a plus que le bouton « précédent » du navigateur. Constaté à l'écran sur `/caisse`
-    // le 2026-08-01.
+  test('les pages câblées sur le socle affichent une barre latérale **stylée**', async ({ page, request }) => {
+    // Sans barre, l'exploitant qui entre sur la page perd toute navigation — il n'a plus
+    // que le bouton « précédent ». Constaté à l'écran sur `/caisse` le 2026-08-01.
+    //
+    // La première version de ce test n'assertait que la **présence** de `#sidebar`. Elle
+    // est passée au vert sur des pages où la barre était injectée **sans aucun style** —
+    // `position: static`, `width: 1920px`, 21 liens bruts empilés au-dessus du contenu —
+    // parce que ces pages chargeaient `style.css` (49 octets, un vestige) au lieu de
+    // `main.css`. Le défaut est parti en production. On assertionne donc la géométrie, qui
+    // est ce que l'exploitant voit.
     const { nomBoutique } = await creerBoutique(request)
 
     await seConnecterAdminPlateforme(page)
     await choisirBoutique(page, nomBoutique)
 
-    const sansBarre: string[] = []
+    const anomalies: string[] = []
     for (const nom of PAGES_AVEC_SOCLE) {
       await page.goto(`/${nom}`)
-      const barre = page.locator('#sidebar, .sidebar').first()
-      if (!(await barre.isVisible().catch(() => false))) sansBarre.push(nom)
+      const barre = page.locator('nav.sidebar').first()
+
+      if (!(await barre.isVisible().catch(() => false))) { anomalies.push(`${nom} — aucune barre`); continue }
+
+      const boite = await barre.boundingBox()
+      if (!boite) { anomalies.push(`${nom} — barre sans géométrie`); continue }
+
+      // Une barre stylée est étroite et collée à gauche. Non stylée, elle occupe toute la
+      // largeur de la fenêtre — c'est exactement ce qui distinguait les deux en production.
+      if (boite.width > 400) anomalies.push(`${nom} — barre large de ${Math.round(boite.width)} px (non stylée ?)`)
+      if (boite.x > 40)      anomalies.push(`${nom} — barre décalée à x=${Math.round(boite.x)} px`)
+
+      const liens = await barre.locator('a.nav-item').count()
+      if (liens < 10) anomalies.push(`${nom} — ${liens} entrées de navigation seulement`)
     }
 
-    expect(sansBarre, 'pages qui devraient porter la barre latérale et ne l\'affichent pas').toEqual([])
+    expect(anomalies, 'barres latérales absentes ou non stylées').toEqual([])
   })
 
   test('fournisseurs affiche ses compteurs, et non des tirets', async ({ page, request }) => {

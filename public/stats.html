@@ -12,10 +12,19 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- CSS du socle : indispensable dès qu'une page appelle `buildSidebar()`.
+       Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
+       bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
+  <link rel="stylesheet" href="/static/css/main.css">
   <style>
     :root { --sidebar-w: 240px; }
     body { display: flex; min-height: 100vh; background: #f1f5f9; font-family: 'Inter', sans-serif; }
-    #sidebar { width: var(--sidebar-w); flex-shrink: 0; }
+    /* Cale de flux réservant la largeur de la barre latérale.
+       Elle portait l'identifiant `sidebar` jusqu'au 2026-08-01 — or `buildSidebar()`
+       injecte lui-même un `<nav class="sidebar" id="sidebar">` en `position: fixed`.
+       Deux éléments auraient porté le même identifiant, et surtout : un élément fixe est
+       hors flux, donc remplacer cette cale ferait passer le contenu sous la barre. */
+    .sidebar-espace  { width: var(--sidebar-w); flex-shrink: 0; }
     #main    { flex: 1; min-width: 0; overflow-y: auto; }
     .card    { background: white; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
     .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1; }
@@ -62,8 +71,12 @@
 <body>
 
   <!-- Sidebar -->
-  <div id="sidebar" class="hidden md:block">
-    <div id="sidebar-root"></div>
+  <!-- Pas de `hidden md:block` ici : la barre injectée est `position: fixed`, et un
+       parent en `display: none` masque tout son sous-arbre. Ces deux classes rendaient
+       la barre invisible jusqu'en 1920 px de large (2026-08-01). Les 17 autres pages du
+       socle n'ont pas de repli mobile non plus — on s'aligne sur elles. -->
+  <div class="sidebar-espace">
+    <div id="sidebar-placeholder"></div>
   </div>
 
   <!-- Main -->
@@ -415,6 +428,7 @@
     // ─── Init ─────────────────────────────────────────────────────────────────
 
     async function init() {
+    buildSidebar('stats');
       // Boutique consultée résolue par le socle (`app.js`), jamais lue en direct dans
       // la session : sinon la page ignore la sélection d'un admin plateforme.
       const session = sessionCourante()

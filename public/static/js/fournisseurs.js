@@ -30,6 +30,7 @@ let fournisseursList  = []   // cache pour les selects
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   requireAuth()
+  buildSidebar('fournisseurs')
   boutiqueId = getBoutiqueId()
 
   initTabs()

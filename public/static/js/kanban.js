@@ -30,7 +30,10 @@ const KanbanApp = (() => {
   async function init() {
     // Boutique consultée résolue par le socle (`app.js`), jamais lue en direct dans la
     // session : sinon la page ignore la sélection d'un admin plateforme.
+    // La garde passe **avant** `buildSidebar()` : celui-ci appelle `requireAuth()`, qui
+    // redirige vers /login — le faire pendant l'attente de session couperait la reprise.
     if (!sessionCourante()) { setTimeout(init, 100); return; }
+    buildSidebar('kanban');
     _boutiqueId = getBoutiqueId();
     await refresh();
   }

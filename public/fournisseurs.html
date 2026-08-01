@@ -12,13 +12,21 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <link href="/static/css/style.css" rel="stylesheet">
+  <!-- CSS du socle : indispensable dès qu'une page appelle `buildSidebar()`.
+       Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
+       bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
+  <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body class="bg-gray-50 min-h-screen">
+
+<!-- Barre latérale du socle. `buildSidebar()` (appelée depuis fournisseurs.js) remplace ce
+     conteneur ; la marge du <main> suit `--sidebar-w`, donc sa largeur réelle. -->
+<div id="sidebar-placeholder"></div>
 
 <!-- Sidebar injectée par app.js -->
 <div id="sidebar-container"></div>
 
-<main class="ml-64 p-6">
+<main class="p-6" style="margin-left: var(--sidebar-w)">
 
   <!-- Header -->
   <header class="flex items-center justify-between mb-6">

@@ -11,10 +11,19 @@
   <title>Notifications Email — iziGSM</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- CSS du socle : indispensable dès qu'une page appelle `buildSidebar()`.
+       Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
+       bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
+  <link rel="stylesheet" href="/static/css/main.css">
   <style>
     :root { --sidebar-w: 240px; }
     body { display: flex; min-height: 100vh; background: #f1f5f9; font-family: 'Inter', sans-serif; }
-    #sidebar { width: var(--sidebar-w); flex-shrink: 0; }
+    /* Cale de flux réservant la largeur de la barre latérale.
+       Elle portait l'identifiant `sidebar` jusqu'au 2026-08-01 — or `buildSidebar()`
+       injecte lui-même un `<nav class="sidebar" id="sidebar">` en `position: fixed`.
+       Deux éléments auraient porté le même identifiant, et surtout : un élément fixe est
+       hors flux, donc remplacer cette cale ferait passer le contenu sous la barre. */
+    .sidebar-espace  { width: var(--sidebar-w); flex-shrink: 0; }
     #main    { flex: 1; min-width: 0; overflow-y: auto; }
     .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
     .stat-dot-envoye  { background: #22c55e; }
@@ -35,8 +44,12 @@
 <body>
 
   <!-- Sidebar -->
-  <div id="sidebar" class="hidden md:block">
-    <div id="sidebar-root"></div>
+  <!-- Pas de `hidden md:block` ici : la barre injectée est `position: fixed`, et un
+       parent en `display: none` masque tout son sous-arbre. Ces deux classes rendaient
+       la barre invisible jusqu'en 1920 px de large (2026-08-01). Les 17 autres pages du
+       socle n'ont pas de repli mobile non plus — on s'aligne sur elles. -->
+  <div class="sidebar-espace">
+    <div id="sidebar-placeholder"></div>
   </div>
 
   <!-- Main -->
@@ -277,10 +290,13 @@
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
 
-  window.addEventListener('DOMContentLoaded', async () => {
-    // Petit délai pour laisser app.js initialiser la session
-    await new Promise(r => setTimeout(r, 150))
-    if (!sessionCourante()) return
+  window.addEventListener('DOMContentLoaded', async function init() {
+    // La session peut n'être pas encore posée : on réessaie, on n'abandonne pas.
+    // Un unique `setTimeout(150)` suivi d'un `return` sec laissait la page entièrement
+    // vide — sans barre ni données — dès que le chargement dépassait ce délai. Constaté
+    // le 2026-08-01, c'est le seul cas où le balayage restait rouge.
+    if (!sessionCourante()) { setTimeout(init, 150); return }
+    buildSidebar('notifications')
     // Boutique consultée résolue par le socle (`app.js`). La lecture directe de
     // `session.boutique_id` qui vivait ici laissait un admin plateforme construire des
     // URL `/api/boutiques/null/settings`, sélection faite ou non.
