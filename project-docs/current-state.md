@@ -1,4 +1,95 @@
-# iziGSM — État courant (MàJ : 2026-08-02, checkpoint 76 — l'enveloppe API fermée sur les 5 fichiers, 3 XSS, chantier 2 cadré)
+# iziGSM — État courant (MàJ : 2026-08-02, checkpoint 77 — le numéro de facture n'est attribué qu'à l'émission, déployé)
+
+## Checkpoint 77 — Une série sans trou (2026-08-02)
+
+**Ticket 001 du chantier `.scratch/conformite-facturation/` livré, déployé et vérifié
+techniquement en production.** Commits `95c8ab0` (code, tests, migration) + `e912700` (docs)
++ `f573c5b` (`CACHE_VERSION`), poussés. Migration `0040` appliquée à distance **puis** Worker
+déployé. **Aucune migration en attente.**
+
+### Ce qui est livré
+
+**Le numéro n'est attribué qu'à l'émission.** `nextNumero()` n'est plus appelé que par
+`emettreFacture()` ; les trois chemins de création (manuelle, conversion de devis, acompte)
+écrivent `numero = NULL`. Un brouillon abandonné n'entame donc plus la série — c'est la cause
+des deux trous réels de la boutique 1 (`FAC-2026-00001` et `00002` n'existent nulle part).
+
+**Le numéro est persisté AVANT le chaînage NF525**, pas seulement calculé. Sans cela, le
+correctif aurait recréé le défaut qu'il corrige : un échec du chaînage aurait laissé la facture
+sans numéro alors que le compteur avait avancé, et la reprise en aurait brûlé un second. La
+reprise réutilise désormais le même numéro (`UPDATE … WHERE id = ? AND numero IS NULL`).
+
+**Une écriture NF525 fautive supprimée.** `PUT /devis/:id/convertir` écrivait une ligne dans
+`journal_nf525` pour un **brouillon**, puis `emettreFacture()` en écrivait une **seconde** pour
+le même document. Défaut préexistant, trouvé en traçant `facture_numero` ; retiré après
+arbitrage de l'exploitant. Le journal légal n'enregistre que des documents émis.
+
+**Frontend** : « Brouillon (non numéroté) » remplace un `esc(null)`, et surtout le repli
+d'impression `'FAC-' + id` — qui imprimait un numéro n'ayant jamais appartenu à la série.
+
+### La migration `0040` — trois pièges D1/SQLite, trois échecs avant de passer
+
+Recréer une table ne suit **pas** le patron de la migration `0034` sur une base peuplée :
+
+1. `PRAGMA foreign_keys=OFF` est **ignoré** — D1 exécute le fichier dans une transaction, et
+   SQLite ignore ce pragma dès qu'une transaction est ouverte. `DROP TABLE factures` échoue en
+   `SQLITE_CONSTRAINT_FOREIGNKEY` (`paiements`, `avoirs`, `commissions`, `bons_achat`).
+2. `defer_foreign_keys=ON` repousse les contrôles mais ne les **résout** pas : le compteur ne
+   redescend que si les lignes parentes sont réinsérées **dans une table portant le nom
+   référencé**. Copier vers `factures_new` puis renommer laisse le COMMIT en échec.
+3. `PRAGMA legacy_alter_table` n'est **pas honoré** — vérifié sur deux tables jetables : le
+   renommage réécrit les clauses `REFERENCES` des tables filles vers l'ancienne table.
+
+Patron qui passe : table de transit (`CREATE TABLE … AS SELECT`, sans contrainte), `DROP`,
+recréation **sous le nom final**, réinsertion, suppression du transit. Aucun `RENAME`.
+
+**Prérequis** : `SELECT COUNT(*) FROM pragma_foreign_key_check` = **0** sur la base visée.
+La base locale en portait 2 (`tickets` → client supprimé, `tickets_statuts_historique` →
+ticket supprimé), supprimées après accord. La production en portait **0**.
+
+### Ce qui a été mesuré en production, et comment
+
+Chaque contrôle par un **chiffre**, jamais par un silence — une sortie vide de wrangler ne
+distingue pas « zéro ligne » de « rien affiché » :
+
+| Contrôle | Résultat |
+|---|---|
+| `pragma_foreign_key_check` (avant migration) | `violations = 0` |
+| `pragma_table_info('factures')` → `numero` | `notnull = 0` |
+| factures / numérotées / paiements / avoirs | `4 / 4 / 3 / 0` — rien perdu |
+| `sw.js` servi par l'apex | `izigsm-v2.90` |
+| `verifier-deploiement.mjs` | `47 970 octets de JavaScript`, domaine OK |
+
+⚠ **Quoting PowerShell 5.1** : `--command "… ""notnull"" …"` arrive à l'exe avec les guillemets
+mangés, donc `notnull` nu — mot-clé SQLite, erreur de syntaxe. Utiliser `[notnull]`.
+
+### 🔴 Anomalie d'outillage — la loop commite et pousse seule
+
+Pendant cette session, à 18:15:07, un processus externe (tâche planifiée Windows, auteur
+`zinside@gmail.com`) a committé **mes 10 fichiers de travail** sous le message
+`wip: conformite facturation ticket 001 …` (`95c8ab0`) **et les a poussés sur `origin/main`**.
+Contenu correct, rien de perdu, aucun impact production (le déploiement reste manuel) — mais
+une session humaine et la loop écrivaient sur le même arbre de travail au même moment. À
+désarmer si ce n'est pas voulu : `Disable-ScheduledTask -TaskName "iziGSM Loop …"`.
+
+### Ce qui reste
+
+**La vérification métier à l'écran n'est pas faite** : personne n'a encore créé un brouillon en
+production pour constater « Brouillon (non numéroté) », l'émettre, puis vérifier qu'un brouillon
+abandonné ne fait pas sauter le numéro suivant. C'est le seul point du ticket qui ne peut pas
+être prouvé autrement. Ne pas le reporter de checkpoint en checkpoint (le cp72 → cp76 a montré
+ce que ça coûte).
+
+Ticket **002** (vente de caisse `locked` ⇒ annulable par avoir) est débloqué par celui-ci.
+
+### Gates
+
+`npx vitest run` → **899/901** (2 échecs permanents de fuseau `agendaService`),
+`npx tsc --noEmit` → **32** (baseline), `npx playwright test` → **188/188**.
+Tests ajoutés : 6 unitaires + 2 E2E (`tests/e2e/facture-numerotation.spec.ts`), **tous vus
+rouges avant correctif** — l'E2E en `422 NOT NULL`, c'est-à-dire pour la bonne raison.
+
+---
 
 ## Checkpoint 76 — Ce qui ne s'affichait pour personne s'affiche (2026-08-02)
 

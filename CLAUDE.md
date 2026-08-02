@@ -527,13 +527,22 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**⚠ État au 2026-08-02 : la migration `0040` (numéro de facture nullable) est EN ATTENTE
-d'application à distance.** Elle doit précéder tout déploiement : le code écrit désormais
-`numero = NULL` à la création d'une facture, ce que le schéma de production refuse encore
-(`NOT NULL`) — déployer avant produirait un `422` sur **toute** création de facture.
-Avant de l'appliquer, vérifier que `npx wrangler d1 execute DB --remote --command "PRAGMA
-foreign_key_check"` renvoie **zéro ligne** : workerd refuse le COMMIT d'une recréation de
-table si la base porte la moindre violation de clé étrangère (constaté en local).
+**État au 2026-08-02 : aucune migration en attente.** `0040` (numéro de facture nullable) a
+été appliquée à distance **puis** le Worker déployé, dans cet ordre — l'inverse aurait produit
+un `422` sur **toute** création de facture, le code écrivant désormais `numero = NULL`.
+Vérifié en production après coup : `pragma_table_info('factures')` donne `notnull = 0` sur
+`numero`, les 4 factures et leurs numéros sont intacts, les 3 paiements aussi, et `sw.js`
+annonce `izigsm-v2.90`.
+
+**Prérequis à toute future recréation de table** : `SELECT COUNT(*) FROM
+pragma_foreign_key_check` doit valoir **0** sur la base visée — workerd refuse le COMMIT
+si la base porte la moindre violation de clé étrangère (la base locale en portait 2, sans
+rapport avec les factures). Le contrôler **par un chiffre** : une sortie vide de wrangler
+ne distingue pas « zéro ligne » de « rien affiché ».
+
+⚠ **Quoting PowerShell 5.1** : `--command "… ""notnull"" …"` arrive à l'exe avec les
+guillemets mangés, donc `notnull` nu — mot-clé SQLite, erreur de syntaxe. Utiliser les
+crochets : `[notnull]`.
 
 **État au 2026-08-01 : aucune migration en attente.** `0039` (journal des actions de plateforme)
 a été appliquée à distance, puis le Worker déployé — chantier supervision entièrement en

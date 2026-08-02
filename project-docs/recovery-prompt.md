@@ -1,3 +1,67 @@
+# Recovery Prompt — iziGSM — 2026-08-02 (checkpoint 77 — numéro de facture attribué à l'émission, déployé)
+
+## Reprendre ici
+
+**Tout est commité, poussé, déployé.** `f573c5b` sur `origin/main`, `CACHE_VERSION`
+`izigsm-v2.90`, migration `0040` appliquée à distance puis Worker déployé. **Aucune migration
+en attente.** Le ticket 001 du chantier `.scratch/conformite-facturation/` est `done`.
+
+⚠️ **Une seule chose attend une action humaine : la vérification métier à l'écran.** Personne
+n'a encore, en production et depuis un compte manager :
+1. créé une facture **en brouillon** → doit afficher « Brouillon (non numéroté) » ;
+2. l'avoir **émise** → elle doit prendre `FAC-2026-00004` (la série continue depuis `00003`) ;
+3. créé un 2ᵉ brouillon, **laissé tel quel**, puis émis une autre facture → `00005`, **sans saut**.
+
+Le point 3 est le cœur du ticket. Ne pas le reporter — c'est le même report qui a traîné du
+checkpoint 72 au 76.
+
+**Suite naturelle : ticket 002** (`.scratch/conformite-facturation/issues/002-…`), débloqué par
+le 001 : la vente de caisse doit poser `locked = 1` pour devenir annulable par avoir.
+Aujourd'hui **aucune vente encaissée n'est corrigeable, pour aucun rôle**. Puis 003
+(immuabilité explicite, aucun bloqueur), puis le chantier `journal-plateforme-lecture`.
+
+## Ce qui a changé, et ne doit pas être redécouvert
+
+- **`emettreFacture()` est le seul point de numérotation** et il **persiste le numéro avant**
+  le chaînage NF525. Ce n'est pas un détail d'implémentation : calculer le numéro sans le
+  persister recréerait le trou que le ticket corrige (échec du chaînage ⇒ facture sans numéro,
+  compteur avancé, reprise qui en brûle un second). Exception assumée :
+  `caisseService.createVente()`, dont la vente POS est émise d'emblée.
+- **`createFacture()` et `convertirDevis()` renvoient `facture_numero: null`** tant que la
+  facture est brouillon. Ne jamais fabriquer un numéro de repli côté client — le
+  `'FAC-' + id` de `factures.js` imprimait un numéro hors série, il a été retiré.
+- **Aucune écriture `journal_nf525` hors d'`emettreFacture()`.** `PUT /devis/:id/convertir` en
+  écrivait une sur un brouillon, doublée à l'émission ; retiré le 2026-08-02.
+- **Recréer une table dans une migration D1 ne suit pas le patron de `0034`.** Trois pragmas
+  inopérants (`foreign_keys=OFF` ignoré en transaction, `defer_foreign_keys` qui ne solde pas
+  le compteur, `legacy_alter_table` non honoré). Patron qui passe : table de transit → `DROP`
+  → recréation **sous le nom final** → réinsertion. Détail dans `current-state.md` § cp 77 et
+  en tête de `migrations/0040_facture_numero_nullable.sql`.
+- **Prérequis d'une telle migration** : `SELECT COUNT(*) FROM pragma_foreign_key_check` = 0 sur
+  la base visée. Le contrôler **par un chiffre** — une sortie vide de wrangler ne distingue pas
+  « zéro ligne » de « rien affiché ».
+- **Quoting PowerShell 5.1** : `""notnull""` arrive nu à l'exe (mot-clé SQLite ⇒ erreur de
+  syntaxe). Utiliser `[notnull]`.
+
+## 🔴 Anomalie d'outillage à trancher
+
+La **loop d'automatisation commite et pousse toute seule** : le 2026-08-02 à 18:15:07, elle a
+committé les 10 fichiers de travail de la session humaine sous `wip: conformite facturation
+ticket 001 …` (`95c8ab0`) et les a poussés sur `origin/main`. Rien de perdu, aucun impact
+production (le déploiement reste manuel), mais deux écrivains sur le même arbre. À désarmer si
+ce n'est pas voulu (`Disable-ScheduledTask`).
+
+## État du dépôt
+
+`main` : `f573c5b`, poussé. Baselines : `npx vitest run` → **899/901** (2 échecs permanents de
+fuseau `agendaService`), `npx tsc --noEmit` → **32**, `npx playwright test` → **188/188**.
+
+Base D1 **locale** : 2 lignes orphelines supprimées (`tickets` id 13,
+`tickets_statuts_historique` id 5) — elles bloquaient toute recréation de table.
+`pragma_foreign_key_check` y est désormais vide, comme en production.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-02 (checkpoint 76 — enveloppe API close, 3 XSS, chantier 2 cadré)
 
 ## Reprendre ici
