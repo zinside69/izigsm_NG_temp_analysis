@@ -1,5 +1,40 @@
 # iziGSM — Bugs connus
 
+## Aucune vente de caisse n'est annulable par un avoir (trouvé le 2026-08-02, NON corrigé)
+
+Trouvé en voulant annuler la vente de test `FAC-2026-00003` passée en production le même jour.
+
+**Root cause** : la caisse crée sa facture en `statut = 'payee'` mais ne pose **jamais** `locked` :
+
+```
+caisseService.ts  INSERT INTO factures (…, statut, notes) VALUES (…, 'payee', ?)
+```
+
+L'émission d'un avoir l'exige, et le refus vient du **service**, pas seulement de l'écran :
+
+```
+factureService.ts  if (!facture.locked)
+                     throw 'Impossible d'émettre un avoir sur une facture non émise.'
+```
+
+Côté interface, le bouton ↩️ est conditionné à `f.locked` : il ne s'affiche même pas. Donc
+**aucune vente POS n'est corrigeable, pour aucun rôle, depuis toujours**.
+
+**Portée** : NF525 impose qu'une transaction encaissée se corrige par un document rectificatif,
+jamais par suppression. Le contournement naturel — supprimer la facture en SQL — **romprait la
+chaîne de hash** de `journal_nf525` et ferait échouer `nf525/verify`, qui passe au vert
+aujourd'hui. Ne jamais toucher cette table en direct (même leçon qu'au checkpoint 69, où les
+lignes NF525 avaient été *réattribuées* et non supprimées).
+
+**Non corrigé** : la correction n'est pas mécanique, elle demande une décision — voir le ticket
+`.scratch/avoir-vente-caisse/issues/001-*.md` (statut `ready-for-human`). En deux mots : soit la
+vente de caisse pose `locked = 1` (une vente POS *est* une facture émise — recommandé, mais
+`ajouterPaiement()` refuse une facture verrouillée, effet de bord à vérifier), soit la garde de
+l'avoir accepte aussi `statut = 'payee'` (plus petit, mais laisse deux notions de « facture
+émise » coexister).
+
+**Facture témoin en production** : `FAC-2026-00003`, id 4, boutique 1, `payee`, `locked = 0`, 60 €.
+
 ## Trois XSS stockées dans les gabarits de page (trouvées et CORRIGÉES le 2026-08-02)
 
 Suite de la XSS de `buildSidebar()` fermée au checkpoint 75, qui ne traitait que la barre

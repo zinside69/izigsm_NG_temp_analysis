@@ -15,6 +15,22 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
+## 🔴 P1 — Aucune vente de caisse n'est annulable par un avoir (constaté en production 2026-08-02)
+
+Une vente POS crée une facture `payee` mais **sans `locked`** ; l'avoir l'exige, côté service comme
+côté écran. Aucune vente encaissée n'est donc corrigeable, pour aucun rôle, depuis toujours —
+alors que NF525 impose de corriger par document rectificatif et jamais par suppression.
+
+⚠️ Ne **jamais** contourner en supprimant la facture en SQL : `journal_nf525` est une chaîne de
+hash, la rompre ferait échouer `nf525/verify`.
+
+Ticket : `.scratch/avoir-vente-caisse/issues/001-avoir-impossible-sur-une-vente-de-caisse.md`
+(statut `ready-for-human` : la correction demande une décision, pas une main mécanique).
+Détail et root cause dans `bugs.md`.
+
+- [ ] Trancher A (la vente pose `locked = 1`) ou B (la garde de l'avoir accepte `payee`)
+- [ ] Sort des factures déjà créées à `locked = 0` — décider même si la réponse est « on les laisse »
+
 ## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
 
 Depuis le déploiement du ticket 04, `journal_actions_plateforme` se remplit — et **aucune
