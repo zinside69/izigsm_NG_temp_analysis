@@ -848,8 +848,12 @@ describe('devisService', () => {
 
       const result = await convertirDevis(dbD1 as any, 10, 10)
 
+      // La conversion produit un BROUILLON : pas de numéro tant que la facture
+      // n'est pas émise, et donc aucune séquence consommée (ticket 001
+      // conformité-facturation, 2026-08-02).
       expect(result.facture_id).toBe(20)
-      expect(result.facture_numero).toMatch(/^FAC-/)
+      expect(result.facture_numero).toBeNull()
+      expect(dbD1.__getCalls().some(c => c.sql.includes('sequences'))).toBe(false)
     })
 
     it('INSERT facture avec bons paramètres', async () => {
@@ -872,6 +876,7 @@ describe('devisService', () => {
       expect(insertFactCall).toBeDefined()
       // boutique_id, numero, client_id, ticket_id, devis_id, total_ht, total_tva, total_ttc
       expect(insertFactCall!.params[0]).toBe(1)   // boutique_id
+      expect(insertFactCall!.params[1]).toBeNull() // numero — attribué à l'émission seule
       expect(insertFactCall!.params[2]).toBe(3)   // client_id
       expect(insertFactCall!.params[3]).toBeNull() // ticket_id
       expect(insertFactCall!.params[4]).toBe(10)  // devis_id

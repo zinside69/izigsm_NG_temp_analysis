@@ -15,17 +15,15 @@ import {
 import {
   listFactures, getFacture, ajouterPaiement, emettreFacture,
   listAvoirs, getAvoir, createAvoir, createFactureAcompte,
-  getDevisPourNf525, updateFactureHash,
   createFacture, type CreateFactureInput,
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
-import { enregistrerTransaction } from '../lib/nf525'
 import { auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FRONTEND_URL?: string; RESEND_API_KEY?: string }
 // 'db' : port Database injecté par le middleware global (src/index.tsx) — utilisé
-// par listFactures/getFacture/listAvoirs/getAvoir/getDevisPourNf525/updateFactureHash
+// par listFactures/getFacture/listAvoirs/getAvoir
 // (Ports & Adapters, 2026-07-12) et par listDevis/getDevis/getStatsDevis/
 // expireDevisPerimes (Ports & Adapters, 2026-07-13). ajouterPaiement/emettreFacture/
 // createAvoir/createDevis/updateDevis/updateStatutDevis/convertirDevis restent sur
@@ -282,20 +280,15 @@ facturation.put('/devis/:id/convertir', requireRole('admin', 'manager'), async (
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   try {
+    // La conversion produit un BROUILLON : ni numéro, ni chaînage NF525.
+    //
+    // Cette route écrivait ici même une ligne dans `journal_nf525`, alors que la
+    // facture n'était pas émise — puis `emettreFacture()` en écrivait une SECONDE
+    // pour le même document. Retiré au ticket 001 conformité-facturation
+    // (2026-08-02) : le journal légal n'enregistre que des documents émis, et
+    // `emettreFacture()` est le point de passage unique qui numérote ET chaîne.
+    // Ne pas réintroduire d'écriture NF525 hors de ce point.
     const { facture_id, facture_numero } = await convertirDevis(c.env.DB, devisId, user.sub)
-
-    // ── NF525 : enregistrer la transaction chaînée ─────────────────────────
-    const devis = await getDevisPourNf525(c.get('db'), devisId)
-    if (devis) {
-      const hashNf525 = await enregistrerTransaction(c.env.DB, {
-        boutique_id: devis.boutique_id, type_transaction: 'facture',
-        reference_id: facture_id, reference_numero: facture_numero,
-        client_id: devis.client_id,
-        montant_ht: devis.total_ht, montant_tva: devis.total_tva, montant_ttc: devis.total_ttc,
-        date_transaction: new Date().toISOString(), user_id: user.sub,
-      })
-      await updateFactureHash(c.get('db'), facture_id, hashNf525)
-    }
 
     return c.json({ success: true, facture_id, facture_numero, message: 'Devis converti en facture.' })
   } catch (err: any) {
@@ -406,9 +399,11 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
       if (body.client_id && Number(body.client_id) !== devis.client_id)
         return c.json({ success: false, error: 'client_id ne correspond pas au client du devis sélectionné.' }, 400)
 
-      const { facture_id, facture_numero } = await convertirDevis(c.env.DB, body.devis_id, user.sub)
+      const { facture_id } = await convertirDevis(c.env.DB, body.devis_id, user.sub)
 
       let statut = 'brouillon'
+      // null tant que la facture reste brouillon — c'est l'émission qui numérote.
+      let facture_numero: string | null = null
       if (body.action === 'emettre_encaisser') {
         // Le montant à encaisser n'est PAS `devis.total_ttc` : convertirDevis() déduit
         // une facture d'acompte antérieure et crée donc une facture au solde restant
@@ -425,7 +420,7 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
         statut = paiement.statut
       }
       if (body.action !== 'brouillon') {
-        await emettreFacture(c.env.DB, facture_id, user.sub)
+        facture_numero = (await emettreFacture(c.env.DB, facture_id, user.sub)).facture_numero
         if (statut === 'brouillon') statut = 'en_attente'
       }
 

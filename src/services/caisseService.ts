@@ -255,6 +255,11 @@ export async function createVente(
   }
 
   // ── 2. Numéro de facture ──────────────────────────────────────────────────
+  // Seul appel à `nextNumero()` hors d'`emettreFacture()`, et c'est cohérent avec
+  // la règle « le numéro n'est attribué qu'à l'émission » : une vente POS *est*
+  // émise dès sa création (numérotée, payée, chaînée NF525 plus bas), elle ne
+  // passe jamais par l'état brouillon. Ticket 001 conformité-facturation.
+  // ⚠ Ce chemin ne pose pas encore `locked = 1` — c'est l'objet du ticket 002.
   const numero = await nextNumero(db, boutiqueId, 'facture')
   const dateEmission = new Date().toISOString()
 

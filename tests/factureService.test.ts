@@ -172,6 +172,10 @@ const SQL_UPDATE_FACTURE_PAIEMENT = n(`
 
 const SQL_GET_FACTURE_EMETTRE = n(`SELECT * FROM factures WHERE id = ?`)
 
+const SQL_SET_NUMERO = n(`
+  UPDATE factures SET numero = ? WHERE id = ? AND numero IS NULL
+`)
+
 const SQL_LOCK_FACTURE = n(`
   UPDATE factures
   SET locked            = 1,
@@ -611,6 +615,81 @@ describe('emettreFacture()', () => {
     expect(vendeurSnapshot.mention_facture).toBeNull()
     expect(vendeurSnapshot.telephone).toBe('0102030405')
     expect(vendeurSnapshot.email).toBe('contact@izigsm-paris11.fr')
+  })
+
+  // ── Numérotation à l'émission (ticket 001 conformité-facturation, 2026-08-02) ──
+  // Un brouillon vit sans numéro : c'est l'émission qui consomme la séquence, et
+  // elle seule. Voir .scratch/conformite-facturation/spec.md.
+
+  /** Mock des deux lectures de `nextNumero()` (settings + compteur). */
+  function setupNumerotation(dbMock: ReturnType<typeof createMockD1>) {
+    dbMock.__setResponse(SQL_NEXT_NUMERO_SETTINGS, {
+      prefix_facture: 'FAC', format_numero: 'annee', padding_numero: 5,
+    })
+    dbMock.__setResponse(
+      n('SELECT dernier_num FROM sequences WHERE boutique_id = ? AND type = ? AND annee = ?'),
+      { dernier_num: 7 }
+    )
+  }
+
+  it('attribue un numéro au brouillon qui n\'en a pas', async () => {
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, { ...FACTURE_ROW, numero: null })
+    setupNumerotation(db)
+    setupNf525(db)
+
+    const result = await emettreFacture(db, 20, 10)
+
+    expect(result.facture_numero).toBe('FAC-2026-00007')
+  })
+
+  it('persiste le numéro sur la facture avant d\'écrire au journal NF525', async () => {
+    // Sans cette persistance immédiate, un échec du chaînage NF525 laisserait la
+    // facture sans numéro alors que le compteur a avancé : la tentative suivante
+    // en brûlerait un second. Le trou serait recréé par le correctif lui-même.
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, { ...FACTURE_ROW, numero: null })
+    setupNumerotation(db)
+    setupNf525(db)
+
+    await emettreFacture(db, 20, 10)
+
+    const calls   = db.__getCalls()
+    const iNumero = calls.findIndex(c => c.sql === SQL_SET_NUMERO)
+    const iJournal = calls.findIndex(c => c.sql === SQL_NF525_INSERT)
+
+    expect(iNumero).toBeGreaterThanOrEqual(0)
+    expect(calls[iNumero].params).toEqual(['FAC-2026-00007', 20])
+    expect(iNumero).toBeLessThan(iJournal)
+  })
+
+  it('ne renumérote pas une facture qui porte déjà un numéro', async () => {
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, FACTURE_ROW)
+    setupNumerotation(db)
+    setupNf525(db)
+
+    const result = await emettreFacture(db, 20, 10)
+
+    expect(result.facture_numero).toBe('FAC-2026-00001')
+    expect(db.__getCalls().some(c => c.sql.includes('sequences'))).toBe(false)
+  })
+
+  it('ne consomme aucun numéro quand l\'émission est refusée', async () => {
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, FACTURE_LOCKED)
+    setupNumerotation(db)
+
+    await expect(emettreFacture(db, 20, 10)).rejects.toThrow()
+
+    expect(db.__getCalls().some(c => c.sql.includes('sequences'))).toBe(false)
+  })
+
+  it('inscrit au journal NF525 le numéro attribué, jamais null', async () => {
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, { ...FACTURE_ROW, numero: null })
+    setupNumerotation(db)
+    setupNf525(db)
+
+    await emettreFacture(db, 20, 10)
+
+    const journal = db.__getCalls().find(c => c.sql === SQL_NF525_INSERT)
+    expect(journal!.params).toContain('FAC-2026-00007')
   })
 })
 
@@ -1184,14 +1263,20 @@ describe('createFacture()', () => {
     expect(calls.some(c => c.sql.includes('sequences'))).toBe(false)
   })
 
-  it('crée la facture en brouillon et retourne id + numéro + statut', async () => {
+  it('crée la facture en brouillon, sans numéro', async () => {
+    // Un brouillon n'est pas une facture : il ne consomme pas la série.
+    // Ticket 001 conformité-facturation (2026-08-02).
     setupBrouillon(60)
 
     const result = await createFacture(db, 10, BASE_INPUT)
 
     expect(result.facture_id).toBe(60)
-    expect(result.facture_numero).toMatch(/^FAC-/)
+    expect(result.facture_numero).toBeNull()
     expect(result.statut).toBe('brouillon')
+
+    const insert = db.__getCalls().find(c => c.sql === SQL_INSERT_FACTURE)
+    expect(insert!.params[1]).toBeNull()          // numero
+    expect(db.__getCalls().some(c => c.sql.includes('sequences'))).toBe(false)
   })
 
   it('INSERT la facture avec les totaux calculés et les champs texte', async () => {
@@ -1324,6 +1409,20 @@ describe('createFacture()', () => {
     expect(calls.some(c => c.sql.includes('INSERT INTO journal_nf525'))).toBe(true)
     expect(calls.some(c => c.sql.includes('INSERT INTO paiements'))).toBe(false)
     expect(result.statut).toBe('en_attente')
+  })
+
+  it('action=emettre : le numéro rendu est celui attribué à l\'émission', async () => {
+    setupEmission(65)
+    // La facture que relit emettreFacture() sort de l'INSERT : elle n'a pas encore
+    // de numéro. C'est l'émission qui le lui donne (ticket 001, 2026-08-02).
+    db.__setResponse(SQL_GET_FACTURE_EMETTRE, {
+      id: 65, boutique_id: 1, client_id: 3, numero: null,
+      total_ht: 100, total_tva: 20, total_ttc: 120, locked: 0,
+    })
+
+    const result = await createFacture(db, 10, { ...BASE_INPUT, action: 'emettre' })
+
+    expect(result.facture_numero).toBe('FAC-2026-00007')
   })
 
   it('action=emettre_encaisser : encaisse le TTC puis verrouille', async () => {

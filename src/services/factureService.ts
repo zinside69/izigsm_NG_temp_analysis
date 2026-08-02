@@ -198,11 +198,24 @@ export async function ajouterPaiement(
 }
 
 /**
- * Émet une facture brouillon : verrouillage NF525 + hash SHA-256 + tracking_token.
- * Conforme CGI art. 289 — la facture devient inaltérable après émission.
+ * Émet une facture brouillon : numérotation + verrouillage NF525 + hash SHA-256
+ * + tracking_token. Conforme CGI art. 289 — la facture devient inaltérable après
+ * émission.
+ *
+ * **Point de passage unique de la numérotation** (ticket 001 du chantier
+ * `.scratch/conformite-facturation/`, 2026-08-02) : `nextNumero()` n'est appelé
+ * que d'ici. Un brouillon vit avec `numero = NULL` ; les trois chemins de création
+ * (manuelle, conversion de devis, acompte) ne consomment plus la séquence, si bien
+ * qu'un échec de création ne laisse plus de trou dans la série.
+ *
+ * Le numéro est **persisté immédiatement**, avant l'écriture au journal NF525 :
+ * si le chaînage échoue, la facture porte déjà son numéro et la tentative suivante
+ * réutilise le même au lieu d'en brûler un second. C'est ce qui rend l'invariant
+ * « ⊥ trou entre les numéros » vrai y compris sur un échec partiel.
+ *
  * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
- * dépend d'`enregistrerTransaction()` (lib/nf525.ts) et d'`auditLog()`, tous
- * deux encore sur `D1Database` brut.
+ * dépend de `nextNumero()`, d'`enregistrerTransaction()` (lib/nf525.ts) et
+ * d'`auditLog()`, tous encore sur `D1Database` brut.
  * @param db        - Instance D1Database
  * @param factureId - ID de la facture
  * @param userId    - ID de l'utilisateur
@@ -218,6 +231,17 @@ export async function emettreFacture(
   if (!facture) throw new Error('Facture introuvable.')
   if (facture.locked) throw new Error('Facture déjà émise et verrouillée.')
 
+  // ── Numérotation ────────────────────────────────────────────────────────────
+  // Après les gardes, jamais avant : un refus d'émission ne doit pas faire avancer
+  // le compteur de la boutique. Une facture déjà numérotée (émission relancée après
+  // un incident) garde son numéro — la séquence n'est consommée qu'une fois.
+  let numero: string = facture.numero
+  if (!numero) {
+    numero = await nextNumero(db, facture.boutique_id, 'facture')
+    await db.prepare('UPDATE factures SET numero = ? WHERE id = ? AND numero IS NULL')
+      .bind(numero, factureId).run()
+  }
+
   // Token de tracking vitrine client
   const trackingToken = crypto.randomUUID()
 
@@ -226,7 +250,7 @@ export async function emettreFacture(
     boutique_id:      facture.boutique_id,
     type_transaction: 'facture',
     reference_id:     facture.id,
-    reference_numero: facture.numero,
+    reference_numero: numero,
     client_id:        facture.client_id,
     montant_ht:       facture.total_ht,
     montant_tva:      facture.total_tva,
@@ -285,7 +309,7 @@ export async function emettreFacture(
   })
 
   return {
-    facture_numero:  facture.numero,
+    facture_numero:  numero,
     tracking_token:  trackingToken,
     hash_nf525:      hashNf525,
   }
@@ -351,8 +375,8 @@ export async function createFactureAcompte(
     { quantite: 1, prix_unitaire_ht: input.montant_ht, tva_taux: input.tva_taux },
   ])
 
-  const numero = await nextNumero(db, input.boutique_id, 'facture')
-
+  // numero = NULL : la séquence n'est consommée qu'à l'émission, quelques lignes
+  // plus bas (emettreFacture()). Un échec avant ce point ne laisse aucun trou.
   // statut='brouillon' à la création : emettreFacture() (appelée plus bas) exige
   // locked=0 pour verrouiller/émettre, donc la facture doit démarrer éditable.
   const facture = await db.prepare(`
@@ -361,7 +385,7 @@ export async function createFactureAcompte(
     VALUES (?, ?, ?, ?, ?, 'acompte', ?, ?, ?, 'brouillon')
     RETURNING id
   `).bind(
-    input.boutique_id, numero, input.client_id,
+    input.boutique_id, null, input.client_id,
     input.ticket_id ?? null, input.devis_id ?? null,
     total_ht, total_tva, total_ttc,
   ).first<{ id: number }>()
@@ -383,7 +407,8 @@ export async function createFactureAcompte(
     mode_paiement: input.mode_paiement,
     reference:     input.reference,
   })
-  await emettreFacture(db, factureId, userId)
+  // C'est l'émission qui attribue le numéro : on le récupère d'elle.
+  const { facture_numero: numero } = await emettreFacture(db, factureId, userId)
 
   await auditLog(db, {
     boutique_id: input.boutique_id, user_id: userId,
@@ -432,12 +457,14 @@ export interface CreateFactureInput {
  * Crée une facture manuelle avec ses lignes, sans passer par un devis.
  * Voir docs/superpowers/specs/2026-07-30-factures-creation-manuelle-design.md.
  *
- * Toute la validation précède `nextNumero()` : un numéro séquentiel de boutique
- * ne doit jamais être consommé par une saisie invalide (il ne peut pas être rendu).
+ * La facture naît **sans numéro** : la séquence de la boutique n'est consommée
+ * qu'à l'émission, par `emettreFacture()` (ticket 001 conformité-facturation,
+ * 2026-08-02). Un brouillon abandonné ne laisse donc aucun trou dans la série,
+ * et `facture_numero` vaut `null` tant que l'action est `'brouillon'`.
  *
  * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12) :
- * dépend de `nextNumero()`/`auditLog()`/`db.batch()`/`ajouterPaiement()`/
- * `emettreFacture()`, tous sur `D1Database` brut.
+ * dépend d'`auditLog()`/`db.batch()`/`ajouterPaiement()`/`emettreFacture()`,
+ * tous sur `D1Database` brut.
  *
  * `action: 'emettre'` verrouille la facture (NF525) juste après création ;
  * `action: 'emettre_encaisser'` encaisse en plus le TTC avant verrouillage —
@@ -452,8 +479,8 @@ export async function createFacture(
   db:     D1Database,
   userId: number,
   input:  CreateFactureInput
-): Promise<{ facture_id: number; facture_numero: string; statut: StatutFacture }> {
-  // ── Validation (avant toute écriture et avant nextNumero) ────────────────
+): Promise<{ facture_id: number; facture_numero: string | null; statut: StatutFacture }> {
+  // ── Validation (avant toute écriture) ────────────────────────────────────
   if (!input.lignes || input.lignes.length === 0)
     throw new Error('La facture doit contenir au moins une ligne.')
 
@@ -487,8 +514,8 @@ export async function createFacture(
   }
 
   // ── Création ─────────────────────────────────────────────────────────────
-  const numero = await nextNumero(db, input.boutique_id, 'facture')
-
+  // numero = NULL : un brouillon n'est pas une facture et ne consomme pas la
+  // série. Seule emettreFacture() appelle nextNumero() (ticket 001, 2026-08-02).
   // statut='brouillon' à la création : ajouterPaiement() et emettreFacture()
   // exigent toutes deux locked=0, la facture doit donc démarrer éditable.
   const facture = await db.prepare(`
@@ -497,7 +524,7 @@ export async function createFacture(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
     RETURNING id
   `).bind(
-    input.boutique_id, numero, input.client_id, input.ticket_id ?? null,
+    input.boutique_id, null, input.client_id, input.ticket_id ?? null,
     totaux.total_ht, totaux.total_tva, totaux.total_ttc,
     input.notes ?? null, input.conditions ?? null,
     input.date_execution ?? todayParis(),
@@ -525,6 +552,8 @@ export async function createFacture(
   // Ordre imposé : ajouterPaiement() exige locked=0, emettreFacture() pose
   // locked=1. Même séquence que createFactureAcompte().
   let statut: StatutFacture = 'brouillon'
+  // null tant que la facture n'est pas émise — un brouillon n'a pas de numéro.
+  let numero: string | null = null
 
   if (input.action === 'emettre_encaisser') {
     const paiement = await ajouterPaiement(db, factureId, userId, {
@@ -536,7 +565,7 @@ export async function createFacture(
   }
 
   if (input.action !== 'brouillon') {
-    await emettreFacture(db, factureId, userId)
+    numero = (await emettreFacture(db, factureId, userId)).facture_numero
     // emettreFacture() ne repasse en 'en_attente' que depuis 'brouillon' :
     // un encaissement préalable ('payee') est préservé.
     if (statut === 'brouillon') statut = 'en_attente'

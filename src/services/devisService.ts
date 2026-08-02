@@ -389,10 +389,16 @@ export async function updateStatutDevis(
 }
 
 /**
- * Convertit un devis accepté en facture (avec copie des lignes).
+ * Convertit un devis accepté en facture **brouillon** (avec copie des lignes).
+ *
+ * La facture produite n'a **pas de numéro** : la séquence de la boutique n'est
+ * consommée qu'à l'émission, par `emettreFacture()` (ticket 001 du chantier
+ * `.scratch/conformite-facturation/`, 2026-08-02). `facture_numero` vaut donc
+ * toujours `null` au retour — l'appelant qui enchaîne une émission doit lire le
+ * numéro rendu par `emettreFacture()`.
+ *
  * Non migré vers le port `Database` (chantier Ports & Adapters, 2026-07-13) :
- * dépend de `nextNumero()` et `auditLog()`, tous deux encore sur `D1Database`
- * brut.
+ * dépend d'`auditLog()`, encore sur `D1Database` brut.
  * @param db     - Instance D1Database
  * @param id     - ID du devis
  * @param userId - ID de l'utilisateur
@@ -401,14 +407,12 @@ export async function convertirDevis(
   db:     D1Database,
   id:     number,
   userId: number
-): Promise<{ facture_id: number; facture_numero: string }> {
+): Promise<{ facture_id: number; facture_numero: null }> {
   const devis = await db.prepare('SELECT * FROM devis WHERE id = ?').bind(id).first<any>()
   if (!devis)                       throw new Error('Devis introuvable.')
   if (devis.statut === 'refuse')    throw new Error('Impossible de convertir un devis refusé.')
   if (devis.statut === 'annule')    throw new Error('Impossible de convertir un devis annulé.')
   if (devis.facture_id)             throw new Error('Ce devis a déjà été converti en facture.')
-
-  const numero = await nextNumero(db, devis.boutique_id, 'facture')
 
   const facture = await db.prepare(`
     INSERT INTO factures
@@ -416,7 +420,7 @@ export async function convertirDevis(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'brouillon')
     RETURNING id
   `).bind(
-    devis.boutique_id, numero,
+    devis.boutique_id, null,
     devis.client_id, devis.ticket_id ?? null, id,
     devis.total_ht, devis.total_tva, devis.total_ttc,
   ).first<{ id: number }>()
@@ -494,7 +498,7 @@ export async function convertirDevis(
     entite_type: 'facture', entite_id: facture.id,
   })
 
-  return { facture_id: facture.id, facture_numero: numero }
+  return { facture_id: facture.id, facture_numero: null }
 }
 
 /**

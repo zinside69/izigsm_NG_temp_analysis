@@ -595,8 +595,9 @@ async function convertToFacture(id) {
     const result = await apiPut('/api/devis/' + id + '/convertir', {});
     if (!result.ok) throw new Error(result.error || 'Erreur API');
 
-    const factureNumero = result.data?.facture_numero || '';
-    showFlash('Devis converti en facture ' + factureNumero + ' ✅', 'success');
+    // La conversion produit un brouillon : `facture_numero` est null, le numéro
+    // n'est attribué qu'à l'émission (ticket 001 conformité-facturation).
+    showFlash('Devis converti en facture brouillon ✅ — le numéro sera attribué à l\'émission', 'success');
     await Promise.all([loadDevisStats(), loadDevis()]);
 
     setTimeout(() => {

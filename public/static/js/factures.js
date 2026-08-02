@@ -57,6 +57,15 @@ const STATUT_LABEL_TO_API = {
   'Annulée':      'annulee',
 };
 
+/**
+ * Libellé d'un document non encore émis. Depuis le ticket 001 du chantier
+ * conformité-facturation (2026-08-02), une facture ne reçoit son numéro qu'à
+ * l'émission : `numero` est `null` tant qu'elle est en brouillon. Ne jamais
+ * remplacer ce libellé par un numéro dérivé de l'id — il n'appartient pas à la
+ * série légale de la boutique.
+ */
+const NUMERO_BROUILLON = 'Brouillon (non numéroté)';
+
 function mapApiFacture(f) {
   const statutLabel = STATUT_API_TO_LABEL[f.statut] || f.statut || 'Brouillon';
   const totalTTC    = parseFloat(f.total_ttc)    || 0;
@@ -68,7 +77,7 @@ function mapApiFacture(f) {
   return {
     // Champs normalisés (compatibles avec le reste du code)
     id:             f.id,
-    number:         f.numero,
+    number:         f.numero || NUMERO_BROUILLON,
     clientId:       f.client_id  || null,
     clientName:     f.client_nom || '—',
     description:    f.notes      || '',
@@ -534,9 +543,15 @@ async function saveFacture(action) {
     return;
   }
 
-  const numero = res.data.facture_numero || res.data.facture_id;
+  // `facture_numero` est null en action brouillon : le numéro n'est attribué qu'à
+  // l'émission. Annoncer un numéro qui n'existe pas encore tromperait l'exploitant.
   closeModal('modal-facture');
-  showFlash(`✓ Facture ${numero} ${action === 'brouillon' ? 'enregistrée en brouillon' : 'émise'}`, 'success');
+  showFlash(
+    action === 'brouillon'
+      ? '✓ Brouillon enregistré — le numéro sera attribué à l\'émission'
+      : `✓ Facture ${res.data.facture_numero} émise`,
+    'success'
+  );
   await loadFactures();
 }
 
@@ -1046,7 +1061,11 @@ async function _fetchFacturePrintData(id) {
     totalTVA,
     totalTTC,
     reste:        Math.max(0, totalTTC - paye),
-    numero:       raw.numero  || f.number  || f.numero  || ('FAC-' + id),
+    // Un brouillon n'a pas de numéro (ticket 001 conformité-facturation) : on le
+    // dit, on n'en fabrique pas. Le repli 'FAC-<id>' d'avant imprimait un numéro
+    // qui n'a jamais existé dans la série — exactement ce que la conformité
+    // interdit. Le numéro réel n'apparaît qu'après émission.
+    numero:       raw.numero  || f.number  || f.numero  || NUMERO_BROUILLON,
     dateEm:       raw.date_emission  || f.createdAt || new Date().toISOString(),
     dateEch:      raw.date_echeance  || '',
     statut:       raw.statut  || f._statut || f.status || 'brouillon',
