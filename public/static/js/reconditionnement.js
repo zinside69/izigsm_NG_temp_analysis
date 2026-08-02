@@ -2,6 +2,19 @@
  * reconditionnement.js — Vue Reconditionnement + Bons d'achat (Sprint 2.16)
  * Rôle architectural : View (P2 — 100% via ApiService app.js, 0 fetch direct).
  *
+ * ⚠️ Niveau d'enveloppe — corrigé le 2026-08-02 (même défaut que `fournisseurs.js`).
+ *
+ * `apiGet`/`apiPost`/… (`app.js`) renvoient une **enveloppe** `{ ok, status, data, error }`
+ * dans laquelle `data` est le corps JSON complet de l'API — lui-même de la forme
+ * `{ success, data, error, pagination }`. Ce fichier lisait `res.success` au niveau de
+ * l'enveloppe : toujours `undefined`, donc `return` silencieux sur **12 sites**. KPIs,
+ * liste des ordres et liste des bons d'achat n'affichaient jamais rien, pour tous les rôles.
+ *
+ * Parade : **déballer une fois au point d'appel** (`(await apiGet(…)).data`). `api()` parse
+ * le corps même sur une réponse en erreur, donc `success` et `error` survivent au déballage.
+ *
+ * Ne jamais réintroduire `const res = await apiGet(...)` suivi de `res.success` ici.
+ *
  * Ce fichier gère deux panneaux activés via onglets :
  *   1. Ordres de reconditionnement — workflow rachat → appareil occasion en stock
  *   2. Bons d'achat — gestes commerciaux clients (code BA-XXXXXXXX)
@@ -133,7 +146,7 @@ function _renderPageActions() {
  */
 async function loadKpis() {
   const bId = getBoutiqueId();
-  const res  = await apiGet(`/api/reconditionnement/kpis?boutique_id=${bId}`);
+  const res  = (await apiGet(`/api/reconditionnement/kpis?boutique_id=${bId}`)).data;
   if (!res?.success) return;
 
   const d = res.data;
@@ -163,7 +176,7 @@ async function loadOrdres(page = 1) {
   if (statut) params.set('statut', statut);
   if (grade)  params.set('grade',  grade);
 
-  const res = await apiGet(`/api/reconditionnement?${params}`);
+  const res = (await apiGet(`/api/reconditionnement?${params}`)).data;
   if (!res?.success) {
     _setText('tbody-ordres', '');
     document.querySelector('#tbody-ordres').innerHTML =
@@ -173,7 +186,7 @@ async function loadOrdres(page = 1) {
 
   _ordres = res.data ?? [];
   _renderTableOrdres(_ordres);
-  renderPagination('pagination-ordres', res.pagination, (p) => loadOrdres(p));
+  _renderPagination('pagination-ordres', res.pagination, (p) => loadOrdres(p));
 }
 
 /**
@@ -266,7 +279,7 @@ async function loadBons(page = 1) {
   if (search) params.set('search', search);
   if (statut) params.set('statut', statut);
 
-  const res = await apiGet(`/api/bons-achat?${params}`);
+  const res = (await apiGet(`/api/bons-achat?${params}`)).data;
   if (!res?.success) {
     document.getElementById('tbody-bons').innerHTML =
       '<tr><td colspan="9" class="empty-row">Erreur de chargement.</td></tr>';
@@ -275,7 +288,7 @@ async function loadBons(page = 1) {
 
   _bons = res.data ?? [];
   _renderTableBons(_bons);
-  renderPagination('pagination-bons', res.pagination, (p) => loadBons(p));
+  _renderPagination('pagination-bons', res.pagination, (p) => loadBons(p));
 }
 
 /**
@@ -363,7 +376,7 @@ function openNewOrdre() {
  */
 async function openEditOrdre(id) {
   const bId = getBoutiqueId();
-  const res  = await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`);
+  const res  = (await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`)).data;
   if (!res?.success) return showToast('Erreur lors du chargement de l\'ordre.', 'error');
 
   const o = res.data;
@@ -436,10 +449,10 @@ async function submitOrdre(e) {
 
   if (ordreId) {
     // Mode édition
-    res = await apiPut(`/api/reconditionnement/${ordreId}`, payload);
+    res = (await apiPut(`/api/reconditionnement/${ordreId}`, payload)).data;
   } else {
     // Mode création
-    res = await apiPost('/api/reconditionnement', payload);
+    res = (await apiPost('/api/reconditionnement', payload)).data;
   }
 
   if (res?.success) {
@@ -467,7 +480,7 @@ async function changerStatutOrdre(id, statut) {
   if (!confirm(`Confirmer l'action : ${label} cet ordre ?`)) return;
 
   const bId = getBoutiqueId();
-  const res  = await apiPatch(`/api/reconditionnement/${id}/statut`, { boutique_id: bId, statut });
+  const res  = (await apiPatch(`/api/reconditionnement/${id}/statut`, { boutique_id: bId, statut })).data;
 
   if (res?.success) {
     showToast(`Statut mis à jour : ${statut}.`, 'success');
@@ -488,7 +501,7 @@ async function changerStatutOrdre(id, statut) {
  */
 async function openTerminerOrdre(id) {
   const bId = getBoutiqueId();
-  const res  = await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`);
+  const res  = (await apiGet(`/api/reconditionnement/${id}?boutique_id=${bId}`)).data;
   if (!res?.success) return showToast('Erreur de chargement de l\'ordre.', 'error');
 
   const o = res.data;
@@ -536,7 +549,7 @@ async function submitTerminer(e) {
     description_travaux: fd.get('description_travaux') || undefined,
   };
 
-  const res = await apiPost(`/api/reconditionnement/${id}/terminer`, payload);
+  const res = (await apiPost(`/api/reconditionnement/${id}/terminer`, payload)).data;
 
   if (res?.success) {
     showToast(res.message ?? 'Ordre clôturé. Produit créé en stock.', 'success');
@@ -581,7 +594,7 @@ async function submitBon(e) {
     motif:           fd.get('motif')          || undefined,
   };
 
-  const res = await apiPost('/api/bons-achat', payload);
+  const res = (await apiPost('/api/bons-achat', payload)).data;
 
   if (res?.success) {
     const code = res.data?.code ?? '';
@@ -619,7 +632,7 @@ async function doVerifierBon() {
 
   if (!code) return showToast('Saisissez un code.', 'error');
 
-  const res = await apiPost('/api/bons-achat/verifier', { boutique_id: bId, code });
+  const res = (await apiPost('/api/bons-achat/verifier', { boutique_id: bId, code })).data;
   resultEl.style.display = 'block';
 
   if (!res?.success) {
@@ -661,7 +674,7 @@ async function annulerBon(id) {
   if (!confirm('Annuler ce bon d\'achat ? Cette action est irréversible.')) return;
 
   const bId = getBoutiqueId();
-  const res  = await apiPost(`/api/bons-achat/${id}/annuler`, { boutique_id: bId });
+  const res  = (await apiPost(`/api/bons-achat/${id}/annuler`, { boutique_id: bId })).data;
 
   if (res?.success) {
     showToast('Bon annulé.', 'success');
@@ -693,6 +706,47 @@ function _setText(id, value) {
 function _setVal(id, value) {
   const el = document.getElementById(id);
   if (el) el.value = value ?? '';
+}
+
+/**
+ * Rend la barre de pagination d'une liste et câble ses boutons.
+ *
+ * La page appelait jusqu'ici `renderPagination()`, qui n'existe **que** dans `sav.js` et y
+ * est locale à son IIFE : `ReferenceError` dès la première liste chargée. Le défaut était
+ * masqué par le bug d'enveloppe (la fonction sortait avant d'y arriver) et n'est apparu
+ * qu'une fois celui-ci corrigé, le 2026-08-02 — même classe que `getCurrentBoutiqueId()`.
+ *
+ * Les handlers sont attachés par `addEventListener`, jamais par un `onclick` qui
+ * sérialiserait la fonction de rappel dans le HTML.
+ *
+ * @param {string} containerId - Id du conteneur de la barre
+ * @param {{page:number, pages:number, total:number}} pag - Bloc `pagination` de l'API
+ * @param {(page:number) => void} onPage - Rappel de changement de page
+ */
+function _renderPagination(containerId, pag, onPage) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (!pag || pag.pages <= 1) {
+    el.textContent = `${pag?.total ?? 0} résultat(s)`;
+    return;
+  }
+
+  el.innerHTML = `
+    <span>${pag.total} résultat(s) — Page ${pag.page}/${pag.pages}</span>
+    <div class="flex gap-1">
+      ${pag.page > 1 ? `<button data-page="${pag.page - 1}" class="px-2 py-1 rounded border text-xs hover:bg-gray-100">←</button>` : ''}
+      ${Array.from({ length: Math.min(5, pag.pages) }, (_, i) => {
+        const p = Math.max(1, Math.min(pag.pages - 4, pag.page - 2)) + i;
+        return `<button data-page="${p}" class="px-2 py-1 rounded border text-xs ${p === pag.page ? 'bg-indigo-600 text-white' : 'hover:bg-gray-100'}">${p}</button>`;
+      }).join('')}
+      ${pag.page < pag.pages ? `<button data-page="${pag.page + 1}" class="px-2 py-1 rounded border text-xs hover:bg-gray-100">→</button>` : ''}
+    </div>
+  `;
+
+  el.querySelectorAll('button[data-page]').forEach(b => {
+    b.addEventListener('click', () => onPage(parseInt(b.dataset.page, 10)));
+  });
 }
 
 /**

@@ -2,6 +2,19 @@
  * caisse.js — Module Caisse POS (Sprint 2.12)
  * Exposé sur window.CaisseApp
  *
+ * ⚠️ Niveau d'enveloppe — corrigé le 2026-08-02, en dernier des cinq fichiers du § P1
+ * (`todo.md`) parce que celui-ci porte de l'argent.
+ *
+ * `apiGet`/`apiPost` renvoient `{ ok, status, data, error }` où `data` est le corps JSON
+ * complet. Les neuf sites lisaient `data.success` sur l'enveloppe — toujours `undefined`.
+ * Conséquences mesurées : KPI, journal et clôtures muets, et surtout **une vente
+ * réellement enregistrée s'affichait comme un échec** (branche `else` du `if`), ce qui
+ * invite l'exploitant à la ressaisir — un doublon de facture, avec chaînage NF525.
+ *
+ * Les lectures conservent `?.` : sur une réponse non-JSON (500 HTML), le corps est `null`,
+ * et il ne faut ni lever ni afficher un succès. Un succès ne s'affiche que si le corps
+ * lui-même porte `success: true`.
+ *
  * Fonctions publiques :
  *   init()                 → initialise la page
  *   switchTab(tab)         → journal | clotures | integrite
@@ -116,8 +129,8 @@
 
   async function refreshKpis() {
     try {
-      const data = await apiGet('/api/caisse/kpis')
-      if (!data.success) return
+      const data = (await apiGet('/api/caisse/kpis')).data
+      if (!data?.success) return
       const d = data.data
 
       setEl('kpi-nb-tx',       d.today.nb_transactions)
@@ -139,8 +152,8 @@
     const date = document.getElementById('filtre-date-journal')?.value || new Date().toISOString().slice(0, 10)
 
     try {
-      const data = await apiGet(`/api/caisse/journal?date=${date}`)
-      if (!data.success) return
+      const data = (await apiGet(`/api/caisse/journal?date=${date}`)).data
+      if (!data?.success) return
 
       const d = data.data
       const list = document.getElementById('journal-list')
@@ -197,8 +210,8 @@
 
   async function refreshClotures() {
     try {
-      const data = await apiGet('/api/caisse/clotures')
-      if (!data.success) return
+      const data = (await apiGet('/api/caisse/clotures')).data
+      if (!data?.success) return
       const list = document.getElementById('clotures-list')
       if (!list) return
 
@@ -230,13 +243,13 @@
     if (!confirm(`Clôturer définitivement la journée du ${date} ? Cette action est irréversible.`)) return
 
     try {
-      const data = await apiPost('/api/caisse/cloture', date ? { date } : {})
-      if (data.success) {
+      const data = (await apiPost('/api/caisse/cloture', date ? { date } : {})).data
+      if (data?.success) {
         toast(`Journée ${data.data.date_cloture} clôturée — ${data.data.nb_transactions} transaction(s)`, 'success')
         refreshKpis()
         refreshJournal()
       } else {
-        toast(data.error || 'Erreur clôture', 'error')
+        toast(data?.error || 'Erreur clôture', 'error')
       }
     } catch (e) {
       toast(e.message || 'Erreur serveur', 'error')
@@ -259,9 +272,9 @@
       if (debut) url += `date_debut=${debut}&`
       if (fin)   url += `date_fin=${fin}&`
 
-      const data = await apiGet(url)
-      if (!data.success) {
-        zone.innerHTML = `<div class="text-red-600 text-sm">${esc(data.error)}</div>`
+      const data = (await apiGet(url)).data
+      if (!data?.success) {
+        zone.innerHTML = `<div class="text-red-600 text-sm">${esc(data?.error ?? 'Erreur de vérification.')}</div>`
         return
       }
 
@@ -497,8 +510,8 @@
     if (!q || q.length < 2) { if (results) results.classList.add('hidden'); return }
 
     try {
-      const data = await apiGet(`/api/clients?search=${encodeURIComponent(q)}&limit=5`)
-      if (!data.success || !data.data?.length) { if (results) results.classList.add('hidden'); return }
+      const data = (await apiGet(`/api/clients?search=${encodeURIComponent(q)}&limit=5`)).data
+      if (!data?.success || !data.data?.length) { if (results) results.classList.add('hidden'); return }
 
       if (results) {
         results.classList.remove('hidden')
@@ -561,8 +574,8 @@
     }
 
     try {
-      const data = await apiPost('/api/caisse/vente', payload)
-      if (data.success) {
+      const data = (await apiPost('/api/caisse/vente', payload)).data
+      if (data?.success) {
         const rendu = data.data.rendu_monnaie
         let msg = `Vente ${data.data.facture.numero} enregistrée.`
         if (rendu && rendu > 0) msg += ` Rendu : ${eur(rendu)}`
@@ -571,7 +584,7 @@
         refreshKpis()
         refreshJournal()
       } else {
-        toast(data.error || 'Erreur', 'error')
+        toast(data?.error || 'Erreur', 'error')
       }
     } catch (e) {
       toast(e.message || 'Erreur serveur', 'error')
@@ -593,8 +606,8 @@
     if (!q || q.length < 3) { if (result) result.classList.add('hidden'); return }
 
     try {
-      const data = await apiGet(`/api/factures?search=${encodeURIComponent(q)}&limit=1`)
-      if (!data.success || !data.data?.length) {
+      const data = (await apiGet(`/api/factures?search=${encodeURIComponent(q)}&limit=1`)).data
+      if (!data?.success || !data.data?.length) {
         if (result) { result.classList.remove('hidden'); result.innerHTML = '<span class="text-red-500">Facture introuvable.</span>' }
         state.factureId = null
         return
@@ -623,14 +636,14 @@
     const mode = document.getElementById('enc-mode-paiement')?.value || 'especes'
 
     try {
-      const data = await apiPost('/api/caisse/encaissement', { facture_id: state.factureId, mode_paiement: mode })
-      if (data.success) {
+      const data = (await apiPost('/api/caisse/encaissement', { facture_id: state.factureId, mode_paiement: mode })).data
+      if (data?.success) {
         toast(`Encaissement ${data.data.reference_numero} enregistré.`, 'success')
         closeModalEnc()
         refreshKpis()
         refreshJournal()
       } else {
-        toast(data.error || 'Erreur', 'error')
+        toast(data?.error || 'Erreur', 'error')
       }
     } catch (e) {
       toast(e.message || 'Erreur serveur', 'error')

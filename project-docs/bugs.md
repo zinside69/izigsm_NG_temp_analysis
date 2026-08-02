@@ -1,5 +1,55 @@
 # iziGSM — Bugs connus
 
+## Trois XSS stockées dans les gabarits de page (trouvées et CORRIGÉES le 2026-08-02)
+
+Suite de la XSS de `buildSidebar()` fermée au checkpoint 75, qui ne traitait que la barre
+latérale. L'audit des autres gabarits restait ouvert (P3).
+
+**Root cause** : `kanban.js`, `sav.js` et `agenda.js` interpolaient des champs **saisis** dans
+`innerHTML` sans échappement — nom de client, téléphone, marque et modèle d'appareil, panne,
+diagnostic. Un client nommé `<img src=x onerror=…>` exécute du script chez quiconque ouvre le
+tableau, **y compris le compte de supervision, qui a accès à toutes les boutiques**.
+
+**Mesure** : `tests/e2e/xss-gabarits.spec.ts` injecte une charge inerte et compte les éléments
+réellement créés dans le DOM. Avant correctif : **3 `<img>`** sur le kanban. Le cas `agenda` est
+différent — le téléphone était interpolé dans un `href="tel:…"` : la charge s'échappe de
+l'**attribut**, sans avoir besoin d'une balise.
+
+**Correctif** : `echapperHtml()` (socle `app.js`) sur toute donnée d'API rendue ;
+`encodeURIComponent()` pour la partie attribut du lien téléphonique. Restent bruts à dessein les
+statuts d'énumération, libellés de colonne, montants et emojis — aucun n'est une saisie.
+
+**Ce que le test n'affirme pas** : il ne compte pas les appels à l'échappeur dans le source.
+Vérifier qu'une fonction est appelée ne dit pas que la page est sûre ; un `<img>` absent du DOM, si.
+
+## `reconditionnement.js` appelait `renderPagination()`, définie nulle part (trouvé et CORRIGÉ le 2026-08-02)
+
+**Découvert par effet de bord** : le défaut était **masqué** par le bug d'enveloppe API. `loadOrdres()`
+sortait par son `return` silencieux avant d'atteindre l'appel. Corriger l'enveloppe l'a révélé
+immédiatement — le gate de balayage du menu a remonté `renderPagination is not defined`.
+
+**Root cause** : la fonction n'existe que dans `sav.js`, **locale à son IIFE**. Aucune version
+partagée dans `app.js`. Même classe que `getCurrentBoutiqueId()` (checkpoint 74) : un appel à une
+fonction qui n'est définie nulle part.
+
+**Correctif** : `_renderPagination()` local à `reconditionnement.js`, handlers attachés par
+`addEventListener` — jamais un `onclick` qui sérialise la fonction de rappel dans le HTML, comme le
+fait la version de `sav.js`.
+
+**Leçon** : corriger un défaut qui faisait sortir tôt fait entrer le code dans des chemins que
+personne n'a jamais exécutés. Relancer le gate complet après ce genre de correction, pas seulement
+le test de la page corrigée.
+
+## `services.js` annonçait « 0 nouveau(x) / 0 total » après un import réussi (trouvé et CORRIGÉ le 2026-08-02)
+
+**Root cause** : le journal d'import lisait `res.data?.added ?? res.added`, alors que le corps
+répond `{ success, data: { modeles_added, modeles_total, … } }`. Les deux noms lus n'ont jamais
+existé — l'import fonctionnait, son compte rendu mentait.
+
+**Correctif** : `res.data?.data.modeles_added` / `modeles_total`. Le `res.ok || res.success` qui
+entourait ce bloc a été ramené à `res.ok` : `success` sur une enveloppe vaut toujours `undefined`,
+la moitié de la condition était morte.
+
 ## `/agenda` visait toujours la boutique 1, en dur (trouvé et CORRIGÉ le 2026-08-01, ticket 02)
 
 Trouvé en implémentant la bascule multi-boutique du ticket 02, en cherchant si une page

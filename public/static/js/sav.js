@@ -259,7 +259,7 @@ const SavApp = (() => {
         const actif   = g.statut === 'active'
         preview.innerHTML = `
           <div class="${actif ? 'text-green-700' : 'text-red-600'} font-semibold mb-1">
-            ${actif ? '✅' : '⚠️'} Garantie ${g.statut} — ${g.appareil_marque} ${g.appareil_modele}
+            ${actif ? '✅' : '⚠️'} Garantie ${escHtml(g.statut)} — ${escHtml(g.appareil_marque)} ${escHtml(g.appareil_modele)}
           </div>
           <div>Client : <strong>${escHtml(client)}</strong></div>
           <div>Ticket origine : <strong>${escHtml(g.ticket_numero || '—')}</strong> — Expire le <strong>${dateFin}</strong></div>

@@ -44,7 +44,12 @@ SELECT j.created_at AS quand,
 `LEFT JOIN` obligatoire : la table n'a aucune clé étrangère, et c'est voulu (ADR 0001) — un
 compte supprimé ou une boutique désactivée laissent leurs lignes intactes.
 
-À cadrer avec le reste du chantier 2 (console enrichie : CA, tickets ouverts, dernière activité).
+**Cadré le 2026-08-02** — spec et 3 tickets dans `.scratch/journal-plateforme-lecture/`.
+Décisions du grilling : deux vues (admin plateforme toutes boutiques / manager sa boutique
+seule, sans l'IP) ; la résolution du 🟠 P2 ci-dessous entre dans le chantier, via
+`assertBoutiqueOwnership()` qui dépose la cible ; libellé métier avec repli technique ;
+conservation illimitée, vue bornée à 30 jours. La console enrichie (CA, tickets ouverts,
+dernière activité) **sort** du périmètre et repart au backlog avec son propre cadrage.
 
 ## 🟠 P2 — Boutique visée « non résolue » sur les routes par ID (constaté en production, 2026-08-01)
 
@@ -121,10 +126,37 @@ au lieu de 35, et `api()` parsant le corps même sur une réponse en erreur, `su
 `tests/e2e/…§ fournisseurs affiche ses compteurs` en affichant `Received: "—"`.
 
 - [x] `fournisseurs.js` — 12 sites déballés, rendu prouvé à l'écran par un test dédié
-- [ ] `reconditionnement.js` (11 sites) et `kanban.js` (5 sites) — même méthode
-- [ ] `services.js` (5 fautifs contre 3 corrects) — **mixte**, revue site par site obligatoire
-- [ ] `caisse.js` (9 sites) — **en dernier** : porte vente, encaissement et chaînage NF525
-- [ ] Ajouter le garde-fou statique contre `r.success` sur un résultat d'`api*()`
+- [x] `reconditionnement.js` (12 sites) et `kanban.js` (5 sites) — 2026-08-02, tests de rendu dédiés
+- [x] `services.js` — revue site par site : **8 fautifs** et non 5, les 5 sites `res.ok` sont corrects et restent tels quels
+- [x] `caisse.js` (9 sites) — 2026-08-02, en dernier, avec témoin d'écriture : une vente enregistrée s'annonce enfin comme un succès
+- [x] Ajouter le garde-fou statique contre `r.success` sur un résultat d'`api*()` — `tests/frontend-enveloppe-api-conformite.test.ts`, prouvé par mutation sur un fichier réel
+
+**Deux défauts trouvés en corrigeant, absents de cet inventaire :**
+
+- `reconditionnement.js` appelait `renderPagination()`, qui n'existe **que** dans `sav.js` et
+  y est locale à son IIFE. `ReferenceError` masqué par le bug d'enveloppe : la fonction
+  sortait avant d'y arriver. Corrigé par un `_renderPagination()` local (handlers par
+  `addEventListener`, jamais un `onclick` qui sérialise la fonction de rappel). Même classe
+  que `getCurrentBoutiqueId()` — un appel à une fonction qui n'existe nulle part.
+- `services.js` affichait « 0 nouveau(x) / 0 total » après un import de modèles réussi :
+  il lisait `res.data?.added`, alors que le corps porte `data.modeles_added`.
+
+## ✅ Audit XSS des gabarits — trois injections stockées fermées (2026-08-02)
+
+Suite de la XSS de `buildSidebar()` (cp 75), qui ne traitait que la barre latérale. Balayage
+de `public/static/js/` : templates affectés à `innerHTML`/`outerHTML`, templates stockés dans
+une variable avant injection, `insertAdjacentHTML`, et les documents imprimables.
+
+- [x] `kanban.js` — nom du client, téléphone, marque, modèle, panne, diagnostic interpolés
+      bruts dans les cartes **et** le modal. **Trois `<img>` réellement injectés**, mesurés.
+- [x] `sav.js` — marque et modèle dans l'aperçu de garantie.
+- [x] `agenda.js` — téléphone du client dans un `href="tel:…"` : la charge s'échappait de
+      l'attribut, sans avoir besoin d'une balise.
+- [x] Couverture : `tests/e2e/xss-gabarits.spec.ts` (charge inerte, on compte les éléments
+      réellement créés — jamais les appels à l'échappeur dans le source).
+
+Restent bruts à dessein : statuts d'énumération, libellés de colonnes, montants, emojis —
+aucun n'est une saisie. Les documents imprimables passent déjà par `esc()`.
 
 ## ✅ 🔴 P1 — Quatre pages n'avaient aucune barre latérale (constaté à l'écran 2026-08-01, **CORRIGÉ**)
 

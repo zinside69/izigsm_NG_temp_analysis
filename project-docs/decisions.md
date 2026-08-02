@@ -1,5 +1,66 @@
 # iziGSM — Décisions
 
+## 2026-08-02 — Chantier 2 supervision : les 8 décisions du cadrage
+
+Grilling complet avant écriture de la spec (`.scratch/journal-plateforme-lecture/spec.md`).
+
+1. **Deux publics, deux vues** — admin plateforme (toutes boutiques) et manager (la sienne).
+   *Pourquoi* : l'ADR 0001 fonde le registre sur le droit du client à savoir ce qui a été fait chez
+   lui. Réservé à la plateforme, ce motif reste théorique — le registre documente sans trancher.
+2. **La résolution de `boutique_id` sur les routes `/:id` entre dans ce chantier**, pas dans un
+   suivant. *Pourquoi* : une vue manager filtrée par boutique n'affiche pas les lignes à cible
+   nulle — donc pas les factures, le cas même du litige. Un registre à trous qui **a l'air**
+   complet est pire qu'une absence de registre.
+3. **`assertBoutiqueOwnership()` dépose la cible dans le contexte**, le middleware la lit en
+   dernier recours. *Pourquoi* : la garde d'isolation et le journal veulent la même information, et
+   la garde est déjà un point de passage unique tenu par un garde-fou statique. Écarte la carte des
+   routes dans le middleware (refusée par l'ADR) et n'ajoute aucune requête SQL.
+4. **Le manager voit tout sauf l'IP.** *Pourquoi* : le corps expurgé est ce qui répond à « qu'avez-
+   vous changé sur ma facture » ; l'IP est une donnée personnelle d'un salarié de la plateforme,
+   sans utilité pour le client (minimisation RGPD).
+5. **Libellé métier avec repli sur le technique brut.** *Pourquoi* : une table de correspondance
+   sans repli devient fausse dès qu'une route nouvelle y manque — la classe de défaut corrigée le
+   matin même. Avec repli, elle vieillit sans jamais mentir.
+6. **Périmètre = journal seul.** La console enrichie (CA, tickets ouverts, dernière activité) sort
+   du chantier. *Pourquoi* : travail d'agrégats, aucune dépendance, et elle retarderait la seule
+   chose aujourd'hui à zéro — la lecture du registre.
+7. **`/journal-plateforme` + onglet « Interventions du support » dans les réglages.** *Pourquoi* :
+   les deux questions réelles côté plateforme sont « qu'a-t-on fait chez ce client » et « qu'a fait
+   cette personne » — elles exigent des filtres croisables, donc une page. Côté manager, ses
+   réglages sont l'endroit où il va déjà pour ce qui touche sa boutique.
+8. **Conservation illimitée, vue bornée à 30 jours et paginée.** *Pourquoi* : un registre invoqué
+   dans un litige sur facture doit couvrir la prescription ; la table est étroite (corps tronqué,
+   aucun binaire). Une purge est irréversible — pas une décision à prendre en passant.
+
+**Deux limites actées** : les lignes antérieures à la correction gardent `boutique_id` NULL
+(l'information n'existe plus, aucun rattrapage possible) ; les routes exemptées de garde
+d'isolation continueront d'écrire une cible nulle, affichée « (non résolue) » côté plateforme et
+structurellement invisible côté manager.
+
+## 2026-08-02 — `services.js` garde deux conventions d'enveloppe, délibérément
+
+**Décision** : dans `services.js`, les chemins Catégories et Services continuent de lire
+l'enveloppe (`res.ok` / `res.error`) ; les chemins Marques, Modèles et Liaisons ont été déballés
+(`(await apiGet(…)).data`). Le fichier reste mixte.
+
+**Pourquoi** : `res.ok` est le **statut HTTP**, plus fiable qu'un champ du corps, et ces cinq sites
+étaient corrects. Les convertir pour l'uniformité aurait modifié du code qui fonctionne, sur un
+fichier de 961 lignes, sans gain fonctionnel. Ce qui est faux et interdit, c'est `res.success` sur
+une enveloppe (toujours `undefined`) et `res.data` pris pour la charge utile (c'est le corps
+entier) — le garde-fou statique n'interdit que cela, et laisse les deux écritures correctes vivre
+côte à côte. L'en-tête du fichier dit laquelle est laquelle.
+
+## 2026-08-02 — Le garde-fou d'enveloppe ne détecte pas `res.data` pris pour la charge utile
+
+**Décision** : `tests/frontend-enveloppe-api-conformite.test.ts` n'attrape que la lecture de
+`.success` sur le résultat brut d'un `api*()`. La confusion voisine — `res.data` au lieu de
+`res.data.data` — reste hors de sa portée.
+
+**Pourquoi** : `res.data` est aussi l'écriture **correcte** pour atteindre le corps. Un détecteur
+qui la signalerait produirait des faux positifs sur du code juste, et un garde-fou qu'on apprend à
+ignorer ne garde plus rien. Ce cas reste du ressort de la revue et des tests de rendu — c'est ainsi
+qu'il a été trouvé dans `services.js` et `caisse.js`.
+
 ## 2026-08-01 — Purge des tenants E2E en local : réattribuer plutôt que supprimer les lignes NF525
 
 **Décision** : lors du ménage de la base D1 locale (checkpoint 69), les 7 lignes de la boutique 1

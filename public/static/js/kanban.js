@@ -1,6 +1,30 @@
 /**
  * kanban.js — Vue Kanban tickets iziGSM
  * Sprint 2.8 — drag & drop, priorité, ancienneté couleur
+ *
+ * ⚠️ Niveau d'enveloppe — corrigé le 2026-08-02 (même défaut que `fournisseurs.js`).
+ *
+ * `apiGet`/`apiPut` renvoient une **enveloppe** `{ ok, status, data, error }` dont `data`
+ * est le corps JSON complet. Lire `resp.success` dessus donne `undefined` : ici le
+ * chargement partait dans le `catch` et remplaçait tout le tableau par « Erreur API »,
+ * alors que la réponse était un 200 valide. Les cinq sites déballent donc au point d'appel
+ * (`(await apiGet(…)).data`).
+ *
+ * `GET /api/tickets/kanban` répond `{ success, colonnes, stats }` — les données sont à la
+ * racine du corps, pas sous `data` : ne pas « uniformiser » `resp.colonnes` en
+ * `resp.data.colonnes`.
+ *
+ * ⚠️ XSS stockée — fermée le 2026-08-02 (audit P3, suite de `buildSidebar()` au cp 75).
+ *
+ * Les cartes et le modal interpolaient dans `innerHTML` des champs saisis : nom du client,
+ * téléphone, marque et modèle d'appareil, panne, diagnostic. Un client nommé
+ * `<img src=x onerror=…>` exécutait du script chez quiconque ouvre le tableau — y compris
+ * le compte de supervision, qui a accès à toutes les boutiques. Trois `<img>` réellement
+ * injectés, mesurés par `tests/e2e/xss-gabarits.spec.ts`.
+ *
+ * Toute donnée d'API rendue ici passe par `echapperHtml()` (`app.js`). Restent bruts, à
+ * dessein, les champs qui ne viennent pas d'une saisie : `col.emoji`, `col.label`, les
+ * statuts d'énumération et les montants.
  */
 
 const KanbanApp = (() => {
@@ -42,7 +66,7 @@ const KanbanApp = (() => {
   async function refresh() {
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : '';
-      const resp   = await apiGet(`/api/tickets/kanban${params}`);
+      const resp   = (await apiGet(`/api/tickets/kanban${params}`)).data;
       if (!resp.success) throw new Error(resp.error || 'Erreur API');
       _colonnes = resp.colonnes || [];
       _stats    = resp.stats    || {};
@@ -143,28 +167,28 @@ const KanbanApp = (() => {
         <div class="pl-2">
           <!-- Numéro + priorité -->
           <div class="flex items-center justify-between mb-1.5">
-            <span class="text-xs font-bold text-blue-700">${t.numero}</span>
+            <span class="text-xs font-bold text-blue-700">${echapperHtml(t.numero)}</span>
             <span class="text-xs px-1.5 py-0.5 rounded font-semibold ${prioCls}">
-              ${PRIO_ICON[t.priorite] || ''} ${t.priorite}
+              ${PRIO_ICON[t.priorite] || ''} ${echapperHtml(t.priorite)}
             </span>
           </div>
           <!-- Appareil -->
           <p class="text-sm font-semibold text-gray-800 leading-tight">
-            ${t.appareil_marque || ''} ${t.appareil_modele || ''}
+            ${echapperHtml(t.appareil_marque || '')} ${echapperHtml(t.appareil_modele || '')}
           </p>
           <!-- Client -->
           <p class="text-xs text-gray-500 mt-0.5">
-            <i class="fas fa-user mr-1"></i>${t.client_nom || '—'}
+            <i class="fas fa-user mr-1"></i>${echapperHtml(t.client_nom || '—')}
           </p>
           <!-- Panne courte -->
-          <p class="text-xs text-gray-400 mt-1 line-clamp-1">${t.description_panne || ''}</p>
+          <p class="text-xs text-gray-400 mt-1 line-clamp-1">${echapperHtml(t.description_panne || '')}</p>
           <!-- Footer carte -->
           <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
             <span class="text-xs text-gray-400">
               <i class="fas fa-clock mr-1"></i>${jours}j
             </span>
             ${retard ? '<span class="text-xs text-red-500 font-bold"><i class="fas fa-exclamation-circle mr-1"></i>En retard</span>' : ''}
-            ${t.technicien_nom ? `<span class="text-xs text-gray-500"><i class="fas fa-user-cog mr-1"></i>${t.technicien_nom.split(' ')[0]}</span>` : ''}
+            ${t.technicien_nom ? `<span class="text-xs text-gray-500"><i class="fas fa-user-cog mr-1"></i>${echapperHtml(t.technicien_nom.split(' ')[0])}</span>` : ''}
           </div>
         </div>
       </div>`;
@@ -212,10 +236,10 @@ const KanbanApp = (() => {
 
     // Appel API
     try {
-      const resp = await apiPut(`/api/tickets/${_dragSrc.ticketId}/statut`, {
+      const resp = (await apiPut(`/api/tickets/${_dragSrc.ticketId}/statut`, {
         statut: statutDest,
         commentaire: `Déplacé via Kanban : ${_dragSrc.statutSrc} → ${statutDest}`
-      });
+      })).data;
       if (resp.success) {
         showToast(`✅ ${ticket.numero} → ${statutDest}`, 'success');
         await refresh();
@@ -232,7 +256,7 @@ const KanbanApp = (() => {
   async function openTicket(id) {
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : '';
-      const resp   = await apiGet(`/api/tickets/${id}${params}`);
+      const resp   = (await apiGet(`/api/tickets/${id}${params}`)).data;
       if (!resp.success) throw new Error(resp.error);
       const t = resp.data;
 
@@ -248,20 +272,20 @@ const KanbanApp = (() => {
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Appareil</p>
-              <p class="font-semibold">${t.appareil_marque || ''} ${t.appareil_modele || ''}</p>
+              <p class="font-semibold">${echapperHtml(t.appareil_marque || '')} ${echapperHtml(t.appareil_modele || '')}</p>
             </div>
             <div>
               <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Client</p>
-              <p class="font-semibold">${t.client_nom || '—'}</p>
-              <p class="text-gray-400 text-xs">${t.client_telephone || ''}</p>
+              <p class="font-semibold">${echapperHtml(t.client_nom || '—')}</p>
+              <p class="text-gray-400 text-xs">${echapperHtml(t.client_telephone || '')}</p>
             </div>
             <div>
               <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Statut</p>
-              <span class="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">${t.statut}</span>
+              <span class="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">${echapperHtml(t.statut)}</span>
             </div>
             <div>
               <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Priorité</p>
-              <span class="inline-block px-2 py-0.5 rounded text-xs font-bold prio-${t.priorite}">${PRIO_ICON[t.priorite] || ''} ${t.priorite}</span>
+              <span class="inline-block px-2 py-0.5 rounded text-xs font-bold prio-${echapperHtml(t.priorite)}">${PRIO_ICON[t.priorite] || ''} ${echapperHtml(t.priorite)}</span>
             </div>
             <div>
               <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Réception</p>
@@ -278,11 +302,11 @@ const KanbanApp = (() => {
           <!-- Panne / Diagnostic -->
           <div class="bg-gray-50 rounded-lg p-3 text-sm">
             <p class="text-gray-500 text-xs uppercase font-semibold mb-1">Panne décrite</p>
-            <p>${t.description_panne || '—'}</p>
+            <p>${echapperHtml(t.description_panne || '—')}</p>
           </div>
           ${t.diagnostic ? `<div class="bg-blue-50 rounded-lg p-3 text-sm">
             <p class="text-blue-600 text-xs uppercase font-semibold mb-1">Diagnostic</p>
-            <p>${t.diagnostic}</p>
+            <p>${echapperHtml(t.diagnostic)}</p>
           </div>` : ''}
 
           <!-- Prix -->
@@ -347,10 +371,10 @@ const KanbanApp = (() => {
   // ─── Changement statut depuis modal ─────────────────────────────────────────
   async function changeStatut(id, statut) {
     try {
-      const resp = await apiPut(`/api/tickets/${id}/statut`, {
+      const resp = (await apiPut(`/api/tickets/${id}/statut`, {
         statut,
         commentaire: `Changement via Kanban modal → ${statut}`
-      });
+      })).data;
       if (resp.success) {
         showToast(`✅ Statut → ${statut}`, 'success');
         closeModal();
@@ -366,7 +390,7 @@ const KanbanApp = (() => {
   // ─── Changement priorité ─────────────────────────────────────────────────────
   async function changePriorite(id, priorite) {
     try {
-      const resp = await apiPut(`/api/tickets/${id}`, { priorite });
+      const resp = (await apiPut(`/api/tickets/${id}`, { priorite })).data;
       if (resp.success) {
         showToast(`✅ Priorité → ${priorite}`, 'success');
         closeModal();

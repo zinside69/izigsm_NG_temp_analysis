@@ -2,6 +2,23 @@
  * iziGSM — services.js
  * Catalogue services hiérarchique (Sprint 2.4)
  * Connecté à /api/services/* via ApiService (app.js — Principe 5)
+ *
+ * ⚠️ Niveau d'enveloppe — revu site par site le 2026-08-02.
+ *
+ * `apiGet`/`apiPost`/… renvoient `{ ok, status, data, error }` où `data` est le corps JSON
+ * complet, lui-même de la forme `{ success, data, … }`. Ce fichier était **mixte** : les
+ * chemins Catégories et Services lisaient correctement l'enveloppe (`res.ok`, `res.error`),
+ * tandis que les chemins Marques, Modèles et Liaisons lisaient `res.success` ou prenaient
+ * `res.data` pour la charge utile — donc marques et modèles vides à l'écran, malgré un
+ * référentiel de 760 marques en base.
+ *
+ * Les deux conventions coexistent toujours, et c'est délibéré :
+ *   - lire l'enveloppe : `res.ok` / `res.error` (statut HTTP, plus fiable qu'un champ du corps) ;
+ *   - ou déballer une fois au point d'appel : `const res = (await apiGet(…)).data`,
+ *     puis `res?.success` / `res?.data`.
+ *
+ * Ce qui est **toujours faux** : `res.success` sur une enveloppe (undefined), et `res.data`
+ * pris pour la charge utile (c'est le corps entier).
  */
 
 // ─── État module ──────────────────────────────────────────────────────────────
@@ -450,8 +467,8 @@ let _selectedMarque = null;
 let _marquesLoaded  = false;
 
 async function loadMarques() {
-  const res = await apiGet('/api/services/marques');
-  _marques = res.data || [];
+  const res = (await apiGet('/api/services/marques')).data;
+  _marques = res?.data || [];
   _marquesLoaded = true;
   renderMarques();
   if (_marques.length > 0) selectMarque(_marques[0].id);
@@ -512,9 +529,9 @@ async function saveMarque() {
 
   const method = id ? 'PUT' : 'POST';
   const url    = id ? `/api/services/marques/${id}` : '/api/services/marques';
-  const res = method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body);
+  const res = (method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body)).data;
 
-  if (!res.success) return alert(res.error || 'Erreur lors de l\'enregistrement.');
+  if (!res?.success) return alert(res?.error || 'Erreur lors de l\'enregistrement.');
   closeModal('modal-marque');
   await loadMarques();
 }
@@ -542,8 +559,8 @@ let _modelesFull = [];
 const TYPE_LABELS = { smartphone:'📱', tablette:'📟', pc:'💻', console:'🎮', autre:'📦' };
 
 async function loadModeles(marqueId) {
-  const res  = await apiGet(`/api/services/modeles?marque_id=${marqueId}`);
-  _modeles     = res.data || [];
+  const res  = (await apiGet(`/api/services/modeles?marque_id=${marqueId}`)).data;
+  _modeles     = res?.data || [];
   _modelesFull = [..._modeles];
   renderModeles();
 }
@@ -617,9 +634,9 @@ async function saveModele() {
 
   const method = id ? 'PUT' : 'POST';
   const url    = id ? `/api/services/modeles/${id}` : '/api/services/modeles';
-  const res    = method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body);
+  const res    = (method === 'PUT' ? await apiPut(url, body) : await apiPost(url, body)).data;
 
-  if (!res.success) return alert(res.error || 'Erreur.');
+  if (!res?.success) return alert(res?.error || 'Erreur.');
   closeModal('modal-modele');
   await loadModeles(_selectedMarque);
   await loadMarques(); // refresh nb_modeles
@@ -646,8 +663,8 @@ async function openModalLiaison(modeleId, modeleName) {
 
   // Charger tous les services pour le select
   if (!_allServices.length) {
-    const res = await apiGet('/api/services?limit=200');
-    _allServices = res.data || [];
+    const res = (await apiGet('/api/services?limit=200')).data;
+    _allServices = res?.data || [];
   }
   const sel = document.getElementById('liaison-service-select');
   sel.innerHTML = `<option value="">— Sélectionner un service —</option>` +
@@ -658,8 +675,9 @@ async function openModalLiaison(modeleId, modeleName) {
 }
 
 async function refreshLiaisonList(modeleId) {
-  const res  = await apiGet(`/api/services/modeles/${modeleId}/services`);
-  const svcs = res.data?.services || [];
+  // `GET /api/services/modeles/:id/services` répond `{ success, data: { modele, services } }`.
+  const res  = (await apiGet(`/api/services/modeles/${modeleId}/services`)).data;
+  const svcs = res?.data?.services || [];
 
   const el = document.getElementById('liaison-services-list');
   if (!svcs.length) {
@@ -687,11 +705,11 @@ async function addLiaison() {
 
   if (!serviceId) return alert('Sélectionner un service.');
 
-  const res = await apiPost(`/api/services/modeles/${modeleId}/services`, {
+  const res = (await apiPost(`/api/services/modeles/${modeleId}/services`, {
     service_id:          serviceId,
     prix_ht_specifique:  prix,
-  });
-  if (!res.success) return alert(res.error || 'Erreur.');
+  })).data;
+  if (!res?.success) return alert(res?.error || 'Erreur.');
   document.getElementById('liaison-service-select').value = '';
   document.getElementById('liaison-prix-specifique').value = '';
   await refreshLiaisonList(modeleId);
@@ -831,7 +849,7 @@ async function importAllBrands() {
   btn.disabled = true;
   btn.textContent = '⏳ Import…';
   const res = await apiPost('/api/services/catalog/sync-brands', {});
-  if (res.ok || res.success) {
+  if (res.ok) {
     showFlash(`Marques importées !`, 'success');
     await loadMarques();        // rafraîchir la liste principale
     await _loadSyncStatus();    // rafraîchir la liste sync
@@ -878,9 +896,13 @@ async function startSync() {
 
     try {
       const res = await apiPost(`/api/services/catalog/sync-modeles/${slug}`, {});
-      if (res.ok || res.success) {
-        const added = res.data?.added ?? res.added ?? 0;
-        const total_modeles = res.data?.total ?? res.total ?? 0;
+      if (res.ok) {
+        // Le corps est `{ success, data: { modeles_added, modeles_total, … } }` : les
+        // anciens noms `added`/`total` n'ont jamais existé, le journal d'import affichait
+        // donc « 0 nouveau(x) / 0 total » même après un import réussi.
+        const d = res.data?.data ?? {};
+        const added = d.modeles_added ?? 0;
+        const total_modeles = d.modeles_total ?? 0;
         totalAdded += added;
         _log(`  ✓ ${marqueNom} — ${added} nouveau(x) / ${total_modeles} total`, '#059669');
       } else {

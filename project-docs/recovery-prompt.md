@@ -1,3 +1,59 @@
+# Recovery Prompt — iziGSM — 2026-08-02 (checkpoint 76 — enveloppe API close, 3 XSS, chantier 2 cadré)
+
+## Reprendre ici
+
+⚠️ **Rien n'est commité ni déployé.** Tout le travail du checkpoint 76 est en working copy :
+8 fichiers modifiés, 4 ajoutés. Production toujours à `CACHE_VERSION` `izigsm-v2.88`
+(checkpoint 75). Aucune migration en attente — la dernière reste `0039`.
+
+Commit proposé et **non exécuté** :
+`fix(frontend): enveloppe API sur 4 pages, garde-fou statique, 3 XSS stockees fermees`
+
+Le chantier suivant est **cadré et prêt** : `.scratch/journal-plateforme-lecture/` — spec + 3
+tickets. Le ticket 001 n'a aucun bloqueur. Un ticket = une fenêtre de contexte neuve.
+
+Priorités, dans cet ordre :
+
+1. **Commiter le travail en cours**, puis décider du déploiement (jamais automatique).
+   `CACHE_VERSION` devra être incrémenté : le lot touche 6 fichiers de `public/static/js/`.
+2. **Ticket 001** — résolution de la boutique visée via `assertBoutiqueOwnership()`.
+3. Tickets 002 puis 003 (003 est bloqué par les deux autres).
+4. **Vérification métier jamais faite** : enregistrer une vente en caisse **en production**
+   depuis le compte de supervision. En attente depuis le checkpoint 72 ; désormais couverte en
+   local par `resolveur-boutique-pages.spec.ts`, ce qui n'est pas la même chose.
+
+## Ce qui a changé, et ne doit pas être redécouvert
+
+- **Le niveau d'enveloppe API est clos** sur les 5 fichiers (`fournisseurs`, `reconditionnement`,
+  `kanban`, `services`, `caisse`). Un garde-fou statique
+  (`tests/frontend-enveloppe-api-conformite.test.ts`) fait rouge la suite si `.success` est lu sur
+  le résultat brut d'un `api*()`. Il ne détecte **pas** `res.data` pris pour la charge utile —
+  volontairement, c'est aussi l'écriture correcte (`decisions.md`).
+- **`services.js` reste mixte, délibérément** : `res.ok`/`res.error` sur les chemins Catégories et
+  Services, déballage sur Marques/Modèles/Liaisons. Ne pas « uniformiser ».
+- **Corriger un défaut qui faisait sortir tôt fait entrer le code dans des chemins jamais
+  exécutés.** Deux défauts sont apparus ainsi (`renderPagination` introuvable, compte rendu
+  d'import faux). Relancer le **gate complet**, jamais le seul test de la page corrigée.
+- **Un test peut être vert parce qu'il n'atteint pas le gabarit fautif.** Le test XSS d'`agenda`
+  passait avant correctif : le téléphone n'apparaît que dans le détail du rendez-vous, il fallait
+  cliquer. Vérifier qu'un test est rouge **pour la bonne raison**.
+- **Le balayage du menu est passé à 120 s** (`test.setTimeout`) : les pages rendent maintenant
+  réellement leurs listes. Ne pas réduire la couverture ou l'observation pour le faire tenir en 30 s.
+- **`echapperHtml()` (`app.js`) est l'échappeur du socle**, disponible sur toute page qui charge
+  `app.js`. `sav.js`/`agenda.js` ont leur `escHtml()` local, `tickets.js` un `esc()` — trois noms
+  pour la même chose, pas d'unification tentée.
+
+## État du dépôt
+
+`main` : `73566e7` (docs cp 75). Le travail du checkpoint 76 n'est pas dessus.
+Baselines : `npx vitest run` → **893/895** (2 échecs permanents de fuseau `agendaService`),
+`npx tsc --noEmit` → **32**, `npx playwright test` → **186/186**.
+
+Serveur local en cours d'exécution sur `:3000` au moment du checkpoint
+(`npx wrangler pages dev dist --local`). `taskkill //F //IM workerd.exe` avant toute relance.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-01 (checkpoint 75 — les 19 pages du menu)
 
 ## Reprendre ici

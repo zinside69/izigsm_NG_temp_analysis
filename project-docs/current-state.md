@@ -1,3 +1,83 @@
+# iziGSM — État courant (MàJ : 2026-08-02, checkpoint 76 — l'enveloppe API fermée sur les 5 fichiers, 3 XSS, chantier 2 cadré)
+
+## Checkpoint 76 — Ce qui ne s'affichait pour personne s'affiche (2026-08-02)
+
+Session de reprise sur les quatre priorités laissées par le checkpoint 75, dans l'ordre annoncé.
+**Rien n'est déployé** : tout est en working copy au moment de ce checkpoint.
+
+### Ce qui est livré
+
+**Le niveau d'enveloppe API est clos sur les cinq fichiers.** `reconditionnement.js` (12 sites),
+`kanban.js` (5), `services.js` (8 fautifs), `caisse.js` (9, traité en dernier). Chaque page a
+désormais un test de **rendu** — pas un test de requête : c'est la seule façon de distinguer « la
+page n'a pas planté » de « la page fonctionne ».
+
+**`services.js` avait 8 sites fautifs, pas 5.** L'inventaire du checkpoint 75 les comptait par
+`res.success` seul ; il manquait trois `res.data` pris pour la charge utile (marques, modèles,
+services liés). La revue site par site que `todo.md` exigeait était justifiée — un remplacement
+mécanique aurait laissé la moitié du fichier muet.
+
+**`caisse.js` : le défaut était pire que « la page est vide ».** Une vente **réellement
+enregistrée** partait dans la branche `else` et s'affichait comme un échec. L'exploitant la
+ressaisit — doublon de facture, avec chaînage NF525. Le test de ce fichier enregistre donc une
+vraie vente et vérifie le succès annoncé **et** le compteur de transactions.
+
+**Garde-fou statique contre la classe entière** :
+`tests/frontend-enveloppe-api-conformite.test.ts`. Il embarque sa preuve par mutation (deux cas
+fautifs, deux cas corrects) et a été vérifié en remettant le défaut réel dans `kanban.js` — rouge,
+fichier et ligne exacts. Il retire les commentaires avant analyse : sans cela, les en-têtes qui
+documentent le défaut (« ne jamais réintroduire `res.success` ») déclencheraient le garde-fou censé
+l'empêcher.
+
+**Trois XSS stockées fermées** — `kanban.js` (3 `<img>` réellement injectés), `sav.js`,
+`agenda.js` (charge s'échappant d'un `href="tel:"`). Détail dans `bugs.md`. Balayage complet
+ensuite : plus aucune interpolation de champ saisi hors échappeur, `insertAdjacentHTML` et
+documents imprimables compris.
+
+**Chantier 2 de la supervision cadré** — grilling (8 décisions, `decisions.md`), spec et 3 tickets
+dans `.scratch/journal-plateforme-lecture/`. Volontairement **non implémenté** : le tracker impose
+un ticket par fenêtre de contexte neuve.
+
+### Deux défauts trouvés en corrigeant, absents de tout inventaire
+
+Les deux étaient **masqués** par le bug d'enveloppe — le code sortait avant de les atteindre.
+
+- `reconditionnement.js` appelait `renderPagination()`, qui n'existe que dans `sav.js`, locale à
+  son IIFE. Trouvé par le gate de balayage **après** le correctif, pas avant.
+- `services.js` annonçait « 0 nouveau(x) / 0 total » après un import de modèles réussi.
+
+**La leçon du jour** : corriger un défaut qui faisait sortir tôt fait entrer le code dans des
+chemins que personne n'a jamais exécutés. Relancer le **gate complet** après ce genre de
+correction, jamais seulement le test de la page corrigée.
+
+### Un test qui devenait faux vert
+
+Le balayage du menu (`aucune page du menu de gauche ne casse`) a commencé à dépasser le timeout de
+30 s : les pages rendent maintenant réellement leurs listes au lieu de sortir immédiatement. Porté
+à 120 s pour ce test seul. Réduire la couverture ou le temps d'observation aurait rendu le gate
+vert en le rendant aveugle.
+
+Même vigilance sur le test XSS d'`agenda` : sa première version passait **avant** correctif, parce
+qu'elle s'arrêtait à la vue liste — le téléphone n'apparaît que dans le détail du rendez-vous. Elle
+n'a été rouge qu'une fois le clic ajouté.
+
+### Vérifications
+
+`npx playwright test` → **186/186** · `npx vitest run` → **893/895** (les 2 échecs permanents de
+fuseau `agendaService`) · `npx tsc --noEmit` → **32**, la baseline.
+
+Le premier jet du garde-fou ajoutait une 33ᵉ erreur `tsc` (paramètre implicitement `any`) —
+corrigée avant checkpoint.
+
+### Reste ouvert
+
+- **Rien n'est commité ni déployé.** 8 fichiers modifiés, 4 ajoutés (2 specs de test, spec de
+  chantier, 3 tickets).
+- Chantier 2 : ticket 001 prenable immédiatement, sans bloqueur.
+- Toujours pas de vente enregistrée **en production** depuis le compte de supervision (la
+  vérification métier de bout en bout, en attente depuis le checkpoint 72). Elle est désormais
+  couverte en local par un test.
+
 # iziGSM — État courant (MàJ : 2026-08-01, checkpoint 75 — les 19 pages du menu, et trois régressions de ma main)
 
 ## Checkpoint 75 — Barre latérale sur tout le menu, page 404, XSS du socle (2026-08-01)

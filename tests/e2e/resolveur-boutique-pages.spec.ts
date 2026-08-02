@@ -148,6 +148,13 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
   ]
 
   test('aucune page du menu de gauche ne casse pour un admin plateforme', async ({ page, request }) => {
+    // 20 pages × (navigation + 1,2 s d'observation) dépasse le timeout global de 30 s. Ce
+    // test le frôlait déjà ; depuis la correction du niveau d'enveloppe (2026-08-02) les
+    // pages rendent réellement leurs listes au lieu de sortir par un `return` immédiat, et
+    // il le franchit. Le balayage est un gate : on lui donne son temps plutôt que de
+    // réduire la couverture ou l'observation.
+    test.setTimeout(120_000)
+
     // Balayage demandé après le constat en production du 2026-08-01 : deux défauts
     // distincts rendaient des pages inutilisables et aucun test ne les couvrait — une
     // réponse d'API en erreur (`apiGet` et sa query doublée), et une exception JS qui tue
@@ -244,6 +251,84 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     const compteur = page.locator('#kpi-nb-fournisseurs')
     await expect(compteur).not.toHaveText('—', { timeout: 15_000 })
     await expect(compteur).toHaveText(/^\d+$/)
+  })
+
+  test('reconditionnement affiche ses compteurs, et non des tirets', async ({ page, request }) => {
+    // Même classe de défaut que `fournisseurs` ci-dessus, mesurée sur 11 sites
+    // (`todo.md` § P1) : `res.success` lu au niveau de l'enveloppe d'`apiGet` sort par un
+    // `return` silencieux, et les KPI restent au tiret cadratin du gabarit.
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+    await page.goto('/reconditionnement')
+
+    const compteur = page.locator('#kpi-en-cours')
+    await expect(compteur).not.toHaveText('—', { timeout: 15_000 })
+    await expect(compteur).toHaveText(/^\d+$/)
+  })
+
+  test('kanban affiche son tableau, et non une erreur', async ({ page, request }) => {
+    // `kanban.js` lit lui aussi `resp.success` sur l'enveloppe : `undefined` fait lever
+    // « Erreur API » dans le `catch`, qui remplace tout le tableau par un message rouge.
+    // Le témoin est donc double — le compteur d'actifs paraît, et le board n'affiche pas
+    // d'erreur.
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+    await page.goto('/kanban')
+
+    const actifs = page.locator('#stat-actifs')
+    await expect(actifs).toBeVisible({ timeout: 15_000 })
+    await expect(actifs).toHaveText(/^\d+ actifs$/)
+    await expect(page.locator('#kanban-board')).not.toContainText('Erreur API')
+  })
+
+  test('services affiche le référentiel des marques, et non un état vide', async ({ page, request }) => {
+    // `services.js` est le cas **mixte** du § P1 de `todo.md` : cinq sites lisent
+    // correctement l'enveloppe (`res.ok`), huit la lisent au mauvais niveau. Le témoin
+    // choisi est le référentiel des marques, qui est **global** (aucun `boutique_id`) :
+    // une boutique neuve doit donc en voir, et un écran « Aucune marque » ne peut pas
+    // s'expliquer par l'absence de données.
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+    await page.goto('/services')
+    await page.click('#tab-modeles')
+
+    const liste = page.locator('#marques-list')
+    await expect(liste.locator('.marque-item').first()).toBeVisible({ timeout: 15_000 })
+    await expect(liste).not.toContainText('Aucune marque')
+  })
+
+  test('caisse enregistre une vente et l’annonce comme un succès', async ({ page, request }) => {
+    // Le seul des cinq fichiers du § P1 qui porte de l'argent. Avant correction, la vente
+    // **était écrite** (l'API répondait 201) mais `data.success` lu sur l'enveloppe valait
+    // `undefined` : la page affichait « Erreur ». Un exploitant ressaisit alors la vente —
+    // doublon de facture, avec chaînage NF525. Le témoin est donc double : le toast de
+    // succès, et le compteur de transactions qui passe à 1.
+    const { nomBoutique } = await creerBoutique(request)
+
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+    await page.goto('/caisse')
+
+    // Une boutique neuve n'a aucune transaction : le KPI doit afficher 0, pas le tiret.
+    await expect(page.locator('#kpi-nb-tx')).toHaveText('0', { timeout: 15_000 })
+
+    await page.click('button:has-text("Nouvelle vente")')
+    await page.click('button:has-text("Ajouter une ligne")')
+    await page.fill('[data-field="designation"]', 'Vitre arrière')
+    // La ligne n'expose que `designation` en `data-field` ; les trois champs numériques
+    // sont, dans l'ordre du gabarit : quantité, prix unitaire HT, remise.
+    await page.locator('.linha-row input[type="number"]').nth(1).fill('50')
+    await page.fill('#montant-remis', '100')
+    await page.click('#btn-submit-vente')
+
+    await expect(page.locator('#toast-inner')).toContainText(/enregistrée/i, { timeout: 15_000 })
+    await expect(page.locator('#kpi-nb-tx')).toHaveText('1')
   })
 
   test('sans sélection, aucune page hors socle ne vise une boutique au hasard', async ({ page }) => {

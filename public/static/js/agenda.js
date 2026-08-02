@@ -494,7 +494,7 @@ function openDetailRdv(rdv) {
     <div class="flex items-center gap-2 text-gray-600">
       <i class="fas fa-user w-4 text-green-400"></i>
       <span>${escHtml(clientLabel)}</span>
-      ${rdv.client_tel ? `<a href="tel:${rdv.client_tel}" class="text-blue-500 ml-1">${rdv.client_tel}</a>` : ''}
+      ${rdv.client_tel ? `<a href="tel:${encodeURIComponent(rdv.client_tel)}" class="text-blue-500 ml-1">${escHtml(rdv.client_tel)}</a>` : ''}
     </div>
     ${rdv.tech_prenom ? `<div class="flex items-center gap-2 text-gray-600">
       <i class="fas fa-user-tie w-4 text-purple-400"></i>

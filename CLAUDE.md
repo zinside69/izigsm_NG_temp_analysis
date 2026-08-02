@@ -279,8 +279,42 @@ pas. `fournisseurs.js` et `caisse.js` n'avaient jamais rien affiché, pour aucun
 - **Parade au point d'appel** : `const res = (await apiGet(…)).data`. Un site au lieu de
   trente-cinq, et `api()` parsant le corps même sur une réponse en erreur, `success` et
   `error` survivent au déballage.
-- **Reste à corriger** (`todo.md`) : `reconditionnement.js`, `kanban.js`, `services.js`
-  (mixte), et `caisse.js` **en dernier** — il porte vente, encaissement et chaînage NF525.
+- **Les 5 fichiers sont corrigés** (2026-08-02) : `fournisseurs`, `reconditionnement`,
+  `kanban`, `services`, `caisse`. Chacun porte un test de **rendu**, pas de requête.
+
+**Garde-fou statique — `tests/frontend-enveloppe-api-conformite.test.ts`.** La suite échoue
+si une variable portant l'enveloppe est lue en `.success`. Il retire les commentaires avant
+analyse : les en-têtes qui documentent le défaut le déclencheraient sinon. Deux écritures
+restent permises côte à côte — lire l'enveloppe (`res.ok` / `res.error`, le statut HTTP) ou
+déballer (`.data`). Ce qui est toujours faux : `res.success` sur une enveloppe, et `res.data`
+pris pour la charge utile.
+
+Ce que le garde-fou **ne** couvre pas : `res.data` au lieu de `res.data.data`. Indétectable
+sans faux positifs — `res.data` est aussi l'écriture correcte pour atteindre le corps
+(`decisions.md`). Ce cas reste du ressort de la revue et des tests de rendu.
+
+`services.js` garde **deux conventions, délibérément** : `res.ok` sur les chemins Catégories
+et Services (corrects), déballage sur Marques/Modèles/Liaisons. Ne pas uniformiser.
+
+## Gabarits et XSS stockée — règle de câblage (depuis 2026-08-02)
+
+Toute donnée d'API rendue dans `innerHTML`/`outerHTML` passe par un échappeur. Le socle
+expose `echapperHtml()` (`app.js`), disponible sur toute page qui charge `app.js` ;
+`sav.js`/`agenda.js` ont un `escHtml()` local et `tickets.js` un `esc()` — trois noms pour la
+même chose, aucune unification tentée.
+
+- **Le vecteur n'est pas hypothétique** : trois `<img>` étaient réellement injectés dans le
+  kanban par un nom de client (`bugs.md`). La victime la plus exposée est le compte de
+  supervision, qui a accès à toutes les boutiques.
+- **Un attribut se perce sans balise** : le téléphone interpolé dans `href="tel:${…}"`
+  s'échappait de l'attribut. Échapper la partie texte **et** encoder la partie URL.
+- **Le corps expurgé du journal de plateforme est une saisie utilisateur réinjectée** : la
+  future vue du chantier 2 doit l'échapper comme le reste.
+- **Couverture** : `tests/e2e/xss-gabarits.spec.ts` injecte une charge inerte et compte les
+  éléments **réellement créés** dans le DOM. Ne jamais remplacer cette mesure par un comptage
+  d'appels à l'échappeur dans le source — vérifier qu'une fonction est appelée ne dit pas que
+  la page est sûre.
+- Restent bruts à dessein : statuts d'énumération, libellés de colonne, montants, emojis.
 
 ## Mémoire projet (context-guardian)
 
