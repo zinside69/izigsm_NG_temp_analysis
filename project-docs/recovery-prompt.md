@@ -11,6 +11,11 @@ production depuis le compte de supervision (`FAC-2026-00003`, 60 € TTC), chaî
 intègre, ligne écrite dans `journal_actions_plateforme` (`POST /api/caisse/vente -> 201`,
 boutique 1). Ne pas la redemander.
 
+**Vérifié depuis les deux rôles**, pas seulement la supervision : un manager (boutique 2) voit ses
+pages rendues, sans bandeau de plateforme, et son `?boutique_id=1` est ignoré par le serveur. La
+vente de test est attribuée au compte de supervision dans la chaîne NF525 du client — voir
+`current-state.md`, c'est une propriété du système, pas un défaut.
+
 Le chantier suivant est **cadré et prêt** : `.scratch/journal-plateforme-lecture/` — spec + 3
 tickets. Le ticket 001 n'a aucun bloqueur. Un ticket = une fenêtre de contexte neuve.
 

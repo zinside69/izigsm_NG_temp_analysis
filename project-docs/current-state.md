@@ -106,10 +106,51 @@ La boutique est résolue ici parce que `apiPost` pose `?boutique_id=` sur l'URL 
 La ligne 2 du même journal montre le défaut que le ticket 001 doit corriger, sur données réelles :
 `DELETE /api/clients/20 -> 200` avec **`boutique_id` NULL**.
 
+### Vérifié aussi depuis un compte manager — c'est lui que les correctifs servent
+
+Le premier passage n'avait été fait que depuis la supervision. Or ces pages ne s'affichaient
+**pour aucun rôle** : le rôle qui les utilise tous les jours est le manager. Contrôlé sur
+« Saïd test / MyDesk » (boutique 2) : caisse (KPI numériques, aucun bandeau de supervision —
+correct, il est réservé à la plateforme), reconditionnement (pagination rendue), kanban
+(6 actifs, ses propres tickets), services (référentiel global visible), fournisseurs. Aucune
+erreur de console.
+
+**Isolation vérifiée côté serveur**, depuis sa session :
+
+```
+appel nominal            → 6 tickets (TKT-2026-00001,3,4,5,6,7)
+avec ?boutique_id=1      → LES MÊMES 6 → le paramètre est ignoré pour un manager
+recherche FAC-2026-00003 → renvoie FAC-2026-00002 (la sienne), jamais celle de la boutique 1
+```
+
+Conforme à `middleware.ts` : le `?boutique_id=` n'est honoré que selon le rôle. À ne pas
+confondre avec la garantie plus forte qu'on serait tenté d'en déduire — un admin *de boutique*
+voit lui aussi son paramètre honoré (noté au checkpoint 73).
+
+### À qui la vente de test est attribuée
+
+Question posée après coup, vérifiée en base plutôt que déduite de l'écran :
+
+```
+FAC-2026-00003 | user_id 1 | support@soteli.fr — « Admin iziGSM » | user.boutique_id = NULL
+               | ligne NF525 boutique_id = 1 (iziGSM Paris 11)
+```
+
+L'écriture est rattachée à la bonne boutique, mais **le caissier inscrit dans la chaîne NF525 est
+le compte de supervision**, pas un employé du client. C'est cohérent avec la traçabilité voulue
+(et c'est la raison d'être du journal des actions de plateforme), mais il faut le savoir : dans le
+registre NF525 d'un client, une intervention de la plateforme porte le nom d'un tiers. À comparer
+avec `FAC-2026-00002`, passée par un vrai manager (`user_id 5`, boutique 2).
+
 ### Reste ouvert
 
 - Chantier 2 : ticket 001 prenable immédiatement, sans bloqueur — et désormais justifié par une
   ligne réelle du journal de production, pas seulement par un raisonnement.
+- Vente de test `FAC-2026-00003` (60 € TTC) laissée dans les comptes de « iziGSM Paris 11 ».
+  S'annule par un avoir si elle gêne — non fait.
+- Non creusé : le CA du mois du manager affiche `0,00 €` alors qu'il porte `FAC-2026-00002`.
+  Hors du mois courant, ou facture non passée par la caisse — à vérifier avant d'en conclure
+  quoi que ce soit.
 - L'audit XSS n'a **pas** été rejoué en production : le faire supposerait d'écrire une charge
   piégée chez un vrai tenant. La couverture est locale (`xss-gabarits.spec.ts`) et le bundle servi
   contient bien `echapperHtml`.
