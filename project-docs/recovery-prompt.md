@@ -16,17 +16,32 @@ pages rendues, sans bandeau de plateforme, et son `?boutique_id=1` est ignoré p
 vente de test est attribuée au compte de supervision dans la chaîne NF525 du client — voir
 `current-state.md`, c'est une propriété du système, pas un défaut.
 
-Le chantier suivant est **cadré et prêt** : `.scratch/journal-plateforme-lecture/` — spec + 3
-tickets. Le ticket 001 n'a aucun bloqueur. Un ticket = une fenêtre de contexte neuve.
+**Deux chantiers sont cadrés et prêts.** Un ticket = une fenêtre de contexte neuve.
 
-Priorités, dans cet ordre :
+**A. `.scratch/conformite-facturation/` — spec + 4 tickets. Priorité, c'est du légal.**
+Invariant posé par l'exploitant : *une facture créée est persistante, non modifiable, non
+supprimable, chaînée ; annuler = avoir lié ; ⊥ trou entre les numéros*.
+- 001 (aucun bloqueur) — le numéro n'est attribué qu'à l'**émission**. `nextNumero()` était appelé
+  avant l'`INSERT` : tout échec brûlait un numéro. Deux trous réels en production (boutique 1).
+- 002 (bloqué par 001) — vente de caisse `locked = 1` ⇒ annulable par avoir. Aujourd'hui **aucune
+  vente encaissée n'est corrigeable**, pour aucun rôle.
+- 003 (aucun bloqueur) — immuabilité **explicite** + test statique anti-réouverture.
+- 004 (`ready-for-human`) — note traçable pour les trous existants, sort du caissier tiers.
 
-1. **Ticket 001** — résolution de la boutique visée via `assertBoutiqueOwnership()`. Justifié par
-   une ligne réelle du journal de production : `DELETE /api/clients/20 -> 200` avec
-   `boutique_id` **NULL**.
-2. Ticket 002 (vue plateforme), puis 003 (vue manager, bloqué par les deux autres).
-3. L'audit XSS n'a pas été rejoué en production — le faire supposerait d'écrire une charge piégée
-   chez un vrai tenant. Couverture locale seulement (`xss-gabarits.spec.ts`).
+⚠️ **Ne jamais** toucher `journal_nf525` en direct ni réécrire un numéro émis : chaîne de hash,
+`nf525/verify` passe au vert aujourd'hui.
+
+⚠️ **La séparation par tenant existe déjà** — numérotation, chaînage, lien avoir↔facture. Vérifié
+en production, preuves dans `decisions.md`. Ne pas relancer ce diagnostic.
+
+**B. `.scratch/journal-plateforme-lecture/` — spec + 3 tickets.**
+- 001 (aucun bloqueur) — résolution de la boutique visée via `assertBoutiqueOwnership()`. Justifié
+  par une ligne réelle du journal de production : `DELETE /api/clients/20 -> 200`, `boutique_id`
+  **NULL**.
+- 002 (vue plateforme), puis 003 (vue manager, bloqué par les deux autres).
+
+Reste noté : l'audit XSS n'a pas été rejoué en production — le faire supposerait d'écrire une
+charge piégée chez un vrai tenant. Couverture locale seulement (`xss-gabarits.spec.ts`).
 
 ## Ce qui a changé, et ne doit pas être redécouvert
 

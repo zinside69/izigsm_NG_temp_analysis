@@ -1,5 +1,50 @@
 # iziGSM — Décisions
 
+## 2026-08-02 — Conformité de la facturation : l'invariant posé par l'exploitant
+
+**Décision, mot pour mot** : une facture créée est **persistante, non modifiable, non
+supprimable**, chaînée NF525. Annuler comptablement = créer un **avoir**. Facture et avoir
+restent **toujours liés**. ⊥ trou entre les numéros. Série et chaînage **propres à chaque tenant**.
+
+**Pourquoi** : art. 289 CGI (numérotation continue) et NF525 (correction par document
+rectificatif, jamais par suppression). Une série à trous est ce qu'un contrôle cherche en premier.
+
+Trois décisions dérivées, prises le même jour :
+
+1. **Le numéro n'est attribué qu'à l'émission**, plus à la création. *Pourquoi* : `nextNumero()`
+   était appelé avant l'`INSERT` — tout échec entre les deux brûlait un numéro sans laisser de
+   document. Numéroter à l'émission supprime la classe entière, pas seulement le cas du brouillon
+   abandonné.
+2. **Les trous existants ne seront pas rebouchés par des factures rétroactives.** *Pourquoi* :
+   fabriquer des documents qui n'ont jamais existé est juridiquement plus discutable qu'un trou
+   expliqué, et réécrire un numéro émis casserait le chaînage. Une note traçable en tient lieu
+   (ticket 004).
+3. **Le caissier tiers entre dans le même chantier** — une vente passée par la plateforme inscrit
+   le compte de supervision dans la chaîne NF525 du client. *Pourquoi* : même famille de sujet,
+   ce qui apparaît dans le registre légal d'un client.
+
+## 2026-08-02 — La séparation par tenant existe déjà : ne pas la rediagnostiquer
+
+**Constat** vérifié en production, à consigner parce qu'il a failli déclencher un chantier inutile.
+
+La numérotation **et** le chaînage sont déjà propres à chaque boutique :
+
+- `sequences(boutique_id, type, annee)` — clé unique sur les trois. Preuve dans les données : la
+  boutique 2 **et** la boutique 5 portent chacune `FAC-2026-00001`. Deux boutiques, même numéro :
+  les séries sont séparées. Migration `0034_numero_unique_par_boutique`.
+- `journal_nf525` : `WHERE boutique_id = ?` sur les quatre chemins — hash précédent, vente,
+  clôture journalière, `verifierIntegriteChaine()`. Aucun hash ne traverse deux boutiques.
+- `avoirs.facture_id NOT NULL` (migration `0010`, conservé par `0034`) : le lien avoir → facture
+  est déjà obligatoire.
+
+**Ce qui a fait douter** : la boutique 1 a reçu `FAC-2026-00003` pour sa première facture visible,
+ce qui ressemble à une série partagée. La vraie cause est le numéro consommé avant l'`INSERT`.
+
+**Corollaire** : une facture n'est déjà ni modifiable ni supprimable — il n'existe ni
+`PUT /factures/:id` ni `DELETE /factures/:id`. Mais c'est une immuabilité **par absence**, pas par
+intention : l'écran propose encore un bouton 🗑 qui appelle cette route morte, et rien n'empêche
+un futur chantier de la rouvrir. D'où le ticket 003, qui la rend explicite et testée.
+
 ## 2026-08-02 — Chantier 2 supervision : les 8 décisions du cadrage
 
 Grilling complet avant écriture de la spec (`.scratch/journal-plateforme-lecture/spec.md`).

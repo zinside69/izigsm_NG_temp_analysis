@@ -142,8 +142,33 @@ le compte de supervision**, pas un employé du client. C'est cohérent avec la t
 registre NF525 d'un client, une intervention de la plateforme porte le nom d'un tiers. À comparer
 avec `FAC-2026-00002`, passée par un vrai manager (`user_id 5`, boutique 2).
 
+### Un second chantier est né de la vente de test : la conformité de la facturation
+
+En voulant annuler la vente par un avoir, refus du **service** : la caisse crée sa facture en
+`payee` sans jamais poser `locked`, et l'avoir l'exige. Aucune vente encaissée n'est donc
+corrigeable, pour aucun rôle — alors que NF525 impose la correction par document rectificatif.
+
+L'exploitant a alors posé un invariant (repris tel quel dans `decisions.md`) : *une facture créée
+est persistante, non modifiable, non supprimable, chaînée ; annuler = avoir lié ; ⊥ trou entre les
+numéros ; série et chaînage propres à chaque tenant.*
+
+**Vérification faite avant d'ouvrir un chantier — la séparation par tenant existe déjà** :
+`sequences(boutique_id, type, annee)` (les boutiques 2 et 5 portent chacune `FAC-2026-00001`),
+chaînage filtré par `boutique_id` sur les 4 chemins, `avoirs.facture_id NOT NULL`, et ni
+`PUT` ni `DELETE /factures/:id`. Le doute venait d'ailleurs : **le numéro est consommé avant que
+le document existe**, donc tout échec en brûle un. Deux trous réels sur la boutique 1.
+
+Ma première explication — « le brouillon est supprimable » — était **incomplète** : les routes de
+suppression n'existent pas, seul un bouton 🗑 mort subsiste à l'écran. L'immuabilité est donc
+accidentelle, pas voulue : c'est l'objet du ticket 003.
+
+Spec + 4 tickets dans `.scratch/conformite-facturation/`. `.scratch/avoir-vente-caisse/` est
+absorbé (`wontfix`, conservé pour la trace).
+
 ### Reste ouvert
 
+- Conformité facturation : tickets 001 et 003 prenables immédiatement. C'est du légal — priorité
+  sur le chantier 2 de la supervision.
 - Chantier 2 : ticket 001 prenable immédiatement, sans bloqueur — et désormais justifié par une
   ligne réelle du journal de production, pas seulement par un raisonnement.
 - Vente de test `FAC-2026-00003` (60 € TTC) laissée dans les comptes de « iziGSM Paris 11 ».
