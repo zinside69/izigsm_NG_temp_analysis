@@ -41,7 +41,12 @@ aucune route `PUT`/`DELETE /factures/:id`.
 Spec + 4 tickets : `.scratch/conformite-facturation/`. Root cause dans `bugs.md`.
 `.scratch/avoir-vente-caisse/` est **absorbé** (`wontfix`, conservé pour la trace).
 
-- [ ] 001 — numéro attribué à l'émission (aucun bloqueur)
+- [x] 001 — numéro attribué à l'émission (2026-08-02) — migration `0040`, `emettreFacture()`
+      seul point de numérotation, écriture NF525 retirée de la conversion de devis.
+      ⚠ **Migration `0040` non appliquée à distance** : à faire AVANT `npm run deploy`.
+      ⚠ **Prérequis distant non vérifié** : `PRAGMA foreign_key_check` doit être **vide**
+      en production, sinon workerd refusera le COMMIT (la base locale portait 2 lignes
+      orphelines, supprimées). Commande à lancer par l'utilisateur (jeton de session).
 - [ ] 002 — vente de caisse verrouillée et annulable par avoir (bloqué par 001)
 - [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur)
 - [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)

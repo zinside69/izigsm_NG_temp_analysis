@@ -418,7 +418,10 @@ Voir `project-docs/todo.md` § "🔴 P1 — Audit persistance des champs" pour c
 ## Factures — invariants (depuis 2026-07-30, checkpoint 64)
 
 - **Une facture émise est figée, y compris son identité.** `emettreFacture()` écrit `vendeur_snapshot` et `acheteur_snapshot` (JSON) : le document réimprimé doit refléter ce qui était vrai à l'émission, jamais les fiches client/boutique du jour. C'est le point de passage **unique** des trois chemins de création (manuelle, conversion de devis, acompte) — n'ajoute jamais de figeage ailleurs, et ne réécris jamais ces colonnes. Une facture en brouillon n'a volontairement pas de snapshot et lit les fiches vivantes.
-- **Toute validation précède `nextNumero()`.** Un numéro de séquence de boutique est consommé définitivement : le brûler sur une saisie invalide est irréparable.
+- **Le numéro n'est attribué qu'à l'émission** (depuis le 2026-08-02, ticket 001 du chantier `.scratch/conformite-facturation/`). `nextNumero()` n'est appelé que par `emettreFacture()` — les trois chemins de création écrivent `numero = NULL` et un brouillon vit sans numéro (migration `0040` : la colonne est nullable, `UNIQUE(boutique_id, numero)` tolère plusieurs `NULL`). `emettreFacture()` **persiste le numéro avant** d'écrire au journal NF525 : un échec du chaînage ne brûle pas un second numéro, la reprise réutilise le même. Seule exception assumée : `caisseService.createVente()`, dont la vente POS est émise d'emblée. Conséquence de contrat : `createFacture()` et `convertirDevis()` renvoient `facture_numero: null` tant que la facture est brouillon — ne jamais fabriquer un numéro de repli côté client (`FAC-<id>` a été retiré de `factures.js` pour cette raison).
+- **Aucune écriture `journal_nf525` hors d'`emettreFacture()`** pour une facture. `PUT /devis/:id/convertir` en écrivait une sur un brouillon, doublée par une seconde à l'émission — retiré le 2026-08-02. Le journal légal n'enregistre que des documents émis.
+- **Toute validation précède l'émission.** Un numéro de séquence de boutique est consommé définitivement : le brûler sur une saisie invalide est irréparable.
+- **Recréer une table dans une migration D1 ne suit PAS le patron de la migration `0034`** (mesuré le 2026-08-02, trois échecs) : `PRAGMA foreign_keys=OFF` est ignoré dans une transaction, `defer_foreign_keys` ne solde le compteur que si les lignes parentes sont réinsérées **sous le nom référencé**, et `PRAGMA legacy_alter_table` n'est pas honoré (tout `RENAME` réécrit les `REFERENCES` des tables filles). Patron qui passe : table de transit `CREATE TABLE … AS SELECT`, `DROP`, recréation sous le nom final, réinsertion, suppression du transit. Voir `migrations/0040_facture_numero_nullable.sql`. Prérequis : `PRAGMA foreign_key_check` **vide** sur la base visée, sinon workerd refuse le COMMIT.
 - **`ajouterPaiement()` refuse une facture `locked = 1`** (`factureService.ts`). Conséquence actuelle : une facture ne peut être encaissée que tant qu'elle est brouillon, d'où l'ordre paiement→émission de l'acompte et de « Émettre & encaisser ». Décision prise de lever cette garde (`todo.md`), **pas encore implémentée** — ne pas supposer qu'un paiement différé fonctionne.
 - **Statuts réels** : `brouillon` | `en_attente` | `partiellement_payee` | `payee` | `annulee`. La valeur `'emise'` n'est écrite par aucun `INSERT` du dépôt — elle survit dans le `DEFAULT` du schéma et dans `statsService.ts`, où elle fausse silencieusement les KPI. `en_attente` s'affiche « Émise » et non « Envoyée » : aucun envoi d'email de facture n'existe.
 - **Le régime de franchise TVA se déduit de `boutique_settings.tva_taux_defaut === 0`**, et le texte de la mention vient de `boutique_settings.mention_facture` — pas de colonne dédiée, le paramétrage est déjà multi-tenant.
@@ -523,6 +526,14 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**⚠ État au 2026-08-02 : la migration `0040` (numéro de facture nullable) est EN ATTENTE
+d'application à distance.** Elle doit précéder tout déploiement : le code écrit désormais
+`numero = NULL` à la création d'une facture, ce que le schéma de production refuse encore
+(`NOT NULL`) — déployer avant produirait un `422` sur **toute** création de facture.
+Avant de l'appliquer, vérifier que `npx wrangler d1 execute DB --remote --command "PRAGMA
+foreign_key_check"` renvoie **zéro ligne** : workerd refuse le COMMIT d'une recréation de
+table si la base porte la moindre violation de clé étrangère (constaté en local).
 
 **État au 2026-08-01 : aucune migration en attente.** `0039` (journal des actions de plateforme)
 a été appliquée à distance, puis le Worker déployé — chantier supervision entièrement en
