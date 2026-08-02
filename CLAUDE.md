@@ -485,6 +485,30 @@ suivant) et surveillance du context window (protocole context-guardian, checkpoi
 [claude-hud](https://github.com/jarrodwatts/claude-hud) sur ce poste (statusline
 terminal, purement local, complémentaire au gate quota programmatique).
 
+## Dépôt git — distinct du workspace (piège vécu le 2026-08-02)
+
+```
+workspace  claude-test    → zinside69/claude-projects
+CE dépôt   izigsm/webapp  → zinside69/izigsm_NG_temp_analysis
+```
+
+**Un `sync push` du workspace ne pousse pas ce dépôt.** Il affiche « Projects pushed to GitHub »,
+message exact et trompeur : le travail sur iziGSM reste local. Constaté avec 6 commits d'un coup,
+alors que le distant avait avancé de son côté (backup D1 automatique) — branches divergées, aucun
+signal.
+
+Avant d'annoncer qu'un travail est poussé, mesurer **sur ce dépôt** :
+
+```bash
+cd izigsm/webapp && git fetch origin && git log --oneline origin/main..HEAD   # vide = poussé
+```
+
+`git status` ne suffit pas : « nothing to commit » est vrai sur un dépôt dont rien n'est parti.
+En cas de divergence, cas standard : `git pull --rebase origin main` puis push (§ Résolution
+conflits git du `CLAUDE.md` racine).
+
+Détail et rattachement aux trois autres pièges de mesure : `project-docs/modop-tests.md` § Piège 4.
+
 ## Déploiement
 
 **Jamais automatique.** Toujours sur confirmation explicite de l'utilisateur, y compris

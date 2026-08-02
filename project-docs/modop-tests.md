@@ -83,6 +83,41 @@ comportement du service worker, le cache CDN, l'état réel de la base distante.
 
 ---
 
+## Piège 4 — prendre un message de succès pour la preuve qu'on cherchait
+
+Constaté le 2026-08-02, en fin de journée.
+
+`izigsm/webapp` est un dépôt **distinct** du workspace, avec son propre remote :
+
+```
+workspace  claude-test        → zinside69/claude-projects
+webapp     izigsm/webapp      → zinside69/izigsm_NG_temp_analysis
+```
+
+Un `sync push` lancé depuis le workspace pousse `claude-projects` et affiche
+**« Projects pushed to GitHub »**. Le message est vrai, et il ne dit **rien** du travail sur
+iziGSM : les 6 commits du jour étaient toujours locaux. Pire, un `git fetch` a révélé que le
+distant avait avancé de son côté (`chore: backup D1 automatique`) — les branches avaient divergé
+sans que rien ne le signale.
+
+**La parade** : vérifier l'état du dépôt **qu'on a modifié**, jamais celui d'à côté, et sur une
+mesure qui ne peut pas mentir :
+
+```bash
+cd izigsm/webapp
+git remote -v                      # quel dépôt ? (le workspace n'est pas celui-là)
+git fetch origin
+git log --oneline origin/main..HEAD   # vide = réellement poussé
+```
+
+`git status` seul ne suffit pas : il annonce « nothing to commit » sur un dépôt dont aucun commit
+n'est parti, et ignore ce que le distant a reçu entre-temps.
+
+**Pourquoi ce piège est ici** : c'est le même que les trois précédents, une couche plus haut. Un
+signal de succès prouve ce qu'il mesure, jamais ce qu'on espérait. « La barre existe » ≠ « elle est
+stylée ». « Le test est vert » ≠ « il atteint le code fautif ». « Projects pushed » ≠ « mes commits
+sont sur le bon dépôt ».
+
 ## La procédure
 
 ### Avant d'annoncer « vérifié »
