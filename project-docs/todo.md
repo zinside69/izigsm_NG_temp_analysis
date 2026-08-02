@@ -15,21 +15,36 @@ Enable-ScheduledTask -TaskName "iziGSM Loop Telegram Listener"
 
 Détail et motif : `loop-runbook.md` § 11.
 
-## 🔴 P1 — Aucune vente de caisse n'est annulable par un avoir (constaté en production 2026-08-02)
+## 🔴 P1 — Conformité de la facturation : série continue, document immuable, avoir lié (2026-08-02)
 
-Une vente POS crée une facture `payee` mais **sans `locked`** ; l'avoir l'exige, côté service comme
-côté écran. Aucune vente encaissée n'est donc corrigeable, pour aucun rôle, depuis toujours —
-alors que NF525 impose de corriger par document rectificatif et jamais par suppression.
+Invariant posé par l'exploitant : **une facture créée est persistante, non modifiable, non
+supprimable, chaînée NF525 ; annuler = créer un avoir ; facture et avoir restent liés ; ⊥ trou
+entre les numéros ; série et chaînage propres à chaque tenant.**
 
-⚠️ Ne **jamais** contourner en supprimant la facture en SQL : `journal_nf525` est une chaîne de
-hash, la rompre ferait échouer `nf525/verify`.
+**Déjà conforme, vérifié en production — ⊥ redécouvrir** : numérotation par tenant
+(`sequences(boutique_id, type, annee)` — deux boutiques portent réellement `FAC-2026-00001`),
+chaînage NF525 filtré par `boutique_id` sur les 4 chemins, `avoirs.facture_id NOT NULL`, et
+aucune route `PUT`/`DELETE /factures/:id`.
 
-Ticket : `.scratch/avoir-vente-caisse/issues/001-avoir-impossible-sur-une-vente-de-caisse.md`
-(statut `ready-for-human` : la correction demande une décision, pas une main mécanique).
-Détail et root cause dans `bugs.md`.
+**Ce qui manque** :
+- le numéro est consommé **avant** que le document existe → trous (b1 : `00001` et `00002`
+  n'existent nulle part, sa 1re facture réelle est `00003`) ;
+- un brouillon porte un numéro définitif ;
+- l'immuabilité est **accidentelle** (absence de routes) et l'écran propose un bouton 🗑 qui
+  appelle une route morte ;
+- une vente de caisse n'est pas verrouillée ⇒ aucune vente encaissée n'est annulable par avoir ;
+- une vente de la plateforme inscrit le compte de supervision comme caissier dans la chaîne
+  NF525 du client.
 
-- [ ] Trancher A (la vente pose `locked = 1`) ou B (la garde de l'avoir accepte `payee`)
-- [ ] Sort des factures déjà créées à `locked = 0` — décider même si la réponse est « on les laisse »
+⚠️ Ne **jamais** contourner en touchant `journal_nf525` ou en réécrivant un numéro émis.
+
+Spec + 4 tickets : `.scratch/conformite-facturation/`. Root cause dans `bugs.md`.
+`.scratch/avoir-vente-caisse/` est **absorbé** (`wontfix`, conservé pour la trace).
+
+- [ ] 001 — numéro attribué à l'émission (aucun bloqueur)
+- [ ] 002 — vente de caisse verrouillée et annulable par avoir (bloqué par 001)
+- [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur)
+- [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)
 
 ## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
 

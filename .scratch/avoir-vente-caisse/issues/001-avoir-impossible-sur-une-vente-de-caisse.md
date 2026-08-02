@@ -1,9 +1,16 @@
 ---
 id: 001
 titre: Aucune vente de caisse ne peut être annulée par un avoir
-statut: ready-for-human
+statut: wontfix
 bloque-par: []
 ---
+
+> **Absorbé le 2026-08-02** par
+> `.scratch/conformite-facturation/issues/002-vente-de-caisse-verrouillee-et-annulable-par-avoir.md`.
+> Même défaut, cadre plus large : l'exploitant a posé l'invariant « facture persistante, non
+> modifiable, non supprimable, annulation par avoir lié », qui commande aussi la numérotation et
+> l'immuabilité. Le choix A|B posé ci-dessous est tranché là-bas (A : la vente pose `locked = 1`).
+> Fichier conservé pour la trace, ⊥ le traiter séparément.
 
 ## Contexte
 
