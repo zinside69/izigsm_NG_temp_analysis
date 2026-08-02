@@ -2,25 +2,26 @@
 
 ## Reprendre ici
 
-⚠️ **Rien n'est commité ni déployé.** Tout le travail du checkpoint 76 est en working copy :
-8 fichiers modifiés, 4 ajoutés. Production toujours à `CACHE_VERSION` `izigsm-v2.88`
-(checkpoint 75). Aucune migration en attente — la dernière reste `0039`.
+**Tout est commité, poussé, déployé et vérifié en production.** Commit `2bf64d9`,
+`CACHE_VERSION` `izigsm-v2.89`. Aucune migration en attente — la dernière reste `0039`.
+Rien n'attend d'action humaine.
 
-Commit proposé et **non exécuté** :
-`fix(frontend): enveloppe API sur 4 pages, garde-fou statique, 3 XSS stockees fermees`
+**La vérification métier qui traînait depuis le checkpoint 72 est faite** : vente enregistrée en
+production depuis le compte de supervision (`FAC-2026-00003`, 60 € TTC), chaîne NF525 vérifiée
+intègre, ligne écrite dans `journal_actions_plateforme` (`POST /api/caisse/vente -> 201`,
+boutique 1). Ne pas la redemander.
 
 Le chantier suivant est **cadré et prêt** : `.scratch/journal-plateforme-lecture/` — spec + 3
 tickets. Le ticket 001 n'a aucun bloqueur. Un ticket = une fenêtre de contexte neuve.
 
 Priorités, dans cet ordre :
 
-1. **Commiter le travail en cours**, puis décider du déploiement (jamais automatique).
-   `CACHE_VERSION` devra être incrémenté : le lot touche 6 fichiers de `public/static/js/`.
-2. **Ticket 001** — résolution de la boutique visée via `assertBoutiqueOwnership()`.
-3. Tickets 002 puis 003 (003 est bloqué par les deux autres).
-4. **Vérification métier jamais faite** : enregistrer une vente en caisse **en production**
-   depuis le compte de supervision. En attente depuis le checkpoint 72 ; désormais couverte en
-   local par `resolveur-boutique-pages.spec.ts`, ce qui n'est pas la même chose.
+1. **Ticket 001** — résolution de la boutique visée via `assertBoutiqueOwnership()`. Justifié par
+   une ligne réelle du journal de production : `DELETE /api/clients/20 -> 200` avec
+   `boutique_id` **NULL**.
+2. Ticket 002 (vue plateforme), puis 003 (vue manager, bloqué par les deux autres).
+3. L'audit XSS n'a pas été rejoué en production — le faire supposerait d'écrire une charge piégée
+   chez un vrai tenant. Couverture locale seulement (`xss-gabarits.spec.ts`).
 
 ## Ce qui a changé, et ne doit pas être redécouvert
 

@@ -69,14 +69,50 @@ fuseau `agendaService`) · `npx tsc --noEmit` → **32**, la baseline.
 Le premier jet du garde-fou ajoutait une 33ᵉ erreur `tsc` (paramètre implicitement `any`) —
 corrigée avant checkpoint.
 
+### Déployé et vérifié en production (même jour)
+
+Commit `2bf64d9`, poussé et déployé. `CACHE_VERSION` → **`izigsm-v2.89`**, confirmé sur le
+`sw.js` servi. Les 6 fichiers corrigés sont servis avec leurs marqueurs ; un asset absent
+répond `404` ; `api/health` 200. Aucune migration dans ce lot.
+
+Contrôlé à l'écran sur la boutique « iziGSM Paris 11 », compte de supervision :
+
+| Page | Avant | Après |
+|---|---|---|
+| `/caisse` | KPI figés à `—` | `0` puis `1` transaction, journal peuplé |
+| `/reconditionnement` | `ReferenceError`, page morte | KPI, tableau, et la barre de pagination rend « 0 résultat(s) » |
+| `/kanban` | « Erreur API » à la place du tableau | 7 colonnes, 5 cartes, « 8 actifs » |
+| `/services` | « Aucune marque » | référentiel complet (Apple 146, Asus 207, BLU 369…) |
+| `/fournisseurs` | corrigé au cp 75 | compteurs numériques, pas de régression |
+
+`/sav`, `/agenda`, `/stats`, `/personnel`, `/stock` chargées sans exception JS. Les deux seules
+erreurs de console viennent d'une extension Chrome, pas de l'application.
+
+### La vérification métier en attente depuis le checkpoint 72 est faite
+
+Vente enregistrée **en production** depuis le compte de supervision : `FAC-2026-00003`,
+50,00 € HT / 60,00 € TTC, espèces. Le modal se ferme sur un succès et les KPI se rafraîchissent —
+c'est précisément le chemin qui, le matin même, affichait « Erreur » sur une vente pourtant écrite.
+**Chaîne NF525 vérifiée intègre** après l'écriture.
+
+Trace correspondante dans `journal_actions_plateforme` (lu en distant, aucune interface ne le
+lit encore) :
+
+```
+4 | 2026-08-02 11:43:34 | user 1 | boutique 1 | POST /api/caisse/vente -> 201
+```
+
+La boutique est résolue ici parce que `apiPost` pose `?boutique_id=` sur l'URL (correctif cp 73).
+La ligne 2 du même journal montre le défaut que le ticket 001 doit corriger, sur données réelles :
+`DELETE /api/clients/20 -> 200` avec **`boutique_id` NULL**.
+
 ### Reste ouvert
 
-- **Rien n'est commité ni déployé.** 8 fichiers modifiés, 4 ajoutés (2 specs de test, spec de
-  chantier, 3 tickets).
-- Chantier 2 : ticket 001 prenable immédiatement, sans bloqueur.
-- Toujours pas de vente enregistrée **en production** depuis le compte de supervision (la
-  vérification métier de bout en bout, en attente depuis le checkpoint 72). Elle est désormais
-  couverte en local par un test.
+- Chantier 2 : ticket 001 prenable immédiatement, sans bloqueur — et désormais justifié par une
+  ligne réelle du journal de production, pas seulement par un raisonnement.
+- L'audit XSS n'a **pas** été rejoué en production : le faire supposerait d'écrire une charge
+  piégée chez un vrai tenant. La couverture est locale (`xss-gabarits.spec.ts`) et le bundle servi
+  contient bien `echapperHtml`.
 
 # iziGSM — État courant (MàJ : 2026-08-01, checkpoint 75 — les 19 pages du menu, et trois régressions de ma main)
 
