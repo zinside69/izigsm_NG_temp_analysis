@@ -1,5 +1,31 @@
 # iziGSM — Bugs connus
 
+## Le bouton 🗑 d'un brouillon de facture échoue en silence (trouvé le 2026-08-16, NON corrigé)
+
+Trouvé en production en tentant de supprimer le brouillon créé pour la vérification du
+ticket 001 (checkpoint 78).
+
+**Symptôme** : sur une facture en **brouillon**, le bouton 🗑 est actif. Il demande une
+confirmation explicite — « Supprimer cette facture définitivement ? Cette action est
+irréversible » — l'appel part, et `DELETE /api/factures/6?boutique_id=1` répond **404**. La
+facture reste en base, la ligne reste dans le tableau, et **aucun message n'apparaît à
+l'écran**. L'exploitant a toutes les raisons de croire qu'il a supprimé le document.
+
+**Root cause** : `deleteFacture()` (`public/static/js/factures.js`) appelle une route qui
+n'existe pas — il n'y a ni `PUT` ni `DELETE /factures/:id` dans le dépôt. L'immuabilité des
+factures est donc **accidentelle** (constat du checkpoint 76), et le bouton est mort depuis
+toujours. S'y ajoute le fait que l'échec n'est pas restitué : le résultat de l'appel n'est pas
+testé, ou son enveloppe est lue au mauvais niveau — à trancher en lisant le fichier.
+
+**Ce qui fonctionne déjà** : sur une facture **émise**, l'interface est correcte — 🗑 est
+`disabled` et un bouton ↩️ (avoir) prend sa place.
+
+**Non corrigé** : appartient au ticket `.scratch/conformite-facturation/issues/003-*.md`
+(immuabilité explicite). Deux issues possibles, à arbitrer par l'exploitant : soit un brouillon
+est réellement supprimable et la route existe, soit il ne l'est pas et le bouton disparaît.
+Ce qui n'est pas acceptable est l'état actuel — une confirmation d'action irréversible suivie
+de rien.
+
 ## Aucune vente de caisse n'est annulable par un avoir (trouvé le 2026-08-02, NON corrigé)
 
 Trouvé en voulant annuler la vente de test `FAC-2026-00003` passée en production le même jour.

@@ -1,3 +1,54 @@
+# Recovery Prompt — iziGSM — 2026-08-16 (checkpoint 78 — la vérification métier est faite, elle passe)
+
+## Reprendre ici
+
+**Plus rien n'attend d'action humaine.** La vérification métier du ticket 001, en attente depuis
+le checkpoint 72, a été faite en production le 2026-08-16 et **elle passe**. Ne pas la
+redemander, ne pas la rejouer : brouillon « non numéroté », émission `FAC-2026-00004`, second
+brouillon laissé tel quel puis émission `FAC-2026-00005` — **compteur à 5 pour trois numéros,
+aucun saut**. Preuves à l'écran, à l'impression et en base dans `current-state.md` § cp 78.
+
+Le dépôt est propre et poussé (`ecd920e` + le commit de ce checkpoint). Prod `izigsm-v2.90`,
+aucune migration en attente. **Aucun code n'a été livré ce jour-là.**
+
+**Suite : ticket 002** (`.scratch/conformite-facturation/issues/002-…`) — la vente de caisse doit
+poser `locked = 1` pour devenir annulable par avoir. Puis **003**, puis le chantier
+`journal-plateforme-lecture`.
+
+## Ce que la vérification a appris, et qu'il ne faut pas redécouvrir
+
+- **Le rôle n'a aucune incidence sur la série.** Elle est portée par
+  `sequences(boutique_id, type, annee)`. Le cp 77 exigeait un compte manager ; le mot de passe de
+  `manager@izigsm.fr` n'est connu de personne, et le rôle manager avait déjà été vérifié au cp 76.
+  La vérification s'est faite depuis `support@soteli.fr` avec la boutique 1 sélectionnée.
+- **Prouver un numéro « à l'impression » sans imprimer** : remplacer `window.print` par une
+  capture de `document.innerText`, appeler `printFacture(id)`, puis compter les occurrences de
+  `FAC…`. C'est ce qui montre que le repli `'FAC-' + id` ne revient pas par ce chemin.
+- **Les colonnes de `journal_nf525`** sont `type_transaction`, `reference_id`,
+  `reference_numero`, `hash_precedent`, `donnees_hash`, `hash_courant` — **pas** `type_operation`,
+  `reference` ni `hash`. Une requête qui les suppose sort **vide**, et une sortie vide de wrangler
+  ne distingue pas « zéro ligne » d'« erreur SQL ». Toujours mesurer par un chiffre.
+- **🔴 Défaut d'interface trouvé, à traiter dans le ticket 003** : sur un **brouillon**, le bouton
+  🗑 est actif, demande confirmation, et l'appel `DELETE /api/factures/:id` répond **404**. La
+  facture reste, **aucun message n'apparaît**, le tableau ne bouge pas — l'exploitant croit avoir
+  supprimé. Sur une facture **émise**, l'interface est déjà correcte (🗑 `disabled`, bouton ↩️).
+- **`FAC-2026-00003` porte `locked = 0`** — le ticket 002 est confirmé par la mesure, plus
+  seulement par la lecture du code.
+- **Résidus assumés en production** : client `ZZ Verification Ticket001`, factures
+  `FAC-2026-00004` (1,20 €) et `FAC-2026-00005` (3,60 €) — définitives, non supprimables —, et le
+  brouillon `id = 6` dont la suppression a échoué en 404.
+- **Le Mac ne fait pas tourner le développement local.** Il lit et écrit la production
+  (`wrangler d1 --remote`, `whoami`, `deploy`) mais macOS 12.7.6 est sous le minimum `workerd`
+  13.5 : ni `pages dev`, ni gates E2E. Ces gates restent sur Windows.
+
+## État du dépôt
+
+`main` : `ecd920e` + le commit de ce checkpoint. Baselines **non rejouées** ce jour (Mac) —
+dernières mesures connues, cp 77 : `npx vitest run` → **899/901** (2 échecs permanents de fuseau
+`agendaService`), `npx tsc --noEmit` → **32**, `npx playwright test` → **188/188**.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-02 (checkpoint 77 — numéro de facture attribué à l'émission, déployé)
 
 ## Reprendre ici

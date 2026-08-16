@@ -1,3 +1,82 @@
+# iziGSM — État courant (MàJ : 2026-08-16, checkpoint 78 — la vérification métier du ticket 001 est faite, elle passe)
+
+## Checkpoint 78 — La série tient, mesurée à l'écran et en base (2026-08-16)
+
+**La vérification métier laissée en attente depuis le checkpoint 72 est close.** Elle passe.
+Aucun code livré, aucun déploiement : c'est une vérification, pas un chantier. Ne pas la
+redemander.
+
+Faite en production sur `repairdesk.fr`, boutique 1, depuis `support@soteli.fr` (admin
+plateforme) avec la boutique 1 sélectionnée — bandeau « Vous consultez la boutique iziGSM
+Paris 11 » affiché. **Le rôle n'a aucune incidence sur l'attendu** : la série est portée par
+`sequences(boutique_id, type, annee)`, pas par l'utilisateur. Le recovery-prompt du cp 77
+demandait un compte manager ; le mot de passe de `manager@izigsm.fr` n'est pas connu, et le
+rôle manager avait déjà été vérifié au cp 76. Ne pas rejouer ce raisonnement.
+
+### Les trois points, et leur preuve
+
+| # | Attendu | Constaté à l'écran | Constaté en base |
+|---|---|---|---|
+| 1 | brouillon non numéroté | « Brouillon (non numéroté) » | `id=5`, `numero=NULL`, compteur **inchangé à 3** |
+| 2 | émission → `FAC-2026-00004` | à l'écran **et à l'impression** | `locked=1`, compteur → 4 |
+| 3 | brouillon laissé + autre émission → `00005` **sans saut** | `FAC-2026-00005` | `id=6` reste `NULL`, compteur = **5** |
+
+Le point 3 est le cœur du ticket : **compteur à 5 pour les numéros 00003 / 00004 / 00005**.
+Un saut se serait lu `dernier_num = 6`.
+
+**Le point 2 se prouve à l'impression, pas seulement à l'écran.** Méthode employée, sans
+lancer d'impression réelle : remplacer `window.print` par une capture de `document.innerText`,
+appeler `printFacture(5)`, puis compter les occurrences de `FAC…` dans le document produit.
+Résultat : `FAC-2026-00004`, et **aucun `FAC-5`** — le repli `'FAC-' + id` retiré au cp 77 ne
+revient pas par le chemin d'impression.
+
+### La chaîne NF525, relue après coup
+
+```
+3 | vente   | FAC-2026-00003 | prec=0000000000 → cour=1e61a3e1
+4 | facture | FAC-2026-00004 | prec=1e61a3e1   → cour=13c3798e
+5 | facture | FAC-2026-00005 | prec=13c3798e   → cour=0bb1c1de
+```
+
+Chaînage intègre, **une seule ligne par facture émise**, et **aucune ligne pour le brouillon** —
+le retrait de l'écriture NF525 sur `PUT /devis/:id/convertir` (cp 77) tient.
+
+Colonnes réelles de `journal_nf525` : `type_transaction`, `reference_id`, `reference_numero`,
+`hash_precedent`, `donnees_hash`, `hash_courant`. **Pas** `type_operation`, `reference` ni
+`hash` — une requête d'audit qui les suppose sort en silence, et une sortie vide de wrangler ne
+distingue pas « zéro ligne » de « erreur SQL ».
+
+### Deux tickets confirmés par l'observation, pas par la lecture du code
+
+- **Ticket 002** : `FAC-2026-00003` (vente de caisse du cp 76) porte `locked = 0`. La vente
+  encaissée n'est donc annulable par avoir pour personne — mesuré, plus seulement déduit.
+- **Ticket 003** : le bouton 🗑 est **actif** sur un brouillon, il demande une confirmation
+  (« Supprimer cette facture définitivement ? Cette action est irréversible »), l'appel part —
+  et `DELETE /api/factures/6?boutique_id=1` répond **404**. La facture reste en base, **aucun
+  message n'apparaît à l'écran**, aucune ligne ne disparaît du tableau. L'exploitant croit
+  avoir supprimé. L'immuabilité accidentelle du cp 76 a donc un coût d'interface réel, à
+  traiter dans le même ticket : soit la route existe, soit le bouton disparaît.
+
+Au passage : sur une facture **émise**, l'interface est déjà correcte — 🗑 est `disabled` et un
+bouton ↩️ (avoir) prend sa place.
+
+### Résidus assumés en production
+
+- Client `ZZ Verification Ticket001` (boutique 1), créé pour porter les trois documents.
+- `FAC-2026-00004` (1,20 € TTC) et `FAC-2026-00005` (3,60 € TTC) — **définitives, non
+  supprimables**, c'est l'invariant lui-même. Elles portent le compte de supervision comme
+  auteur dans la chaîne NF525 (propriété connue du système, cp 76).
+- Brouillon `id = 6` (2,40 €) : la suppression a été tentée, elle a échoué en 404. Il reste.
+
+### Ce qui reste
+
+Ticket **002** (vente de caisse `locked = 1` ⇒ annulable par avoir), puis **003** (immuabilité
+explicite + le bouton mort ci-dessus), puis le chantier `journal-plateforme-lecture`.
+Rappel d'outillage : le Mac lit et écrit la production (`wrangler d1 --remote`, `deploy`) mais
+ne fait tourner ni `pages dev` ni les gates E2E (macOS 12.7.6 sous le minimum `workerd` 13.5).
+
+---
+
 # iziGSM — État courant (MàJ : 2026-08-16 — état des séries mesuré en production, vérification métier toujours à faire)
 
 ## Mesure d'état production — 2026-08-16 (aucun code livré)
