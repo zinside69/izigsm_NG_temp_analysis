@@ -24,6 +24,9 @@ rôle manager avait déjà été vérifié au cp 76. Ne pas rejouer ce raisonnem
 Le point 3 est le cœur du ticket : **compteur à 5 pour les numéros 00003 / 00004 / 00005**.
 Un saut se serait lu `dernier_num = 6`.
 
+Capture de l'écran final : `project-docs/captures/verif-ticket001-2026-08-16.png` (les quatre
+lignes du tableau des factures, dont le brouillon resté non numéroté entre `00005` et `00004`).
+
 **Le point 2 se prouve à l'impression, pas seulement à l'écran.** Méthode employée, sans
 lancer d'impression réelle : remplacer `window.print` par une capture de `document.innerText`,
 appeler `printFacture(5)`, puis compter les occurrences de `FAC…` dans le document produit.
