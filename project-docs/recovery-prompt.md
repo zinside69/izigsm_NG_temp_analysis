@@ -15,6 +15,31 @@ aucune migration en attente. **Aucun code n'a été livré ce jour-là.**
 poser `locked = 1` pour devenir annulable par avoir. Puis **003**, puis le chantier
 `journal-plateforme-lecture`.
 
+## 🪟 Deux gestes à faire au prochain démarrage **sous Windows**
+
+**1. Le ticket 002 se traite sous Windows, pas sur le Mac.** Il touche vente, encaissement et
+chaînage NF525 : il exige le gate complet (`npx vitest run`, `npx tsc --noEmit`,
+`npx playwright test`), donc un serveur local — et `wrangler pages dev` ne tourne pas sur ce
+Mac (macOS 12.7.6 sous le minimum `workerd` 13.5). Le Mac reste bon pour lire et écrire la
+production (`wrangler d1 --remote`, `whoami`, `deploy`) et pour la documentation.
+Rappel avant relance : `taskkill //F //IM workerd.exe`, sinon des orphelins servent l'ancien
+bundle sur `:3000`.
+
+**2. Désarmer la loop d'automatisation** — décidé par l'exploitant le 2026-08-16, **non
+exécuté** (impossible depuis le Mac). Motif : elle commite **et pousse** seule sur `origin/main`
+(`95c8ab0` parti à 18:15 pendant une session humaine, cp 77) — deux écrivains sur le même arbre.
+
+```powershell
+Disable-ScheduledTask -TaskName "iziGSM Loop Engineering"
+Disable-ScheduledTask -TaskName "iziGSM Loop Watchdog"
+Get-ScheduledTask -TaskName "iziGSM Loop *" | Select TaskName, State   # contrôler par un état
+```
+
+Les **deux** sont nécessaires : le watchdog est une tâche indépendante (`loop-runbook.md`
+§ watchdog), le désactiver seul ne suffit pas, et laisser le watchdog seul armé ne sert à rien.
+« iziGSM Loop Telegram Listener » est déjà désactivée depuis le 2026-07-31 (`todo.md`).
+Réarmement, le jour venu : `Enable-ScheduledTask` sur les mêmes noms.
+
 ## Ce que la vérification a appris, et qu'il ne faut pas redécouvrir
 
 - **Le rôle n'a aucune incidence sur la série.** Elle est portée par

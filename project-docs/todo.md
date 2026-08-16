@@ -1,5 +1,25 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## ⚠ NOTE (pas une tâche) — loop d'automatisation à désarmer, décidé le 2026-08-16
+
+Rédigé **sans case à cocher** volontairement : `pick-task.mjs` ne retient que les lignes
+`- [ ] …`, et la loop piocherait sinon une tâche consistant à se désactiver elle-même.
+
+Décision de l'exploitant le 2026-08-16 : **désarmer la loop**, parce qu'elle commite *et
+pousse* seule sur `origin/main` (`95c8ab0` parti à 18:15 pendant une session humaine,
+checkpoint 77) — deux écrivains sur le même arbre, sans signal.
+
+**Non exécuté** : la décision a été prise depuis le Mac, les tâches vivent dans le
+Planificateur Windows. À faire au prochain démarrage Windows :
+
+```powershell
+Disable-ScheduledTask -TaskName "iziGSM Loop Engineering"
+Disable-ScheduledTask -TaskName "iziGSM Loop Watchdog"
+Get-ScheduledTask -TaskName "iziGSM Loop *" | Select TaskName, State
+```
+
+Les deux, pas une seule : le watchdog est indépendant (`loop-runbook.md` § watchdog).
+
 ## ⚠ NOTE (pas une tâche) — listener Telegram désactivé le 2026-07-31
 
 Volontairement rédigé **sans case à cocher** : `pick-task.mjs` ne retient que les lignes
