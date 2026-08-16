@@ -1,3 +1,68 @@
+# iziGSM — État courant (MàJ : 2026-08-16 — état des séries mesuré en production, vérification métier toujours à faire)
+
+## Mesure d'état production — 2026-08-16 (aucun code livré)
+
+Session de préparation à la vérification métier du ticket 001, laissée en attente depuis le
+checkpoint 77. **Rien n'a été livré, rien n'a été déployé, et la vérification à l'écran n'est
+toujours pas faite.** Ce qui suit est un relevé, pas un checkpoint.
+
+### L'état des séries, lu en base plutôt que déduit des docs
+
+`npx wrangler d1 execute DB --remote`, session OAuth `contact@soteli.fr` (`d1 (write)`) :
+
+| Boutique | `sequences.facture.2026.dernier_num` | Factures existantes | Prochain numéro émis |
+|---|---|---|---|
+| 1 — iziGSM Paris 11 | **3** | 1 (`FAC-2026-00003`, `payee`) | `FAC-2026-00004` |
+| 2 — SOTELI | 2 | 2 (`00001`, `00002`, `locked = 1`) | `FAC-2026-00003` |
+| 5 — ZZ Audit Isolation 2026 | 1 | 1 **brouillon numéroté** `FAC-2026-00001` | — |
+
+Les deux trous de la boutique 1 sont lisibles en chiffres : compteur à **3** pour **une seule**
+facture. Le brouillon **numéroté** de la boutique 5 date du 2026-07-31 — c'est l'ancien
+comportement, figé avant le correctif ; il ne se reproduira plus mais il reste en base.
+
+### Une contradiction du recovery-prompt, tranchée
+
+Le recovery-prompt du checkpoint 77 demande la vérification « depuis un compte manager » **et**
+annonce `FAC-2026-00004`. Les deux ensemble ne désignaient aucune boutique de façon évidente : le
+manager connu jusque-là (« Saïd test », `telnet@bbox.fr`) est sur la **boutique 2**, dont la série
+donnerait `00003`.
+
+Le compte qui satisfait les deux conditions existe : **`manager@izigsm.fr`** (Sophie Martin, rôle
+`manager`, **boutique 1**, actif). C'est depuis lui que les attendus `00004` puis `00005` sont
+justes. Ne pas refaire ce raisonnement à la session suivante.
+
+Au passage, la table `users` n'a **pas** de colonne `role` : le rôle vit dans `roles`, via
+`users.role_id`. Une requête d'audit qui suppose `users.role` échoue en `SQLITE_ERROR 7500`.
+
+### Outillage — le Mac ne peut pas tout faire
+
+Node 22.23.2 LTS installé sur le Mac (userland, `~/.local`, PATH dans `~/.zshrc`). Mais **wrangler
+avertit que macOS 12.7.6 est sous le minimum de `workerd` (13.5)** :
+
+| Usage | Mac | Windows |
+|---|---|---|
+| `wrangler d1 execute --remote`, `whoami`, `deploy` | ✓ | ✓ |
+| `wrangler pages dev` (runtime local) | ✗ probable | ✓ |
+| Gates E2E Playwright (dépendent du serveur local) | ✗ par ricochet | ✓ |
+
+Autrement dit : le Mac lit et écrit la production, mais le développement local iziGSM reste sur
+Windows.
+
+### Ce qui reste à faire — inchangé depuis le checkpoint 77
+
+La vérification métier à l'écran, en production, depuis `manager@izigsm.fr` :
+
+1. créer une facture sans l'émettre → doit afficher **« Brouillon (non numéroté) »** ;
+2. l'émettre → **`FAC-2026-00004`**, à l'écran **et à l'impression** ;
+3. créer un 2ᵉ brouillon, **le laisser tel quel**, puis émettre une autre facture → **`00005`,
+   sans saut**. C'est le cœur du ticket ; un saut se lirait `dernier_num = 6`.
+
+Le point 1 ne se prouve qu'à l'écran (libellé frontend). Les points 2 et 3 se prouvent mieux en
+base qu'à l'œil. Piège d'environnement : **NoScript doit approuver `repairdesk.fr` en permanent**,
+sinon aucun script ne s'exécute et les symptômes imitent un bug applicatif.
+
+---
+
 # iziGSM — État courant (MàJ : 2026-08-02, checkpoint 77 — le numéro de facture n'est attribué qu'à l'émission, déployé)
 
 ## Checkpoint 77 — Une série sans trou (2026-08-02)
