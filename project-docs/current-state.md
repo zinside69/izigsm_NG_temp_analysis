@@ -1,4 +1,40 @@
-# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 81 — analyse du dossier, cinq dérives documentaires refermées)
+# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 82 — les serveurs fantômes sont morts)
+
+## Checkpoint 82 — Port 3000 libéré, et une commande donnée dans le mauvais shell (2026-09-04)
+
+Court, mais il referme une boucle ouverte au cp80 et corrige une erreur de méthode.
+
+### Les serveurs fantômes sont arrêtés
+
+Les deux `workerd.exe` qui écoutaient sur le port **3000** — restés de sessions antérieures,
+servant l'**ancien** Worker — sont arrêtés (PID `22476` et `25992`, arrêtés par l'exploitant).
+Vérifié après coup : **port 3000 libre, aucun port de dev en écoute** (3000/3100/5173/8787/8788).
+
+Trois `workerd.exe` subsistent, mais sur des **ports éphémères hauts** (18589, 22879, 23013) :
+processus internes de `wrangler`, sans serveur d'application derrière, appartenant possiblement
+aux sessions soteli/telnet qui tournent en parallèle. **⊥ les toucher.**
+
+Conséquence : la prochaine session locale sur `wrangler pages dev --port 3000` servira bien le
+Worker qu'elle vient de builder. Le piège du cp80 — un correctif correct qui semblait sans effet —
+ne peut plus se rejouer sur cette machine en l'état.
+
+### Une commande Bash donnée pour un shell PowerShell
+
+`MSYS_NO_PATHCONV=1 taskkill …` a été fourni à l'exploitant pour exécution avec `!`. Ce préfixe
+est une parade **propre à Git Bash** (sans lui, `/PID` est converti en chemin Windows) ; PowerShell
+ne fait pas cette conversion et lit `MSYS_NO_PATHCONV=1` comme un **nom de commande** →
+`CommandNotFoundException`.
+
+**Règle qui en sort, écrite dans `recovery-prompt.md`** : une commande destinée au `!` de
+l'exploitant s'écrit **pour PowerShell** — c'est son shell, pas celui de la session. La forme
+correcte est `taskkill /PID <n> /T /F` ou `Stop-Process -Id <n> -Force`.
+
+Même classe que les trois mesures fausses du cp81 : une parade transposée d'un contexte à un autre
+sans vérifier qu'elle s'y applique.
+
+---
+
+## Checkpoint 81 — Ce que les docs disaient de faux (2026-09-04)
 
 ## Checkpoint 81 — Ce que les docs disaient de faux (2026-09-04)
 

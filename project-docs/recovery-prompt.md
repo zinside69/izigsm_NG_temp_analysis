@@ -133,8 +133,18 @@ Deux fausses pistes écartées avant ça, par la mesure : le bundle contenait bi
 `Set(["facture","avoir"])`), et la reconstruction reproduisait exactement le `hash_courant`
 stocké de deux lignes réelles.
 
-Corollaire : `taskkill` depuis Git Bash exige `MSYS_NO_PATHCONV=1`, sinon `/PID` est transformé
-en chemin Windows et la commande est refusée.
+Corollaire — **et deux shells, deux syntaxes** :
+
+| Shell | Commande |
+|---|---|
+| Git Bash (l'outil `Bash` de la session) | `MSYS_NO_PATHCONV=1 taskkill /PID <n> /T /F` — sans le préfixe, `/PID` est converti en chemin Windows et la commande est refusée |
+| PowerShell (ce que lance le `!` de l'utilisateur) | `taskkill /PID <n> /T /F`, ou `Stop-Process -Id <n> -Force` |
+
+⊥ transposer la parade Bash vers PowerShell : `MSYS_NO_PATHCONV=1` y est lu comme un **nom de
+commande** et échoue en `CommandNotFoundException`. Erreur commise le 2026-09-04 en donnant à
+l'exploitant une commande Bash à exécuter dans son shell. **Avant de fournir une commande à faire
+lancer avec `!`, l'écrire pour PowerShell** — c'est le shell de l'utilisateur, pas celui de la
+session.
 
 ---
 
