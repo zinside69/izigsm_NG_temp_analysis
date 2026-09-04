@@ -1,3 +1,86 @@
+# Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 80 — le contrôle NF525 dit enfin la vérité)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**iziGSM se travaille depuis `C:\Users\Said\Downloads\claude-test\izigsm\webapp`, jamais depuis
+la racine du workspace** (décision du 2026-09-04, détail complet dans le bloc du checkpoint 79
+ci-dessous). Lancer Claude Code depuis ce dossier.
+
+## Reprendre ici
+
+**Rien n'est en attente d'une action humaine sauf une décision de déploiement.** Le ticket 005
+est livré, commité et poussé. Deux tickets NF525 attendent la production : **002** (vente de
+caisse verrouillée, cp79) et **005** (vérificateur). Un `npm run deploy` embarquerait les deux
+d'un coup — c'est la seule chose que l'exploitant n'a pas tranchée.
+
+**Aucune migration en attente.** Prod : `izigsm-v2.90`.
+
+## Ce qui a été livré au checkpoint 80
+
+`verifierIntegriteChaine()` (`caisseService.ts`) aiguille sur `type_transaction` via
+`rebuildDonneesHash()`. Le journal a **deux écrivains** avec **deux formats canoniques**, et le
+vérificateur n'en connaissait qu'un : il déclarait frauduleuse **toute** facture émise et **tout**
+avoir, depuis l'origine.
+
+| `type_transaction` | Écrivain | Format hashé | Genèse |
+|---|---|---|---|
+| `vente`, `encaissement` | INSERT direct, `caisseService.ts` | `type\|ref\|centimes\|date\|prev` | `'0'×64` |
+| `facture`, `avoir` | `lib/nf525.enregistrerTransaction()` | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` | `''` |
+
+`buildCanonicalData()` est **exportée** de `lib/nf525.ts` et réutilisée — la cause racine étant
+une copie divergente, en écrire une seconde aurait reproduit le bug. **Zéro ligne de
+`journal_nf525` réécrite.**
+
+**Mesuré** : boutique 1 **170 → 0 anomalies** (171 entrées, les deux écrivains), 0 sur les
+38 boutiques du journal local, via l'endpoint réel.
+
+## Invariants à ne pas casser
+
+- ⊥ revenir à un format unique dans le vérificateur : aligner sur l'un déclare l'autre
+  frauduleux, le mensonge se déplace.
+- ⊥ recalculer un `hash_courant` déjà émis. NF525 l'interdit ; ça détruirait la preuve.
+- ⊥ recalculer depuis la colonne `donnees_hash` : ça donne 0 anomalie **et** valide une ligne
+  dont le montant a été réécrit en base. Toujours partir des **champs** de la ligne.
+- Un nouveau type passant par `enregistrerTransaction()` va dans `TYPES_ECRIVAIN_B` —
+  `tests/nf525-ecrivains-conformite.test.ts` fait échouer la suite sinon.
+
+Détail complet : `CLAUDE.md` § Journal NF525 deux écrivains ; `decisions.md` § 2026-09-04.
+
+## État du dépôt
+
+`main` : **`c086048`**, poussé. Baselines : vitest **914/916** (2 échecs permanents de fuseau
+`agendaService`), tsc **32**, playwright **188/188**, build ✓.
+
+## Tâches en attente
+
+- [ ] Décision de déploiement — 002 + 005 ensemble (dernier critère du 005 : revérifier
+      `GET /api/caisse/integrite` **en production**)
+- [ ] 🟠 P2 — `verifierIntegriteChaine()` ne vérifie **pas le chaînage** : une ligne supprimée au
+      milieu du journal ne produit aucune anomalie. `verifyChain()` (`lib/nf525.ts`) le fait mais
+      relit `donnees_hash` et rate l'altération d'un montant ; aucune interface ne l'appelle.
+      Aucun des deux vérificateurs n'est complet. `/to-tickets` avant tout code.
+- [ ] Tickets 003 (immuabilité explicite, aucun bloqueur) et 004 (`ready-for-human`)
+- [ ] Bouton 🗑 d'un brouillon de facture → `DELETE /api/factures/:id` n'existe pas, 404 muet
+- [ ] Chantier 2 supervision : le journal de plateforme se remplit, rien ne le lit (3 tickets)
+
+## Piège de mesure, vécu ce jour-là
+
+Le premier relevé après correctif annonçait **toujours 170 anomalies**. Ni le code ni le build :
+**deux serveurs `wrangler` de sessions antérieures écoutaient sur le port 3000** et servaient
+l'ancien Worker. Trouvé au `netstat -ano | grep :3000`. Avant de conclure qu'un correctif ne
+marche pas en local, vérifier **qui** répond sur le port — ou mesurer sur un port neuf
+(`PW_PORT=<port>` pour Playwright).
+
+Deux fausses pistes écartées avant ça, par la mesure : le bundle contenait bien le correctif
+(un `grep` d'identifiant échoue — Vite les minifie ; chercher un **littéral**, ex.
+`Set(["facture","avoir"])`), et la reconstruction reproduisait exactement le `hash_courant`
+stocké de deux lignes réelles.
+
+Corollaire : `taskkill` depuis Git Bash exige `MSYS_NO_PATHCONV=1`, sinon `/PID` est transformé
+en chemin Windows et la commande est refusée.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 79 — vente de caisse annulable ; le contrôle NF525 ment)
 
 ## ⚠ Avant tout — d'où se travaille ce projet
