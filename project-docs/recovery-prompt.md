@@ -1,5 +1,23 @@
 # Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 79 — vente de caisse annulable ; le contrôle NF525 ment)
 
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**iziGSM se travaille depuis `C:\Users\Said\Downloads\claude-test\izigsm\webapp`, jamais depuis
+la racine du workspace.** Lancer Claude Code depuis ce dossier, pas depuis `claude-test`.
+
+Décision de l'exploitant du 2026-09-04. Trois raisons, toutes vérifiées :
+
+1. **Le bon `CLAUDE.md` se charge.** Celui d'`izigsm/webapp` porte les invariants NF525, les
+   règles d'isolation multi-tenant, l'enveloppe API, la barre latérale et la procédure de
+   déploiement. Depuis la racine, c'est celui du workspace qui se charge — et il ne mentionne
+   **pas** izigsm (manque signalé le 2026-07-09, comblé le 2026-09-04).
+2. **Le piège du dépôt imbriqué reste invisible depuis la racine.** `izigsm/webapp` a son propre
+   remote `zinside69/izigsm_NG_temp_analysis` : `sync push` du workspace annonce « Projects
+   pushed to GitHub » **sans jamais le pousser**. Mesurer par
+   `git log --oneline origin/main..HEAD` **dans ce dépôt**, jamais par `git status`.
+3. **Plusieurs projets tournent en parallèle** dans d'autres sessions (soteli, telnet). Rester
+   dans ce dossier est ce qui garantit qu'on ne travaille pas chez le voisin.
+
 ## Reprendre ici
 
 **Rien n'attend d'action humaine sur le ticket 002 : il est livré, poussé, documenté.**
