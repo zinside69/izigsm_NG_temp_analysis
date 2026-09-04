@@ -495,10 +495,26 @@ workspace  claude-test    → zinside69/claude-projects
 CE dépôt   izigsm/webapp  → zinside69/izigsm_NG_temp_analysis
 ```
 
-**Un `sync push` du workspace ne pousse pas ce dépôt.** Il affiche « Projects pushed to GitHub »,
-message exact et trompeur : le travail sur iziGSM reste local. Constaté avec 6 commits d'un coup,
-alors que le distant avait avancé de son côté (backup D1 automatique) — branches divergées, aucun
-signal.
+**⚠ Renversé le 2026-09-04 — `sync push` du workspace pousse DÉSORMAIS ce dépôt.**
+`scripts/sync-push.ps1` appelle `Invoke-DepotsPush` en étape **2/4**, sur chaque dépôt imbriqué
+et **avant** le workspace, avec en commentaire « incident du 2026-08-02 ». Le script a donc été
+corrigé après l'incident ci-dessous ; cette page ne l'avait jamais su.
+
+**Conséquence pratique, dans l'autre sens** : un commit izigsm laissé volontairement local
+**peut partir sans action de la session qui l'a créé**, si une autre session lance un
+`sync push` du workspace. C'est arrivé le 2026-09-04 au commit `d3a7713` du checkpoint 79 —
+annoncé « non poussé », trouvé sur `origin` quelques minutes plus tard. Deux règles en
+découlent :
+
+- ⊥ traiter « je ne pousse pas » comme un garde-fou. Ce qui est commité peut devenir public.
+- ⊥ **amender** un commit izigsm sans un `git fetch origin` **juste avant** : l'amend d'un
+  commit déjà parti produit un rejet non-fast-forward (vécu le 2026-09-04). Réparer par
+  `git reset --soft origin/main` puis un nouveau commit — **jamais** par un `push --force`.
+
+**L'incident d'origine (2026-08-02), conservé pour mémoire** : à l'époque, `sync push` affichait
+« Projects pushed to GitHub » alors que le travail sur iziGSM restait local. Constaté avec
+6 commits d'un coup, le distant ayant avancé de son côté (backup D1 automatique) — branches
+divergées, aucun signal.
 
 Avant d'annoncer qu'un travail est poussé, mesurer **sur ce dépôt** :
 
