@@ -1,7 +1,7 @@
 ---
 id: 005
 titre: Le vérificateur NF525 et l'écrivain des factures/avoirs ne parlent pas le même format
-statut: ready-for-human
+statut: done-pending-prod-check
 bloque-par: []
 ---
 
@@ -62,13 +62,51 @@ satisfait par aucun avoir ni aucune facture émise.
 
 ## Critères d'acceptation
 
-- [ ] Le format faisant foi pour chaque `type_transaction` est écrit dans `decisions.md`
-- [ ] `verifierIntegriteChaine()` valide les entrées des deux écrivains sans réécrire aucune ligne
-- [ ] Un test voit rouge sur une entrée écrite par B avant le correctif
-- [ ] Les deux hash de genèse (`'0'×64` et `''`) sont unifiés ou explicitement documentés comme distincts
-- [ ] Mesuré par un chiffre en base locale : anomalies = 0 sur un journal contenant les deux écrivains
+- [x] Le format faisant foi pour chaque `type_transaction` est écrit dans `decisions.md`
+      (§ 2026-09-04 deux écrivains — table complète + 4 arbitrages)
+- [x] `verifierIntegriteChaine()` valide les entrées des deux écrivains sans réécrire aucune ligne
+      (`rebuildDonneesHash()` aiguille sur `type_transaction` ; zéro `UPDATE` sur `journal_nf525`)
+- [x] Un test voit rouge sur une entrée écrite par B avant le correctif
+      (3 tests rouges dans `tests/caisseService.test.ts` : facture, avoir, journal mixte)
+- [x] Les deux hash de genèse (`'0'×64` et `''`) sont unifiés ou explicitement documentés comme distincts
+      (documentés distincts — décision 4 ; unifier toucherait un chemin d'écriture NF525)
+- [x] Mesuré par un chiffre en base locale : anomalies = 0 sur un journal contenant les deux écrivains
+      (boutique 1 : 171 entrées — 117 `facture` + 53 `avoir` + 1 `vente` — **170 → 0** ; et
+      **0 sur les 38 boutiques** du journal local, via l'endpoint réel, pas un script maison)
 - [ ] `GET /api/caisse/integrite` revérifié en **production** — l'affirmation « chaîne NF525 relue
       intègre » du checkpoint 78 a été établie par requête SQL directe, jamais par cet endpoint
+      → **SEUL CRITÈRE OUVERT.** Exige un déploiement, qui embarquerait aussi le ticket 002 (non
+      déployé depuis le cp79). Décision laissée à l'exploitant le 2026-09-04.
+
+## Livré le 2026-09-04
+
+| Fichier | Changement |
+|---|---|
+| `src/lib/nf525.ts` | `buildCanonicalData()` **exportée** — une seule définition du format B |
+| `src/services/caisseService.ts` | `TYPES_ECRIVAIN_B` + `rebuildDonneesHash()` ; en-têtes corrigés |
+| `tests/caisseService.test.ts` | +5 tests (3 vus rouges, 2 interdisant d'affaiblir le contrôle) |
+| `tests/nf525-ecrivains-conformite.test.ts` | garde-fou statique, vu rouge en retirant `'avoir'` |
+
+Gates : vitest **914/916** (2 échecs permanents de fuseau `agendaService`), tsc **32**,
+playwright **188/188**, build ✓ — baseline cp79 tenue.
+
+**Le recalcul part des CHAMPS de la ligne, jamais de la colonne `donnees_hash`.** Relire cette
+colonne aurait donné 0 anomalie immédiatement, sur les deux écrivains — et validé une ligne dont
+le montant a été réécrit en base. Deux tests interdisent cette facilité.
+
+## Deux erreurs de ce ticket, corrigées par la mesure
+
+- `cloturerJournee()` **n'écrit pas** dans `journal_nf525` — il écrit dans
+  `clotures_journalieres`. Ce n'est pas un écrivain de cette chaîne.
+- **Aucun rachat** n'appelle `enregistrerTransaction()`. Seuls `emettreFacture()` et
+  `creerAvoir()` le font.
+
+## Trouvé en route, hors périmètre — non corrigé
+
+`verifierIntegriteChaine()` **ne vérifie pas le chaînage** : il ne compare jamais
+`hash_precedent` au `hash_courant` de la ligne précédente. Une **suppression** de ligne au milieu
+du journal ne produit aucune anomalie. Documenté dans `bugs.md` et `todo.md` (🟠 P2) ; mérite son
+propre ticket.
 
 ## Notes
 

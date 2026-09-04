@@ -771,3 +771,175 @@ describe('createVente() — verrouillage NF525 (ticket 002)', () => {
     expect(verrou, 'la facture a été verrouillée malgré l\'échec du journal').toBeUndefined()
   })
 })
+
+// ─── verifierIntegriteChaine — les deux écrivains du journal (ticket 005) ─────
+
+/**
+ * Construit la chaîne canonique de l'écrivain B (`lib/nf525.buildCanonicalData`).
+ * FORMAT FIGÉ : boutique_id|type|reference|ht|tva|ttc|date|hash_precedent
+ *
+ * Réécrit ici volontairement plutôt qu'importé : ce test doit échouer si le
+ * format de production dérive, pas suivre la dérive en silence.
+ */
+function buildCanonicalB(
+  boutiqueId: number, type: string, ref: string,
+  ht: number, tva: number, ttc: number,
+  date: string, hashPrecedent: string
+): string {
+  return [
+    boutiqueId, type, ref,
+    ht.toFixed(2), tva.toFixed(2), ttc.toFixed(2),
+    date, hashPrecedent,
+  ].join('|')
+}
+
+/** Hash genèse de l'écrivain B : chaîne vide (l'écrivain A utilise 64 zéros). */
+const HASH_GENESE_B = ''
+
+describe('verifierIntegriteChaine — écrivain B (factures et avoirs)', () => {
+  const DATE = '2026-09-04T10:00:00.000Z'
+
+  it('déclare intègre une facture écrite par lib/nf525 (format B)', async () => {
+    const canonical = buildCanonicalB(1, 'facture', 'FAC-2026-00001', 100, 20, 120, DATE, HASH_GENESE_B)
+    const transaction: Partial<JournalEntry> = {
+      id: 5, boutique_id: 1,
+      type_transaction: 'facture',
+      reference_numero: 'FAC-2026-00001',
+      montant_ht: 100, montant_tva: 20, montant_ttc: 120,
+      date_transaction: DATE,
+      hash_precedent:   HASH_GENESE_B,
+      donnees_hash:     canonical,
+      hash_courant:     await sha256Real(canonical),
+    }
+
+    const db = createMockDatabase()
+    db.__setListFn(
+      'SELECT * FROM journal_nf525 WHERE boutique_id = ? ORDER BY id ASC',
+      () => [transaction as JournalEntry]
+    )
+
+    const result = await verifierIntegriteChaine(db, 1)
+
+    expect(result.anomalies).toHaveLength(0)
+    expect(result.integre).toBe(true)
+  })
+
+  it('déclare intègre un avoir écrit par lib/nf525 (format B)', async () => {
+    const prev      = 'a'.repeat(64)
+    const canonical = buildCanonicalB(1, 'avoir', 'AV-2026-00001', -100, -20, -120, DATE, prev)
+    const transaction: Partial<JournalEntry> = {
+      id: 6, boutique_id: 1,
+      type_transaction: 'avoir',
+      reference_numero: 'AV-2026-00001',
+      montant_ht: -100, montant_tva: -20, montant_ttc: -120,
+      date_transaction: DATE,
+      hash_precedent:   prev,
+      donnees_hash:     canonical,
+      hash_courant:     await sha256Real(canonical),
+    }
+
+    const db = createMockDatabase()
+    db.__setListFn(
+      'SELECT * FROM journal_nf525 WHERE boutique_id = ? ORDER BY id ASC',
+      () => [transaction as JournalEntry]
+    )
+
+    const result = await verifierIntegriteChaine(db, 1)
+
+    expect(result.anomalies).toHaveLength(0)
+    expect(result.integre).toBe(true)
+  })
+
+  it('valide un journal mixte : vente (écrivain A) puis facture et avoir (écrivain B)', async () => {
+    // 1. vente POS — format A, genèse 64 zéros
+    const canonA = buildCanonical('vente', 'FAC-2026-00010', 60, DATE, HASH_GENESE)
+    const hashA  = await sha256Real(canonA)
+
+    // 2. facture émise — format B, chaînée sur le hash de la vente
+    const canonB1 = buildCanonicalB(1, 'facture', 'FAC-2026-00011', 100, 20, 120, DATE, hashA)
+    const hashB1  = await sha256Real(canonB1)
+
+    // 3. avoir — format B, chaîné sur la facture
+    const canonB2 = buildCanonicalB(1, 'avoir', 'AV-2026-00002', -100, -20, -120, DATE, hashB1)
+    const hashB2  = await sha256Real(canonB2)
+
+    const journal: Array<Partial<JournalEntry>> = [
+      { id: 1, boutique_id: 1, type_transaction: 'vente',   reference_numero: 'FAC-2026-00010',
+        montant_ht: 50, montant_tva: 10, montant_ttc: 60,
+        date_transaction: DATE, hash_precedent: HASH_GENESE, donnees_hash: canonA,  hash_courant: hashA  },
+      { id: 2, boutique_id: 1, type_transaction: 'facture', reference_numero: 'FAC-2026-00011',
+        montant_ht: 100, montant_tva: 20, montant_ttc: 120,
+        date_transaction: DATE, hash_precedent: hashA,      donnees_hash: canonB1, hash_courant: hashB1 },
+      { id: 3, boutique_id: 1, type_transaction: 'avoir',   reference_numero: 'AV-2026-00002',
+        montant_ht: -100, montant_tva: -20, montant_ttc: -120,
+        date_transaction: DATE, hash_precedent: hashB1,     donnees_hash: canonB2, hash_courant: hashB2 },
+    ]
+
+    const db = createMockDatabase()
+    db.__setListFn(
+      'SELECT * FROM journal_nf525 WHERE boutique_id = ? ORDER BY id ASC',
+      () => journal as JournalEntry[]
+    )
+
+    const result = await verifierIntegriteChaine(db, 1)
+
+    expect(result.anomalies).toHaveLength(0)
+    expect(result.integre).toBe(true)
+  })
+
+  it('détecte encore une altération de montant sur une entrée format B', async () => {
+    // Le correctif ne doit PAS se contenter de relire donnees_hash : un contrôle
+    // qui ferait cela validerait cette ligne alors que le montant a été réécrit.
+    const canonical = buildCanonicalB(1, 'facture', 'FAC-2026-00001', 100, 20, 120, DATE, HASH_GENESE_B)
+    const transaction: Partial<JournalEntry> = {
+      id: 5, boutique_id: 1,
+      type_transaction: 'facture',
+      reference_numero: 'FAC-2026-00001',
+      montant_ht: 100, montant_tva: 20,
+      montant_ttc: 1,                       // réécrit en base : 120 → 1
+      date_transaction: DATE,
+      hash_precedent:   HASH_GENESE_B,
+      donnees_hash:     canonical,          // laissé intact par le fraudeur
+      hash_courant:     await sha256Real(canonical),
+    }
+
+    const db = createMockDatabase()
+    db.__setListFn(
+      'SELECT * FROM journal_nf525 WHERE boutique_id = ? ORDER BY id ASC',
+      () => [transaction as JournalEntry]
+    )
+
+    const result = await verifierIntegriteChaine(db, 1)
+
+    expect(result.integre).toBe(false)
+    expect(result.anomalies).toHaveLength(1)
+    expect(result.anomalies[0].reference_numero).toBe('FAC-2026-00001')
+  })
+
+  it('détecte une altération de boutique_id sur une entrée format B', async () => {
+    // boutique_id fait partie du format B et d'aucun autre : cette ligne prouve
+    // que le dispatch ne retombe pas silencieusement sur le format A.
+    const canonical = buildCanonicalB(1, 'facture', 'FAC-2026-00001', 100, 20, 120, DATE, HASH_GENESE_B)
+    const transaction: Partial<JournalEntry> = {
+      id: 5, boutique_id: 2,                // réécrit : la facture est déplacée de boutique
+      type_transaction: 'facture',
+      reference_numero: 'FAC-2026-00001',
+      montant_ht: 100, montant_tva: 20, montant_ttc: 120,
+      date_transaction: DATE,
+      hash_precedent:   HASH_GENESE_B,
+      donnees_hash:     canonical,
+      hash_courant:     await sha256Real(canonical),
+    }
+
+    const db = createMockDatabase()
+    db.__setListFn(
+      'SELECT * FROM journal_nf525 WHERE boutique_id = ? ORDER BY id ASC',
+      () => [transaction as JournalEntry]
+    )
+
+    const result = await verifierIntegriteChaine(db, 2)
+
+    expect(result.integre).toBe(false)
+    expect(result.anomalies).toHaveLength(1)
+  })
+})

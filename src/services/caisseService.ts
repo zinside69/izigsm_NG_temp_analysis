@@ -7,7 +7,17 @@
  *
  * Architecture NF525 (Loi anti-fraude TVA, art. 88 LFR 2015) :
  *  - Chaque transaction est insérée dans `journal_nf525` avec un hash SHA-256 chaîné.
- *  - Formule : `hash_courant = SHA-256(type|reference_numero|montant_centimes|date|hash_precedent)`
+ *  - **Deux écrivains alimentent cette chaîne, avec deux formats canoniques** :
+ *      A — ici même (INSERT direct), types `vente` / `encaissement` :
+ *          `SHA-256(type|reference_numero|montant_centimes|date|hash_precedent)`
+ *      B — `lib/nf525.enregistrerTransaction()`, types `facture` / `avoir` :
+ *          `SHA-256(boutique_id|type|ref|ht|tva|ttc|date|hash_precedent)`
+ *    Les deux se chaînent correctement (chacun lit le dernier `hash_courant` de la
+ *    boutique) ; seule la genèse diffère — 64 zéros chez A, chaîne vide chez B.
+ *    `verifierIntegriteChaine()` aiguille sur `type_transaction` (voir
+ *    `rebuildDonneesHash()`). Constaté et corrigé le 2026-09-04, ticket 005 : le
+ *    vérificateur ne connaissait que le format A et déclarait donc frauduleuse
+ *    **toute** facture émise et **tout** avoir, depuis l'origine du journal.
  *  - Le montant est stocké en centimes (entier) pour éviter les erreurs de virgule flottante.
  *  - La clôture journalière enchaîne les hash de toutes les transactions du jour
  *    avec le hash de la clôture précédente (chaînage inter-journées).
@@ -26,6 +36,7 @@
 
 import { nextNumero, calculLignes } from '../lib/db'
 import { todayParis, currentMonthParis } from '../lib/timezone'
+import { buildCanonicalData } from '../lib/nf525'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -133,6 +144,56 @@ function buildDonneesHash(
 ): string {
   const montantCentimes = Math.round(montantTtc * 100)
   return `${type}|${referenceNumero}|${montantCentimes}|${date}|${hashPrecedent}`
+}
+
+/**
+ * Types de transaction écrits par `lib/nf525.enregistrerTransaction()` — dits
+ * « écrivain B », au format `boutique_id|type|ref|ht|tva|ttc|date|prev`.
+ *
+ * Tout autre type est écrit ici même, par INSERT direct — « écrivain A », au
+ * format `type|ref|centimes|date|prev` (`buildDonneesHash()` ci-dessus).
+ *
+ * Relevé le 2026-09-04 en lisant les appelants, pas en supposant :
+ *   A → 'vente' (`createVente()`), 'encaissement' (`enregistrerEncaissement()`)
+ *   B → 'facture' (`factureService.emettreFacture()`), 'avoir' (`creerAvoir()`)
+ *
+ * `cloturerJournee()` n'écrit PAS dans `journal_nf525` (table
+ * `clotures_journalieres`) — ce n'est pas un écrivain de cette chaîne.
+ *
+ * Le défaut par défaut est le format A : c'est le comportement historique, et un
+ * type inconnu doit ressortir en anomalie plutôt que d'être validé au hasard.
+ */
+export const TYPES_ECRIVAIN_B = new Set(['facture', 'avoir'])
+
+/**
+ * Reconstruit la chaîne canonique d'une entrée du journal selon l'écrivain qui
+ * l'a produite, déterminé par `type_transaction`.
+ *
+ * Pourquoi un aiguillage plutôt qu'un format unique (décision du 2026-09-04,
+ * ticket 005) : deux écrivains cohabitent depuis l'origine du journal, avec deux
+ * formats incompatibles. Aligner le vérificateur sur l'un déclare l'autre
+ * frauduleux — le mensonge se déplace au lieu de disparaître. Et réécrire les
+ * `hash_courant` déjà émis pour les uniformiser est exactement ce que NF525
+ * interdit. L'aiguillage est la seule option qui ne réécrit aucune ligne.
+ *
+ * ⚠ On reconstruit depuis les CHAMPS de la ligne, jamais depuis la colonne
+ * `donnees_hash` stockée : relire cette colonne validerait une ligne dont le
+ * montant a été réécrit en base, et le contrôle légal ne prouverait plus rien.
+ *
+ * @param t  Entrée du journal telle qu'elle est stockée
+ * @returns  Chaîne canonique à repasser dans sha256() pour comparaison
+ */
+function rebuildDonneesHash(t: JournalEntry): string {
+  if (TYPES_ECRIVAIN_B.has(t.type_transaction)) {
+    return buildCanonicalData(t, t.hash_precedent)
+  }
+  return buildDonneesHash(
+    t.type_transaction,
+    t.reference_numero,
+    t.montant_ttc,
+    t.date_transaction,
+    t.hash_precedent
+  )
 }
 
 // ─── Helpers DB ───────────────────────────────────────────────────────────────
@@ -719,6 +780,15 @@ export async function cloturerJournee(
  * Pour chaque transaction, recalcule le hash attendu et le compare au hash stocké.
  * Toute divergence indique une modification frauduleuse d'une transaction passée.
  *
+ * Le format canonique dépend de l'écrivain de la ligne — `rebuildDonneesHash()`
+ * aiguille sur `type_transaction` (ticket 005, 2026-09-04). Le recalcul part
+ * toujours des **champs** de la ligne, jamais de la colonne `donnees_hash`
+ * stockée : sinon une ligne dont le montant a été réécrit en base passerait le
+ * contrôle. `lib/nf525.verifyChain()` fait ce raccourci et est donc plus faible
+ * sur ce point — mais il vérifie en revanche le **chaînage** (`hash_precedent`
+ * contre le `hash_courant` de la ligne précédente), que cette fonction-ci ne
+ * teste pas encore : une suppression de ligne au milieu du journal lui échappe.
+ *
  * Cette vérification peut être effectuée par l'administration fiscale ou l'exploitant.
  *
  * Migré vers le port `Database` (chantier Ports & Adapters, 2026-07-12).
@@ -753,14 +823,8 @@ export async function verifierIntegriteChaine(
   const anomalies: Array<{ id: number; reference_numero: string; details: string }> = []
 
   for (const t of transactions) {
-    const donneesAttendu = buildDonneesHash(
-      t.type_transaction,
-      t.reference_numero,
-      t.montant_ttc,
-      t.date_transaction,
-      t.hash_precedent
-    )
-    const hashAttendu = await sha256(donneesAttendu)
+    const donneesAttendu = rebuildDonneesHash(t)
+    const hashAttendu    = await sha256(donneesAttendu)
 
     if (hashAttendu !== t.hash_courant) {
       anomalies.push({

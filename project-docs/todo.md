@@ -1,20 +1,36 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## 🔴 P1 — Le contrôle d'intégrité NF525 ment (ticket 005, ouvert le 2026-09-04)
+## 🟠 P2 — Le contrôle d'intégrité NF525 ne détecte pas la suppression d'une ligne (ouvert le 2026-09-04)
 
-Rédigé **sans case à cocher** volontairement : le ticket est `ready-for-human` et exige trois
-arbitrages (quel format fait foi, sort des 170 entrées existantes, refus explicite de recalculer
-les hash). Une loop réarmée ne doit pas le piocher.
+Rédigé **sans case à cocher** : aucun ticket n'est écrit, et le sujet touche le contrôle légal —
+il ne doit pas être pioché par une loop réarmée.
 
-`GET /api/caisse/integrite` déclare frauduleuse **toute** facture émise et **tout** avoir, depuis
-l'origine : le vérificateur recalcule avec le format de `caisseService`, alors que factures et
-avoirs sont hashés par `lib/nf525.ts` dans un format différent. Mesuré le 2026-09-04 en base
-locale : 170 anomalies pour exactement 170 entrées de cet écrivain, 0 sur l'entrée de l'autre.
+`verifierIntegriteChaine()` recalcule chaque hash isolément et ne compare **jamais**
+`hash_precedent` au `hash_courant` de la ligne précédente. Supprimer une entrée au milieu du
+journal ne produit donc aucune anomalie. `verifyChain()` (`lib/nf525.ts`) fait ce contrôle mais
+recalcule depuis la colonne `donnees_hash` stockée, donc rate l'altération d'un montant — et
+aucune interface ne l'appelle. Les deux vérificateurs sont complémentaires, aucun n'est complet.
 
-Détail et critères : `.scratch/conformite-facturation/issues/005-verificateur-nf525-deux-formats.md`
-Cause racine : `project-docs/bugs.md` § contrôle d'intégrité NF525.
+Trouvé en corrigeant le 005. Cause racine et détail : `bugs.md` § chaînage non vérifié.
+Étape suivante suggérée : `/to-tickets` sur ce sujet avant tout code — c'est le contrôle fiscal.
 
-**Bloque** le dernier critère du ticket 002, livré sans lui le 2026-09-04.
+## 🔴 P1 — Le contrôle d'intégrité NF525 ment (ticket 005) — ✅ CORRIGÉ le 2026-09-04
+
+`GET /api/caisse/integrite` déclarait frauduleuse **toute** facture émise et **tout** avoir depuis
+l'origine du journal. Corrigé par un aiguillage sur `type_transaction`, sans réécrire une seule
+ligne de `journal_nf525`.
+
+**Mesuré** : boutique 1 **170 → 0 anomalies** (171 entrées, les deux écrivains), 0 sur les
+38 boutiques du journal local. Gates : vitest 914/916, tsc 32, playwright 188/188.
+
+Décisions (table des formats, 4 arbitrages) : `decisions.md` § 2026-09-04 deux écrivains.
+Ticket : `.scratch/conformite-facturation/issues/005-verificateur-nf525-deux-formats.md`.
+
+⚠ **Un critère reste ouvert** : `GET /api/caisse/integrite` revérifié **en production**. Il exige
+un déploiement, qui embarquerait aussi le ticket 002 — non déployé depuis le cp79. Décision de
+déploiement laissée à l'exploitant le 2026-09-04.
+
+**Ne bloque plus** le dernier critère du ticket 002.
 
 ## ⚠ NOTE (pas une tâche) — loop d'automatisation à désarmer, décidé le 2026-08-16
 

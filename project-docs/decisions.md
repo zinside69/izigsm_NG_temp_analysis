@@ -1,5 +1,46 @@
 # iziGSM — Décisions
 
+## 2026-09-04 — Le journal NF525 a deux écrivains, et le vérificateur aiguille (ticket 005)
+
+**Le format faisant foi dépend du `type_transaction`.** C'est la décision, et elle est
+définitive :
+
+| `type_transaction` | Écrivain | Format canonique hashé | Genèse |
+|---|---|---|---|
+| `vente`, `encaissement` | A — INSERT direct, `caisseService.ts` | `type\|ref\|montant_centimes\|date\|prev` | `'0'×64` |
+| `facture`, `avoir` | B — `lib/nf525.enregistrerTransaction()` | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` | `''` |
+
+Relevé **en lisant les appelants**, pas en recopiant le ticket — qui se trompait sur deux points :
+`cloturerJournee()` n'écrit pas dans `journal_nf525` (table `clotures_journalieres`), et **aucun
+rachat** n'appelle `enregistrerTransaction()`.
+
+**Décision 1 — un aiguillage, pas un format unique.** `verifierIntegriteChaine()` choisit le
+format selon `type_transaction` (`rebuildDonneesHash()`). Aligner le vérificateur sur B aurait
+rendu saines les 170 entrées B et fausse l'entrée A : le mensonge se déplace, il ne disparaît
+pas. L'aiguillage est la seule option qui ne sacrifie aucune entrée.
+
+**Décision 2 — aucun `hash_courant` existant n'est recalculé.** Écartée explicitement, pas
+oubliée : réécrire des hash déjà émis pour uniformiser le format est exactement ce que NF525
+interdit, et détruirait la preuve d'inaltérabilité qu'on cherche à produire. Aucune ligne de
+`journal_nf525` n'a été touchée par ce ticket.
+
+**Décision 3 — deux écrivains pour toujours, la caisse ne converge pas vers B.** Faire passer
+`createVente()` par `enregistrerTransaction()` serait plus propre, mais modifierait un chemin
+d'**écriture** NF525 en production. Le 005 ne touche qu'au chemin de **lecture**. Si cette
+convergence est un jour souhaitée, elle relève d'un ticket dédié.
+
+**Décision 4 — les deux genèses restent distinctes**, documentées plutôt qu'unifiées. Unifier
+`''` en `'0'×64` côté B toucherait un chemin d'écriture pour un gain cosmétique. L'écart ne porte
+que sur la toute première entrée d'une boutique et l'aiguillage l'absorbe.
+
+**Une seule définition du format B.** `buildCanonicalData()` est désormais **exportée** de
+`lib/nf525.ts` et importée par le vérificateur. La cause racine de ce défaut est une copie
+divergente ; en réécrire une seconde dans `caisseService.ts` aurait reproduit le bug à retardement.
+
+**Mesuré, pas déduit** : `GET /api/caisse/integrite` passe de **170 anomalies à 0** sur la
+boutique 1 (171 entrées, les deux écrivains), et **0 anomalie sur les 38 boutiques** du journal
+local. Garde-fou de non-récidive : `tests/nf525-ecrivains-conformite.test.ts`.
+
 ## 2026-09-04 — Vente de caisse : verrouillage complet, et sort des factures existantes (ticket 002)
 
 **Décision 1 — alignement complet, pas le strict minimum.** `createVente()` pose les six marques

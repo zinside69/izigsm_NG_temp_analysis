@@ -88,11 +88,17 @@ async function sha256(data: string): Promise<string> {
  * Les montants sont formatés avec `.toFixed(2)` pour éviter les erreurs
  * de virgule flottante (ex: 10.1 → "10.10", jamais "10.099999...").
  *
+ * EXPORTÉE depuis le 2026-09-04 (ticket 005) : `verifierIntegriteChaine()`
+ * (`caisseService.ts`) doit recalculer ce format à l'identique pour valider les
+ * entrées écrites ici. Elle en avait une copie divergente, et déclarait donc
+ * frauduleuse toute facture émise et tout avoir. Une seule définition, un seul
+ * format — ne jamais en réécrire une seconde copie ailleurs.
+ *
  * @param input         Données de la transaction NF525
  * @param previousHash  Hash SHA-256 de la transaction précédente ('' si premiere)
  * @returns             Chaîne canonique prête à passer dans sha256()
  */
-function buildCanonicalData(input: Nf525Input, previousHash: string): string {
+export function buildCanonicalData(input: Nf525Input, previousHash: string): string {
   return [
     input.boutique_id,
     input.type_transaction,

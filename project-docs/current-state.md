@@ -1,4 +1,54 @@
-# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 79 — la vente de caisse est annulable, et le contrôle NF525 ment)
+# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 80 — le contrôle NF525 dit enfin la vérité)
+
+## Checkpoint 80 — Ticket 005 livré : le vérificateur connaît ses deux écrivains (2026-09-04)
+
+Même journée que le cp79, session enchaînée. Le défaut trouvé en validant le 002 est corrigé.
+
+**⊥ déployé.** Prod toujours `izigsm-v2.90`, et le ticket **002 non plus n'est pas déployé** —
+un déploiement embarquerait les deux d'un coup sur la chaîne NF525. Décision laissée à
+l'exploitant. Aucune migration en attente.
+
+### Le correctif
+
+`verifierIntegriteChaine()` aiguille sur `type_transaction` (`rebuildDonneesHash()`) : format A
+pour `vente`/`encaissement`, format B pour `facture`/`avoir`. `buildCanonicalData()` est
+**exportée** de `lib/nf525.ts` et réutilisée — la cause racine étant une copie divergente, en
+écrire une seconde aurait reproduit le bug à retardement. **Zéro ligne de `journal_nf525`
+touchée.** Table des formats et les 4 arbitrages : `decisions.md` § 2026-09-04 deux écrivains.
+
+**Mesuré par l'endpoint réel** : boutique 1 **170 → 0 anomalies** (171 entrées — 117 `facture`,
+53 `avoir`, 1 `vente`, donc les deux écrivains), **0 sur les 38 boutiques** du journal local.
+
+Gates : vitest **914/916** (baseline 907/909 + 7 nouveaux ; 2 échecs permanents de fuseau
+`agendaService`), tsc **32**, playwright **188/188**, build ✓.
+
+### Ce qui a failli passer pour un échec
+
+Le premier relevé après correctif annonçait **toujours 170 anomalies**. Ni le code ni le build
+n'étaient en cause : **deux serveurs `wrangler` écoutaient sur le port 3000**, dont un resté d'une
+session antérieure servant l'**ancien** Worker. Trouvé au `netstat`, contourné en mesurant sur un
+port neuf (3100, `PW_PORT=3100` pour Playwright) — aucun processus tué.
+
+Deux fausses pistes écartées avant ça, par la mesure et non par le raisonnement : le bundle
+contenait bien le correctif (`Set(["facture","avoir"])` — mon premier grep échouait sur des
+identifiants minifiés), et ma reconstruction reproduisait **exactement** le `hash_courant` stocké
+de deux lignes réelles. Leçon : avant de conclure qu'un correctif ne marche pas en local,
+vérifier **qui** répond sur le port.
+
+### Trouvé en route, non corrigé
+
+`verifierIntegriteChaine()` **ne vérifie pas le chaînage** — il ne compare jamais `hash_precedent`
+au `hash_courant` de la ligne précédente. Une **suppression** de ligne au milieu du journal ne
+produit aucune anomalie. `verifyChain()` (`lib/nf525.ts`) le fait mais relit `donnees_hash` et
+rate l'altération d'un montant ; aucune interface ne l'appelle. Aucun des deux n'est complet.
+🟠 P2 dans `todo.md`, cause racine dans `bugs.md`.
+
+### Deux erreurs du ticket 005, corrigées par la mesure
+
+`cloturerJournee()` écrit dans `clotures_journalieres`, pas dans `journal_nf525`. Et **aucun
+rachat** n'appelle `enregistrerTransaction()` — seuls `emettreFacture()` et `creerAvoir()`.
+
+---
 
 ## Checkpoint 79 — Ticket 002 livré et poussé, et un défaut d'origine sur le contrôle légal (2026-09-04)
 

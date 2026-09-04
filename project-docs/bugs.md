@@ -1,6 +1,27 @@
 # iziGSM — Bugs connus
 
-## 🔴 Le contrôle d'intégrité NF525 déclare frauduleuse toute facture émise et tout avoir (trouvé le 2026-09-04, NON corrigé — ticket 005)
+## ⚠ `verifierIntegriteChaine()` ne vérifie pas le chaînage — une ligne supprimée lui échappe (trouvé le 2026-09-04, NON corrigé)
+
+Trouvé en corrigeant le ticket 005, en lisant les deux vérificateurs côte à côte.
+
+`verifierIntegriteChaine()` (`caisseService.ts`) recalcule chaque hash **isolément** : il
+reconstruit la chaîne canonique depuis les champs de la ligne et compare à `hash_courant`. Il ne
+compare **jamais** `hash_precedent` au `hash_courant` de la ligne précédente. ∴ **supprimer une
+ligne au milieu du journal ne produit aucune anomalie** — la chaîne est rompue, le contrôle est
+muet.
+
+`verifyChain()` (`lib/nf525.ts`), lui, vérifie le chaînage — mais recalcule depuis la colonne
+`donnees_hash` stockée au lieu des champs, donc **rate l'altération d'un montant** en base. Les
+deux vérificateurs sont complémentaires et aucun n'est complet. Aucune interface n'appelle
+`verifyChain()`.
+
+**Ce que ça donne, concrètement** : le contrôle légal exposé (`GET /api/caisse/integrite`) détecte
+la **modification** d'une transaction, pas sa **suppression**.
+
+Documenté dans le JSDoc de `verifierIntegriteChaine()`. Mérite son propre ticket — hors du
+périmètre du 005, qui portait sur le format canonique.
+
+## ✅ Le contrôle d'intégrité NF525 déclarait frauduleuse toute facture émise et tout avoir (trouvé le 2026-09-04, CORRIGÉ le 2026-09-04 — ticket 005)
 
 Trouvé en validant le ticket 002, en cherchant pourquoi l'avoir émis sur une vente de caisse
 ressortait anomalique. **Défaut pré-existant, sans lien avec le ticket 002.**
@@ -29,6 +50,27 @@ précisément ce que NF525 interdit, et ça détruirait la preuve d'inaltérabil
 
 **À revérifier** : l'affirmation « chaîne NF525 relue intègre » du checkpoint 78 a été établie par
 requête SQL directe, jamais par cet endpoint. Le dire de la production demande de le mesurer.
+
+**Correctif (2026-09-04)** — `verifierIntegriteChaine()` aiguille désormais sur
+`type_transaction` (`rebuildDonneesHash()`, `caisseService.ts`) : format A pour
+`vente`/`encaissement`, format B pour `facture`/`avoir`. `buildCanonicalData()` est **exportée**
+de `lib/nf525.ts` et réutilisée — la cause racine étant une copie divergente, en écrire une
+seconde aurait reproduit le bug. **Aucune ligne de `journal_nf525` n'a été touchée.**
+
+Mesuré par l'endpoint réel, pas par un script maison : boutique 1 **170 → 0 anomalies**
+(171 entrées, les deux écrivains), et **0 sur les 38 boutiques** du journal local. Décisions et
+table des formats : `decisions.md` § 2026-09-04 deux écrivains. Non-récidive :
+`tests/nf525-ecrivains-conformite.test.ts`, garde-fou statique vu rouge avant d'être retenu.
+
+**Deux erreurs du ticket 005, corrigées par la mesure** : `cloturerJournee()` n'écrit pas dans
+`journal_nf525` (il écrit dans `clotures_journalieres`) et **aucun rachat** n'appelle
+`enregistrerTransaction()`. Le ticket citait les deux comme écrivains de cette chaîne.
+
+**Piège de mesure rencontré, à retenir** : le premier relevé après correctif annonçait toujours
+170 anomalies. Cause — **deux serveurs `wrangler` écoutaient sur le port 3000**, dont un resté
+d'une session antérieure servant l'**ancien** Worker. Un `netstat` sur le port l'a montré. Avant
+de conclure qu'un correctif ne marche pas en local, vérifier **qui** répond sur le port ; mesurer
+sur un port neuf est plus sûr que de faire confiance à un serveur qu'on croit avoir démarré.
 
 ## Le bouton 🗑 d'un brouillon de facture échoue en silence (trouvé le 2026-08-16, NON corrigé)
 

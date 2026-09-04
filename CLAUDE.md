@@ -427,6 +427,37 @@ Voir `project-docs/todo.md` § "🔴 P1 — Audit persistance des champs" pour c
 - **Le régime de franchise TVA se déduit de `boutique_settings.tva_taux_defaut === 0`**, et le texte de la mention vient de `boutique_settings.mention_facture` — pas de colonne dédiée, le paramétrage est déjà multi-tenant.
 - **Aucune numérotation côté client.** Le fallback localStorage qui fabriquait des `FAC-2026-…` dans le navigateur a été supprimé ; ne jamais le réintroduire sous une autre forme.
 
+## Journal NF525 — deux écrivains, un aiguillage (depuis 2026-09-04, ticket 005)
+
+`journal_nf525` est alimenté par **deux** fonctions, avec **deux formats canoniques** — c'est un
+fait de conception, pas un accident à corriger :
+
+| `type_transaction` | Écrivain | Format hashé | Genèse |
+|---|---|---|---|
+| `vente`, `encaissement` | INSERT direct, `caisseService.ts` | `type\|ref\|centimes\|date\|prev` | `'0'×64` |
+| `facture`, `avoir` | `lib/nf525.enregistrerTransaction()` | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` | `''` |
+
+- **`verifierIntegriteChaine()` aiguille sur `type_transaction`** (`rebuildDonneesHash()`). Il
+  n'a longtemps connu que le premier format et déclarait donc frauduleuse **toute** facture émise
+  et **tout** avoir, depuis l'origine du journal — 170 anomalies sur 171 entrées. Ne jamais
+  revenir à un format unique : aligner sur l'un déclare l'autre frauduleux, le mensonge se
+  déplace au lieu de disparaître.
+- **Un nouveau `type_transaction` passant par `enregistrerTransaction()` doit être ajouté à
+  `TYPES_ECRIVAIN_B`.** `tests/nf525-ecrivains-conformite.test.ts` fait échouer la suite sinon —
+  il relit les sources, seul moyen de couvrir un type qui n'existe pas encore.
+- **Une seule définition du format B.** `buildCanonicalData()` est exportée de `lib/nf525.ts` et
+  importée par le vérificateur. La cause racine de ce défaut est une copie divergente : ⊥ en
+  réécrire une seconde ailleurs, sous aucun prétexte.
+- **Le recalcul part des CHAMPS de la ligne, jamais de la colonne `donnees_hash`.** Relire cette
+  colonne donne 0 anomalie sur les deux écrivains — et valide une ligne dont le montant a été
+  réécrit en base. C'est le piège de `verifyChain()` (`lib/nf525.ts`), qui en revanche vérifie le
+  **chaînage** que `verifierIntegriteChaine()` ignore encore (`bugs.md` 🟠 P2 : une suppression de
+  ligne lui échappe). Aucun des deux vérificateurs n'est complet.
+- **⊥ recalculer un `hash_courant` déjà émis** pour uniformiser un format. C'est exactement ce que
+  NF525 interdit, et ça détruirait la preuve d'inaltérabilité recherchée.
+- `cloturerJournee()` écrit dans `clotures_journalieres`, **pas** dans `journal_nf525` : ce n'est
+  pas un écrivain de cette chaîne.
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +
