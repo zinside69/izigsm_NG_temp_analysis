@@ -1,4 +1,93 @@
-# iziGSM — État courant (MàJ : 2026-08-16, checkpoint 78 — la vérification métier du ticket 001 est faite, elle passe)
+# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 79 — la vente de caisse est annulable, et le contrôle NF525 ment)
+
+## Checkpoint 79 — Ticket 002 livré et poussé, et un défaut d'origine sur le contrôle légal (2026-09-04)
+
+Première session depuis le 2026-08-16. Reprise par `/init recover izigsm` sur Windows, comme
+prévu par le cp78 : le ticket 002 touche vente, encaissement et chaînage NF525, donc gate
+complet, donc serveur local — que le Mac ne fait pas tourner.
+
+**Commit `8964dd6` sur `origin/main`** (SHA rejoué par rebase depuis `8f518ff`, par-dessus les
+2 backups D1 automatiques des 03 et 04/09). Poussé et **vérifié par la mesure** :
+`git log origin/main..HEAD` vide. **⊥ déployé en production** — prod toujours `izigsm-v2.90`.
+
+### Les deux gestes Windows en attente depuis le cp78 : soldés
+
+La loop d'automatisation était **déjà désarmée** — vérifié par un état, pas par une supposition :
+`Engineering`, `Telegram Listener` et `Watchdog` sont les **trois** `Disabled`. Le second geste
+(traiter le 002 sous Windows) est l'objet de cette session. Plus rien n'attend d'action humaine
+à ce titre.
+
+### Ce qui est livré — ticket 002
+
+`caisseService.createVente()` pose les six marques d'émission d'`emettreFacture()` : `locked`,
+`issued_at`, `hash_nf525`, `tracking_token`, `vendeur_snapshot`, `acheteur_snapshot`.
+
+**L'ordre est l'invariant, pas le contenu.** Le verrou est posé **après** l'écriture au journal
+NF525. Le poser dans l'`INSERT` rendrait la facture immuable **avant** que la chaîne n'existe :
+un échec du journal laisserait une facture verrouillée et orpheline, donc irréparable — une
+aggravation de la classe de défaut corrigée le 2026-07-12. Un test garde cet ordre.
+
+Deux choses n'ont **pas** été nécessaires, contre l'intuition de départ :
+- **aucune migration** — les six colonnes existent depuis `0006`/`0010`/`0037` ;
+- **aucune modification frontend** — `factures.js:237` conditionne déjà le bouton ↩️ sur
+  `f.locked`, le bouton apparaît donc seul.
+
+Et aucun chemin d'encaissement ne casse : `createVente()` insère dans `paiements` en direct,
+sans passer par `ajouterPaiement()` (qui refuse une facture verrouillée). Les deux seuls
+appelants de celle-ci, `routes/facturation.ts:415` et `:490`, sont hors POS.
+
+**Vérifié en live local** : `FAC-2026-00266` verrouillée avec ses six marques, puis
+`AV-2026-00054` émis sur cette vente et lié à elle — geste impossible pour tous les rôles depuis
+l'origine du produit.
+
+**Gates, conformes à la baseline cp77** : vitest **907/909** (899/901 + 8 nouveaux, mêmes
+2 échecs permanents de fuseau `agendaService`), tsc **32**, playwright **188/188**.
+
+### 🔴 Ce qui a été trouvé, et qui vaut plus que le ticket lui-même
+
+**Le contrôle d'intégrité NF525 déclare frauduleuse toute facture émise et tout avoir, depuis
+l'origine.** Deux écrivains hashent dans la même chaîne avec deux formats canoniques
+incompatibles :
+
+| Écrivain | Fonction | Format |
+|---|---|---|
+| A | `caisseService.createVente()` / `cloturerJournee()` | `type\|ref\|centimes\|date\|prev` |
+| B | `lib/nf525.enregistrerTransaction()` — factures, avoirs, rachats | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` |
+
+`verifierIntegriteChaine()` recalcule **toujours** avec le format A. Écart secondaire : le hash
+de genèse vaut `'0'×64` chez A, `''` chez B.
+
+**Mesuré, pas déduit** — 171 entrées sur la boutique 1 en base locale : 117 `facture` +
+53 `avoir` (B) + 1 `vente` (A). `GET /api/caisse/integrite` signale **exactement 170**
+anomalies. 100 % des entrées B, 0 % de l'entrée A. La première est l'entrée `id 5`,
+`FAC-2026-00001`.
+
+Ouvert en **ticket 005** (`ready-for-human`, 3 arbitrages), consigné dans `bugs.md` et `todo.md`
+🔴 P1. Ce défaut rend **insatisfiable** le dernier critère du 002, livré sans lui.
+
+⚠️ **Corollaire à ne pas perdre** : le cp78 affirme « chaîne NF525 relue intègre » en production.
+Cette lecture a été faite **par requête SQL directe**, jamais par cet endpoint. L'état réel de
+`/api/caisse/integrite` en production **n'est pas connu**.
+
+### Leçons de méthode de cette session
+
+- **Une mesure prise pendant qu'un autre processus écrit ne mesure rien.** Le compte d'anomalies
+  a bougé de 167 à 170 sans écriture de ma part : Playwright tournait en parallèle sur la même
+  base D1 locale. Attendre la fin du gate avant de compter.
+- **Un test rouge peut accuser le test, pas le code.** Le premier échec sur `hash_nf525` venait
+  de mon mock, qui renvoyait un hash fabriqué là où le code persiste le hash réellement calculé.
+- **Tout test ajouté n'est pas une preuve.** Le garde-fou d'ordre et les 3 tests `createAvoir()`
+  sont verts d'emblée : ils caractérisent l'existant. Seuls 4 des 8 ont été vus rouges.
+- **`curl` et `node -e` sont interceptés dans cet environnement** ; un script `.mjs` exécuté par
+  `node <fichier>` passe. Déjà rencontré le 2026-07-14, à ne plus redécouvrir.
+- **Syntaxe de shell** : `@'…'@` est un here-string PowerShell, il explose dans Bash. Pour un
+  message de commit multiligne depuis Bash : `git commit -F -` avec un heredoc `<< 'EOF'`.
+
+### Résidus assumés en base locale
+
+Client/vente `ZZ Ticket002`, facture `FAC-2026-00266`, avoir `AV-2026-00054`. Laissés
+délibérément : base de préprod déjà chargée de 171 entrées de tests E2E, et supprimer une
+facture chaînée NF525 romprait la chaîne — ce que le chantier interdit.
 
 ## Checkpoint 78 — La série tient, mesurée à l'écran et en base (2026-08-16)
 

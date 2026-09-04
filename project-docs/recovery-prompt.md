@@ -1,3 +1,85 @@
+# Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 79 — vente de caisse annulable ; le contrôle NF525 ment)
+
+## Reprendre ici
+
+**Rien n'attend d'action humaine sur le ticket 002 : il est livré, poussé, documenté.**
+Commit `8964dd6` sur `origin/main`, vérifié par la mesure (`git log origin/main..HEAD` vide).
+**Non déployé** — la production reste `izigsm-v2.90`. Aucune migration en attente.
+
+Les deux gestes Windows laissés par le cp78 sont soldés : la loop est désarmée (les **trois**
+tâches `Disabled`, vérifié par un état) et le ticket 002 a été traité ici, sous Windows.
+
+**Suite au choix :**
+1. **Ticket 003** — sur un brouillon, le 🗑 est actif, demande confirmation, `DELETE
+   /api/factures/:id` répond **404**, la facture reste et **aucun message n'apparaît**.
+   Aucun bloqueur.
+2. **Ticket 005** — le contrôle d'intégrité NF525 (ci-dessous). `ready-for-human` : il faut
+   trancher avant de coder.
+3. **Déployer le 002** en production, si l'exploitant le veut.
+
+## 🔴 Le fait le plus important de cette session
+
+**`GET /api/caisse/integrite` — le contrôle légal NF525 — déclare frauduleuse toute facture
+émise et tout avoir, depuis l'origine.** Deux écrivains, deux formats canoniques incompatibles :
+
+| Écrivain | Fonction | Format |
+|---|---|---|
+| A | `caisseService.createVente()` / `cloturerJournee()` | `type\|ref\|centimes\|date\|prev` |
+| B | `lib/nf525.enregistrerTransaction()` — factures, avoirs, rachats | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` |
+
+`verifierIntegriteChaine()` recalcule toujours avec A. Genèse : `'0'×64` chez A, `''` chez B.
+
+**Mesuré en base locale** : 171 entrées boutique 1 = 117 `facture` + 53 `avoir` (B) + 1 `vente`
+(A) ; **exactement 170 anomalies**. 100 % de B, 0 % de A.
+
+⚠️ **Le cp78 affirme « chaîne NF525 relue intègre » en production — cette lecture a été faite par
+requête SQL directe, jamais par cet endpoint.** L'état réel de `/api/caisse/integrite` en prod
+n'est pas connu. Ne pas recopier l'affirmation du cp78 comme si elle valait pour cet endpoint.
+
+⊥ **recalculer les `hash_courant` existants** pour « réparer » : c'est ce que NF525 interdit, et
+ça détruirait la preuve d'inaltérabilité. Un vérificateur qui choisit son format selon
+`type_transaction` est la seule piste qui ne réécrit rien.
+
+Détail : `.scratch/conformite-facturation/issues/005-verificateur-nf525-deux-formats.md`
+
+## Ce qui a changé, et ne doit pas être redécouvert
+
+- **`createVente()` est un second site de figeage des identités, assumé.** Il pose les six
+  marques d'émission (`locked`, `issued_at`, `hash_nf525`, `tracking_token`, les deux
+  snapshots). L'invariant « point de passage unique » de `CLAUDE.md` visait les trois chemins
+  brouillon → émission ; il est amendé pour nommer la caisse. Un troisième site doit être
+  discuté avant d'être écrit.
+- **L'ordre est l'invariant** : le verrou est posé **après** l'écriture au journal. Le poser
+  dans l'`INSERT` rendrait la facture immuable avant l'existence de la chaîne — facture
+  verrouillée et orpheline sur échec du journal, donc irréparable. Un test garde cet ordre.
+- **Le bouton d'avoir n'a demandé aucun frontend** : `factures.js:237` le conditionne déjà sur
+  `f.locked`.
+- **Aucun chemin d'encaissement ne casse** : `createVente()` insère dans `paiements` en direct,
+  jamais via `ajouterPaiement()`.
+- **Les factures existantes à `locked = 0` restent telles quelles** — décision de l'exploitant
+  du 2026-09-04 : dossier en préprod, remise à zéro de toutes les factures avant la mise en
+  production réelle. Aucune migration de backfill.
+
+## Pièges d'outillage revérifiés le 2026-09-04
+
+- **Mesurer pendant qu'un gate tourne ne mesure rien** : le compte d'anomalies a bougé de 167 à
+  170 sans écriture, Playwright écrivant dans la même base D1 locale.
+- **`curl` et `node -e` sont interceptés** ici ; `node <fichier>.mjs` passe.
+- **`@'…'@` est du PowerShell** : dans Bash, `git commit -F -` avec un heredoc `<< 'EOF'`.
+- `/api/auth/login` répond `{ success, accessToken, refreshToken, expiresIn, user }` — le jeton
+  est à la racine, pas sous `data`.
+
+## État du dépôt
+
+`main` = `8964dd6`, arbre propre, rien à pousser. Baselines mesurées ce jour :
+`npx vitest run` **907/909** (2 échecs permanents de fuseau `agendaService`),
+`npx tsc --noEmit` **32**, `npx playwright test` **188/188**.
+
+**Résidus assumés en base locale** : client/vente `ZZ Ticket002`, `FAC-2026-00266`,
+`AV-2026-00054`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-08-16 (checkpoint 78 — la vérification métier est faite, elle passe)
 
 ## Reprendre ici
