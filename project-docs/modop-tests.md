@@ -118,6 +118,27 @@ signal de succès prouve ce qu'il mesure, jamais ce qu'on espérait. « La barre
 stylée ». « Le test est vert » ≠ « il atteint le code fautif ». « Projects pushed » ≠ « mes commits
 sont sur le bon dépôt ».
 
+## Piège 5 — mesurer le mauvais objet, et conclure quand même (2026-09-04)
+
+Trois mesures fausses dans la même journée, chacune ayant produit une affirmation erronée avant
+d'être rattrapée. Elles ne se ressemblent pas, mais la faute est identique : **l'outil ne mesurait
+pas ce que la conclusion prétendait dire.**
+
+| Ce qui a été mesuré | Ce qui a été conclu, à tort | Le correctif |
+|---|---|---|
+| `GET /api/caisse/integrite` sur le port 3000 | « le correctif NF525 ne marche pas » — 170 anomalies inchangées | **Deux serveurs `wrangler` écoutaient sur 3000**, dont un resté d'une session antérieure servant l'ancien Worker. `netstat -ano \| grep :3000`. Mesurer sur un port neuf (`PW_PORT=<port>` pour Playwright) |
+| `grep "TYPES_ECRIVAIN_B" dist/_worker.js` → 0 | « le build ne contient pas le correctif » | Vite **minifie les identifiants**. Chercher un **littéral** qui survit : `Set(["facture","avoir"])` |
+| `grep '^## ' project-docs/todo.md` | « deux sections se contredisent sur `reconditionnement.js` » | Le second titre était **dans un `<details>`**. Le dépôt replie les diagnostics d'origine sous le titre corrigé — un `grep` de titres ne voit pas le repli, il faut suivre l'imbrication |
+
+**La règle qui en sort** : avant d'annoncer qu'une mesure infirme quelque chose, se demander
+*quel objet* elle a réellement observé — quel processus a répondu, quel fichier a été lu, quelle
+transformation s'est appliquée entre la source et ce qu'on regarde.
+
+**Corollaire, même journée** : le dossier de mémoire persistante d'`izigsm/webapp` étant vide, une
+explication plausible en a été donnée comme un fait (« le déménagement a orphelin les mémoires »).
+Elle était fausse, et c'est l'exploitant qui l'a relevée ; la mesure — transcripts et checkpoints
+41-53 de juillet — disait l'inverse. **⊥ expliquer une absence par une hypothèse : la mesurer.**
+
 ## La procédure
 
 ### Avant d'annoncer « vérifié »

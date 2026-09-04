@@ -1,3 +1,60 @@
+# Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 81 — docs réalignées sur le code)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis `C:\Users\Said\Downloads\claude-test\izigsm\webapp`, jamais depuis la racine.** Ça a
+toujours été le cas (trace du harnais dans les checkpoints 41-53 de juillet) ; la règle a été
+écrite le 2026-09-04 après qu'une session eut démarré par erreur depuis un scratch workspace de
+Claude Desktop.
+
+## Reprendre ici
+
+**Une seule chose attend une décision humaine : le déploiement.** Les tickets **002** (vente de
+caisse verrouillée, cp79) et **005** (vérificateur NF525, cp80) sont livrés, commités, poussés —
+et **⊥ déployés**. Un `npm run deploy` les embarquerait tous les deux. Aucune migration en
+attente. Prod : `izigsm-v2.90`.
+
+Le dernier critère du ticket 005 — revérifier `GET /api/caisse/integrite` **en production** — en
+dépend.
+
+## Ce qu'a fait le checkpoint 81
+
+Analyse du dossier `webapp` et **cinq dérives documentaires refermées** : `bugs.md` et `todo.md`
+disaient encore « non corrigé » d'un défaut livré la veille, la case du ticket 002 était restée
+`[ ]`, le ticket 005 manquait de la liste, un avertissement de migration traînait depuis 33 jours,
+et `CLAUDE.md` annonçait 37 migrations / 826 tests au lieu de 40 / 914. **Aucun code touché.**
+
+## À savoir avant de choisir un chantier
+
+**Le 🔴 de `todo.md` ne trie plus.** 13 titres le portent, 3 se déclarent résolus dans leur propre
+titre : **10 chantiers ouverts**, dont **7 de juillet marqués « PAS commencé »**. Faire un tri
+avant de s'y fier.
+
+Les plus chargés de sens métier, par ancienneté : conformité facturation (tickets 003 et 004),
+chantier 2 de la supervision (le journal de plateforme se remplit, rien ne le lit), 5 pages du
+menu qui lisent l'enveloppe API au mauvais niveau, facture verrouillée = encaissement impossible.
+
+## État du dossier, mesuré au 2026-09-04
+
+338 fichiers suivis · `src/services` 24 fichiers / 14 671 l. · `src/routes` 18 / 6 775 ·
+`public/static/js` 21 / 14 920 · 27 suites unitaires + 10 e2e · 40 migrations.
+« 0 SQL inline » respectée. 22 services sur 24 couverts (manquent `journalPlateformeService`,
+`sirenService`). Menu 20 entrées. Point chaud : `phoneCatalogService.ts`, 1 712 lignes.
+`graphify-out/` = 2 773 fichiers ignorés par git, fausse tout comptage naïf.
+
+## Baselines
+
+vitest **914/916** (2 échecs permanents de fuseau `agendaService`), tsc **32**,
+playwright **188/188**, build ✓.
+
+## Pièges de mesure — lire `modop-tests.md` § Piège 5
+
+Trois mesures fausses le 2026-09-04 : un `wrangler` fantôme sur le port 3000 servant l'ancien
+Worker, un `grep` d'identifiant sur un bundle **minifié**, et un `grep '^## '` aveugle aux titres
+repliés dans `<details>`. Plus une explication donnée pour un fait sans avoir été mesurée.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 80 — le contrôle NF525 dit enfin la vérité)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

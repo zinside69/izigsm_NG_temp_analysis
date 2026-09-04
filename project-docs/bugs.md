@@ -98,7 +98,21 @@ est réellement supprimable et la route existe, soit il ne l'est pas et le bouto
 Ce qui n'est pas acceptable est l'état actuel — une confirmation d'action irréversible suivie
 de rien.
 
-## Aucune vente de caisse n'est annulable par un avoir (trouvé le 2026-08-02, NON corrigé)
+## ✅ Aucune vente de caisse n'était annulable par un avoir (trouvé le 2026-08-02, CORRIGÉ le 2026-09-04 — ticket 002)
+
+**Corrigé par le ticket 002** (commit `8964dd6`, checkpoint 79). `caisseService.createVente()`
+pose les six marques d'émission d'`emettreFacture()` — `locked`, `issued_at`, `hash_nf525`,
+`tracking_token`, `vendeur_snapshot`, `acheteur_snapshot` — **après** l'écriture au journal
+NF525. Le bouton ↩️ de `factures.js:237` étant déjà conditionné sur `f.locked`, il apparaît
+seul : aucune modification frontend, aucune migration.
+
+Vérifié en local : `FAC-2026-00266` verrouillée avec ses six marques, puis `AV-2026-00054` émis
+sur cette vente et lié à elle. **⊥ déployé en production au 2026-09-04.**
+
+Ce titre est resté « NON corrigé » un jour de trop : le cp79 avait mis à jour `current-state.md`
+et `todo.md`, pas cette entrée. Relevé le 2026-09-04 en analysant le dossier.
+
+Description d'origine du défaut ci-dessous.
 
 Trouvé en voulant annuler la vente de test `FAC-2026-00003` passée en production le même jour.
 

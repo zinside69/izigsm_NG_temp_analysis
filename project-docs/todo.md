@@ -90,18 +90,27 @@ aucune route `PUT`/`DELETE /factures/:id`.
 
 ⚠️ Ne **jamais** contourner en touchant `journal_nf525` ou en réécrivant un numéro émis.
 
-Spec + 4 tickets : `.scratch/conformite-facturation/`. Root cause dans `bugs.md`.
+Spec + **5 tickets** : `.scratch/conformite-facturation/`. Root cause dans `bugs.md`.
 `.scratch/avoir-vente-caisse/` est **absorbé** (`wontfix`, conservé pour la trace).
 
 - [x] 001 — numéro attribué à l'émission (2026-08-02) — migration `0040`, `emettreFacture()`
       seul point de numérotation, écriture NF525 retirée de la conversion de devis.
-      ⚠ **Migration `0040` non appliquée à distance** : à faire AVANT `npm run deploy`.
-      ⚠ **Prérequis distant non vérifié** : `PRAGMA foreign_key_check` doit être **vide**
-      en production, sinon workerd refusera le COMMIT (la base locale portait 2 lignes
-      orphelines, supprimées). Commande à lancer par l'utilisateur (jeton de session).
-- [ ] 002 — vente de caisse verrouillée et annulable par avoir (bloqué par 001)
-- [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur)
+      ✅ **Migration `0040` appliquée à distance puis Worker déployé**, dans cet ordre
+      (`CLAUDE.md` § Déploiement, vérifié en production : `numero` est bien `notnull = 0`).
+      L'avertissement « non appliquée à distance » qui figurait ici était **périmé depuis le
+      2026-08-02** — relevé le 2026-09-04.
+- [x] 002 — vente de caisse verrouillée et annulable par avoir (2026-09-04, commit `8964dd6`) —
+      `createVente()` pose les six marques d'émission **après** l'écriture au journal NF525.
+      Ni migration, ni changement frontend. **⊥ déployé en production.**
+      Case restée à `[ ]` un jour de trop alors que le ticket était `done` : la règle « marquer
+      `x` immédiatement » n'a pas été tenue au cp79.
+- [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur,
+      `ready-for-agent`)
 - [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)
+- [x] 005 — le vérificateur NF525 connaît ses deux écrivains (2026-09-04, commit `c086048`) —
+      aiguillage sur `type_transaction`, 170 → 0 anomalies, aucune ligne réécrite.
+      ⚠ **1 critère reste ouvert** : revérifier `GET /api/caisse/integrite` **en production**,
+      ce qui exige un déploiement (qui embarquerait aussi le 002).
 
 ## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
 

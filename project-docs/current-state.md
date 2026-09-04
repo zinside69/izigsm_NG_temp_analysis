@@ -1,4 +1,56 @@
-# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 80 — le contrôle NF525 dit enfin la vérité)
+# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 81 — analyse du dossier, cinq dérives documentaires refermées)
+
+## Checkpoint 81 — Ce que les docs disaient de faux (2026-09-04)
+
+Analyse demandée du dossier `webapp`, à partir de `CLAUDE.md` § Mémoire projet. **Aucun code
+applicatif touché, rien de déployé.** La production reste `izigsm-v2.90`, et les tickets 002 et
+005 attendent toujours une décision de déploiement.
+
+### Cinq écarts entre ce que les docs affirmaient et ce qui est
+
+| Fichier | Écart | Depuis |
+|---|---|---|
+| `bugs.md` | « Aucune vente de caisse n'est annulable par un avoir — **NON corrigé** » alors que le ticket 002 l'a livré | 1 jour |
+| `todo.md` | Case du **ticket 002 restée `- [ ]`** alors que le ticket est `statut: done` | 1 jour |
+| `todo.md` | **Ticket 005 absent** de la liste du chantier conformité | ce jour |
+| `todo.md` | « Migration `0040` non appliquée à distance » — appliquée puis Worker déployé | **33 jours** |
+| `CLAUDE.md` | « 37 migrations » (→ 40) et « 826 tests, 22 suites » (→ 914/916, 27 suites) | ~1 mois |
+
+Les deux premiers viennent du checkpoint 79 : il a mis à jour `current-state.md` et la section P1
+de `todo.md`, mais ni l'entrée `bugs.md` ni la case du ticket. **La règle « marquer `x`
+immédiatement » n'a pas été tenue**, et c'est précisément ce que le `CLAUDE.md` racine désigne
+comme la source de vérité d'une nouvelle session.
+
+### L'état du dossier, mesuré
+
+- Code suivi : **338 fichiers**. `src/services` 24 fichiers / 14 671 l., `src/routes` 18 / 6 775,
+  `public/static/js` 21 / 14 920, 27 suites unitaires + 10 e2e, 40 migrations.
+- `graphify-out/` pèse **2 773 fichiers** — ignoré par git (vérifié), mais fausse tout comptage naïf.
+- **« 0 SQL inline » respectée** : aucun `.prepare()` dans les 18 fichiers de `src/routes`.
+- **22 services sur 24 ont un test dédié** ; manquent `journalPlateformeService` (140 l.) et
+  `sirenService` (80 l.).
+- Menu : **20 entrées**, 11 pages hors menu — toutes publiques ou d'authentification. Cohérent.
+- Point chaud : **`phoneCatalogService.ts`, 1 712 lignes**, plus du double du service suivant.
+
+### Le vrai problème de `todo.md` n'est pas sa taille
+
+**13 titres portent 🔴, mais 3 se déclarent résolus dans leur propre titre** — il reste
+**10 chantiers réellement ouverts**, dont **7 datent de juillet et sont marqués « PAS commencé »**.
+Le marqueur ne trie plus rien. Un tri est à faire avant de se fier au 🔴 pour choisir un chantier.
+
+### Trois mesures fausses, et ce qu'elles coûtent
+
+Écrites en `modop-tests.md` § Piège 5 : un serveur `wrangler` fantôme sur le port 3000 servant
+l'ancien Worker (le correctif NF525 semblait sans effet), un `grep` d'identifiant sur un bundle
+minifié (le build semblait ne pas contenir le correctif), et un `grep '^## '` aveugle aux titres
+repliés dans `<details>` (une fausse contradiction annoncée dans `todo.md`).
+
+S'y ajoute une explication donnée pour un fait sans avoir été mesurée — la cause du dossier
+mémoire vide — **relevée par l'exploitant**, et démentie par les checkpoints 41 à 53 de juillet.
+
+---
+
+## Checkpoint 80 — Ticket 005 livré : le vérificateur connaît ses deux écrivains (2026-09-04)
 
 ## Checkpoint 80 — Ticket 005 livré : le vérificateur connaît ses deux écrivains (2026-09-04)
 

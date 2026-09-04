@@ -11,10 +11,15 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 37 migrations dans `migrations/`
+- Base de données : Cloudflare D1 (SQLite edge) — 40 migrations dans `migrations/`
+  (dernière : `0040_facture_numero_nullable.sql`)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (826 tests, 22 suites) — `tests/`, mocks D1 dans `tests/helpers/`
+- Tests unitaires : Vitest (914/916 au 2026-09-04, 27 suites) — `tests/`, mocks D1 dans
+  `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
+  partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
+  chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
+  vieilli de 88 tests et 5 suites sans que personne ne le voie.
 - Tests E2E : Playwright (`tests/e2e/`) — gate de non-régression, voir § Loop engineering
 - Stockage fichiers : Cloudflare R2 (photos tickets)
 
