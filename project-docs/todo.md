@@ -1,5 +1,21 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 — Le contrôle d'intégrité NF525 ment (ticket 005, ouvert le 2026-09-04)
+
+Rédigé **sans case à cocher** volontairement : le ticket est `ready-for-human` et exige trois
+arbitrages (quel format fait foi, sort des 170 entrées existantes, refus explicite de recalculer
+les hash). Une loop réarmée ne doit pas le piocher.
+
+`GET /api/caisse/integrite` déclare frauduleuse **toute** facture émise et **tout** avoir, depuis
+l'origine : le vérificateur recalcule avec le format de `caisseService`, alors que factures et
+avoirs sont hashés par `lib/nf525.ts` dans un format différent. Mesuré le 2026-09-04 en base
+locale : 170 anomalies pour exactement 170 entrées de cet écrivain, 0 sur l'entrée de l'autre.
+
+Détail et critères : `.scratch/conformite-facturation/issues/005-verificateur-nf525-deux-formats.md`
+Cause racine : `project-docs/bugs.md` § contrôle d'intégrité NF525.
+
+**Bloque** le dernier critère du ticket 002, livré sans lui le 2026-09-04.
+
 ## ⚠ NOTE (pas une tâche) — loop d'automatisation à désarmer, décidé le 2026-08-16
 
 Rédigé **sans case à cocher** volontairement : `pick-task.mjs` ne retient que les lignes

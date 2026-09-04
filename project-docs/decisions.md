@@ -1,5 +1,30 @@
 # iziGSM — Décisions
 
+## 2026-09-04 — Vente de caisse : verrouillage complet, et sort des factures existantes (ticket 002)
+
+**Décision 1 — alignement complet, pas le strict minimum.** `createVente()` pose les six marques
+d'émission d'`emettreFacture()` : `locked`, `issued_at`, `hash_nf525`, `tracking_token`,
+`vendeur_snapshot`, `acheteur_snapshot`. Le strict minimum (`locked` seul) aurait coché tous les
+critères écrits du ticket en laissant les ventes POS sans identités figées — un second passage
+garanti plus tard, sur un document déjà émis donc plus difficile à reprendre.
+
+**Conséquence assumée** : il existe désormais **deux** sites de figeage des identités.
+`emettreFacture()` couvre les trois chemins brouillon → émission (manuelle, conversion de devis,
+acompte) ; `createVente()` couvre la vente POS, qui naît émise et ne passe par aucun d'eux.
+L'invariant « point de passage unique » de `CLAUDE.md` est amendé en ce sens — il visait les trois
+chemins de brouillon, jamais la caisse.
+
+**Décision 2 — l'ordre du verrouillage est un invariant, pas un détail.** Le verrou est posé
+**après** l'écriture au journal NF525. Le poser dans l'`INSERT` rendrait la facture immuable
+**avant** que la chaîne n'existe : un échec du journal laisserait une facture verrouillée et
+orpheline, donc irréparable — aggravation de la classe de défaut corrigée le 2026-07-12.
+
+**Décision 3 — les factures existantes à `locked = 0` restent telles quelles.** Ce dossier est en
+**préprod** : les tests de validation et de conformité NF525 s'y font, et **toutes les factures
+seront remises à zéro avant la mise en production réelle**. Aucune migration de backfill : passer
+`locked = 1` rétroactivement sur des documents déjà chaînés reviendrait à réécrire l'historique,
+ce que l'invariant du 2026-08-02 interdit.
+
 ## 2026-08-02 — Conformité de la facturation : l'invariant posé par l'exploitant
 
 **Décision, mot pour mot** : une facture créée est **persistante, non modifiable, non

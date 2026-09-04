@@ -1,5 +1,35 @@
 # iziGSM — Bugs connus
 
+## 🔴 Le contrôle d'intégrité NF525 déclare frauduleuse toute facture émise et tout avoir (trouvé le 2026-09-04, NON corrigé — ticket 005)
+
+Trouvé en validant le ticket 002, en cherchant pourquoi l'avoir émis sur une vente de caisse
+ressortait anomalique. **Défaut pré-existant, sans lien avec le ticket 002.**
+
+**Cause racine** — deux formats canoniques incompatibles écrivent dans la même chaîne :
+
+| Écrivain | Fonction | Format hashé |
+|---|---|---|
+| A | `caisseService.createVente()` / `cloturerJournee()` | `type\|ref\|centimes\|date\|prev` |
+| B | `lib/nf525.enregistrerTransaction()` — factures émises, avoirs, rachats | `boutique_id\|type\|ref\|ht\|tva\|ttc\|date\|prev` |
+
+`verifierIntegriteChaine()` (`caisseService.ts`) recalcule **toujours** avec le format A. Toute
+entrée écrite par B est donc signalée comme fraudée, définitivement. Écart secondaire : le hash
+de genèse vaut `'0'.repeat(64)` chez A et `''` chez B.
+
+**Mesuré en base locale le 2026-09-04** — 171 entrées sur la boutique 1 : 117 `facture` +
+53 `avoir` (écrivain B) + 1 `vente` (écrivain A). `GET /api/caisse/integrite` signale
+**exactement 170 anomalies** — 100 % des entrées B, 0 % de l'entrée A. La première est l'entrée
+`id 5`, `FAC-2026-00001` : le défaut existe depuis l'origine du journal.
+
+**Impact** — c'est le contrôle légal NF525. Il annonce une fraude là où il n'y en a pas, dès
+qu'une facture est émise ou qu'un avoir est créé.
+
+**À ne pas faire** : recalculer les `hash_courant` existants pour « réparer » la chaîne. C'est
+précisément ce que NF525 interdit, et ça détruirait la preuve d'inaltérabilité recherchée.
+
+**À revérifier** : l'affirmation « chaîne NF525 relue intègre » du checkpoint 78 a été établie par
+requête SQL directe, jamais par cet endpoint. Le dire de la production demande de le mesurer.
+
 ## Le bouton 🗑 d'un brouillon de facture échoue en silence (trouvé le 2026-08-16, NON corrigé)
 
 Trouvé en production en tentant de supprimer le brouillon créé pour la vérification du

@@ -625,3 +625,149 @@ describe('cloturerJournee()', () => {
     expect(call!.params[1]).toBe(todayParis())
   })
 })
+
+// ─── createVente() — verrouillage NF525 (ticket 002) ──────────────────────────
+//
+// Une vente POS *est* une facture émise : numérotée, payée, chaînée. Elle doit
+// donc porter les mêmes marques d'émission qu'`emettreFacture()` — sans quoi
+// `createAvoir()` la refuse (`if (!facture.locked) throw`) et aucune vente
+// encaissée n'est corrigeable, ce qu'interdit NF525 (correction par document
+// rectificatif, jamais par suppression).
+
+describe('createVente() — verrouillage NF525 (ticket 002)', () => {
+  const SQL_INSERT_FACTURE = n(`
+    INSERT INTO factures
+      (boutique_id, client_id, numero, date_emission, date_echeance,
+       total_ht, total_tva, total_ttc, statut, notes)
+    VALUES (?, ?, ?, ?, date('now', '+30 days'), ?, ?, ?, 'payee', ?)
+    RETURNING *
+  `)
+
+  const SQL_INSERT_JOURNAL_VENTE = n(`
+    INSERT INTO journal_nf525
+      (boutique_id, type_transaction, reference_id, reference_numero,
+       client_id, montant_ht, montant_tva, montant_ttc,
+       date_transaction, hash_precedent, donnees_hash, hash_courant,
+       est_cloture, user_id)
+    VALUES (?, 'vente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+    RETURNING *
+  `)
+
+  /** Le verrou posé APRÈS le journal — même ordre qu'emettreFacture() */
+  const SQL_VERROU = n(`
+    UPDATE factures
+    SET locked            = 1,
+        issued_at         = CURRENT_TIMESTAMP,
+        tracking_token    = ?,
+        hash_nf525        = ?,
+        vendeur_snapshot  = ?,
+        acheteur_snapshot = ?
+    WHERE id = ?
+  `)
+
+  const SQL_VENDEUR = n(`
+    SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville,
+           b.telephone, b.email,
+           s.tva_taux_defaut, s.mention_facture
+    FROM   boutiques b
+    LEFT   JOIN boutique_settings s ON s.boutique_id = b.id
+    WHERE  b.id = ?
+  `)
+
+  const SQL_ACHETEUR = n(`
+    SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville
+    FROM clients WHERE id = ?
+  `)
+
+  const LIGNE = {
+    designation: 'Réparation écran', quantite: 1,
+    prix_unitaire_ht: 80, tva_taux: 20,
+  }
+
+  function setup(db: ReturnType<typeof createMockD1>) {
+    db.__setResponseFn(SQL_INSERT_FACTURE, () => ({
+      id: 10, numero: 'FAC-2026-00001', total_ht: 80, total_tva: 16, total_ttc: 96,
+    }))
+    // Le mock renvoie le hash que l'INSERT reçoit (params[10]), pas une valeur
+    // fabriquée : en base, la ligne du journal porte le hash réellement calculé.
+    db.__setResponseFn(SQL_INSERT_JOURNAL_VENTE, (params: any[]) => ({
+      id: 1, boutique_id: params[0], reference_numero: params[2],
+      hash_courant: params[10],
+    }))
+    db.__setResponse(SQL_VENDEUR, {
+      nom: 'SOTELI', siret: '12345678900011', tva_numero: 'FR00123456789',
+      adresse: '1 rue Test', code_postal: '01700', ville: 'Beynost',
+      telephone: '0400000000', email: 'contact@soteli.fr',
+      tva_taux_defaut: 20, mention_facture: null,
+    })
+    db.__setResponse(SQL_ACHETEUR, {
+      type_client: 'particulier', raison_sociale: null,
+      prenom: 'Jean', nom: 'Dupont', siret: null, tva_intracom: null,
+      adresse: '2 rue Client', code_postal: '69000', ville: 'Lyon',
+    })
+  }
+
+  const vente = (db: any) => createVente(db, 1, 5, {
+    lignes: [LIGNE], mode_paiement: 'especes', client_id: 7,
+  })
+
+  it('pose locked = 1 et issued_at sur la facture', async () => {
+    const db = createMockD1()
+    setup(db)
+
+    await vente(db)
+
+    const verrou = db.__getCalls().find(c => c.sql === SQL_VERROU)
+    expect(verrou, 'aucun UPDATE de verrouillage émis').toBeDefined()
+    expect(verrou!.params.at(-1)).toBe(10)   // WHERE id = facture.id
+  })
+
+  it('persiste hash_nf525 = hash_courant du journal', async () => {
+    const db = createMockD1()
+    setup(db)
+
+    const { journal } = await vente(db)
+
+    const verrou = db.__getCalls().find(c => c.sql === SQL_VERROU)
+    expect(verrou!.params[1]).toBe(journal.hash_courant)
+    expect(verrou!.params[1]).toMatch(/^[0-9a-f]{64}$/)   // SHA-256 réel, pas un jeton fabriqué
+  })
+
+  it('génère un tracking_token', async () => {
+    const db = createMockD1()
+    setup(db)
+
+    await vente(db)
+
+    const verrou = db.__getCalls().find(c => c.sql === SQL_VERROU)
+    expect(verrou!.params[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/i)
+  })
+
+  it('fige les identités vendeur et acheteur en JSON', async () => {
+    const db = createMockD1()
+    setup(db)
+
+    await vente(db)
+
+    const verrou   = db.__getCalls().find(c => c.sql === SQL_VERROU)
+    const vendeur  = JSON.parse(verrou!.params[2])
+    const acheteur = JSON.parse(verrou!.params[3])
+
+    expect(vendeur.siret).toBe('12345678900011')
+    expect(vendeur.tva_taux_defaut).toBe(20)   // régime TVA figé avec le document
+    expect(acheteur.nom).toBe('Dupont')
+  })
+
+  // Le piège que l'ordre évite : verrouiller dans l'INSERT rendrait la facture
+  // immuable AVANT que la chaîne NF525 n'existe — facture orpheline irréparable.
+  it('laisse la facture déverrouillée si le journal NF525 échoue', async () => {
+    const db = createMockD1()
+    setup(db)
+    db.__setResponseFn(SQL_INSERT_JOURNAL_VENTE, () => null)
+
+    await expect(vente(db)).rejects.toThrow('journal NF525')
+
+    const verrou = db.__getCalls().find(c => c.sql === SQL_VERROU)
+    expect(verrou, 'la facture a été verrouillée malgré l\'échec du journal').toBeUndefined()
+  })
+})

@@ -1467,3 +1467,62 @@ describe('createFacture()', () => {
     expect(paiement!.params[4]).toBe('CHQ-4412')
   })
 })
+
+// ─── createAvoir() — annulation d'une vente de caisse (ticket 002) ────────────
+//
+// NF525 impose la correction par document rectificatif, jamais par suppression.
+// `createAvoir()` exige `locked` sur la facture source : tant que la caisse ne
+// verrouille pas ses ventes, aucune vente encaissée n'est corrigeable.
+
+describe('createAvoir() — facture source verrouillée', () => {
+  const SQL_FACTURE = 'SELECT * FROM factures WHERE id = ?'
+
+  const SQL_INSERT_AVOIR = n(`
+    INSERT INTO avoirs
+      (boutique_id, numero, facture_id, client_id, type, motif,
+       total_ht, total_tva, total_ttc, notes, date_expiration)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `)
+
+  const INPUT: CreateAvoirInput = {
+    facture_id: 4,
+    motif:      'Retour produit défectueux',
+    lignes:     [{ description: 'Réparation écran', quantite: 1, prix_unitaire_ht: 50, tva_taux: 20 }],
+  }
+
+  /** Vente POS telle que la crée `createVente()` */
+  function ventePos(locked: number) {
+    return { id: 4, boutique_id: 1, client_id: 7, numero: 'FAC-2026-00003', statut: 'payee', locked }
+  }
+
+  it('refuse un avoir sur une vente non verrouillée', async () => {
+    const db = createMockD1()
+    db.__setResponse(SQL_FACTURE, ventePos(0))
+
+    await expect(createAvoir(db, 5, INPUT))
+      .rejects.toThrow('non émise')
+  })
+
+  it('accepte un avoir sur une vente de caisse verrouillée', async () => {
+    const db = createMockD1()
+    db.__setResponse(SQL_FACTURE, ventePos(1))
+    db.__setResponseFn(SQL_INSERT_AVOIR, () => ({ id: 99 }))
+
+    const res = await createAvoir(db, 5, INPUT)
+
+    expect(res.id).toBe(99)
+    expect(res.hash_nf525).toHaveLength(64)
+  })
+
+  it('lie l\'avoir à sa facture source', async () => {
+    const db = createMockD1()
+    db.__setResponse(SQL_FACTURE, ventePos(1))
+    db.__setResponseFn(SQL_INSERT_AVOIR, () => ({ id: 99 }))
+
+    await createAvoir(db, 5, INPUT)
+
+    const insert = db.__getCalls().find(c => c.sql === SQL_INSERT_AVOIR)
+    expect(insert!.params[2]).toBe(4)   // facture_id NOT NULL
+  })
+})

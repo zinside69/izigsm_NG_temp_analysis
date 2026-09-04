@@ -259,7 +259,7 @@ export async function createVente(
   // la règle « le numéro n'est attribué qu'à l'émission » : une vente POS *est*
   // émise dès sa création (numérotée, payée, chaînée NF525 plus bas), elle ne
   // passe jamais par l'état brouillon. Ticket 001 conformité-facturation.
-  // ⚠ Ce chemin ne pose pas encore `locked = 1` — c'est l'objet du ticket 002.
+  // Le verrouillage correspondant est posé à l'étape 8, après le journal NF525.
   const numero = await nextNumero(db, boutiqueId, 'facture')
   const dateEmission = new Date().toISOString()
 
@@ -403,6 +403,52 @@ export async function createVente(
   ).first<JournalEntry>()
 
   if (!journal) throw new Error('Échec enregistrement journal NF525.')
+
+  // ── 8. Verrouillage NF525 de la vente ─────────────────────────────────────
+  // Une vente POS *est* une facture émise : numérotée, payée, chaînée. Elle doit
+  // donc porter les mêmes marques d'émission qu'`emettreFacture()`, faute de quoi
+  // `createAvoir()` la refuse (`if (!facture.locked) throw`) et aucune vente
+  // encaissée n'est corrigeable — ce qu'interdit NF525, qui impose la correction
+  // par document rectificatif et jamais par suppression. Ticket 002.
+  //
+  // ⚠ ORDRE : le verrou est posé APRÈS l'écriture du journal, comme dans
+  // `emettreFacture()`. Le poser dans l'INSERT de l'étape 3 rendrait la facture
+  // immuable AVANT que la chaîne NF525 n'existe : un échec ci-dessus laisserait
+  // une facture verrouillée sans entrée au journal, donc irréparable.
+  //
+  // Second site de figeage des identités, assumé : `emettreFacture()` couvre les
+  // trois chemins brouillon → émission (manuelle, conversion de devis, acompte),
+  // celui-ci couvre la vente POS, qui naît émise et ne passe jamais par eux.
+  const vendeur = await db.prepare(`
+    SELECT b.nom, b.siret, b.tva_numero, b.adresse, b.code_postal, b.ville,
+           b.telephone, b.email,
+           s.tva_taux_defaut, s.mention_facture
+    FROM   boutiques b
+    LEFT   JOIN boutique_settings s ON s.boutique_id = b.id
+    WHERE  b.id = ?
+  `).bind(boutiqueId).first<any>()
+
+  const acheteur = await db.prepare(`
+    SELECT type_client, raison_sociale, prenom, nom, siret, tva_intracom, adresse, code_postal, ville
+    FROM clients WHERE id = ?
+  `).bind(clientId).first<any>()
+
+  await db.prepare(`
+    UPDATE factures
+    SET locked            = 1,
+        issued_at         = CURRENT_TIMESTAMP,
+        tracking_token    = ?,
+        hash_nf525        = ?,
+        vendeur_snapshot  = ?,
+        acheteur_snapshot = ?
+    WHERE id = ?
+  `).bind(
+    crypto.randomUUID(),
+    hashCourant,
+    JSON.stringify(vendeur  ?? {}),
+    JSON.stringify(acheteur ?? {}),
+    facture.id,
+  ).run()
 
   return { facture, journal, rendu_monnaie: renduMonnaie }
 }
