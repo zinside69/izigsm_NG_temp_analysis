@@ -167,6 +167,7 @@ INSERT INTO "clients" ("id","boutique_id","prenom","nom","email","telephone","ad
 INSERT INTO "clients" ("id","boutique_id","prenom","nom","email","telephone","adresse","code_postal","ville","pays","notes","actif","created_at","updated_at","type_client","raison_sociale","siret","tva_intracom") VALUES(21,1,'Client','Comptoir','comptoir@pos.local','0000000000',NULL,NULL,NULL,'France',NULL,1,'2026-08-02 11:43:33','2026-08-02 11:43:33','particulier',NULL,NULL,NULL);
 INSERT INTO "clients" ("id","boutique_id","prenom","nom","email","telephone","adresse","code_postal","ville","pays","notes","actif","created_at","updated_at","type_client","raison_sociale","siret","tva_intracom") VALUES(22,2,'MOUNIR','KAAOUANE','mounirlyon@gmail.com','0667281966','67 AVENUE JEAN JAURES','69007','LYON','France',NULL,1,'2026-08-13 09:41:38','2026-08-13 09:41:38','professionnel','MMS LYON','97905357600018','FR61979053576');
 INSERT INTO "clients" ("id","boutique_id","prenom","nom","email","telephone","adresse","code_postal","ville","pays","notes","actif","created_at","updated_at","type_client","raison_sociale","siret","tva_intracom") VALUES(23,1,'ZZ Verification','Ticket001','verif.ticket001@soteli.fr','0000000001','1 rue de Verification','69000','Lyon','France','Client technique - verification ticket 001 conformite-facturation (2026-08-16).',1,'2026-08-16 18:03:03','2026-08-16 18:03:03','particulier',NULL,NULL,NULL);
+INSERT INTO "clients" ("id","boutique_id","prenom","nom","email","telephone","adresse","code_postal","ville","pays","notes","actif","created_at","updated_at","type_client","raison_sociale","siret","tva_intracom") VALUES(24,2,'tarik','Daoudi','d.tarik.itm@gmail.com','+212663488928','Rue Professeur Ranvier','69008','Lyon','France',NULL,1,'2026-09-04 13:28:18','2026-09-04 13:28:18','particulier',NULL,NULL,NULL);
 CREATE TABLE appareils (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id       INTEGER NOT NULL,
@@ -737,6 +738,8 @@ INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","e
 INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","entite_id","donnees_avant","donnees_apres","ip_address","created_at") VALUES(235,1,1,'CREATE_FACTURE','facture',6,NULL,'{"numero":null,"total_ttc":2.4,"action":"brouillon","statut":"brouillon"}',NULL,'2026-08-16 18:05:38');
 INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","entite_id","donnees_avant","donnees_apres","ip_address","created_at") VALUES(236,1,1,'EMETTRE_FACTURE','facture',7,NULL,'{"locked":true,"issued_at":"2026-08-16T18:06:23.972Z","hash_nf525":"0bb1c1de5518c7034bf6f9a4b949ea15e89e7deeed349cb3ffaa6eb01e676ce5"}',NULL,'2026-08-16 18:06:24');
 INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","entite_id","donnees_avant","donnees_apres","ip_address","created_at") VALUES(237,1,1,'CREATE_FACTURE','facture',7,NULL,'{"numero":"FAC-2026-00005","total_ttc":3.6,"action":"emettre","statut":"en_attente"}',NULL,'2026-08-16 18:06:24');
+INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","entite_id","donnees_avant","donnees_apres","ip_address","created_at") VALUES(238,2,5,'LOGIN',NULL,NULL,NULL,NULL,NULL,'2026-09-04 13:26:49');
+INSERT INTO "audit_logs" ("id","boutique_id","user_id","action","entite_type","entite_id","donnees_avant","donnees_apres","ip_address","created_at") VALUES(239,2,5,'CREATE_CLIENT','client',24,NULL,'{"prenom":"tarik","nom":"Daoudi","email":"d.tarik.itm@gmail.com","telephone":"+212663488928","adresse":"Rue Professeur Ranvier","code_postal":"69008","ville":"Lyon","pays":"France","type_client":"particulier","raison_sociale":null,"siret":null,"tva_intracom":null,"notes":null,"boutique_id":2}',NULL,'2026-09-04 13:28:18');
 CREATE TABLE lignes_avoir (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   avoir_id         INTEGER NOT NULL,
@@ -1048,6 +1051,7 @@ INSERT INTO "kv_store" ("key","value","expires_at") VALUES('refresh:5:f1283a0624
 INSERT INTO "kv_store" ("key","value","expires_at") VALUES('refresh:5:18179508a895454e9da52c6ff5dc0ef4eb1612a4bb87cc95db434a1a8c5c37be','{"userId":5,"createdAt":1786726929341}',1787331729);
 INSERT INTO "kv_store" ("key","value","expires_at") VALUES('refresh:1:f4d492518c4c032f5692b874214f089e239d63d73e4c731f03ea2ab726f87158','{"userId":1,"createdAt":1786903067216}',1787507867);
 INSERT INTO "kv_store" ("key","value","expires_at") VALUES('refresh:1:fd681a4a92cc7fc597b103591d4c5400a721815f6d0c2e12225a551d7173f56d','{"userId":1,"createdAt":1786903270786}',1787508070);
+INSERT INTO "kv_store" ("key","value","expires_at") VALUES('refresh:5:149a2fbcb8c45942d43dee80482d82e9a65b09ff8e3b1db068ca8264652fd3ed','{"userId":5,"createdAt":1788528409661}',1789133209);
 CREATE TABLE boutique_creneaux (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   boutique_id  INTEGER NOT NULL REFERENCES boutiques(id),
@@ -13928,10 +13932,10 @@ INSERT INTO "sqlite_sequence" ("name","seq") VALUES('users',8);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('employes',3);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('categories',8);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('produits',9);
-INSERT INTO "sqlite_sequence" ("name","seq") VALUES('clients',23);
+INSERT INTO "sqlite_sequence" ("name","seq") VALUES('clients',24);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('appareils',6);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('sequences',41);
-INSERT INTO "sqlite_sequence" ("name","seq") VALUES('audit_logs',237);
+INSERT INTO "sqlite_sequence" ("name","seq") VALUES('audit_logs',239);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('mouvements_stock',1);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('phone_catalog_sync_log',121);
 INSERT INTO "sqlite_sequence" ("name","seq") VALUES('tickets_statuts_historique',29);
