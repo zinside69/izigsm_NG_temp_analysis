@@ -1,5 +1,21 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 — L'écran Factures n'offre pas l'avoir sur une facture émise (trouvé en production le 2026-09-07)
+
+`f.locked` est falsy au rendu de `factures.js` alors que l'API renvoie `locked: 1`. Conséquence :
+ni badge 🔒, ni bouton « Créer un avoir », et « Émettre » proposé sur une facture déjà émise.
+
+**Rattaché au chantier conformité** : le ticket 003 a gravé « la seule annulation est un avoir »
+le même jour ; ce défaut rend cette voie invisible à l'exploitant.
+
+Cause racine et mesures : `bugs.md` § `f.locked` ignoré au rendu. Le diagnostic n'est **pas**
+terminé — première chose à faire : rejouer la mesure **avec une boutique sélectionnée**, la
+vérification ayant été faite en admin plateforme sans sélection.
+
+- [ ] Rejouer la mesure avec une boutique sélectionnée, puis en compte manager
+- [ ] Trouver où `locked` se perd entre la réponse API et `renderFactures()`
+- [ ] Test de rendu (pas de requête) : une facture `locked` affiche l'avoir et pas « Émettre »
+
 ## 🟠 P2 — Le contrôle d'intégrité NF525 ne détecte pas la suppression d'une ligne (ouvert le 2026-09-04)
 
 Rédigé **sans case à cocher** : aucun ticket n'est écrit, et le sujet touche le contrôle légal —
@@ -115,7 +131,11 @@ Spec + **5 tickets** : `.scratch/conformite-facturation/`. Root cause dans `bugs
       `PUT`/`DELETE /factures/:id` répondent 405 en nommant l'avoir, bouton 🗑 retiré (son repli
       hors-ligne supprimait réellement la facture du cache local), garde-fou statique
       `tests/factures-immuabilite-conformite.test.ts`. Brouillon tranché : **non supprimable non
-      plus**, puisque tout encaissement vit sur un brouillon. **⊥ déployé.**
+      plus**, puisque tout encaissement vit sur un brouillon.
+      ✅ **Déployé et vérifié en production le 2026-09-07** : `PUT`/`DELETE /api/factures/:id`
+      répondent **405** avec le motif nommant l'avoir — y compris sur une facture **inexistante**,
+      ce qui prouve que le handler ne lit aucune ressource. Écran : **0 bouton 🗑** dans le DOM,
+      `window.deleteFacture` `undefined`, asset `factures.96fe3a61.js` servi.
       ⚠ Reste ouvert : aucune route ne pose le statut `annulee`, donc une facture créée par erreur
       ne peut plus être retirée de la liste — à cadrer avec le 004.
 - [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)

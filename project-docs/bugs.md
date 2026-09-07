@@ -1,5 +1,39 @@
 # iziGSM — Bugs connus
 
+## 🔴 `f.locked` ignoré au rendu de `factures.js` — l'avoir n'est pas proposé (trouvé en production le 2026-09-07, NON corrigé)
+
+Trouvé en vérifiant le ticket 003 en production, avec une session admin plateforme. **Défaut
+pré-existant, sans lien avec ce ticket** — qui n'a touché que le bouton de suppression.
+
+**Trois symptômes, une seule cause.** Sur `FAC-2026-00005` et `FAC-2026-00004`, que
+`GET /api/factures` renvoie avec **`locked: 1`**, l'écran :
+
+| Élément | Condition dans `factures.js` | Observé |
+|---|---|---|
+| Badge 🔒 (`lockBadge`) | `f.locked` | **absent** |
+| Bouton « Créer un avoir » (`btnAvoir`) | `f.locked` | **absent** |
+| Bouton « Émettre et verrouiller » (`btnEmettre`) | `!f.locked` | **présent sur une facture déjà émise** |
+
+Les trois dépendent de la même variable : à l'écran, `f.locked` est falsy alors que l'API le donne
+à 1. Le badge 🔐 s'affiche bien, lui — il dépend de `hash_nf525`, pas de `locked` — d'où
+l'illusion que la facture est correctement marquée.
+
+**Pourquoi c'est grave** : l'avoir est la **seule voie d'annulation** d'une facture (invariant
+gravé par le ticket 003 le même jour). Elle n'est pas offerte à l'écran. Et « Émettre » est
+proposé sur une facture déjà émise, action que le serveur refusera.
+
+**Ce qui est mesuré, et ce qui ne l'est pas** :
+
+- Mesuré : `GET /api/factures?boutique_id=1` renvoie `locked: 1` (type `number`) sur les deux
+  factures émises — **le serveur est correct**.
+- Mesuré : `localStorage.izigsm_factures` contient `locked: true` sur ces mêmes factures — la
+  donnée survit donc au mapping qui écrit le cache.
+- **⊥ mesuré** : quel objet `renderFactures()` reçoit réellement. Le diagnostic s'est arrêté là.
+  Piste à écarter en premier : la session de vérification était **admin plateforme sans boutique
+  sélectionnée** (`boutique_selectionnee_id = null`), configuration où `getBoutiqueId()` renvoie
+  `null` et où la page retombe sur une autre source que l'API. Refaire la mesure **avec** une
+  boutique sélectionnée avant toute théorie — un manager ne voit peut-être pas ce défaut.
+
 ## ⚠ `verifierIntegriteChaine()` ne vérifie pas le chaînage — une ligne supprimée lui échappe (trouvé le 2026-09-04, NON corrigé)
 
 Trouvé en corrigeant le ticket 005, en lisant les deux vérificateurs côte à côte.

@@ -33,6 +33,29 @@ supprimable. La seule annulation est un avoir.
       20 entrées du menu (`resolveur-boutique-pages.spec.ts`), les 3 tests XSS et les 7 pages hors
       socle. La page factures ne casse pas après le retrait du bouton et de `window.deleteFacture`.
 
+## Vérifié en production le 2026-09-07
+
+Déployé (`8d9d176`), puis mesuré avec une session admin plateforme :
+
+| Appel | Réponse |
+|---|---|
+| `PUT /api/factures/1` | **405** + « … émettre un avoir. » |
+| `DELETE /api/factures/1` | **405** idem |
+| `PUT /api/factures/1?boutique_id=1` | **405** idem |
+| `DELETE /api/factures/999999` (inexistante) | **405** idem |
+
+Le dernier est celui qui prouve quelque chose : sur un identifiant qui n'existe pas, le refus
+tombe quand même — le handler ne lit donc **aucune** ressource, ce qui est exactement le motif
+inscrit dans l'exemption du garde-fou d'isolation.
+
+Écran, mesuré dans le DOM et non à l'œil : **0** bouton 🗑, `window.deleteFacture` `undefined`,
+asset servi `factures.96fe3a61.js` (contient le commentaire de retrait, donc bien le nouveau).
+
+⚠ **Défaut pré-existant trouvé au passage** : `f.locked` est falsy au rendu alors que l'API donne
+`locked: 1` — ni badge 🔒, ni bouton « Créer un avoir », et « Émettre » proposé sur une facture
+déjà émise. **L'avoir, seule voie d'annulation que ce ticket vient de graver, n'est pas offert à
+l'écran.** Diagnostic non terminé, consigné dans `bugs.md` et `todo.md` (🔴 P1).
+
 ## Fait le 2026-09-07
 
 - `src/routes/facturation.ts` : `PUT` et `DELETE /factures/:id` répondent 405 avec un motif unique
