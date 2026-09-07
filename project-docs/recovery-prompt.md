@@ -1,3 +1,62 @@
+# Recovery Prompt — iziGSM — 2026-09-07 (checkpoint 83 — 002 et 005 en production, et mesurés)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis `C:\Users\Said\Downloads\claude-test\izigsm\webapp`, jamais depuis la racine.** Seul
+moyen de charger le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la
+procédure de déploiement.
+
+## Reprendre ici
+
+**Plus rien n'attend de décision humaine.** Les tickets **002** (vente de caisse verrouillée et
+annulable par un avoir) et **005** (vérificateur NF525 à deux écrivains) sont déployés le
+2026-09-07 et vérifiés en production. Aucune migration en attente. Prod `izigsm-v2.90`,
+`/api/health` 200.
+
+Le prochain chantier se choisit librement dans `todo.md` — **en triant d'abord** : le 🔴 ne trie
+plus rien (13 titres, 3 se déclarent résolus dans leur propre titre, 7 de juillet « PAS
+commencé »). Par ancienneté et charge métier : conformité facturation (tickets 003 et 004),
+chantier 2 de la supervision (le journal de plateforme se remplit, rien ne le lit), 5 pages du
+menu qui lisent l'enveloppe API au mauvais niveau, facture verrouillée = encaissement impossible.
+
+## Ce qu'a fait le checkpoint 83
+
+Déploiement des deux commits de code restés locaux (`8964dd6`, `c086048`), puis mesure en
+production de `GET /api/caisse/integrite` : les 3 boutiques `integre: true`, **0 anomalie**.
+**Aucun code écrit.**
+
+Le seul résultat qui prouve quelque chose est celui de la **boutique 1** : c'est la seule dont le
+journal porte les **deux écrivains** (2 `facture` en format B + 1 `vente` en format A), donc la
+seule configuration que l'ancien vérificateur échouait à lire. La boutique 3 a un journal vide —
+son « 0 anomalie » ne vaut rien.
+
+## Ce que ce checkpoint ne prouve pas
+
+- Le « 170 → 0 » du cp80 était **local** (171 entrées). La prod en compte **5**. ⊥ transposer.
+- **Aucun relevé pris avant le déploiement** : l'état antérieur de la prod est une inférence, pas
+  une mesure.
+- 🟠 P2 toujours ouvert : `verifierIntegriteChaine()` ne vérifie pas le **chaînage** — une ligne
+  supprimée lui échappe (`bugs.md`).
+
+## Pièges revérifiés le 2026-09-07
+
+- **`npm run deploy` finit sur `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`** après
+  son `✓`. Crash libuv de Node à la sortie du process sous Windows. ⊥ le lire comme un échec.
+- **Le jeton d'API ne vit pas dans `izigsm_session`** mais dans `localStorage.izigsm_token`.
+  Fabriquer un `Authorization: Bearer` depuis `session.token` donne `undefined` → **401** qu'on
+  prend pour une session expirée. Passer par `apiGet()` du socle, qui sait où il est.
+- **Un admin plateforme doit poser `?boutique_id=N`** sur les routes de caisse : son
+  `boutique_id` est nul par construction, le serveur n'a rien à retrouver dans le jeton.
+- **⊥ ouvrir le domaine dans un navigateur avant le `✓` du script de vérification.** Règle du
+  2026-08-01, tenue ici.
+
+## Baselines
+
+vitest **914/916** (2 échecs permanents de fuseau `agendaService`), tsc **32**,
+playwright **188/188**, build ✓. 40 migrations, `CACHE_VERSION` `izigsm-v2.90`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-04 (checkpoint 81 — docs réalignées sur le code)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

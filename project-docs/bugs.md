@@ -48,8 +48,13 @@ qu'une facture est émise ou qu'un avoir est créé.
 **À ne pas faire** : recalculer les `hash_courant` existants pour « réparer » la chaîne. C'est
 précisément ce que NF525 interdit, et ça détruirait la preuve d'inaltérabilité recherchée.
 
-**À revérifier** : l'affirmation « chaîne NF525 relue intègre » du checkpoint 78 a été établie par
-requête SQL directe, jamais par cet endpoint. Le dire de la production demande de le mesurer.
+**Revérifié en production le 2026-09-07** (cp83), par l'endpoint réel et non par requête SQL
+détournée : les 3 boutiques répondent `integre: true`, **0 anomalie**. Le cas qui tranche est la
+boutique 1, seule à porter les **deux écrivains** dans la même chaîne — 2 `facture` (format B) et
+1 `vente` (format A). Le journal de production compte **5 entrées** en tout (b1 : 2 `facture` +
+1 `vente` ; b2 : 2 `facture` ; b3 : vide) : le « 170 → 0 » ci-dessus reste une mesure **locale**,
+⊥ transposable. Aucun relevé n'a été pris *avant* le déploiement — l'état antérieur de la
+production est une inférence depuis le mécanisme, pas une mesure.
 
 **Correctif (2026-09-04)** — `verifierIntegriteChaine()` aiguille désormais sur
 `type_transaction` (`rebuildDonneesHash()`, `caisseService.ts`) : format A pour

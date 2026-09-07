@@ -26,11 +26,18 @@ ligne de `journal_nf525`.
 Décisions (table des formats, 4 arbitrages) : `decisions.md` § 2026-09-04 deux écrivains.
 Ticket : `.scratch/conformite-facturation/issues/005-verificateur-nf525-deux-formats.md`.
 
-⚠ **Un critère reste ouvert** : `GET /api/caisse/integrite` revérifié **en production**. Il exige
-un déploiement, qui embarquerait aussi le ticket 002 — non déployé depuis le cp79. Décision de
-déploiement laissée à l'exploitant le 2026-09-04.
+✅ **Dernier critère levé le 2026-09-07** (cp83) — déployé, puis mesuré en production **par
+l'endpoint réel**, session admin plateforme : les 3 boutiques répondent `integre: true`,
+**0 anomalie**. Le cas qui tranche est la boutique 1, seule à porter les **deux écrivains** dans
+la même chaîne — 2 `facture` (format B) + 1 `vente` (format A) ; c'est exactement la configuration
+que l'ancien vérificateur ne savait pas lire.
 
-**Ne bloque plus** le dernier critère du ticket 002.
+⚠ Deux limites à ne pas surinterpréter : le « 170 → 0 » ci-dessus est une mesure **locale**, la
+prod ne compte que **5 entrées** au journal ; et **aucun relevé n'a été pris avant le
+déploiement** — que ces factures aient été signalées auparavant reste une inférence depuis le
+mécanisme, pas une mesure.
+
+**Tickets 002 et 005 : livrés, déployés, vérifiés.** Rien ne reste ouvert ici.
 
 ## ⚠ NOTE (pas une tâche) — loop d'automatisation à désarmer, décidé le 2026-08-16
 

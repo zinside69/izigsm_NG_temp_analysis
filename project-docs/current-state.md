@@ -1,4 +1,76 @@
-# iziGSM — État courant (MàJ : 2026-09-04, checkpoint 82 — les serveurs fantômes sont morts)
+# iziGSM — État courant (MàJ : 2026-09-07, checkpoint 83 — 002 et 005 en production)
+
+## Checkpoint 83 — Les tickets 002 et 005 sont en production, et mesurés (2026-09-07)
+
+La seule chose qui attendait une décision humaine depuis le cp79 est faite. Rien de neuf n'a été
+écrit côté applicatif : ce checkpoint déploie l'existant et **mesure** ce qu'il produit en prod.
+
+### Déploiement
+
+Décision de l'exploitant le 2026-09-07. `npm run deploy` a embarqué les deux commits de code
+restés locaux au déploiement : `8964dd6` (ticket 002 — vente de caisse verrouillée et annulable
+par un avoir) et `c086048` (ticket 005 — le vérificateur NF525 connaît ses deux écrivains).
+
+Contrôles tenus **avant** de lancer, dans cet ordre :
+
+| Contrôle | Résultat |
+|---|---|
+| Arbre de travail / `origin/main` | propre, rien à pousser |
+| Migrations nouvelles | **aucune** — dernière `0040`, appliquée en distant le 2026-08-02 |
+| Fichiers frontend touchés | **aucun** — les 2 tickets sont 100 % backend |
+| `CACHE_VERSION` | reste `izigsm-v2.90`, la règle ne vise que `public/static/js` \| `public/*.html` |
+| Gate vitest | **914/916**, baseline exacte (2 échecs permanents de fuseau `agendaService`) |
+
+Sortie du déploiement : 79 modules, `_worker.js` 413.63 kB, 24 assets hashés, 31 pages réécrites,
+**71/71 fichiers déjà présents** (cohérent : aucun asset frontend n'a changé), aperçu
+`3cf3e0df.izigsm.pages.dev`, puis `scripts/verifier-deploiement.mjs` ✓ — `repairdesk.fr` sert
+47 970 octets de JavaScript sur `app.d39189aa.js`. La fenêtre de propagation a été respectée :
+**aucun navigateur ouvert sur le domaine avant le ✓**.
+
+`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` s'affiche après le `✓` : crash libuv de
+Node **à la sortie** du process sous Windows. Bruit, pas un échec de déploiement — ⊥ le confondre
+avec une erreur la prochaine fois.
+
+### La vérification du ticket 005, en production
+
+Faite via Claude in Chrome sur la session de l'exploitant (`support@soteli.fr`, `role: admin`,
+`boutique_id: null` → admin plateforme). **Lectures seules, aucune écriture sur la prod.**
+
+`GET /api/caisse/integrite?boutique_id=N` → les 3 boutiques : `integre: true`, **0 anomalie**.
+
+| Boutique | Journal `journal_nf525` | Verdict |
+|---|---|---|
+| 1 — iziGSM Paris 11 | 2 `facture` (écrivain B) + 1 `vente` (écrivain A) | `true`, 0 anomalie |
+| 2 — SOTELI | 2 `facture` (écrivain B) | `true`, 0 anomalie |
+| 3 — Desk1 | **vide** | `true`, 0 anomalie — sans portée |
+
+**Seule la boutique 1 tranche** : elle porte les deux formats canoniques dans la même chaîne,
+c'est-à-dire exactement la configuration que l'ancien vérificateur ne savait pas lire. Un « 0
+anomalie » lu sur la boutique 3, journal vide, n'aurait rien prouvé — le piège du point
+d'observation commode, `modop-tests.md` § Piège 2.
+
+Ça lève le « À revérifier » posé dans `bugs.md` au cp80 : l'intégrité de la production est
+désormais établie **par l'endpoint réel**, plus par une requête SQL détournée.
+
+### Ce qui n'a PAS été mesuré
+
+- Le « 170 → 0 » du cp80 est une mesure **locale** (171 entrées). La prod en compte **5**.
+  ⊥ transposer ce chiffre à la production.
+- **Aucun relevé n'a été pris avant le déploiement.** Que les 4 factures aient été signalées
+  frauduleuses auparavant en prod est une **inférence** depuis le mécanisme documenté, pas une
+  mesure. Le fait établi est celui d'après.
+- Le 🟠 P2 reste entier : `verifierIntegriteChaine()` ne vérifie toujours pas le **chaînage**,
+  une ligne supprimée lui échappe.
+
+### État
+
+Prod `izigsm-v2.90`, `GET /api/health` 200. Aucune migration en attente. Tickets 002 et 005 :
+livrés → déployés → vérifiés. **Plus aucune décision de déploiement en suspens.**
+
+Le prochain chantier se choisit dans `todo.md`, en se souvenant de l'avertissement du cp81 : le 🔴
+ne trie plus rien (13 titres, 3 résolus dans leur propre titre, 7 de juillet « PAS commencé »).
+
+---
 
 ## Checkpoint 82 — Port 3000 libéré, et une commande donnée dans le mauvais shell (2026-09-04)
 
