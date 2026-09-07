@@ -108,7 +108,7 @@ Spec + **5 tickets** : `.scratch/conformite-facturation/`. Root cause dans `bugs
       2026-08-02** — relevé le 2026-09-04.
 - [x] 002 — vente de caisse verrouillée et annulable par avoir (2026-09-04, commit `8964dd6`) —
       `createVente()` pose les six marques d'émission **après** l'écriture au journal NF525.
-      Ni migration, ni changement frontend. **⊥ déployé en production.**
+      Ni migration, ni changement frontend. **Déployé en production le 2026-09-07** (cp83).
       Case restée à `[ ]` un jour de trop alors que le ticket était `done` : la règle « marquer
       `x` immédiatement » n'a pas été tenue au cp79.
 - [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur,
@@ -116,8 +116,71 @@ Spec + **5 tickets** : `.scratch/conformite-facturation/`. Root cause dans `bugs
 - [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)
 - [x] 005 — le vérificateur NF525 connaît ses deux écrivains (2026-09-04, commit `c086048`) —
       aiguillage sur `type_transaction`, 170 → 0 anomalies, aucune ligne réécrite.
-      ⚠ **1 critère reste ouvert** : revérifier `GET /api/caisse/integrite` **en production**,
-      ce qui exige un déploiement (qui embarquerait aussi le 002).
+      ✅ **Dernier critère levé le 2026-09-07** (cp83) : `GET /api/caisse/integrite` mesuré en
+      production **par l'endpoint réel** — les 3 boutiques `integre: true`, 0 anomalie. Le cas qui
+      tranche est la boutique 1, seule à porter les deux écrivains dans la même chaîne.
+
+## 🔴 P1 — Intégration du fournisseur Mobilax : catalogue de pièces (demandé le 2026-09-07)
+
+Mobilax (`mobilax.fr`) est un fournisseur de pièces détachées et d'accessoires. Un accès API de
+**préproduction** a été ouvert à l'exploitant le 2026-09-07. Documentation et endpoints :
+`https://developers.mobilax.fr/`.
+
+**Objectif final, en trois volets** — seul le premier est dans ce chantier :
+
+1. disposer de **tout le catalogue** de pièces du fournisseur, cherchable depuis l'interface ;
+2. **calculer les marges** à partir des prix fournisseur, dans les devis et les tickets ;
+3. **passer commande** directement depuis `repairdesk.fr`.
+
+### 🔒 Le jeton ne doit jamais entrer dans ce dépôt
+
+**Ce dépôt est public sur GitHub.** Le token de préproduction vit dans `.dev.vars` en local
+(déjà ignoré par git) et dans un secret Cloudflare en distant. Aucun fichier suivi — ni ce
+`todo.md`, ni un ticket, ni un test, ni un commentaire — ne doit porter sa valeur. Le dépôt a
+déjà payé le prix d'un identifiant publié (§ compte de démo dans `CLAUDE.md`).
+
+Le token de préproduction a transité en clair dans une conversation : **le faire tourner chez
+Mobilax** une fois l'intégration en place.
+
+### Décisions actées le 2026-09-07 (exploitant)
+
+| Question | Décision |
+|---|---|
+| Périmètre de ce chantier | **Catalogue seul.** Marges/devis et commandes = chantiers suivants |
+| Exploitation du catalogue | **Hybride** : cache D1 (références, libellés, compatibilités) + prix et stock revérifiés en direct au moment d'ajouter la pièce à un devis ou une commande |
+| Compte fournisseur | **Un compte par boutique** — tarifs négociés propres à chaque réparateur, commandes rattachées à son compte, cohérent avec l'isolation multi-tenant |
+| Priorité | P1, **après** les tickets 003 et 004 de la conformité facturation (contrôle légal NF525) |
+
+### Question ouverte à trancher avant d'écrire du code
+
+**Un secret par boutique ne peut pas vivre dans un secret Cloudflare**, qui est global au
+Worker. Il faudra donc le stocker en base, et un identifiant fournisseur en clair dans D1 n'est
+pas acceptable : prévoir un chiffrement au repos (la clé de chiffrement, elle, en secret
+Cloudflare) — ou déléguer la saisie à chaque boutique sans jamais le relire côté serveur. À
+arbitrer en premier, ça détermine le schéma.
+
+### Contraintes du dépôt qui s'appliquent à ce chantier
+
+- **0 SQL inline** : toute requête dans un `mobilaxService.ts`, jamais dans un controller.
+- **Isolation multi-tenant** : le catalogue mis en cache et les identifiants sont portés par
+  `boutique_id` ; toute route par ID passe par `assertBoutiqueOwnership()`.
+- **Enveloppe API** : les pages qui afficheront le catalogue lisent `r.data.success` /
+  `r.data.data`, jamais `r.success` (§ enveloppe dans `CLAUDE.md`).
+- **XSS** : libellés, descriptions et images venant du fournisseur sont des données tierces →
+  `echapperHtml()` obligatoire, et encodage d'URL pour toute image ou lien.
+- Migration D1 nécessaire → **appliquée à distance AVANT** tout déploiement du Worker.
+
+### Tâches
+
+- [ ] Lire `https://developers.mobilax.fr/` et consigner : endpoints, pagination, format des
+      prix (HT/TTC, devise), gestion du stock, limites de débit, durée de vie du jeton
+- [ ] Premier appel de vérification en préproduction, jeton lu depuis `.dev.vars` — mesurer la
+      taille réelle du catalogue avant de choisir le schéma
+- [ ] Trancher le stockage du secret par boutique (voir question ouverte ci-dessus)
+- [ ] Migration D1 : tables du cache catalogue + identifiants fournisseur par boutique
+- [ ] `mobilaxService.ts` + adaptateur, tests unitaires
+- [ ] Écran de recherche de pièces, avec relecture du prix en direct à la sélection
+- [ ] Job de rafraîchissement du cache + conduite à tenir quand l'API est indisponible
 
 ## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
 
@@ -181,7 +244,17 @@ CSP future produirait le même effet.
 
 - [ ] Externaliser la logique de `public/reset-password.html` dans `public/static/js/reset-password.js`
 
-## 🔴 P1 — 5 pages du menu lisent l'enveloppe API au mauvais niveau (mesuré en PRODUCTION 2026-08-01)
+## ✅ 🔴 P1 — 5 pages du menu lisaient l'enveloppe API au mauvais niveau (mesuré en PRODUCTION 2026-08-01, **CORRIGÉ le 2026-08-02**)
+
+**Corrigé le 2026-08-02** : les cinq fichiers déballent désormais au point d'appel
+(`const res = (await apiGet(…)).data`), chacun porte un test de **rendu**, et
+`tests/frontend-enveloppe-api-conformite.test.ts` fait échouer la suite en cas de récidive.
+Revérifié dans le code le 2026-09-07 : les seules occurrences de `res.success` restantes dans
+ces fichiers sont **dans leurs commentaires d'en-tête**, qui documentent le défaut.
+
+Le titre est resté 🔴 pendant 36 jours alors que `CLAUDE.md` annonçait la correction — la
+même classe de dérive que les cinq refermées au cp81. Ce qui suit est le **constat d'origine**,
+conservé pour mémoire : il ne décrit plus l'état du code.
 
 C'est la classe de défaut annoncée par l'audit de persistance du 2026-07-30 (« 4 fichiers
 avec le pattern `r.success`/`r.data` cassé »), désormais **mesurée fichier par fichier et
@@ -354,7 +427,11 @@ balayage du menu (`page.on('pageerror')`), qui reste vert désormais.
 
 <details><summary>Diagnostic d'origine</summary>
 
-## 🔴 P1 — `reconditionnement.js` appelle une fonction qui n'existe pas (constaté 2026-08-01, en revue)
+## ✅ 🔴 P1 — `reconditionnement.js` appelait une fonction qui n'existe pas (constaté 2026-08-01, **CORRIGÉ le 2026-08-02**)
+
+**Doublon de l'entrée ✅ ci-dessus**, resté à 🔴 « en revue » alors que le correctif était livré.
+Revérifié le 2026-09-07 : `getCurrentBoutiqueId` n'apparaît plus dans `public/` que dans **un
+commentaire** de `reconditionnement.js`. Constat d'origine conservé ci-dessous.
 
 `public/static/js/reconditionnement.js` appelle `getCurrentBoutiqueId()` **11 fois**
 (lignes 135, 156, 261, 365, 415, 469, 490, 528, 572, 617, 663). Cette fonction **n'est
