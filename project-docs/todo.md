@@ -182,6 +182,145 @@ arbitrer en premier, ça détermine le schéma.
 - [ ] Écran de recherche de pièces, avec relecture du prix en direct à la sélection
 - [ ] Job de rafraîchissement du cache + conduite à tenir quand l'API est indisponible
 
+## 🔴 P1 — Prise en charge : ergonomie du modal et valeur juridique de la signature (demandé le 2026-09-07)
+
+Quatre demandes de l'exploitant sur le modal **« Nouvelle prise en charge »** (`/tickets`), l'écran
+le plus utilisé au comptoir. Constaté à l'écran le 2026-09-07 : l'onglet « Informations » ne tient
+pas dans la fenêtre, il faut faire défiler pour atteindre « Notes internes » et les boutons.
+
+Le cinquième point de la demande — la signature déportée — est un **chantier séparé**, voir le
+bloc suivant.
+
+### Décisions actées le 2026-09-07 (exploitant)
+
+| Point | Décision |
+|---|---|
+| Hauteur du modal | **Compacter la grille** : 3 colonnes sur écran large, hauteurs de champs réduites, description et notes redimensionnables. Les 4 onglets sont conservés. ⊥ plein écran, ⊥ découpage en étapes |
+| Recherche client | **Champ unique** : 3 lettres suffisent, les fiches existantes s'affichent, recherche **côté serveur** avec temporisation. Si aucune ne correspond → **renvoi vers l'onglet « Nouveau client »** avec le texte saisi repris |
+| États des lieux | Liste enrichie ci-dessous, à cocher dans l'onglet « État & Sécurité » |
+| CGR | La signature vaut acceptation des conditions générales de réparation |
+
+### 1. Le modal doit tenir sans défilement
+
+`+ Nouvelle prise en charge` → onglet « Informations ». Aujourd'hui 7 paires de champs en
+2 colonnes + 2 zones de texte : la fenêtre déborde sur un écran 1080p. Passer en 3 colonnes
+au-delà d'une certaine largeur, réduire les hauteurs, rendre `description` et `notes`
+redimensionnables. Mesurer sur 1366×768 (portable de comptoir), pas seulement sur grand écran.
+
+### 2. Recherche du client sur 3 lettres
+
+Le menu déroulant « Sélectionner un client » impose de connaître la fiche et de la faire défiler.
+À remplacer par un champ de saisie interrogeant le serveur au bout de 3 caractères, sur le **nom,
+le téléphone et l'email** — au comptoir, le téléphone est souvent la seule chose que le client
+donne. Aucun filtrage local : la base d'une boutique active dépasse vite la page chargée, et un
+filtre local devient alors silencieusement faux.
+
+⚠ La route de recherche doit être isolée par `boutique_id` : chercher « dupont » ne doit jamais
+faire remonter le client d'une autre boutique.
+
+### 3. États des lieux à ajouter (onglet « État & Sécurité »)
+
+Les deux demandés :
+
+- Téléphone fourni éteint — impossible de faire les tests de prise en charge
+- Téléphone écran noir — impossible de faire les tests de prise en charge
+
+Proposés en complément, classés par portée. Les trois marqués 🛡 sont ceux qui servent réellement
+en cas de litige :
+
+**Impossibilité de tester**
+- Appareil ne charge pas — tests impossibles
+- Batterie totalement déchargée, mise en charge nécessaire avant diagnostic
+- Appareil verrouillé, code non communiqué — tests limités
+- 🛡 Verrouillage d'activation iCloud / compte Google actif — remise en service non garantie
+
+**Constats physiques**
+- Vitre ou écran fissuré (préciser la localisation)
+- Châssis déformé ou plié · coque arrière fissurée ou décollée
+- 🛡 Traces d'oxydation ou d'humidité — indicateur LCI déclenché
+- 🛡 Appareil déjà ouvert ou réparé antérieurement (vis manquantes, joints d'étanchéité absents)
+- Lentille caméra rayée ou cassée · bouton défectueux (power, volume, home) · tiroir SIM absent
+
+**Défauts fonctionnels constatés**
+- Tactile partiellement inopérant · pixels morts ou taches sur l'écran
+- Haut-parleur ou micro sans son · Face ID / capteur d'empreinte non fonctionnel
+- Charge intermittente, connecteur encrassé
+
+**Réserves à faire accepter**
+- Sauvegarde des données non effectuée par le client — perte possible acceptée
+- Étanchéité non garantie après ouverture
+- Appareil remis avec / sans carte SIM · avec / sans carte mémoire · accessoires remis
+
+### 5. La signature vaut acceptation des CGR
+
+L'onglet « Signature » doit porter la mention : en signant, le client reconnaît avoir pris
+connaissance et accepté les conditions générales de réparation, avec un lien ouvrant le texte.
+
+Modèle dont s'inspirer : `https://www.telnet-beynost.fr/cgr-conditions-generales-reparation/` —
+23 articles + 2 annexes. Ossature : objet · propriété de l'appareil · commande de la prestation ·
+**sauvegarde des données par le client** · délai de réparation · **limitation de responsabilité
+pour les appareils oxydés** · non-réparation, délai de récupération et limite de responsabilité ·
+remplacement de l'appareil · livraison et réclamations · garanties légales et garantie des
+réparations · transfert des risques · droit de rétractation · prix et paiement · données
+personnelles · convention de preuve · droit applicable · règlement des litiges.
+
+⚠ **Ne pas copier ce texte tel quel dans le produit** : il nomme une société précise et engage
+sa responsabilité. Les CGR sont **propres à chaque boutique** (raison sociale, délais, garanties
+pratiquées) → texte paramétrable par boutique, avec un modèle par défaut à faire relire.
+
+⚠ **Le point qui donne sa valeur à la mention** : la signature doit enregistrer **quelle version
+des CGR** a été acceptée (numéro de version ou empreinte du texte, + horodatage). Une mention qui
+renvoie au texte « du jour » ne prouve rien en litige, puisque le texte a pu changer depuis. Même
+raisonnement que le figeage des snapshots de facture (§ Factures dans `CLAUDE.md`).
+
+### Tâches
+
+- [ ] Modal : passage en 3 colonnes, mesuré sur 1366×768 et 1920×1080, sans défilement interne
+- [ ] Route de recherche client par nom / téléphone / email, isolée par `boutique_id`, testée
+- [ ] Champ unique côté frontend + renvoi vers l'onglet « Nouveau client » avec la saisie reprise
+- [ ] États des lieux : ajout des items ci-dessus (source de vérité à choisir — liste en dur ou
+      table paramétrable par boutique, à trancher avant le schéma)
+- [ ] CGR : texte par boutique dans les réglages + mention et lien dans l'onglet Signature
+- [ ] CGR : persistance de la **version acceptée** avec la signature (migration D1)
+- [ ] `CACHE_VERSION` de `public/sw.js` à incrémenter sur la dernière tâche frontend
+
+## 🟠 P2 — Signature déportée : QR pour l'appareil tiers, tablette d'atelier pour le smartphone (demandé le 2026-09-07, priorité à confirmer)
+
+Chantier séparé du précédent : il expose une surface publique et demande un cadrage sécurité.
+
+**Deux modes, et le choix dépend de l'appareil pris en charge** — arbitrage de l'exploitant du
+2026-09-07 :
+
+| Mode | Quand | Comment |
+|---|---|---|
+| **QR à l'écran** | Réparation d'un appareil **qui n'est pas le téléphone du client** (tablette, PC, console, montre) | Le client scanne avec son propre smartphone et signe sur une page publique minimale |
+| **Tablette de l'atelier** | Réparation **du smartphone du client** — cas le plus fréquent | Une tablette de la boutique, connectée au même compte, affiche la signature en attente |
+
+**Le QR seul ne suffit pas, et c'est le point qu'il ne faut pas oublier** : un client qui dépose
+son téléphone en réparation n'a, par définition, pas de second appareil pour scanner. Toute
+solution qui ne prévoit que le QR est inutilisable sur le cœur du métier.
+
+L'écran doit donc proposer les deux et **suggérer la tablette quand l'appareil pris en charge est
+un téléphone**.
+
+### Contraintes de sécurité (mode QR)
+
+- Jeton **signé, à expiration courte, à usage unique** — jamais un identifiant de ticket devinable
+- La page publique ne montre **que ce qui est signé** : appareil, panne, prix estimé, CGR. Aucune
+  donnée d'une autre prise en charge, aucun accès à la boutique
+- Route publique → hors `authMiddleware`, donc à ajouter explicitement aux exemptions du garde-fou
+  d'isolation (`tests/routes-isolation-conformite.test.ts`, motif `public`)
+- La signature reçue est une donnée tierce : échappement à l'affichage (une XSS par signature a
+  déjà été corrigée le 2026-07-11, voir `bugs.md`)
+
+### Tâches
+
+- [ ] Cadrer le mode QR : forme du jeton, durée de vie, usage unique, contenu exposé
+- [ ] Route publique de signature + exemption motivée dans le garde-fou d'isolation
+- [ ] Affichage du QR dans l'onglet Signature, avec attente et rafraîchissement de l'état
+- [ ] Mode tablette : file des signatures en attente pour un compte de la boutique
+- [ ] Suggestion automatique du mode selon le type d'appareil pris en charge
+
 ## 🔴 P1 — Chantier 2 de la supervision : personne ne peut lire le journal de plateforme (2026-08-01, ticket 04)
 
 Depuis le déploiement du ticket 04, `journal_actions_plateforme` se remplit — et **aucune
