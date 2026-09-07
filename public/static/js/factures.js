@@ -148,6 +148,17 @@ function loadFacturesFallback() {
     status:      f.status || 'Brouillon',
     createdAt:   f.createdAt || f.date_emission || new Date().toISOString(),
     hash_nf525:  f.hash_nf525 || null,
+    // `locked` était ABSENT de ce mapping : le chemin de repli faisait donc passer
+    // toute facture pour non verrouillée. Conséquence à l'écran — pas de badge 🔒,
+    // pas de bouton « Créer un avoir » (la SEULE annulation possible depuis le
+    // ticket 003), et « Émettre » proposé sur une facture déjà émise.
+    // Le repli sert aussi à relire un cache écrit par une version antérieure, qui ne
+    // porte pas le champ : une facture chaînée NF525 est nécessairement émise, donc
+    // verrouillée. Sans `locked` ni `hash_nf525`, rien ne permet de conclure et on
+    // reste sur `false`.
+    locked:      f.locked === 1 || f.locked === true ||
+                 (f.locked === undefined && !!f.hash_nf525),
+    issued_at:   f.issued_at || null,
     _statut:     STATUT_LABEL_TO_API[f.status] || 'brouillon',
   }));
   renderFactures();

@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🔴 `f.locked` ignoré au rendu de `factures.js` — l'avoir n'est pas proposé (trouvé en production le 2026-09-07, NON corrigé)
+## ✅ `f.locked` ignoré au rendu de `factures.js` — l'avoir n'était pas proposé (trouvé en production le 2026-09-07, **CORRIGÉ le 2026-09-07**)
 
 Trouvé en vérifiant le ticket 003 en production, avec une session admin plateforme. **Défaut
 pré-existant, sans lien avec ce ticket** — qui n'a touché que le bouton de suppression.
@@ -28,11 +28,35 @@ proposé sur une facture déjà émise, action que le serveur refusera.
   factures émises — **le serveur est correct**.
 - Mesuré : `localStorage.izigsm_factures` contient `locked: true` sur ces mêmes factures — la
   donnée survit donc au mapping qui écrit le cache.
-- **⊥ mesuré** : quel objet `renderFactures()` reçoit réellement. Le diagnostic s'est arrêté là.
-  Piste à écarter en premier : la session de vérification était **admin plateforme sans boutique
-  sélectionnée** (`boutique_selectionnee_id = null`), configuration où `getBoutiqueId()` renvoie
-  `null` et où la page retombe sur une autre source que l'API. Refaire la mesure **avec** une
-  boutique sélectionnée avant toute théorie — un manager ne voit peut-être pas ce défaut.
+**Cause racine (2026-09-07)** — `loadFacturesFallback()` reconstruisait chaque facture **sans le
+champ `locked`**. Le mapping du chemin API (`mapApiFacture()`) le porte bien ; celui du chemin de
+repli l'avait simplement oublié. Tout ce qui en dépend basculait donc du mauvais côté.
+
+`loadFactures()` emprunte ce repli dans **trois** cas : aucune boutique résolue
+(`getBoutiqueId()` nul), réponse API en erreur, ou coupure réseau. Le premier est celui de la
+vérification en production — un admin plateforme sans boutique choisie.
+
+**Comment ça a été trouvé, et pourquoi ça compte** : les trois premières configurations testées en
+local sont **vertes** (manager, admin avec boutique choisie, admin sans boutique choisie — cette
+dernière n'affichant rien du tout). Le défaut n'est apparu qu'en **rejouant l'état du navigateur**
+de l'exploitant : un cache `localStorage.izigsm_factures` rempli par une session antérieure. Sans
+ce rejeu, la boucle serait restée verte et le bug déclaré introuvable.
+
+**Correctif** — le repli recopie `locked` et `issued_at`, avec la même normalisation que le chemin
+API, et **déduit de `hash_nf525`** quand le champ est absent d'un cache écrit par une version
+antérieure : une facture chaînée NF525 est nécessairement émise. Sans `locked` ni `hash_nf525`,
+rien ne permet de conclure et on reste sur `false`.
+
+**Non-récidive** : `tests/e2e/facture-avoir-visible.spec.ts`, 4 cas — manager, admin avec boutique,
+admin sans boutique, et le rejeu du cache sans `locked` (le seul qui était rouge).
+
+### ⚠ Ce que ce correctif ne répare PAS — plus grave que les boutons
+
+Sans boutique sélectionnée, la page affiche **les factures de la dernière boutique consultée**,
+prises dans le cache local. Un admin plateforme voit donc des pièces comptables qui ne sont pas
+celles de la boutique qu'il croit regarder. C'est un mensonge d'isolation à l'écran, de la même
+famille que ceux du ticket 03, et il vaut pour **toute page** qui garde un cache local — pas
+seulement les factures. Traité séparément (`todo.md`), délibérément hors de ce correctif.
 
 ## ⚠ `verifierIntegriteChaine()` ne vérifie pas le chaînage — une ligne supprimée lui échappe (trouvé le 2026-09-04, NON corrigé)
 

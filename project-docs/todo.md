@@ -1,6 +1,6 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## 🔴 P1 — L'écran Factures n'offre pas l'avoir sur une facture émise (trouvé en production le 2026-09-07)
+## ✅ 🔴 P1 — L'écran Factures n'offrait pas l'avoir sur une facture émise (trouvé en production le 2026-09-07, **CORRIGÉ le 2026-09-07**)
 
 `f.locked` est falsy au rendu de `factures.js` alors que l'API renvoie `locked: 1`. Conséquence :
 ni badge 🔒, ni bouton « Créer un avoir », et « Émettre » proposé sur une facture déjà émise.
@@ -12,9 +12,27 @@ Cause racine et mesures : `bugs.md` § `f.locked` ignoré au rendu. Le diagnosti
 terminé — première chose à faire : rejouer la mesure **avec une boutique sélectionnée**, la
 vérification ayant été faite en admin plateforme sans sélection.
 
-- [ ] Rejouer la mesure avec une boutique sélectionnée, puis en compte manager
-- [ ] Trouver où `locked` se perd entre la réponse API et `renderFactures()`
-- [ ] Test de rendu (pas de requête) : une facture `locked` affiche l'avoir et pas « Émettre »
+- [x] Rejouer la mesure avec une boutique sélectionnée, puis en compte manager — **les deux sont
+      verts**, le défaut n'est ni dans le mapping API ni lié au rôle
+- [x] Trouver où `locked` se perd — `loadFacturesFallback()` ne le recopiait pas
+- [x] Test de rendu : `tests/e2e/facture-avoir-visible.spec.ts`, 4 cas, le rejeu du cache vu rouge
+      avant correctif
+
+**⊥ déployé.** `CACHE_VERSION` `v2.91` → `v2.92`, aucune migration.
+
+## 🟠 P2 — Sans boutique sélectionnée, une page affiche le cache de la boutique précédente (isolé le 2026-09-07)
+
+Constaté sur `/factures` en corrigeant le défaut ci-dessus, mais le mécanisme n'a rien de propre
+aux factures : `loadFactures()` bascule sur `localStorage` dès que `getBoutiqueId()` est nul, et
+affiche alors les données **de la dernière boutique consultée**.
+
+Un admin plateforme regarde donc des pièces comptables qui ne sont pas celles de la boutique qu'il
+croit consulter — sans le moindre signal à l'écran. Même famille que les mensonges d'isolation du
+ticket 03, et à vérifier sur **toute page gardant un cache local**, pas seulement celle-ci.
+
+- [ ] Recenser les pages qui se replient sur un cache local sans boutique résolue
+- [ ] Décider : écran « choisissez une boutique » plutôt qu'un affichage trompeur
+- [ ] Vérifier que le cache local porte la boutique dont il provient
 
 ## 🟠 P2 — Le contrôle d'intégrité NF525 ne détecte pas la suppression d'une ligne (ouvert le 2026-09-04)
 
