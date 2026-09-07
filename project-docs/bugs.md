@@ -414,6 +414,25 @@ Statut et `.superpowers/sdd/2026-07-31-isolation-routes-par-id/task-7-report.md`
 de route (non liée à l'isolation, non corrigée) : `project-docs/todo.md` § "Dette et bugs découverts pendant
 le chantier isolation routes par ID". Non encore déployé.
 
+## Piège outillage — un `workerd` survit à l'arrêt de `wrangler pages dev` (revérifié 3 fois le 2026-09-07)
+
+Complète l'entrée ci-dessous. **Arrêter la tâche ne suffit pas** : le shell parent meurt,
+`workerd.exe` continue d'écouter sur le port 3000 et sert l'**ancien** build. C'est le fantôme des
+checkpoints 80 et 82, celui qui fait croire qu'un correctif correct est sans effet.
+
+Constaté trois fois dans la même session, y compris quand c'est le **système** qui tue la tâche
+(mémoire insuffisante) — donc pas seulement sur un arrêt volontaire.
+
+Parade, à faire après **tout** arrêt du serveur local :
+
+```bash
+netstat -ano | grep LISTENING | grep ":3000"   # un PID ici = fantôme
+taskkill //PID <pid> //T //F
+```
+
+Les `workerd` restants sur des **ports éphémères hauts** sont des processus internes de wrangler,
+sans serveur d'application derrière : ⊥ les toucher.
+
 ## Piège outillage — `wrangler pages dev` s'empile sans tuer l'instance précédente (trouvé 2026-07-31)
 
 **20 processus `workerd` vivants simultanément**, soit **2 Go de RAM**, plus une cinquantaine de processus `node` associés. Issus de redémarrages répétés du serveur dev : 09:33, 09:41, 10:26, 11:09, 11:20, 11:36, 11:37, 11:49, 11:50, 11:51, 11:58, 11:59, 12:07, 12:15, 12:42, 12:46, 12:59, 13:00, 13:50, 13:51.

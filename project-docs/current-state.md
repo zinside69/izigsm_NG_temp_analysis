@@ -1,4 +1,98 @@
-# iziGSM — État courant (MàJ : 2026-09-07, checkpoint 83 — 002 et 005 en production)
+# iziGSM — État courant (MàJ : 2026-09-07, checkpoint 84 — ticket 003 en production, et le bug qu'il a révélé)
+
+## Checkpoint 84 — Le ticket 003 en production, et le bug qu'il a révélé (2026-09-07)
+
+Session longue. Trois choses livrées, une décision d'exploitant reprise en cours de route, et
+trois pièges d'outillage qui ont coûté du temps.
+
+### Ce qui est en production
+
+**Tickets 002 et 005** (restés local depuis le cp79) : déployés puis **mesurés** —
+`GET /api/caisse/integrite` renvoie `integre: true` et **0 anomalie** sur les 3 boutiques. Le seul
+résultat qui prouve quelque chose est celui de la **boutique 1**, seule à porter les **deux
+écrivains** dans la même chaîne (2 `facture` format B + 1 `vente` format A) ; la boutique 3 a un
+journal vide, son « 0 anomalie » ne vaut rien.
+
+**Ticket 003 — l'immuabilité d'une facture devient explicite.** `PUT` et `DELETE /factures/:id`
+répondent **405** avec un motif nommant l'avoir, y compris sur une facture **inexistante** : le
+handler ne lit aucune ressource, ce qui justifie son exemption au garde-fou d'isolation. Bouton 🗑
+et `deleteFacture()` retirés — son repli hors-ligne **supprimait pour de bon** la facture du cache
+local en annonçant « supprimée », pire que l'échec muet décrit par le ticket. Vérifié en
+production : 405 sur 4 appels, 0 corbeille dans le DOM, `window.deleteFacture` `undefined`.
+
+**Brouillon tranché : non supprimable non plus.** `ajouterPaiement()` refuse une facture
+verrouillée, donc **tout encaissement vit sur un brouillon** — le supprimer effacerait de l'argent
+encaissé.
+
+⚠ **Contrepartie non traitée** : une facture créée par erreur ne peut plus être retirée de la
+liste. Le statut `annulee` existe, aucune route ne le pose. À cadrer avec le 004.
+
+### Le bug que la vérification a révélé — corrigé, ⊥ déployé
+
+En vérifiant le 003 à l'écran : sur des factures que l'API donne à `locked: 1`, ni badge 🔒, ni
+bouton **« Créer un avoir »**, et « Émettre » proposé sur une facture déjà émise. **L'avoir est la
+seule voie d'annulation que le 003 venait de graver, et l'écran ne l'offrait pas.**
+
+Cause : `loadFacturesFallback()` reconstruisait chaque facture **sans `locked`**. Le chemin API le
+portait, le chemin de repli l'avait oublié. `loadFactures()` emprunte ce repli dans trois cas —
+boutique non résolue, API en erreur, réseau coupé.
+
+**Ce que le diagnostic a appris, et qui vaut pour la suite** : les trois configurations évidentes
+sont **vertes** (manager, admin avec boutique, admin sans boutique). Le défaut n'est apparu qu'en
+**rejouant l'état du navigateur** — un cache `localStorage` d'une session antérieure. Sans ce
+rejeu, la boucle serait restée verte et le bug déclaré introuvable. Écrit en `modop-tests.md`
+§ Piège 6.
+
+⚠ **Plus grave, isolé et ⊥ corrigé** : sans boutique sélectionnée, la page affiche **les factures
+de la dernière boutique consultée**. Mensonge d'isolation à l'écran, valable pour toute page
+gardant un cache local. 🟠 P2 dans `todo.md`, délibérément hors de ce correctif.
+
+### Backlog enrichi
+
+Trois entrées neuves, écrites sur décisions de l'exploitant : **Mobilax** (catalogue de pièces,
+cache D1 hybride, un compte fournisseur par boutique — le jeton de préproduction ⊥ doit jamais
+entrer dans ce dépôt public), **prise en charge** (modal sans défilement, recherche client sur
+3 lettres, états des lieux enrichis, CGR à la signature), **signature déportée** (QR pour un
+appareil tiers **et** tablette d'atelier pour le smartphone du client — qui, par définition, n'a
+pas de second appareil pour scanner).
+
+Et **4 dérives documentaires refermées** : deux entrées 🔴 périmées de 36 jours, plus deux mentions
+du cp83 lui-même, qui avait mis à jour la section du ticket 005 sans le bloc du chantier.
+
+### Grilling du ticket 004 — 4 arbitrages, 3 questions ouvertes
+
+Détail dans `decisions.md`. Deux faits mesurés dépassaient le ticket : **100 % du registre de la
+boutique 1 est signé par le compte de supervision** (pas seulement la vente citée), et la
+boutique 2 montre que le mécanisme correct fonctionne.
+
+L'exploitant s'est **repris** sur le verrouillage de `FAC-2026-00003` : première réponse « on
+verrouille puisque tout sera remis à zéro », puis retour à la décision 3 du 2026-09-04 après
+objection — bénéfice nul, et premier précédent d'écriture sur une pièce chaînée.
+
+Restent ouvertes : la nature de la note (préproduction ⇒ rien d'opposable à un contrôle), la
+**procédure de remise à zéro** (⚠ les `sequences` doivent repartir à 0, sinon la première vraie
+facture sortira en `FAC-2026-00006`), et **où** inscrire la marque d'intervention plateforme sans
+toucher au format canonique hashé.
+
+### Baselines
+
+vitest **920/922** (2 permanents de fuseau), tsc **32**, **Playwright 192/192**, build ✓.
+Production : `izigsm-v2.91`. Local : `v2.92`, ⊥ déployé.
+
+### Trois pièges d'outillage, tous consignés
+
+- **Un `workerd` survit à l'arrêt du serveur local** — 3 fois ce jour, y compris quand c'est le
+  système qui tue la tâche. Le fantôme des cp80/82. Parade dans `bugs.md`.
+- **La suite E2E se fait tuer sous ~8 Go libres** — deux fois, **0 test exécuté**. Une tâche tuée
+  n'est pas un échec de test : lire le compte réel avant de conclure. `modop-tests.md` § Piège 7.
+- **Les backticks d'un `node -e "…"` lancé depuis bash** sont interprétés comme une substitution
+  de commande : le script annonce `OK` et écrit un fichier vidé de ses backticks, sans erreur.
+  § Piège 8.
+
+Et un flake mesuré : `selection-boutique.spec.ts`, 2 échecs sur un premier passage complet, verts
+isolément **puis** verts sur un second passage complet.
+
+---
 
 ## Checkpoint 83 — Les tickets 002 et 005 sont en production, et mesurés (2026-09-07)
 

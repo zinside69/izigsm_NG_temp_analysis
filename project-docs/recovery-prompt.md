@@ -1,3 +1,56 @@
+# Recovery Prompt — iziGSM — 2026-09-07 (checkpoint 84 — le 003 en production, et le bug qu'il a révélé)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis `C:\Users\Said\Downloads\claude-test\izigsm\webapp`, jamais depuis la racine.** Seul
+moyen de charger le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la
+procédure de déploiement.
+
+## Reprendre ici
+
+**Un correctif attend un déploiement** : le bug `f.locked` de `factures.js` (commit `7952896`) est
+commité et **⊥ déployé**. `CACHE_VERSION` local `v2.92`, production `v2.91`. Aucune migration en
+attente. C'est le seul écart entre le dépôt et la production.
+
+**Trois questions attendent l'exploitant** (round 2 du grilling 004, voir `decisions.md`) : la
+nature de la note de trous en régime de préproduction, la procédure de remise à zéro, et où
+inscrire la marque d'intervention plateforme.
+
+## Ce qu'a fait le checkpoint 84
+
+Tickets 002, 005 et **003** en production et vérifiés. Le 003 a révélé un bug d'affichage qui
+**annulait son propre invariant** — l'avoir, seule annulation possible, n'était pas proposé à
+l'écran — diagnostiqué et corrigé le jour même. Backlog enrichi de 3 chantiers (Mobilax, prise en
+charge, signature déportée) et débarrassé de 4 dérives.
+
+## Ce qu'il faut savoir avant de toucher aux factures
+
+- **Une facture ne se modifie ni ne se supprime**, brouillon compris : tout encaissement vit sur
+  un brouillon (`ajouterPaiement()` refuse une facture verrouillée). `PUT`/`DELETE` → 405.
+- **Contrepartie ouverte** : aucune route ne pose `annulee`, donc une facture créée par erreur ne
+  peut plus être retirée de la liste.
+- **Sans boutique sélectionnée, `/factures` affiche le cache de la boutique précédente** (🟠 P2).
+  Le correctif du jour rétablit `locked` mais **ne répare pas** ce mensonge d'isolation.
+
+## Pièges revérifiés le 2026-09-07
+
+- **Un `workerd` survit à l'arrêt de `wrangler pages dev`** — 3 fois ce jour. Après tout arrêt :
+  `netstat -ano | grep LISTENING | grep ":3000"`, puis `taskkill //PID <pid> //T //F`.
+- **La suite E2E est tuée sous ~8 Go de mémoire libre**, sans exécuter le moindre test. Mesurer
+  avant de lancer ; une tâche tuée ≠ un échec de test.
+- **`node -e "…"` depuis bash mange les backticks** (substitution de commande) : écrire le script
+  dans un `.mjs` et lancer `node fichier.mjs`.
+- **Un `git fetch` périme en minutes** : le backup D1 automatique fait avancer `origin` tout seul.
+- **Le sélecteur de questions ne s'affiche pas chez l'exploitant** : poser les questions en texte
+  numéroté (mémoire `feedback_questions_en_texte`).
+
+## Baselines
+
+vitest **920/922** (2 permanents de fuseau `agendaService`), tsc **32**, **Playwright 192/192**,
+build ✓. 40 migrations.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-07 (checkpoint 83 — 002 et 005 en production, et mesurés)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

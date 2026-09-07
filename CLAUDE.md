@@ -572,6 +572,14 @@ cd izigsm/webapp && git fetch origin && git log --oneline origin/main..HEAD   # 
 ```
 
 `git status` ne suffit pas : « nothing to commit » est vrai sur un dépôt dont rien n'est parti.
+
+⚠ **Un `git fetch` périme en minutes sur ce dépôt** (mesuré le 2026-09-07). Un push a été rejeté
+en non-fast-forward alors que le contrôle fait quelques minutes plus tôt annonçait « rien en
+face » : trois commits `chore: backup D1 automatique` étaient arrivés entre-temps, poussés par
+l'automatisation quotidienne. Et dans l'autre sens, un commit s'est retrouvé sur `origin` **avant**
+le `git push` de la session qui l'avait créé. Conséquence pratique : `fetch` **juste avant** de
+pousser et **juste avant** d'annoncer qu'un travail est poussé — une mesure d'il y a cinq minutes
+ne vaut rien.
 En cas de divergence, cas standard : `git pull --rebase origin main` puis push (§ Résolution
 conflits git du `CLAUDE.md` racine).
 

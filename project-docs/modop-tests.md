@@ -139,6 +139,52 @@ explication plausible en a été donnée comme un fait (« le déménagement a o
 Elle était fausse, et c'est l'exploitant qui l'a relevée ; la mesure — transcripts et checkpoints
 41-53 de juillet — disait l'inverse. **⊥ expliquer une absence par une hypothèse : la mesurer.**
 
+## Piège 6 — la boucle verte qui ne prouve rien, faute du bon état (2026-09-07)
+
+Le défaut `f.locked` de `factures.js` n'était reproductible dans **aucune** des trois
+configurations évidentes : manager, admin plateforme avec boutique choisie, admin plateforme sans
+boutique choisie. Trois boucles vertes — de quoi conclure « pas reproductible, donc pas de bug »,
+alors que le symptôme était filmé en production.
+
+Ce qui manquait n'était pas une configuration de **code** mais un état de **navigateur** : un
+cache `localStorage` rempli par une session antérieure. En le rejouant (`page.addInitScript`), la
+boucle est devenue rouge en deux secondes.
+
+**Règle** : quand le code ne reproduit pas et que le symptôme est réel, l'état du client fait
+partie de l'entrée du système. Le rejouer est une étape à part entière, pas un raffinement.
+
+Détail annexe, mais coûteux : `addInitScript` doit recevoir une **chaîne**, pas une fonction —
+`tsconfig` n'inclut pas la lib `dom`, et une fonction touchant `localStorage` casse la baseline
+`tsc`.
+
+## Piège 7 — la suite E2E tuée par la mémoire, et le résultat qu'on n'a pas (2026-09-07)
+
+Deux lancements de `npm run test:e2e` tués par le harnais faute de mémoire, **0 test exécuté** les
+deux fois. Cause : ~40 processus Chrome ouverts sur la machine, auxquels s'ajoutent les Chromium
+de Playwright.
+
+Deux enseignements :
+
+- **Une tâche tuée n'est pas un échec de test.** Lire le compte réel (`grep -c` sur les lignes de
+  résultat) avant de conclure quoi que ce soit — ici, aucun test n'avait tourné.
+- **Le seuil du harnais est plus haut que la mémoire libre affichée** : les coupures sont
+  survenues avec ~5 Go libres. Viser ~8 Go avant de lancer la suite complète.
+
+Et un flake mesuré au passage : `selection-boutique.spec.ts` a donné 2 échecs sur un premier
+passage complet, verts isolément **puis** verts sur un second passage complet. Un seul passage ne
+suffit pas à distinguer flake et régression — rejouer le spec seul, **puis** la suite entière.
+
+## Piège 8 — les backticks d'un `node -e "…"` lancé depuis bash (2026-09-07)
+
+`node -e "… \`update|delete\` …"` : bash traite les backticks de la chaîne double-quotée comme une
+**substitution de commande**. Le script s'exécute, annonce `OK`, et écrit un fichier dont tous les
+passages entre backticks ont été **remplacés par du vide** — sans la moindre erreur visible dans
+le fichier produit.
+
+Constaté sur une entrée de ticket : la section écrite était vidée de ses noms de fonctions, et
+seul un `grep` de contrôle l'a montré. **Parade** : écrire le script dans un fichier `.mjs` (outil
+Write) et lancer `node fichier.mjs`, jamais `node -e` dès qu'il y a un backtick.
+
 ## La procédure
 
 ### Avant d'annoncer « vérifié »

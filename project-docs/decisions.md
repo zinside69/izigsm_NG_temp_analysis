@@ -1,5 +1,41 @@
 # iziGSM — Décisions
 
+## 2026-09-07 — Ticket 004 : trous de numérotation et caissier tiers (4 arbitrages)
+
+Grilling de l'exploitant, round 1. Les faits ont été mesurés en production avant de poser les
+questions ; deux d'entre eux dépassaient ce que le ticket décrivait.
+
+**Fait 1 — le registre de la boutique 1 est signé par un tiers à 100 %**, et pas seulement la
+vente citée par le ticket : les trois entrées portent `user_id 1 = support@soteli.fr`
+(`boutique_id` NULL). La boutique 2, elle, est signée par `telnet@bbox.fr`, un utilisateur de la
+boutique — le mécanisme correct existe donc et fonctionne.
+
+**Fait 2 — les trous, mesurés** : boutique 1, compteur à 5 pour 3 numéros existants, donc
+`FAC-2026-00001` et `00002` jamais matérialisés. Boutiques 2 et 5 : aucun trou.
+
+| | Décision |
+|---|---|
+| **A — note traçable** | Un fichier **versionné** dans le dépôt, **plus** un PDF pour le comptable |
+| **B — caissier tiers** | **Voie 2** : la plateforme peut vendre, mais **la ligne le dit explicitement** |
+| **Numéro sur un brouillon (boutique 5)** | **On n'y touche pas**, on le documente |
+| **`FAC-2026-00003` payée mais non verrouillée** | **On ne la verrouille pas** — conforme à la décision 3 du 2026-09-04 |
+
+**Sur le dernier point, l'exploitant s'est repris.** Sa première réponse était de verrouiller, au
+motif que tout sera remis à zéro avant la mise en service. Objection soulevée : ce raisonnement
+part du même fait que la décision 3 du 2026-09-04 mais en tire la conclusion inverse, et surtout
+le bénéfice serait **nul** — la donnée sera effacée — pour le coût d'un premier `UPDATE` sur une
+pièce chaînée, trois jours après avoir gravé l'invariant contraire. Décision maintenue : on ne
+verrouille pas.
+
+**Conséquence non tranchée, à ne pas oublier** : si toutes les factures sont remises à zéro, les
+trous `00001`/`00002` sont des artefacts de **préproduction**, pas des pièces comptables. La note
+du point A ne documente donc rien d'opposable à un contrôle, et le PDF n'a pas de destinataire
+tant que l'exploitation réelle n'a pas commencé. Trois questions restent ouvertes (round 2) :
+la nature exacte de cette note, la **procédure de remise à zéro** (factures, avoirs, paiements,
+`journal_nf525`, `clotures_journalieres`, `sequences` — sinon la première vraie facture sortira
+en `FAC-2026-00006`), et **où inscrire** la marque d'intervention plateforme sans toucher au
+format canonique hashé.
+
 ## 2026-09-04 — Le journal NF525 a deux écrivains, et le vérificateur aiguille (ticket 005)
 
 **Le format faisant foi dépend du `type_transaction`.** C'est la décision, et elle est
