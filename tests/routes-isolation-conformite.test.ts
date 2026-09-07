@@ -40,6 +40,8 @@ const ROUTES_DIR = join(process.cwd(), 'src', 'routes')
 
 /** Routes sans garde d'isolation, volontairement et avec motif. */
 const EXEMPTIONS: Record<string, string> = {
+  'facturation.ts PUT /factures/:id':                'immuabilite NF525 (ticket 003) : repond toujours 405 sans jamais lire ni ecrire aucune ressource, le param :id n\'est pas lu',
+  'facturation.ts DELETE /factures/:id':             'immuabilite NF525 (ticket 003) : repond toujours 405 sans jamais lire ni ecrire aucune ressource, le param :id n\'est pas lu',
   'personnel.ts DELETE /employes/:id':               'admin-only : requireRole(admin) seul, l\'admin plateforme traverse par conception',
   'public.ts GET /token-for-ticket/:id':             'endpoint desactive : repond toujours 405 sans jamais lire ni ecrire aucune ressource, le param :id n\'est meme pas lu dans le handler',
   'services.ts PUT /services/marques/:id':           'referentiel-global : ecriture restreinte a requireRole(admin)',

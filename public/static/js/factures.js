@@ -237,9 +237,9 @@ function renderFactures(filter = '', statusFilter = '') {
     const btnAvoir   = f.locked
       ? `<button class="btn btn-ghost btn-icon" onclick="openModalAvoir(${f.id})" title="Créer un avoir (NF525)" style="color:var(--accent);">↩️</button>`
       : '';
-    const btnDelete  = !f.locked
-      ? `<button class="btn btn-ghost btn-icon" onclick="deleteFacture(${f.id})" style="color:var(--red);" title="Supprimer">🗑</button>`
-      : `<button class="btn btn-ghost btn-icon" disabled title="Facture verrouillée — non supprimable (NF525)" style="color:var(--muted);cursor:not-allowed;">🗑</button>`;
+    // Aucun bouton de suppression : une facture est immuable (NF525), y compris en
+    // brouillon — voir PUT/DELETE /api/factures/:id, qui répondent 405. La seule
+    // annulation est un avoir (bouton ↩️ ci-dessus). Ticket 003.
 
     return `
     <tr>
@@ -259,7 +259,7 @@ function renderFactures(filter = '', statusFilter = '') {
       </td>
       <td>
         <div class="row-actions">
-          ${btnPrint}${btnEmettre}${btnPaiement}${btnAvoir}${btnDelete}
+          ${btnPrint}${btnEmettre}${btnPaiement}${btnAvoir}
         </div>
       </td>
     </tr>`;
@@ -682,36 +682,12 @@ async function confirmPaiement() {
 // Alias legacy (utilisé dans le HTML inline onClick) → redirige vers openMarkAsPaid
 function markAsPaid(id) { openMarkAsPaid(id); }
 
-// ─── Suppression ─────────────────────────────────────────────────────────────
-async function deleteFacture(id) {
-  if (!confirm('Supprimer cette facture définitivement ? Cette action est irréversible.')) return;
-
-  if (facturesUseApi) {
-    try {
-      const result = await apiDelete('/api/factures/' + id);
-      if (result.ok) {
-        allFacturesCache = allFacturesCache.filter(f => f.id != id);
-        setDB('factures', allFacturesCache);
-        renderFactures();
-        showFlash('✓ Facture supprimée.', 'info');
-        return;
-      } else {
-        // L'API factures peut ne pas exposer DELETE (factures inaltérables NF525)
-        // On informe l'utilisateur
-        showFlash('ℹ️ Les factures NF525 ne peuvent pas être supprimées (conformité légale). Vous pouvez les annuler.', 'info');
-        return;
-      }
-    } catch (err) {
-      console.warn('[factures] deleteFacture erreur réseau', err);
-    }
-  }
-
-  // Fallback localStorage
-  deleteFromDB('factures', id);
-  allFacturesCache = allFacturesCache.filter(f => f.id != id);
-  renderFactures();
-  showFlash('✓ Facture supprimée (hors-ligne).', 'info');
-}
+// ─── Suppression : il n'y en a pas ────────────────────────────────────────────
+// `deleteFacture()` a été retirée le 2026-09-07 (ticket 003). Elle appelait une
+// route qui n'a jamais existé, et son repli hors-ligne supprimait pour de bon la
+// facture du cache local en annonçant « Facture supprimée (hors-ligne) » : une
+// pièce comptable disparaissait de l'écran alors que le serveur l'avait toujours.
+// Une facture ne se supprime pas — elle s'annule par un avoir.
 
 // ─── Émission facture (CGI art. 289 — verrouillage) ─────────────────────────
 async function emettreFacture(id) {
@@ -1391,7 +1367,6 @@ window.saveFacture             = saveFacture;
 window.markAsPaid              = markAsPaid;
 window.openMarkAsPaid          = openMarkAsPaid;
 window.confirmPaiement         = confirmPaiement;
-window.deleteFacture           = deleteFacture;
 window.printFacture            = printFacture;
 window.filterFactures          = filterFactures;
 window.filterFactureStatus     = filterFactureStatus;

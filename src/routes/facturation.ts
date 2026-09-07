@@ -466,6 +466,37 @@ facturation.get('/factures/:id', async (c) => {
 })
 
 /**
+ * PUT /api/factures/:id  →  405
+ * DELETE /api/factures/:id  →  405
+ *
+ * Une facture est immuable : elle ne se modifie pas, elle ne se supprime pas.
+ * Ces deux routes n'existent QUE pour dire pourquoi. Sans elles, l'appel tombait
+ * en 404 : l'immuabilité était tenue par l'absence de route — accidentelle, et
+ * indiscernable d'une erreur de chemin pour qui la rencontrait.
+ *
+ * Le refus ne dépend pas du statut. Un brouillon non numéroté ne coûterait rien à
+ * la série (le numéro n'est attribué qu'à l'émission, ticket 001), mais il peut
+ * déjà porter des paiements : `ajouterPaiement()` n'accepte QUE les factures non
+ * verrouillées, donc tout encaissement vit sur un brouillon. Le supprimer
+ * effacerait de l'argent encaissé.
+ *
+ * Ces handlers ne lisent ni n'écrivent aucune ressource — d'où leur exemption
+ * motivée dans `tests/routes-isolation-conformite.test.ts`.
+ * Non-récidive : `tests/factures-immuabilite-conformite.test.ts`.
+ */
+const REFUS_MUTATION_FACTURE =
+  'Une facture est définitivement immuable (conformité NF525) : elle ne peut être ' +
+  'ni modifiée ni supprimée. Pour l\'annuler, émettre un avoir.'
+
+facturation.put('/factures/:id', async (c) => {
+  return c.json({ success: false, error: REFUS_MUTATION_FACTURE }, 405)
+})
+
+facturation.delete('/factures/:id', async (c) => {
+  return c.json({ success: false, error: REFUS_MUTATION_FACTURE }, 405)
+})
+
+/**
  * POST /api/factures/:id/paiement
  * Enregistre un paiement et met à jour le statut (payee / partiellement_payee).
  * Body : { montant, mode_paiement, reference?, notes? }

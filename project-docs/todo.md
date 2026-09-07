@@ -111,8 +111,13 @@ Spec + **5 tickets** : `.scratch/conformite-facturation/`. Root cause dans `bugs
       Ni migration, ni changement frontend. **Déployé en production le 2026-09-07** (cp83).
       Case restée à `[ ]` un jour de trop alors que le ticket était `done` : la règle « marquer
       `x` immédiatement » n'a pas été tenue au cp79.
-- [ ] 003 — immuabilité explicite + test statique anti-réouverture (aucun bloqueur,
-      `ready-for-agent`)
+- [x] 003 — immuabilité explicite + test statique anti-réouverture (2026-09-07) —
+      `PUT`/`DELETE /factures/:id` répondent 405 en nommant l'avoir, bouton 🗑 retiré (son repli
+      hors-ligne supprimait réellement la facture du cache local), garde-fou statique
+      `tests/factures-immuabilite-conformite.test.ts`. Brouillon tranché : **non supprimable non
+      plus**, puisque tout encaissement vit sur un brouillon. **⊥ déployé.**
+      ⚠ Reste ouvert : aucune route ne pose le statut `annulee`, donc une facture créée par erreur
+      ne peut plus être retirée de la liste — à cadrer avec le 004.
 - [ ] 004 — trous existants documentés & sort du caissier tiers (`ready-for-human`)
 - [x] 005 — le vérificateur NF525 connaît ses deux écrivains (2026-09-04, commit `c086048`) —
       aiguillage sur `type_transaction`, 170 → 0 anomalies, aucune ligne réécrite.
