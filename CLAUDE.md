@@ -349,12 +349,18 @@ Chantier feature non trivial → chaîne `mattpocock-skills`, prioritaire :
 neuf). Tickets sous `.scratch/<feature>/issues/`. `/implement` pilote `tdd` puis
 `code-review` avant commit.
 
-⚠️ Ces skills sont déclarés `disable-model-invocation` dans leur frontmatter : l'outil `Skill`
-les refuse (« cannot be used with Skill tool »), **même quand l'utilisateur les demande
-explicitement**. Constaté le 2026-08-01 sur `to-spec`, vaut aussi pour `to-tickets`, `implement`,
-`grill-with-docs` et `triage`. Contournement : lire directement leur `SKILL.md` sous
-`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/<version>/skills/engineering/`
-et suivre le processus qu'il décrit. Ne pas conclure à un plugin mal installé.
+⚠️ Ces skills sont déclarées `disable-model-invocation` : l'outil `Skill` les refuse. Ce n'est
+**ni** un défaut d'installation **ni** quelque chose à contourner — c'est un choix de l'auteur
+que le harnais fait respecter. Concerne `to-spec`, `to-tickets`, `implement`, `grill-with-docs`
+et `triage`, plus 15 autres skills du plugin (20 sur 25 en v1.2.3).
+
+**La voie prévue** : l'utilisateur tape lui-même `/mattpocock-skills:to-spec` — préfixe du
+plugin obligatoire. Le flag bloque l'invocation *par le modèle*, jamais celle de l'utilisateur.
+
+⊥ **rejouer leur processus en lisant le `SKILL.md`**, ⊥ **en fabriquer un wrapper sous
+`.claude/skills/`** : le refus dit mot pour mot « Do not replicate this skill's workflow by
+other means ». Le contournement décrit ici jusqu'au 2026-09-08 était donc faux — et il est
+aujourd'hui explicitement interdit. Remesuré sur `to-spec` le 2026-09-08.
 
 Les étapes grilling → spec → tickets tiennent dans **une seule fenêtre de contexte** :
 pas de `/compact` ni `/clear` avant `/to-tickets`. Si la fenêtre sature avant la fin,

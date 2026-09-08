@@ -18,7 +18,10 @@ vérification ayant été faite en admin plateforme sans sélection.
 - [x] Test de rendu : `tests/e2e/facture-avoir-visible.spec.ts`, 4 cas, le rejeu du cache vu rouge
       avant correctif
 
-**⊥ déployé.** `CACHE_VERSION` `v2.91` → `v2.92`, aucune migration.
+**✅ Déployé le 2026-09-08.** Prod `izigsm-v2.92`, aucune migration. Correctif confirmé dans
+`static/js/factures.4528a59f.js` réellement servi par l'apex (`locked` + `issued_at` + déduction
+depuis `hash_nf525`). **Reste à confirmer à l'écran** — badge 🔒 et bouton « Créer un avoir »
+sur une facture émise, dans une session connectée.
 
 ## 🟠 P2 — Sans boutique sélectionnée, une page affiche le cache de la boutique précédente (isolé le 2026-09-07)
 
