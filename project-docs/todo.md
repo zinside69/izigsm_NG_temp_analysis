@@ -24,6 +24,23 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
+## 🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global, pas par boutique (trouvé le 2026-09-08)
+
+Trouvé en recensant les tables du domaine facturation/caisse, sans rapport avec le ticket qui
+était en cours. Jamais remonté par personne — la production n'a qu'une boutique qui clôture.
+
+La contrainte porte sur la **date seule**. Conséquence : dès que deux boutiques exploitent
+le même jour, **la seconde ne peut pas clôturer sa journée** — la première a consommé la date.
+Un arrêté de caisse refusé sans motif compréhensible pour l'exploitant.
+
+Même famille que les mensonges d'isolation déjà corrigés : une contrainte qui ignore
+`boutique_id` dans un schéma multi-tenant.
+
+- [ ] Vérifier la contrainte réelle en base (locale **et** distante) avant toute conclusion
+- [ ] Migration : `UNIQUE(boutique_id, date_cloture)` — recréation de table, donc suivre le
+      patron de `0040` (table de transit), **pas** celui de `0034`
+- [ ] Prérequis mesuré : `SELECT COUNT(*) FROM pragma_foreign_key_check` doit valoir **0**
+
 ## 🟠 P2 — Sans boutique sélectionnée, une page affiche le cache de la boutique précédente (isolé le 2026-09-07)
 
 Constaté sur `/factures` en corrigeant le défaut ci-dessus, mais le mécanisme n'a rien de propre

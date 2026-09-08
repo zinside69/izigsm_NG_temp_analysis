@@ -1,3 +1,82 @@
+# Recovery Prompt — iziGSM — 2026-09-08 (checkpoint 86 — la plateforme ne vend plus)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Un chantier attend un déploiement** : le ticket 004 (« la plateforme ne vend pas ») est
+implémenté, testé et commité, **⊥ déployé**. Dépôt `v2.93`, production `v2.92`. **Aucune
+migration en attente** — le changement est code + front.
+
+Le ticket 004 est le dernier du chantier `.scratch/conformite-facturation/` ; 001, 002, 003 et
+005 sont en production. Le chantier se termine avec ce déploiement.
+
+## Le ticket 004 en une phrase
+
+Un **admin plateforme** ne peut plus poser aucun acte inscrit au registre légal d'une boutique
+cliente — vente en caisse, encaissement, émission de facture, avoir. Serveur **et** écran.
+Motif : la plateforme supervise et débogue, elle ne fait pas de commerce.
+Voir [ADR 0002](../docs/adr/0002-la-plateforme-ne-vend-pas.md).
+
+## Ce qu'il faut savoir avant d'y toucher
+
+- **La garde vit dans les écrivains, pas dans les routes** — `assertPeutEcrireAuRegistre()`
+  (`lib/nf525.ts`), porte unique, acceptant le D1 brut **et** le port `Database`.
+- **Les chemins composites refusent en tête de fonction.** `createFactureAcompte()` et
+  `createFacture(emettre_encaisser)` encaissent **avant** d'émettre : une garde placée dans le
+  seul écrivain terminal laissait un brouillon et un paiement orphelins, et bloquait ensuite
+  l'exploitant légitime sur ce devis. ⊥ déplacer cette garde plus bas.
+- **Fabriquer une facture émise ou un avoir dans un test exige un compte de boutique.**
+  `admin@izigsm.fr` est l'admin plateforme du seed (`boutique_id` NULL) : il ne peut plus signer.
+  Utiliser `loginSeedManager()` (isolation) ou `createTenantAdmin()`, qui expose son mot de passe.
+- **Le fail-open est délibéré, pas un oubli** : signataire introuvable ⇒ l'écriture passe. C'est
+  ce qui tient les ~120 tests existants verts. Le changer est une décision d'exploitant.
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : une ligne supprimée au milieu du journal ne
+   produit aucune anomalie. Contrôle fiscal — tickets **avant** tout code.
+2. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+   Cause connue (⊥ `/diagnosing-bugs`) : il manque un recensement multi-pages et une décision
+   produit, pas un diagnostic.
+3. **`clotures_journalieres.date_cloture` est `UNIQUE` global**, pas par boutique : une boutique
+   ne peut pas clôturer un jour déjà clôturé par une autre. Trouvé en recensant les tables,
+   jamais inscrit au backlog.
+4. **`FAC-2026-00003`** (payée, non verrouillée) se voit encore proposer « Émettre et
+   verrouiller » à un compte de boutique — l'action que la décision du 2026-09-07 dit de ne pas
+   faire.
+5. **Dette documentaire** : le ticket 005 porte `done-pending-prod-check`, statut hors du
+   vocabulaire de `docs/agents/triage-labels.md` — le 004 suit ce précédent.
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. Le harnais interdit d'en rejouer
+le processus autrement. `tdd`, `code-review`, `grilling` et `domain-modeling` sont invocables
+directement — c'est la voie employée pour ce ticket.
+
+## Pièges revalidés le 2026-09-08
+
+- **La suite E2E exige un serveur local** (`wrangler pages dev dist --local --port 3000`) et
+  ~8 Go de mémoire libre. Mesurer avec `node -e "os.freemem()"` — l'appel PowerShell
+  équivalent s'est bloqué. Après arrêt : `netstat -ano | grep ":3000"` puis `taskkill`.
+- **`seConnecter()` rend la main dès le clic** : naviguer aussitôt donne `net::ERR_ABORTED`.
+  Attendre `waitForURL('**/dashboard**', { waitUntil: 'commit' })`.
+- **Chercher un symbole dans un bundle donne l'appel avant la définition** : viser
+  `function <nom>`.
+- **Un `git fetch` périme en minutes** — le backup D1 automatique fait avancer `origin` seul.
+
+## Baselines
+
+vitest **928/930** (2 permanents de fuseau `agendaService`), Playwright **195/195**, tsc **32**,
+build ✓. 40 migrations. `CACHE_VERSION` dépôt `izigsm-v2.93`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-08 (checkpoint 85 — le correctif déployé, et un contournement qui n'en était pas un)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

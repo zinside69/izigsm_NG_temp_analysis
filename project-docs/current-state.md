@@ -1,4 +1,100 @@
-# iziGSM — État courant (MàJ : 2026-09-08, checkpoint 85 — le correctif déployé, et un contournement qui n'en était pas un)
+# iziGSM — État courant (MàJ : 2026-09-08, checkpoint 86 — la plateforme ne vend plus, et la revue a rattrapé une corruption d'état)
+
+## Checkpoint 86 — La plateforme ne vend plus (ticket 004, serveur et écran) (2026-09-08)
+
+Grilling round 2, décision, implémentation complète en TDD, revue à deux axes. Le ticket 004
+est le premier de ce chantier à passer de `ready-for-human` à implémenté dans la même session.
+
+### La décision, et le fait qu'elle renverse le round 1
+
+**Voie 1 : la plateforme ne vend pas.** Un admin plateforme ne peut plus poser aucun acte
+inscrit au registre légal d'une boutique cliente.
+
+Le round 1 avait retenu la **voie 2** (« elle vend, mais la ligne le dit »). Interrogé sur le
+vocabulaire de la personne qui encaisse, l'exploitant a recadré : *« ta mission est de travailler
+sur la boutique. La partie admin est là pour aider les boutiques en cas de problème. En mode
+supervision et débogage. »* Une plateforme qui supervise n'a pas à vendre — les deux positions ne
+tenaient pas ensemble. Contradiction soulevée, tranchée en connaissance de cause.
+
+Détail : [ADR 0002](../docs/adr/0002-la-plateforme-ne-vend-pas.md), `decisions.md` § 2026-09-08.
+
+### Ce que la mesure a corrigé dans le ticket lui-même
+
+Le périmètre écrit au moment de la décision était **faux sur trois points**. Mesure des appelants
+réels : `enregistrerEncaissement()` et le chemin indirect de l'acompte manquaient, et
+l'enregistrement d'un paiement y figurait à tort — `ajouterPaiement()` n'écrit rien au journal.
+
+**Quatre écrivains**, pas trois : `createVente`, `enregistrerEncaissement`, `emettreFacture`,
+`createAvoir`. L'ADR et `decisions.md` ont été amendés après coup.
+
+### Le défaut que la revue de spec a rattrapé — le point le plus important
+
+Les gardes des quatre écrivains étaient **vertes**, et le correctif était pourtant nuisible.
+
+`createFactureAcompte()` et `createFacture(emettre_encaisser)` insèrent la facture, ses lignes,
+**puis encaissent**, et n'appellent `emettreFacture()` qu'en dernier. Une garde dans le seul
+écrivain terminal les refusait **en bout de course** : il restait un brouillon et un paiement
+orphelins — et le contrôle d'unicité de l'acompte **bloquait ensuite l'exploitant légitime** sur
+ce devis. Le correctif remplaçait un défaut de traçabilité par une **corruption d'état**.
+
+Les deux refusent désormais en tête de fonction. Prouvé par `__getCalls()` du mock : zéro
+écriture avant le rejet. Aucune suite de tests ne l'aurait trouvé — c'est la revue de spec, en
+lisant l'ordre des opérations, qui l'a vu.
+
+### Ce que la revue de standards a rattrapé
+
+**Vocabulaire.** Le premier jet écrivait « compte de supervision » dans le code, les tests et le
+message affiché, alors que `CLAUDE.md` impose « admin plateforme » — terme correctement employé
+dans le glossaire une heure plus tôt. Aligné partout.
+
+**Assertion molle.** `rejects.not.toThrow(...)` restait vert pour n'importe quel autre rejet :
+le « point d'observation commode » de `modop-tests.md`. Durcie sur le message exact.
+
+**Non corrigé, et à dessein** : la garde ne compare pas la boutique du signataire à la boutique
+visée. Bloquer un utilisateur d'une *autre* boutique relève de l'isolation multi-tenant, pas de
+ce ticket — la revue extrapolait au-delà de la spec.
+
+### Trois tests existants cassés, tous pour la même cause
+
+Ils fabriquaient leurs données sous `admin@izigsm.fr`, qui est l'**admin plateforme du seed**
+(`boutique_id` NULL). Effet de bord annoncé par l'ADR, survenu le jour même.
+
+| Test | Traitement |
+|---|---|
+| `isolation.spec.ts` (avoir, GET + POST) | fixtures basculées sur le manager (`loginSeedManager()`) — fabriquer ces pièces sous l'admin plateforme était de toute façon une fiction |
+| `resolveur-boutique-pages.spec.ts` (vente caisse) | joué sous `createTenantAdmin()` ; `TenantAdmin` expose désormais son mot de passe |
+| `facture-avoir-visible.spec.ts` (2 cas) | `verifierEtatVerrouille()` lit le badge 🔒 — même `f.locked`, non masqué — et l'absence du bouton d'avoir devient l'attendu |
+
+**Aucun test affaibli.** Celui de `facture-avoir-visible` prouve maintenant **deux** faits là où
+il en prouvait un.
+
+### Volet écran
+
+`/factures` : « Émettre et verrouiller » et « Créer un avoir » retirés en supervision.
+`/caisse` : « Nouvelle vente » retiré. **Rien à masquer pour l'acompte** — la route existe mais
+aucun bouton ne l'expose (vérifié, pas supposé).
+
+`factures.js` lit `isAdminPlateforme()` **une fois** pour tout le tableau : la fonction reparse
+la session à chaque appel. `caisse.js` **retire** le bouton plutôt que de le griser — un bouton
+grisé invite à chercher comment l'activer.
+
+### Gates
+
+vitest **928/930** (+8 ; les 2 échecs restent les permanents de fuseau `agendaService`),
+Playwright **195/195** (+3), tsc **32** inchangé, build ✓. `CACHE_VERSION` `v2.92` → **`v2.93`**.
+
+### État et restes
+
+**Non déployé** — prod `v2.92`, dépôt `v2.93`, aucune migration en attente.
+
+- **Fail-open assumé, non tranché** : signataire introuvable ⇒ l'écriture passe. C'est ce qui
+  tient les ~120 tests existants verts ; basculer en refus par défaut exigerait de mocker le
+  signataire partout. Décision d'exploitant, pas de développeur.
+- La définition « rôle admin **et** aucune boutique » est écrite **deux fois** (ici et
+  `isAdminPlateforme()`). Assumé et documenté des deux côtés : `middleware.ts` tire
+  `hono/factory`, l'importer ferait dépendre le domaine de l'infrastructure HTTP.
+- Le ticket porte `done-pending-prod-check`, valeur **hors** du vocabulaire de
+  `docs/agents/triage-labels.md` (qui ne connaît que `done`). Précédent du ticket 005.
 
 ## Checkpoint 85 — Le correctif f.locked en production, et un contournement qui n'en était pas un (2026-09-08)
 
