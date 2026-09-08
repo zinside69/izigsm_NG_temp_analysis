@@ -943,3 +943,50 @@ describe('verifierIntegriteChaine — écrivain B (factures et avoirs)', () => {
     expect(result.anomalies).toHaveLength(1)
   })
 })
+
+// ─── Ticket 004 — la plateforme ne vend pas ───────────────────────────────────
+
+/**
+ * Un admin plateforme (rôle `admin` sans boutique) ne doit inscrire aucune pièce
+ * au registre légal d'une boutique cliente. La garde vit dans l'écrivain, pas dans la
+ * route : `emettreFacture()` est aussi atteinte indirectement, via l'acompte.
+ * Décision et alternatives écartées : docs/adr/0002-la-plateforme-ne-vend-pas.md
+ */
+describe('createVente() — la plateforme ne vend pas (ticket 004)', () => {
+  const SQL_SIGNATAIRE = n(`
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `)
+
+  const LIGNE_VENTE = {
+    designation: 'Réparation écran', quantite: 1,
+    prix_unitaire_ht: 80, tva_taux: 20,
+  }
+
+  it('refuse un admin plateforme, avec un motif qui nomme la raison', async () => {
+    const db = createMockD1()
+    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+
+    await expect(
+      createVente(db, 1, 1, { lignes: [LIGNE_VENTE], mode_paiement: 'especes' })
+    ).rejects.toThrow(/admin plateforme/i)
+  })
+})
+
+describe('enregistrerEncaissement() — la plateforme ne vend pas (ticket 004)', () => {
+  const SQL_SIGNATAIRE_PORT = n(`
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `)
+
+  it('refuse un admin plateforme, avant même de lire la facture', async () => {
+    const db = createMockDatabase()
+    db.__setResponse(SQL_SIGNATAIRE_PORT, { role: 'admin', boutique_id: null })
+
+    await expect(
+      enregistrerEncaissement(db, 1, 1, 42, 'especes')
+    ).rejects.toThrow(/admin plateforme/i)
+  })
+})

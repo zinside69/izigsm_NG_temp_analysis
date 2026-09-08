@@ -21,6 +21,7 @@
  *   - `verifyChain()`         : vérifie l'intégrité complète de la chaîne
  *   - `clotureJournaliere()`  : scelle la journée avec hash de clôture
  */
+import type { Database } from '../ports/database'
 
 export interface Nf525Entry {
   id:                number
@@ -351,4 +352,58 @@ export async function clotureJournaliere(
   ).run()
 
   return { success: true, message: `Clôture du ${date} effectuée. ${stats?.nb ?? 0} transactions. CA TTC : ${(stats?.ttc ?? 0).toFixed(2)} €` }
+}
+
+// ─── Qui a le droit d'écrire au registre (ticket 004) ─────────────────────────
+
+/**
+ * Refuse à un **admin plateforme** d'inscrire une pièce au registre légal d'une
+ * boutique cliente : vente, encaissement, facture émise, avoir.
+ *
+ * **La garde vit ici, pas dans les routes.** `emettreFacture()` est aussi atteinte
+ * indirectement — `POST /devis/:id/acompte` passe par `createFactureAcompte()` — et une
+ * garde posée route par route aurait raté ce chemin. C'est la classe d'oubli qui a laissé
+ * 23 routes invisibles à l'audit d'isolation du 2026-07-31. Placée dans l'écrivain, elle
+ * couvre les chemins indirects et toute route écrite plus tard, par construction.
+ *
+ * Le rôle est relu en base parce que les écrivains ne reçoivent qu'un `userId`, jamais le
+ * JWT. Coût assumé : une requête par acte inscrit au registre.
+ *
+ * Définition d'un admin plateforme : rôle `admin` **et** aucune boutique — la même que
+ * celle d'`isAdminPlateforme()` (`src/lib/middleware.ts`), qui la lit dans le JWT quand
+ * celle-ci la lit en base.
+ *
+ * ⚠ **La règle est donc écrite deux fois.** Ce n'est pas un oubli : `middleware.ts` tire
+ * `hono/factory`, et l'importer ici ferait dépendre un module de domaine de l'infrastructure
+ * HTTP. Si la définition change (ADR 0001 l'interdit aujourd'hui : un admin plateforme ne
+ * doit jamais se voir attribuer de boutique), **les deux sites doivent changer ensemble**.
+ *
+ * @throws {Error} si le signataire est un admin plateforme
+ * @see docs/adr/0002-la-plateforme-ne-vend-pas.md
+ */
+export async function assertPeutEcrireAuRegistre(
+  db: D1Database | Database,
+  userId: number
+): Promise<void> {
+  const SQL = `
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `
+
+  // Les quatre écrivains ne parlent pas au même objet : `createVente()` et
+  // `emettreFacture()` reçoivent le D1 brut, `enregistrerEncaissement()` le port
+  // (migration Ports & Adapters en cours). Une seule porte d'entrée, pour qu'aucun
+  // appelant n'ait à choisir entre deux noms — et donc à se tromper.
+  type Signataire = { role: string; boutique_id: number | null }
+  const signataire = 'prepare' in db
+    ? await db.prepare(SQL).bind(userId).first<Signataire>()
+    : await db.get<Signataire>(SQL, [userId])
+
+  if (signataire && signataire.role === 'admin' && !signataire.boutique_id) {
+    throw new Error(
+      "Un admin plateforme ne peut pas inscrire de pièce au registre légal d'une boutique. " +
+      "La plateforme supervise et débogue ; l'exploitant signe ses pièces."
+    )
+  }
 }

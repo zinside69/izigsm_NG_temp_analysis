@@ -15,7 +15,7 @@ passée par la plateforme chez un client inscrit donc **un tiers dans le registr
 client**, silencieusement.
 
 Ce n'est pas une hypothèse. Mesuré le 2026-09-07 : **100 % des entrées du registre de la
-boutique 1** sont signées par le compte de supervision (`boutique_id` NULL), alors que la
+boutique 1** sont signées par l'admin plateforme (`boutique_id` NULL), alors que la
 boutique 2 est signée par un utilisateur de la boutique — le mécanisme correct existe donc et
 fonctionne. Le seul usage constaté de ce pouvoir est de la manipulation de préproduction, jamais
 le secours à un exploitant en difficulté.
@@ -25,9 +25,12 @@ facture : un registre qu'on ne peut plus corriger doit d'abord être exact.
 
 ## Décision
 
-**Un compte de supervision — rôle `admin` sans boutique — ne peut poser aucun des trois actes
-qui inscrivent une pièce au registre légal d'une boutique cliente** : vente en caisse, émission
-de facture, création d'avoir.
+**Un admin plateforme — rôle `admin` sans boutique — ne peut poser aucun des quatre actes
+qui inscrivent une pièce au registre légal d'une boutique cliente** : vente en caisse,
+encaissement de caisse, émission de facture, création d'avoir.
+
+Le périmètre initial de la décision disait « trois » : `enregistrerEncaissement()` a été
+trouvé en mesurant les appelants réels, après l'écriture de cet ADR.
 
 - La garde s'appuie sur `isAdminPlateforme(user)` (`src/lib/middleware.ts`), déjà existant.
 - Le serveur refuse avec un **motif explicite** nommant la raison — jamais une erreur muette,
@@ -38,6 +41,12 @@ de facture, création d'avoir.
 - Les **104 autres routes d'écriture** restent ouvertes : la plateforme corrige la cause d'un
   blocage, l'exploitant signe la pièce.
 - Les lignes **déjà écrites ne sont pas modifiées** — le journal est append-only.
+- **Les chemins composites refusent d'emblée.** `createFactureAcompte()` et
+  `createFacture(emettre_encaisser)` insèrent la facture, ses lignes **puis** encaissent avant
+  d'émettre : une garde posée dans le seul écrivain terminal les aurait refusés en bout de
+  course, laissant un brouillon et un paiement orphelins — et le contrôle d'unicité de
+  l'acompte aurait ensuite bloqué l'exploitant légitime sur ce devis. Trouvé en revue de spec,
+  alors que les gardes des quatre écrivains étaient vertes.
 
 ## Conséquences
 
@@ -50,7 +59,7 @@ ne s'est jamais manifesté.
 description d'un « accès complet en écriture » n'est plus exacte. Trois routes en sont désormais
 exclues.
 
-**Ce qui devient plus difficile : tester le circuit de vente depuis un compte de supervision.**
+**Ce qui devient plus difficile : tester le circuit de vente depuis un admin plateforme.**
 C'est précisément ce que faisait la préproduction, et c'est ce qui a produit le défaut. Les
 scénarios de test devront passer par un compte rattaché à une boutique.
 

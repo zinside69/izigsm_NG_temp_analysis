@@ -7,7 +7,7 @@ bloque-par: [001, 002]
 
 ## Contexte
 
-Une vente passée par la plateforme chez un client inscrit le compte de supervision comme
+Une vente passée par la plateforme chez un client inscrit l'admin plateforme comme
 signataire dans la **chaîne NF525 du client** :
 
 ```
@@ -38,31 +38,58 @@ sert à superviser et déboguer, pas à faire du commerce.
 
 ## Périmètre
 
-Les **trois** actes qui inscrivent une pièce au registre légal, et eux seuls :
+**Quatre fonctions** écrivent au registre légal. La garde vit **en elles**, pas dans les routes
+(seam confirmé le 2026-09-08) : elles ne reçoivent qu'un `userId` et reliront le rôle en base.
 
-| Acte | Point d'entrée |
+| Écrivain | Service | Atteint par |
+|---|---|---|
+| `createVente()` | `caisseService` | `POST /caisse/vente` |
+| `enregistrerEncaissement()` | `caisseService` | `POST /caisse/encaissement` |
+| `emettreFacture()` | `factureService` | `POST /factures` (`emettre`, `emettre_encaisser`), `POST /factures/:id/emettre`, **et `POST /devis/:id/acompte` via `createFactureAcompte()`** |
+| `createAvoir()` | `factureService` | `POST /avoirs` |
+
+**Pourquoi le seam est dans le service** : l'acompte n'atteint `emettreFacture()` qu'indirectement.
+Une garde posée route par route l'aurait raté — c'est la classe d'oubli qui a produit les 23 routes
+invisibles de l'audit d'isolation. Une garde dans l'écrivain couvre les chemins indirects et toute
+route future, par construction (même raisonnement que l'ADR 0001).
+
+**Deux chemins composites écrivent AVANT d'atteindre `emettreFacture()`** et refusent donc
+d'emblée, garde en tête de fonction :
+
+| Chemin | Ce qu'il écrit avant d'émettre |
 |---|---|
-| Vente en caisse | `POST /api/caisse/vente` → `createVente()` |
-| Émission de facture (avec ou sans encaissement) | `POST /api/factures` (`emettre`, `emettre_encaisser`), `POST /api/factures/:id/emettre` |
-| Enregistrement d'un paiement | `POST /api/factures/:id/paiements` |
-| Création d'un avoir | route d'avoir (`avoirs`) |
+| `createFactureAcompte()` | facture brouillon, `lignes_document`, **paiement** |
+| `createFacture(action: 'emettre_encaisser')` | facture, `lignes_document`, **paiement** |
 
-Les **104 autres routes d'écriture** du dépôt restent ouvertes : la plateforme corrige la cause
-d'un blocage, l'exploitant signe la pièce.
+Sans cette garde en tête, un refus tardif laisserait un brouillon et un encaissement orphelins,
+et le contrôle d'unicité de l'acompte bloquerait ensuite l'exploitant légitime sur ce devis.
+`createFacture(action: 'brouillon')` **reste ouvert** : un brouillon n'inscrit rien au registre.
+
+**Hors périmètre, mesuré** — ces routes n'écrivent rien au registre :
+`POST /factures/:id/paiement` (`ajouterPaiement()` seul), `PUT /devis/:id/convertir` (crée un
+brouillon), `POST /caisse/cloture` (écrit dans `clotures_journalieres`, pas `journal_nf525`).
+
+⚠ Le périmètre initial de ce ticket était **faux sur trois points** : il omettait
+`/caisse/encaissement` et l'acompte, et incluait à tort l'enregistrement d'un paiement. Corrigé
+après mesure des appelants réels, pas après relecture.
 
 ## Critères d'acceptation
 
-- [ ] La garde s'appuie sur `isAdminPlateforme(user)` (`src/lib/middleware.ts`), sans nouvelle
-      notion de rôle ni test sur le rôle seul
-- [ ] Chacun des actes ci-dessus refuse un compte de supervision avec un **motif explicite**
+- [x] La garde applique **la même définition** qu'`isAdminPlateforme()` (rôle `admin` **et**
+      aucune boutique), sans nouvelle notion de rôle ni test sur le rôle seul. Elle ne
+      l'**appelle** pas : ce helper vit dans `src/lib/middleware.ts`, qui tire `hono/factory` —
+      l'importer depuis `lib/nf525.ts` ferait dépendre le domaine de l'infrastructure HTTP.
+      La définition est donc écrite deux fois, et chaque site pointe l'autre
+- [x] Chacun des actes ci-dessus refuse un admin plateforme avec un **motif explicite**
       nommant la raison — ni 404 muet, ni échec silencieux
 - [ ] Les commandes correspondantes sont **masquées à l'écran** quand la session est en
       supervision : aucune action proposée qui échouera
-- [ ] Aucune soupape, aucun mode d'exception, aucune délégation d'identité
-- [ ] Une route d'écriture **hors** de ce périmètre reste accessible à un compte de supervision
+- [x] Aucune soupape, aucun mode d'exception, aucune délégation d'identité
+- [x] Une route d'écriture **hors** de ce périmètre reste accessible à un admin plateforme
       (preuve que la fermeture ne déborde pas)
-- [ ] Aucune ligne de `journal_nf525` n'est modifiée — `FAC-2026-00003` reste telle quelle
-- [ ] Test vu **rouge avant** le correctif, couvrant serveur **et** rendu
+- [x] Aucune ligne de `journal_nf525` n'est modifiée — `FAC-2026-00003` reste telle quelle
+- [x] Test vu **rouge avant** le correctif côté **serveur** — 6 slices, chacun vu rouge
+- [ ] Volet **rendu** : commandes masquées à l'écran + test Playwright — **non fait**
 
 ## Reporté — la note des numéros manquants (ex-point A)
 
@@ -79,6 +106,6 @@ contrôleur pour destinataire. À reprendre au moment de la mise en service.
 - ⊥ toucher `journal_nf525` en direct, sous aucun prétexte.
 - Contrepartie assumée : un exploitant seul et bloqué devant son client ne peut plus être dépanné
   par un encaissement de la plateforme. Coût présenté avant la décision, pas découvert après.
-- Effet de bord à prévoir : tester le circuit de vente depuis un compte de supervision ne sera
+- Effet de bord à prévoir : tester le circuit de vente depuis un admin plateforme ne sera
   plus possible — c'est précisément ce qui a produit le défaut. Les scénarios devront passer par
   un compte rattaché à une boutique.

@@ -1526,3 +1526,151 @@ describe('createAvoir() — facture source verrouillée', () => {
     expect(insert!.params[2]).toBe(4)   // facture_id NOT NULL
   })
 })
+
+// ─── Ticket 004 — la plateforme ne vend pas ───────────────────────────────────
+
+/**
+ * Un admin plateforme (rôle `admin` sans boutique) n'inscrit aucune pièce au
+ * registre légal d'une boutique cliente. La garde vit dans l'écrivain et non dans la
+ * route, parce qu'`emettreFacture()` est aussi atteinte indirectement, par l'acompte.
+ * @see docs/adr/0002-la-plateforme-ne-vend-pas.md
+ */
+describe('la plateforme ne vend pas (ticket 004)', () => {
+  const SQL_SIGNATAIRE = `
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `.replace(/\s+/g, ' ').trim()
+
+  function dbAvecAdminPlateforme() {
+    const db = createMockD1()
+    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    return db
+  }
+
+  it("emettreFacture() refuse un admin plateforme, avant de lire la facture", async () => {
+    await expect(
+      emettreFacture(dbAvecAdminPlateforme(), 42, 1)
+    ).rejects.toThrow(/admin plateforme/i)
+  })
+
+  it("createAvoir() refuse un admin plateforme", async () => {
+    await expect(
+      createAvoir(dbAvecAdminPlateforme(), 1, {
+        facture_id: 42, motif: 'Erreur de saisie', type: 'remboursement',
+      } as CreateAvoirInput)
+    ).rejects.toThrow(/admin plateforme/i)
+  })
+})
+
+/**
+ * Frontière de la fermeture. `ajouterPaiement()` n'écrit RIEN au registre légal — c'est
+ * `emettreFacture()` qui le fait — donc un admin plateforme doit continuer à
+ * l'atteindre. Ce test ne suit pas un cycle rouge → vert : il était vert d'emblée. Il est
+ * là pour virer au rouge le jour où quelqu'un étendrait la garde par symétrie, en croyant
+ * bien faire. Le ticket 004 listait d'ailleurs cette route à tort avant mesure.
+ */
+describe('la fermeture ne déborde pas (ticket 004)', () => {
+  const SQL_SIGNATAIRE = `
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `.replace(/\s+/g, ' ').trim()
+
+  it("ajouterPaiement() reste ouvert à un admin plateforme", async () => {
+    const db = createMockD1()
+    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+
+    // Échoue faute de facture, jamais faute de droits : la garde n'est pas sur ce chemin.
+    // Assertion sur le message EXACT, et non un `not.toThrow` — qui resterait vert pour
+    // n'importe quel autre rejet, y compris une régression future (modop-tests.md, piège 2).
+    await expect(
+      ajouterPaiement(db, 42, 1, { montant: 10, mode_paiement: 'especes' } as any)
+    ).rejects.toThrow('Facture introuvable.')
+  })
+})
+
+/**
+ * Les chemins composites — ceux qui écrivent AVANT d'atteindre un écrivain du registre.
+ *
+ * `createFactureAcompte()` insère la facture, ses lignes, puis encaisse, et n'appelle
+ * `emettreFacture()` qu'en dernier. Une garde posée dans le seul écrivain terminal
+ * laisserait donc un brouillon et un paiement orphelins — et le contrôle d'unicité
+ * (« Un acompte a déjà été facturé pour ce dossier ») bloquerait ensuite l'exploitant
+ * légitime sur ce devis. Le refus doit tomber avant la première écriture.
+ *
+ * Trouvé en revue de spec (ticket 004), pas par la suite de tests : les gardes des quatre
+ * écrivains étaient vertes.
+ */
+describe('chemins composites — rien n\'est écrit avant le refus (ticket 004)', () => {
+  const SQL_SIGNATAIRE = `
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `.replace(/\s+/g, ' ').trim()
+
+  function dbAvecAdminPlateforme() {
+    const db = createMockD1()
+    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    return db
+  }
+
+  /** Les écritures réellement tentées, INSERT comme UPDATE. */
+  function ecritures(db: ReturnType<typeof createMockD1>) {
+    return db.__getCalls()
+      .map(c => c.sql)
+      .filter(sql => /^\s*(INSERT|UPDATE)\b/i.test(sql))
+  }
+
+  it("createFactureAcompte() refuse sans avoir rien écrit", async () => {
+    const db = dbAvecAdminPlateforme()
+
+    await expect(
+      createFactureAcompte(db, 1, {
+        devis_id: 7, montant_ht: 50, tva_taux: 20,
+      } as CreateFactureAcompteInput)
+    ).rejects.toThrow(/admin plateforme/i)
+
+    expect(ecritures(db), 'un acompte refusé ne doit laisser ni brouillon ni paiement').toEqual([])
+  })
+
+  it("createFacture(emettre_encaisser) refuse sans avoir rien écrit", async () => {
+    const db = dbAvecAdminPlateforme()
+
+    await expect(
+      createFacture(db, 1, {
+        client_id: 3, boutique_id: 1, action: 'emettre_encaisser', mode_paiement: 'especes',
+        lignes: [{ description: 'Réparation', quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 }],
+      } as CreateFactureInput)
+    ).rejects.toThrow(/admin plateforme/i)
+
+    expect(ecritures(db)).toEqual([])
+  })
+})
+
+/**
+ * Frontière introduite par la garde conditionnelle de `createFacture()` : un brouillon
+ * n'inscrit rien au registre (le numéro n'est attribué qu'à l'émission, ticket 001), il
+ * reste donc ouvert à un admin plateforme. Sans ce test, resserrer la condition en
+ * `if (true)` passerait inaperçu — et fermerait plus que le ticket ne le demande.
+ */
+describe('la fermeture ne déborde pas sur le brouillon (ticket 004)', () => {
+  const SQL_SIGNATAIRE = `
+    SELECT r.nom AS role, u.boutique_id
+    FROM   users u JOIN roles r ON r.id = u.role_id
+    WHERE  u.id = ?
+  `.replace(/\s+/g, ' ').trim()
+
+  it("createFacture(brouillon) reste ouvert à un admin plateforme", async () => {
+    const db = createMockD1()
+    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+
+    // Échoue sur la donnée manquante, jamais sur les droits.
+    await expect(
+      createFacture(db, 1, {
+        client_id: 3, boutique_id: 1, action: 'brouillon',
+        lignes: [{ description: 'Réparation', quantite: 1, prix_unitaire_ht: 100, tva_taux: 20 }],
+      } as CreateFactureInput)
+    ).rejects.toThrow('Client introuvable dans cette boutique.')
+  })
+})

@@ -36,7 +36,7 @@
 
 import { nextNumero, calculLignes } from '../lib/db'
 import { todayParis, currentMonthParis } from '../lib/timezone'
-import { buildCanonicalData } from '../lib/nf525'
+import { buildCanonicalData, assertPeutEcrireAuRegistre } from '../lib/nf525'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -286,6 +286,10 @@ export async function createVente(
   if (!data.lignes || data.lignes.length === 0) {
     throw new Error('La vente doit contenir au moins une ligne.')
   }
+
+  // Un admin plateforme n'inscrit aucune pièce au registre légal d'une boutique
+  // (ticket 004, ADR 0002). Contrôlé avant tout calcul : rien ne doit être écrit.
+  await assertPeutEcrireAuRegistre(db, userId)
 
   // ── 1. Calcul totaux ──────────────────────────────────────────────────────
   // Appliquer remises ligne par ligne
@@ -538,6 +542,9 @@ export async function enregistrerEncaissement(
   factureId:    number,
   modePaiement: string
 ): Promise<JournalEntry> {
+  // Un admin plateforme n'inscrit aucune pièce au registre légal (ticket 004, ADR 0002).
+  await assertPeutEcrireAuRegistre(db, userId)
+
   const facture = await db.get<any>(
     'SELECT * FROM factures WHERE id = ? AND boutique_id = ? LIMIT 1', [factureId, boutiqueId]
   )

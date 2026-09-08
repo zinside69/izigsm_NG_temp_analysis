@@ -15,7 +15,7 @@ faveur de la **voie 1**.
 | | Décision | Motif |
 |---|---|---|
 | **B — caissier tiers** | **Voie 1** : le chemin est fermé | La plateforme supervise et débogue, elle ne fait pas de commerce |
-| **Périmètre** | Les **3** actes qui écrivent au registre : vente POS, émission de facture, avoir | L'encaissement seul laisserait l'émission produire le même défaut |
+| **Périmètre** | Les **4** écrivains : vente POS, encaissement de caisse, émission de facture, avoir — **plus** les 2 chemins composites qui encaissent avant d'émettre | L'encaissement seul laisserait l'émission produire le même défaut. Le 4ᵉ écrivain et les chemins composites ont été trouvés en mesurant, après la décision |
 | **Soupape** | **Aucune** | Le seul usage constaté est du test de préproduction (100 % du registre de la boutique 1), jamais un secours à un exploitant |
 | **Refus** | Serveur avec motif explicite **+** commande masquée à l'écran | Même parti pris que le ticket 003 : ni erreur muette, ni action proposée qui échouera |
 | **Existant** | `FAC-2026-00003` intouchée | Append-only : ce n'est pas un arbitrage, c'est l'invariant |
@@ -25,8 +25,9 @@ faveur de la **voie 1**.
 ne peut plus être dépanné par un encaissement de la plateforme. Ce coût a été présenté avant la
 décision, pas découvert après.
 
-**Ce qui reste ouvert à la plateforme** : **104 des 107** routes d'écriture du dépôt, et la
-lecture intégrale. Le principe tient en une phrase — *l'admin répare la cause, l'exploitant signe
+**Ce qui reste ouvert à la plateforme** : **101 des 107** routes d'écriture du dépôt, et la
+lecture intégrale. `POST /factures` n'est fermée qu'en partie — le brouillon reste ouvert, il
+n'inscrit rien au registre. Le principe tient en une phrase — *l'admin répare la cause, l'exploitant signe
 la pièce*.
 
 **Décision de méthode** : la **remise à zéro des données n'est pas un sujet de développement**.
@@ -159,7 +160,7 @@ Trois décisions dérivées, prises le même jour :
    expliqué, et réécrire un numéro émis casserait le chaînage. Une note traçable en tient lieu
    (ticket 004).
 3. **Le caissier tiers entre dans le même chantier** — une vente passée par la plateforme inscrit
-   le compte de supervision dans la chaîne NF525 du client. *Pourquoi* : même famille de sujet,
+   l'admin plateforme dans la chaîne NF525 du client. *Pourquoi* : même famille de sujet,
    ce qui apparaît dans le registre légal d'un client.
 
 ## 2026-08-02 — La séparation par tenant existe déjà : ne pas la rediagnostiquer

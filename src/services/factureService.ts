@@ -16,7 +16,7 @@
  */
 
 import { nextNumero, auditLog, parsePagination, calculLignes } from '../lib/db'
-import { enregistrerTransaction } from '../lib/nf525'
+import { enregistrerTransaction, assertPeutEcrireAuRegistre } from '../lib/nf525'
 import { todayParis } from '../lib/timezone'
 import type { Database } from '../ports/database'
 
@@ -225,6 +225,10 @@ export async function emettreFacture(
   factureId: number,
   userId:    number
 ): Promise<{ facture_numero: string; tracking_token: string; hash_nf525: string }> {
+  // Un admin plateforme n'inscrit aucune pièce au registre légal (ticket 004, ADR 0002).
+  // Placé avant toute lecture : c'est une question d'autorisation, pas de validation.
+  await assertPeutEcrireAuRegistre(db, userId)
+
   const facture = await db.prepare('SELECT * FROM factures WHERE id = ?')
     .bind(factureId).first<any>()
 
@@ -357,6 +361,13 @@ export async function createFactureAcompte(
   userId: number,
   input:  CreateFactureAcompteInput
 ): Promise<{ facture_id: number; facture_numero: string }> {
+  // Un acompte finit TOUJOURS par émettre. La garde de `emettreFacture()` tomberait donc
+  // après l'INSERT de la facture, de ses lignes et du paiement : refusée en bout de course,
+  // l'opération laisserait un brouillon et un encaissement orphelins, et le contrôle
+  // d'unicité ci-dessous bloquerait ensuite l'exploitant légitime sur ce devis.
+  // Ticket 004, ADR 0002 — trouvé en revue de spec, les gardes des écrivains étaient vertes.
+  await assertPeutEcrireAuRegistre(db, userId)
+
   if (!input.ticket_id && !input.devis_id)
     throw new Error('ticket_id ou devis_id requis.')
   // typeof/isNaN en plus de <= 0 : défense en profondeur pour tout appelant qui ne
@@ -480,6 +491,13 @@ export async function createFacture(
   userId: number,
   input:  CreateFactureInput
 ): Promise<{ facture_id: number; facture_numero: string | null; statut: StatutFacture }> {
+  // Seules les actions émettrices inscrivent au registre. Un brouillon n'y écrit rien et
+  // reste donc ouvert à un admin plateforme — la fermeture ne doit pas déborder (ticket 004).
+  // Contrôlé ici, et pas seulement dans `emettreFacture()` : `emettre_encaisser` encaisse
+  // AVANT d'émettre, un refus tardif laisserait un paiement orphelin.
+  if (input.action === 'emettre' || input.action === 'emettre_encaisser')
+    await assertPeutEcrireAuRegistre(db, userId)
+
   // ── Validation (avant toute écriture) ────────────────────────────────────
   if (!input.lignes || input.lignes.length === 0)
     throw new Error('La facture doit contenir au moins une ligne.')
@@ -682,6 +700,10 @@ export async function createAvoir(
   userId: number,
   input:  CreateAvoirInput
 ): Promise<{ id: number; numero: string; hash_nf525: string }> {
+  // Un admin plateforme n'inscrit aucune pièce au registre légal (ticket 004, ADR 0002).
+  // Avant les validations de saisie : on ne valide pas la saisie de qui n'a pas le droit d'écrire.
+  await assertPeutEcrireAuRegistre(db, userId)
+
   const TYPES_VALIDES: TypeAvoir[] = ['remboursement', 'bon_achat', 'echange']
   const type = input.type ?? 'remboursement'
 
