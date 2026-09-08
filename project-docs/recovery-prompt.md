@@ -1,3 +1,62 @@
+# Recovery Prompt — iziGSM — 2026-09-08 (checkpoint 85 — le correctif déployé, et un contournement qui n'en était pas un)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Rien n'attend de déploiement.** Dépôt et production sont alignés : prod `izigsm-v2.92`,
+`/api/health` 200, aucune migration en attente. Le P1 `f.locked` est **clos**, vérifié jusqu'à
+l'écran.
+
+**Le projet attend l'exploitant sur un seul point** : les **3 questions du ticket 004**
+(`.scratch/conformite-facturation/issues/004-*`, `statut: ready-for-human`) — nature de la note de
+trous en préproduction, **procédure de remise à zéro** (sinon la première vraie facture sortira en
+`FAC-2026-00006`), et où inscrire la marque d'intervention plateforme sans toucher au format
+canonique hashé. Chemin recommandé : **`/mattpocock-skills:grill-with-docs`**, round 2.
+
+## Comment lancer les skills mattpocock — corrigé le 2026-09-08
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` (et 15 autres) sont
+`disable-model-invocation`. **La consigne précédente était fausse** : lire leur `SKILL.md` pour
+rejouer leur processus est **explicitement interdit** par le harnais (« Do not replicate this
+skill's workflow by other means »).
+
+**Voie réelle** : l'exploitant tape lui-même `/mattpocock-skills:<nom>` — préfixe obligatoire. Le
+flag ne bloque que l'invocation par le modèle. Vérifié en vrai avec `ask-matt`.
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : une ligne supprimée au milieu du journal ne
+   produit aucune anomalie. C'est le contrôle fiscal — tickets **avant** tout code.
+2. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+   Cause connue (⊥ `/diagnosing-bugs`) : il manque un recensement multi-pages et une décision
+   produit, pas un diagnostic.
+3. **`FAC-2026-00003`** (payée, non verrouillée) se voit proposer « Émettre et verrouiller » —
+   l'action que la décision du 2026-09-07 dit de ne pas faire. Rien n'empêche un clic.
+4. **Dette documentaire** : le ticket 005 porte encore `done-pending-prod-check`, alors que le
+   contrôle prod date du cp83.
+
+## Pièges revalidés le 2026-09-08
+
+- **Un `git fetch` périme en minutes** : `origin` a avancé d'un backup D1 **pendant** la session.
+  Résoudre par `git pull --rebase`, jamais `--force` — le SHA change, c'est normal.
+- **Chercher un symbole dans un bundle donne l'appel avant la définition** : viser
+  `function <nom>`, sinon la mesure conclut à tort que le correctif est absent.
+- **Vérifier en production exige la session de l'exploitant** : ⊥ saisir un mot de passe, ⊥
+  chercher un contournement. Il se connecte, la lecture se fait ensuite dans sa session.
+- **Un asset servi correct ne prouve pas un écran correct** — il a fallu les deux, plus le cache.
+
+## Baselines
+
+**Non remesurées** au cp85 (aucun code applicatif touché). Valeurs du cp84 : vitest **920/922**
+(2 permanents de fuseau `agendaService`), tsc **32**, Playwright **192/192**, build ✓. 40 migrations.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-07 (checkpoint 84 — le 003 en production, et le bug qu'il a révélé)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

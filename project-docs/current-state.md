@@ -1,4 +1,69 @@
-# iziGSM — État courant (MàJ : 2026-09-07, checkpoint 84 — ticket 003 en production, et le bug qu'il a révélé)
+# iziGSM — État courant (MàJ : 2026-09-08, checkpoint 85 — le correctif déployé, et un contournement qui n'en était pas un)
+
+## Checkpoint 85 — Le correctif f.locked en production, et un contournement qui n'en était pas un (2026-09-08)
+
+Session courte et sans code applicatif : elle déploie un commit qui existait déjà, le vérifie
+jusqu'à l'écran, et corrige une consigne du `CLAUDE.md` qui était fausse depuis cinq semaines.
+
+### Le P1 `f.locked` est clos
+
+Déployé (`npm run deploy`), prod `izigsm-v2.91` → `v2.92`, aucune migration. Vérifié en **trois
+temps**, parce qu'aucun des deux premiers ne suffit :
+
+1. **L'asset hashé réellement servi** par l'apex — `static/js/factures.4528a59f.js`, 60 449 o,
+   `application/javascript` (⊥ HTML) : `locked`, `issued_at` et la déduction depuis `hash_nf525`
+   y sont. Première mesure fausse au passage : la fenêtre partait du premier **appel** de
+   `loadFacturesFallback` (l. 107), pas de sa **définition** (l. 134) — chercher un symbole dans
+   un bundle donne l'appel avant la déclaration.
+2. **L'écran, en session connectée**, boutique iziGSM Paris 11 : `FAC-2026-00004` et `00005`
+   portent 🔐 **et** 🔒, offrent « Créer un avoir (NF525) », et n'offrent plus « Émettre ».
+   Le brouillon garde « Émettre et verrouiller ». Les trois symptômes sont éteints.
+3. **Le cache local** porte `locked` sur **4/4** factures — c'est le chemin qui était en cause.
+
+Contrôles annexes du ticket 003 reconduits : `window.deleteFacture` → `undefined`, et l'unique
+corbeille du DOM est le « Supprimer la ligne » du **formulaire** de saisie, pas une facture.
+
+### Le contournement mattpocock était faux, et interdit
+
+`CLAUDE.md` § Workflow recommandait depuis le 2026-08-01 de lire le `SKILL.md` des skills
+`disable-model-invocation` et de rejouer leur processus à la main. Remesuré ce jour : le harnais
+refuse en disant mot pour mot « **Do not replicate this skill's workflow by other means** », et
+nomme la voie prévue — **l'utilisateur tape lui-même `/mattpocock-skills:<nom>`**. Le flag ne
+bloque que l'invocation *par le modèle*.
+
+**Prouvé le jour même** : `/mattpocock-skills:ask-matt` lancé par l'exploitant a chargé sans
+broncher, une heure après la correction. Un wrapper local sous `.claude/skills/` tomberait sous la
+même interdiction — ⊥ en fabriquer.
+
+Les 6 autres occurrences vivent dans des checkpoints datés de `recovery-prompt.md` et de ce
+fichier : **archives, non réécrites**.
+
+### Deux observations neuves, aucune n'est une régression
+
+- **`FAC-2026-00003` (payée, non verrouillée) se voit proposer « Émettre et verrouiller ».**
+  L'écran dit vrai sur l'état, mais rien n'empêche un clic sur l'action que la décision du
+  2026-09-07 dit justement de **ne pas** faire. Relève du ticket 004.
+- **Les KPI comptent « EN ATTENTE — 4 factures »** sur une liste de 4 lignes aux statuts variés :
+  le statut fantôme `'emise'` de `statsService.ts`, déjà documenté dans `CLAUDE.md`.
+
+### Pièges revalidés en direct
+
+- **Un `git fetch` périme en minutes.** Mesuré à nouveau : `origin` avait avancé d'un
+  `chore: backup D1 automatique 2026-09-08` **pendant** la session. Divergence d'un commit de
+  chaque côté, résolue par `git pull --rebase` — le commit a changé de SHA (`c3fd36b` →
+  `74e4e0d`), jamais par `--force`.
+- **La vérification en production exige la session de l'exploitant.** L'extension Chrome ne portait
+  aucune session, et saisir un mot de passe est exclu : l'exploitant se connecte, la lecture se
+  fait ensuite dans sa session. ⊥ chercher un contournement de ce point.
+
+### État
+
+Dépôt et production **alignés**, aucun écart, aucune migration en attente. Baselines **non
+remesurées** — aucun code applicatif touché cette session, elles valent celles du cp84
+(vitest 920/922, tsc 32, Playwright 192/192).
+
+**Dette repérée, ⊥ traitée** : le ticket 005 porte encore `statut: done-pending-prod-check` alors
+que le contrôle prod est fait depuis le cp83.
 
 ## Checkpoint 84 — Le ticket 003 en production, et le bug qu'il a révélé (2026-09-07)
 

@@ -20,8 +20,9 @@ vérification ayant été faite en admin plateforme sans sélection.
 
 **✅ Déployé le 2026-09-08.** Prod `izigsm-v2.92`, aucune migration. Correctif confirmé dans
 `static/js/factures.4528a59f.js` réellement servi par l'apex (`locked` + `issued_at` + déduction
-depuis `hash_nf525`). **Reste à confirmer à l'écran** — badge 🔒 et bouton « Créer un avoir »
-sur une facture émise, dans une session connectée.
+depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin plateforme, boutique
+iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
+« Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
 ## 🟠 P2 — Sans boutique sélectionnée, une page affiche le cache de la boutique précédente (isolé le 2026-09-07)
 
