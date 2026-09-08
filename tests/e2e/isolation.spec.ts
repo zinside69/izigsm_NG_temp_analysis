@@ -137,6 +137,24 @@ test.describe('Isolation multi-tenant', () => {
   // Le tenant créé par createTenantAdmin est un `manager` (role_id 2, migration 0001)
   // avec sa propre boutique : requireRole('admin','manager') le laisse donc entrer
   // jusqu'au code métier, et le patron "l'admin plateforme traverse" ne le couvre pas.
+  /**
+   * Compte **manager** de la boutique 1 du seed.
+   *
+   * Les fixtures qui écrivent au registre légal (facture émise, avoir) passent par lui et
+   * non par `admin@izigsm.fr` : depuis le ticket 004, un admin plateforme ne peut inscrire
+   * aucune pièce au registre d'une boutique (ADR 0002). Les fabriquer sous ce compte était
+   * d'ailleurs une fiction — en exploitation réelle, c'est l'exploitant qui les signe.
+   */
+  async function loginSeedManager(request: APIRequestContext): Promise<string> {
+    const loginRes = await request.post('/api/auth/login', {
+      data: { email: 'manager@izigsm.fr', password: 'Admin@2026!' },
+    })
+    if (!loginRes.ok()) {
+      throw new Error(`login manager boutique 1 (seed) failed: ${loginRes.status()} ${await loginRes.text()}`)
+    }
+    return (await loginRes.json()).accessToken
+  }
+
   async function loginSeedAdmin(request: APIRequestContext): Promise<string> {
     const loginRes = await request.post('/api/auth/login', {
       data: { email: 'admin@izigsm.fr', password: 'Admin@2026!' },
@@ -151,12 +169,12 @@ test.describe('Isolation multi-tenant', () => {
     request: APIRequestContext,
     action: 'brouillon' | 'emettre'
   ): Promise<number> {
-    const accessToken = await loginSeedAdmin(request)
+    const accessToken = await loginSeedManager(request)
 
     const res = await request.post('/api/factures', {
       headers: { Authorization: `Bearer ${accessToken}` },
       data: {
-        boutique_id: 1, // admin@izigsm.fr est admin plateforme (boutique_id NULL) : explicite requis
+        boutique_id: 1, // explicite, même si le manager le porte déjà dans son jeton
         client_id: 1,
         action,
         lignes: [{ description: 'Réparation écran', quantite: 1, prix_unitaire_ht: 50, tva_taux: 20 }],
@@ -171,7 +189,7 @@ test.describe('Isolation multi-tenant', () => {
   async function createBoutique1Avoir(request: APIRequestContext): Promise<number> {
     // createAvoir() exige une facture émise (verrouillée NF525) comme support.
     const factureId   = await createBoutique1Facture(request, 'emettre')
-    const accessToken = await loginSeedAdmin(request)
+    const accessToken = await loginSeedManager(request)
 
     const res = await request.post('/api/avoirs', {
       headers: { Authorization: `Bearer ${accessToken}` },

@@ -222,6 +222,13 @@ function renderFactures(filter = '', statusFilter = '') {
   }
   empty?.classList.add('hidden');
 
+  // Un admin plateforme ne peut inscrire aucune pièce au registre légal d'une boutique
+  // (ticket 004, ADR 0002) : le serveur refuse l'émission et l'avoir, l'écran cesse donc de
+  // les proposer. Proposer une action vouée à échouer est exactement ce que faisait le
+  // bouton « Émettre » du défaut `f.locked` (bugs.md, 2026-09-07).
+  // Lu une fois pour tout le tableau : `isAdminPlateforme()` reparse la session à chaque appel.
+  const peutSigner = !isAdminPlateforme();
+
   tbody.innerHTML = data.map(f => {
     const dateEmission = new Date(f.createdAt);
     const echeance     = new Date(dateEmission.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -237,7 +244,7 @@ function renderFactures(filter = '', statusFilter = '') {
 
     // Boutons actions contextuels
     const btnPrint   = `<button class="btn btn-ghost btn-sm" onclick="printFacture(${f.id})" title="Imprimer / PDF">🖨</button>`;
-    const btnEmettre = !f.locked
+    const btnEmettre = !f.locked && peutSigner
       ? `<button class="btn btn-ghost btn-icon" onclick="emettreFacture(${f.id})" title="Émettre et verrouiller (CGI art. 289)" style="color:var(--primary);font-weight:700;">📤</button>`
       : '';
     const btnPaiement = !f.locked && f._statut !== 'payee' && f._statut !== 'annulee'
@@ -245,7 +252,7 @@ function renderFactures(filter = '', statusFilter = '') {
       : (f.locked && f._statut !== 'payee' && f._statut !== 'annulee'
           ? `<button class="btn btn-ghost btn-icon" onclick="openMarkAsPaid(${f.id})" title="Enregistrer un paiement" style="color:var(--green);">💰</button>`
           : '');
-    const btnAvoir   = f.locked
+    const btnAvoir   = f.locked && peutSigner
       ? `<button class="btn btn-ghost btn-icon" onclick="openModalAvoir(${f.id})" title="Créer un avoir (NF525)" style="color:var(--accent);">↩️</button>`
       : '';
     // Aucun bouton de suppression : une facture est immuable (NF525), y compris en

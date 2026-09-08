@@ -18,6 +18,8 @@
  */
 import { test, expect } from '@playwright/test'
 import { seConnecterAdminPlateforme, creerBoutique, choisirBoutique } from './fixtures/console-plateforme'
+import { createTenantAdmin } from './fixtures/tenant'
+import { seConnecter } from './fixtures/comptes'
 
 /**
  * Une page hors socle, et l'appel par lequel on la prend en flagrant délit.
@@ -309,10 +311,14 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     // `undefined` : la page affichait « Erreur ». Un exploitant ressaisit alors la vente —
     // doublon de facture, avec chaînage NF525. Le témoin est donc double : le toast de
     // succès, et le compteur de transactions qui passe à 1.
-    const { nomBoutique } = await creerBoutique(request)
+    // Joué sous un compte **de boutique**, et non en admin plateforme : depuis le ticket 004,
+    // celui-ci ne peut plus vendre (ADR 0002). Le témoin recherché — l'enveloppe de
+    // `caisse.js` — vit sur le chemin de SUCCÈS, il faut donc un signataire légitime.
+    // Le pendant (l'admin plateforme est refusé) est couvert par plateforme-ne-vend-pas.spec.ts.
+    const tenant = await createTenantAdmin(request)
 
-    await seConnecterAdminPlateforme(page)
-    await choisirBoutique(page, nomBoutique)
+    await seConnecter(page, { email: tenant.email, password: tenant.password })
+    await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/caisse')
 
     // Une boutique neuve n'a aucune transaction : le KPI doit afficher 0, pas le tiret.

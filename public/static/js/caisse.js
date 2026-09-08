@@ -94,6 +94,15 @@
     // n'appelait jamais le socle : l'exploitant perdait toute navigation en entrant ici.
     buildSidebar('caisse')
 
+    // Un admin plateforme ne peut inscrire aucune pièce au registre légal d'une boutique
+    // (ticket 004, ADR 0002) : `createVente()` refuse côté serveur, l'écran cesse donc
+    // d'offrir la vente. Masqué plutôt que désactivé : un bouton grisé invite à chercher
+    // comment l'activer, alors qu'il n'y a rien à activer.
+    if (isAdminPlateforme()) {
+      const btnVente = document.getElementById('btn-nouvelle-vente')
+      if (btnVente) btnVente.remove()
+    }
+
     // Date par défaut = aujourd'hui
     const today = new Date().toISOString().slice(0, 10)
     const fd = document.getElementById('filtre-date-journal')

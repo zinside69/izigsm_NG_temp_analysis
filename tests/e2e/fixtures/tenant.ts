@@ -12,6 +12,10 @@ import type { APIRequestContext } from '@playwright/test'
 
 export interface TenantAdmin {
   email: string
+  /** Exposé pour les tests qui doivent se connecter dans le NAVIGATEUR, et pas seulement
+   *  par l'API : depuis le ticket 004, un admin plateforme ne peut plus jouer les scénarios
+   *  qui écrivent au registre légal, il leur faut un compte rattaché à une boutique. */
+  password: string
   accessToken: string
   boutiqueId: number
 }
@@ -48,6 +52,7 @@ export async function createTenantAdmin(request: APIRequestContext): Promise<Ten
 
   return {
     email,
+    password,
     accessToken: verifyBody.accessToken,
     boutiqueId: verifyBody.user?.boutique_id,
   }

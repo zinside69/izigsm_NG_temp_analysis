@@ -63,6 +63,34 @@ async function verifierBoutons(page: Page, numero: string) {
   ).toHaveCount(0)
 }
 
+/**
+ * Ce qu'un **admin plateforme** doit voir sur une facture émise, depuis le ticket 004.
+ *
+ * Le bouton d'avoir lui est désormais masqué — il ne peut inscrire aucune pièce au registre
+ * légal d'une boutique (ADR 0002) — mais le défaut que ce fichier verrouille reste entier :
+ * l'écran doit toujours **reconnaître** la facture comme verrouillée. Le badge 🔒 dépend de la
+ * même variable `f.locked` que les deux boutons, et n'est pas masqué : c'est lui qui porte la
+ * preuve ici.
+ */
+async function verifierEtatVerrouille(page: Page, numero: string) {
+  const ligne = page.locator('table tbody tr', { hasText: numero }).first()
+  await expect(ligne).toBeVisible({ timeout: 15_000 })
+
+  await expect(
+    ligne.locator('span[title*="Inaltérable"]'),
+    '`f.locked` doit être vrai à l\'écran : c\'est le défaut du 2026-09-07',
+  ).toBeVisible()
+
+  await expect(
+    ligne.locator('button[title="Émettre et verrouiller (CGI art. 289)"]'),
+    'proposer d\'émettre une facture déjà émise mène à un refus serveur',
+  ).toHaveCount(0)
+
+  await expect(
+    ligne.locator('button[title="Créer un avoir (NF525)"]'),
+    'ticket 004 : un admin plateforme n\'inscrit aucune pièce au registre légal',
+  ).toHaveCount(0)
+}
 test.describe('écran Factures — une facture émise propose l\'avoir', () => {
   test('manager : la ligne d\'une facture émise porte « Créer un avoir », et plus « Émettre »', async ({ page, request }) => {
     const numero = await emettreFactureSeed(request)
@@ -78,14 +106,14 @@ test.describe('écran Factures — une facture émise propose l\'avoir', () => {
     await verifierBoutons(page, numero)
   })
 
-  test('admin plateforme, boutique choisie : même écran, mêmes boutons', async ({ page, request }) => {
+  test('admin plateforme, boutique choisie : la facture est reconnue verrouillée', async ({ page, request }) => {
     const numero = await emettreFactureSeed(request)
 
     await seConnecterAdminPlateforme(page)
     await choisirBoutique(page, BOUTIQUE_SEED)
     await page.goto('/factures')
 
-    await verifierBoutons(page, numero)
+    await verifierEtatVerrouille(page, numero)
   })
 
   test('admin plateforme sans boutique choisie : l\'écran ne montre pas de facture verrouillée à tort', async ({ page, request }) => {
@@ -149,6 +177,6 @@ test.describe('écran Factures — une facture émise propose l\'avoir', () => {
     const ligne = page.locator('table tbody tr', { hasText: 'FAC-2026-09901' }).first()
     await expect(ligne, 'préalable du rejeu : la page doit bien afficher la ligne du cache').toBeVisible({ timeout: 15_000 })
 
-    await verifierBoutons(page, 'FAC-2026-09901')
+    await verifierEtatVerrouille(page, 'FAC-2026-09901')
   })
 })

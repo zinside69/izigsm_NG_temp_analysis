@@ -1,7 +1,7 @@
 ---
 id: 004
 titre: La plateforme ne vend pas — fermer les actes inscrits au registre légal d'une boutique
-statut: ready-for-agent
+statut: done-pending-prod-check
 bloque-par: [001, 002]
 ---
 
@@ -82,14 +82,15 @@ après mesure des appelants réels, pas après relecture.
       La définition est donc écrite deux fois, et chaque site pointe l'autre
 - [x] Chacun des actes ci-dessus refuse un admin plateforme avec un **motif explicite**
       nommant la raison — ni 404 muet, ni échec silencieux
-- [ ] Les commandes correspondantes sont **masquées à l'écran** quand la session est en
+- [x] Les commandes correspondantes sont **masquées à l'écran** quand la session est en
       supervision : aucune action proposée qui échouera
 - [x] Aucune soupape, aucun mode d'exception, aucune délégation d'identité
 - [x] Une route d'écriture **hors** de ce périmètre reste accessible à un admin plateforme
       (preuve que la fermeture ne déborde pas)
 - [x] Aucune ligne de `journal_nf525` n'est modifiée — `FAC-2026-00003` reste telle quelle
 - [x] Test vu **rouge avant** le correctif côté **serveur** — 6 slices, chacun vu rouge
-- [ ] Volet **rendu** : commandes masquées à l'écran + test Playwright — **non fait**
+- [x] Volet **rendu** : `factures.js` (émettre, avoir) et `caisse.js` (vente), couverts par
+      `tests/e2e/plateforme-ne-vend-pas.spec.ts` — 3 cas, chacun vu rouge avant correctif
 
 ## Reporté — la note des numéros manquants (ex-point A)
 
@@ -100,6 +101,20 @@ est plus discutable qu'un trou expliqué, et toucher aux numéros émis casserai
 La note traçable (numéros, boutique, cause, date) **n'est pas produite maintenant** : ces trous
 appartiennent à un système qui n'est pas en service, la note n'a donc aujourd'hui ni comptable ni
 contrôleur pour destinataire. À reprendre au moment de la mise en service.
+
+## Effets de bord sur la suite existante — traités
+
+Trois tests E2E fabriquaient leurs données sous `admin@izigsm.fr`, qui est l'admin plateforme
+du seed (`boutique_id` NULL). C'est l'effet de bord annoncé par l'ADR 0002.
+
+| Test | Traitement |
+|---|---|
+| `isolation.spec.ts` — avoir (GET et POST) | fixtures basculées sur `manager@izigsm.fr` via `loginSeedManager()` |
+| `resolveur-boutique-pages.spec.ts` — vente en caisse | joué sous un `createTenantAdmin()` ; `TenantAdmin` expose désormais son mot de passe |
+| `facture-avoir-visible.spec.ts` — 2 cas admin plateforme | `verifierEtatVerrouille()` remplace `verifierBoutons()` : le badge 🔒 porte la preuve de `f.locked`, et l'absence du bouton d'avoir devient l'attendu |
+
+Aucun de ces tests n'a été affaibli : celui de `facture-avoir-visible` prouve désormais **deux**
+faits là où il en prouvait un.
 
 ## Notes
 
