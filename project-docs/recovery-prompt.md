@@ -12,11 +12,16 @@ déploiement.
 `/api/health` 200, aucune migration en attente. Le P1 `f.locked` est **clos**, vérifié jusqu'à
 l'écran.
 
-**Le projet attend l'exploitant sur un seul point** : les **3 questions du ticket 004**
-(`.scratch/conformite-facturation/issues/004-*`, `statut: ready-for-human`) — nature de la note de
-trous en préproduction, **procédure de remise à zéro** (sinon la première vraie facture sortira en
-`FAC-2026-00006`), et où inscrire la marque d'intervention plateforme sans toucher au format
-canonique hashé. Chemin recommandé : **`/mattpocock-skills:grill-with-docs`**, round 2.
+**Ticket 004 — grilling round 2 tenu le 2026-09-08, voie 1 tranchée** : un compte de supervision
+(admin plateforme, sans boutique) **ne doit plus pouvoir encaisser** chez une boutique cliente. Le
+chemin lui est fermé côté serveur. Motif de l'exploitant : la plateforme sert à **superviser et
+déboguer**, pas à faire du commerce — aucun tiers n'a donc à figurer dans le registre légal d'une
+boutique. Ce choix **renverse la voie 2** retenue au round 1 ; la contradiction a été soulevée et
+tranchée en connaissance de cause.
+
+⊥ **La remise à zéro des données n'est pas un sujet de développement.** Elle aura lieu quand le
+développement sera achevé, et il ne faut plus en faire mention d'ici là — écarté explicitement par
+l'exploitant le 2026-09-08. Ne pas la réintroduire dans un plan, une spec ou un ticket.
 
 ## Comment lancer les skills mattpocock — corrigé le 2026-09-08
 

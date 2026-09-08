@@ -74,6 +74,12 @@ d'origine. `avoirs` + `lignes_avoir`.
 **NF525** — norme française d'inviolabilité des logiciels de caisse. `journal_nf525`
 est un journal en append-only : jamais de `UPDATE`, jamais de `DELETE`.
 
+**Signataire** — l'utilisateur connecté au moment où une pièce est inscrite au registre.
+Le registre d'une boutique ne porte que des membres de cette boutique : un **admin
+plateforme** ne peut y écrire aucune pièce (vente, facture émise, avoir). Voir
+[ADR 0002](docs/adr/0002-la-plateforme-ne-vend-pas.md). Il n'existe pas de « caissier »
+distinct : celui qui encaisse est celui qui est connecté.
+
 **Clôture journalière** — arrêté de caisse d'une journée. `clotures_journalieres`.
 
 **Séquence** — compteur de numérotation par boutique et par type de document, garant de

@@ -1,5 +1,42 @@
 # iziGSM — Décisions
 
+## 2026-09-08 — Ticket 004, round 2 : la plateforme ne vend pas (voie 1)
+
+Grilling round 2. **Le round 1 est renversé sur son point B** — et il l'est sur une objection de
+l'exploitant, pas sur un revirement technique.
+
+Le round 1 avait retenu la **voie 2** (« la plateforme peut vendre, mais la ligne le dit »).
+Interrogé sur le vocabulaire de la personne qui encaisse, l'exploitant a recadré : *« ta mission
+est de travailler sur la boutique. La partie admin est là pour aider les boutiques en cas de
+problème. En mode supervision et débogage. »* Une plateforme qui supervise n'a pas à vendre : la
+voie 2 et ce principe ne tiennent pas ensemble. La contradiction a été soulevée, et tranchée en
+faveur de la **voie 1**.
+
+| | Décision | Motif |
+|---|---|---|
+| **B — caissier tiers** | **Voie 1** : le chemin est fermé | La plateforme supervise et débogue, elle ne fait pas de commerce |
+| **Périmètre** | Les **3** actes qui écrivent au registre : vente POS, émission de facture, avoir | L'encaissement seul laisserait l'émission produire le même défaut |
+| **Soupape** | **Aucune** | Le seul usage constaté est du test de préproduction (100 % du registre de la boutique 1), jamais un secours à un exploitant |
+| **Refus** | Serveur avec motif explicite **+** commande masquée à l'écran | Même parti pris que le ticket 003 : ni erreur muette, ni action proposée qui échouera |
+| **Existant** | `FAC-2026-00003` intouchée | Append-only : ce n'est pas un arbitrage, c'est l'invariant |
+| **A — note de trous** | **Reportée** à la mise en service | Les numéros manquants n'ont aujourd'hui ni comptable ni contrôleur pour destinataire |
+
+**Contrepartie assumée, écrite sans l'adoucir** : un exploitant seul et bloqué devant son client
+ne peut plus être dépanné par un encaissement de la plateforme. Ce coût a été présenté avant la
+décision, pas découvert après.
+
+**Ce qui reste ouvert à la plateforme** : **104 des 107** routes d'écriture du dépôt, et la
+lecture intégrale. Le principe tient en une phrase — *l'admin répare la cause, l'exploitant signe
+la pièce*.
+
+**Décision de méthode** : la **remise à zéro des données n'est pas un sujet de développement**.
+Elle aura lieu quand le développement sera achevé ; d'ici là, ⊥ la mentionner dans un plan, une
+spec ou un ticket. Le round 2 l'avait mise en question d'ouverture — c'était hors sujet, et
+l'exploitant l'a écartée.
+
+Trace durable : [ADR 0002](../docs/adr/0002-la-plateforme-ne-vend-pas.md), qui amende l'ADR 0001
+sur son « accès complet en écriture ».
+
 ## 2026-09-07 — Ticket 004 : trous de numérotation et caissier tiers (4 arbitrages)
 
 Grilling de l'exploitant, round 1. Les faits ont été mesurés en production avant de poser les
