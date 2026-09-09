@@ -1,3 +1,85 @@
+# Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 88 — le registre refuse de signer pour un inconnu)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Rien n'attend de déploiement, rien n'attend de décision.** Dépôt et production alignés,
+`/api/health` 200, `sw.js` `izigsm-v2.93`, aucune migration en attente.
+
+Le chantier `.scratch/conformite-facturation/` est **clos** : 5 tickets sur 5 en `done`, tous
+déployés. Le prochain chantier se choisit librement dans `todo.md`.
+
+## Ce qu'il faut savoir avant de toucher au registre NF525
+
+- **La garde vit dans les écrivains, pas dans les routes** — `assertPeutEcrireAuRegistre()`
+  (`lib/nf525.ts`), porte unique, acceptant le D1 brut **et** le port `Database`. Elle refuse
+  deux cas, avec deux motifs distincts : **admin plateforme**, et **signataire introuvable**.
+- **Les chemins composites refusent en tête de fonction.** `createFactureAcompte()` et
+  `createFacture(emettre_encaisser)` encaissent **avant** d'émettre : une garde placée dans le
+  seul écrivain terminal laissait un brouillon et un paiement orphelins. ⊥ la déplacer plus bas.
+- **Tout test qui écrit au registre doit déclarer son signataire** : `avecSignataire(db)`
+  (`tests/helpers/signataire.ts`). ⊥ remettre un défaut dans les mocks — le test passerait sans
+  rien fournir, et une régression sur la lecture de `users`/`roles` le laisserait vert.
+  `sansSignataire(db)` sert au seul test qui exige le refus.
+- **Une seule définition de la requête du signataire**, dans le helper. Le dépôt en a déjà porté
+  7 copies locales pendant une heure — même cause racine que `buildCanonicalData` (cp80).
+- **Fabriquer une facture émise ou un avoir exige un compte de boutique.** `admin@izigsm.fr` est
+  l'admin plateforme du seed (`boutique_id` NULL) : il ne peut plus signer. Utiliser
+  `loginSeedManager()` (isolation) ou `createTenantAdmin()`, qui expose son mot de passe.
+- ⊥ **chercher à « vérifier en production » le refus du signataire introuvable** : le bundle du
+  Worker n'est pas lisible de l'extérieur, et le cas est impossible à provoquer sans supprimer un
+  utilisateur en base. Les tests unitaires en sont la seule preuve.
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : `verifierIntegriteChaine()` ne compare jamais
+   `hash_precedent` au `hash_courant` de la ligne précédente, donc une ligne supprimée au milieu
+   du journal ne produit aucune anomalie. Contrôle fiscal — tickets **avant** tout code.
+2. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+   Cause connue (⊥ `/diagnosing-bugs`) : il manque un recensement multi-pages et une décision
+   produit, pas un diagnostic.
+3. **🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global**, pas par boutique : dès
+   que deux boutiques exploitent le même jour, la seconde ne peut pas clôturer.
+4. **Chantier écarté, laissé ouvert** : supprimer la relecture en base du rôle, déjà présent dans
+   le JWT. Tue la classe entière de problème, mais **121 points de contact** (111 appels de tests,
+   10 dans `src/`). Rien à défaire pour la faire plus tard.
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. Le harnais interdit d'en rejouer
+le processus autrement. `tdd`, `code-review`, `grilling` et `domain-modeling` sont invocables
+directement — `grilling` seul a servi à trancher le fail-open.
+
+Plugin **déjà installé et à jour** : v1.2.3, identique à l'amont (vérifié le 2026-09-09).
+⊥ chercher à l'installer ou à ajouter le marketplace amont.
+
+## Pièges revalidés les 2026-09-08 et 09
+
+- **`origin` avance seul pendant la nuit** (`chore: backup D1 automatique`, ne touche que
+  `backups/d1/`). `git fetch` puis `git pull --rebase` **avant** de déployer ou de commiter.
+- **L'assertion `libuv` (`UV_HANDLE_CLOSING`) en fin de `npm run deploy`** est un crash de sortie
+  de Node sous Windows, imprimée **après** le `✓ Déploiement vérifié`. ⊥ y voir un échec.
+- **Un déploiement backend pur ne change pas `CACHE_VERSION`** — `sw.js` reste à sa valeur, c'est
+  normal et ⊥ un signe d'échec.
+- **La suite E2E exige un serveur local** (`wrangler pages dev dist --local --port 3000`) et
+  ~8 Go libres. Mesurer avec `node -e "os.freemem()"` — l'appel PowerShell se bloque. Après
+  arrêt : `netstat -ano | grep ":3000"` puis `taskkill`.
+- **`npm run deploy` peut être bloqué par le classificateur.** Proposer d'emblée la commande à
+  lancer avec `!` : `cd C:\Users\Said\Downloads\claude-test\izigsm\webapp ; npm run deploy`
+
+## Baselines
+
+vitest **929/931** (2 permanents de fuseau `agendaService`), Playwright **195/195**, tsc **32**,
+build ✓. 40 migrations. `CACHE_VERSION` dépôt **et** production : `izigsm-v2.93`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 87 — le chantier conformité est en production)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

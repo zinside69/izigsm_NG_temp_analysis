@@ -1,4 +1,71 @@
-# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 87 — le chantier conformité est en production)
+# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 88 — le registre refuse de signer pour un inconnu)
+
+## Checkpoint 88 — Signataire introuvable : refus, et des tests qui disent la vérité (2026-09-09)
+
+Le dernier point laissé ouvert par le ticket 004 est tranché, implémenté et déployé.
+
+### La décision
+
+`assertPeutEcrireAuRegistre()` lisait en base l'identité du signataire ; quand la base ne
+retrouvait personne, **elle laissait écrire**. Une pièce partait donc au registre légal signée
+par un identifiant ne correspondant à aucun utilisateur. **Décidé : refuser.** Deux motifs
+distincts désormais — signataire introuvable, et admin plateforme.
+
+**Ce qui a fait basculer l'arbitrage est une mesure, pas un raisonnement.** L'argument du statu
+quo, défendu la veille, était le coût : « ~120 tests reposent sur ce laisser-passer ». Mesuré en
+basculant temporairement la garde : **56 rouges**, dix fois moins. L'estimation était fausse et
+n'avait jamais été vérifiée. Leçon à garder : un chiffre avancé pour justifier une décision se
+mesure avant, pas après.
+
+Le cas reste **quasi inatteignable** et c'est assumé : aucun `DELETE FROM users` dans `src/`,
+jeton d'accès de 1 h. Il faudrait une suppression à la main en base pendant cette fenêtre. On ne
+corrige pas un incident constaté — on refuse d'écrire dans le doute sur une pièce comptable.
+
+### Le premier jet était mauvais, et l'exploitant l'a arrêté
+
+Solution initiale : poser un signataire **par défaut** dans `mockD1`/`mockDatabase` — 6 lignes
+au lieu de 54. Objection : *« il faut que les tests reflètent la réalité »*. Elle est juste — les
+54 tests seraient passés **sans rien fournir**, la dépendance des services envers `users`/`roles`
+serait devenue invisible, et une régression sur cette lecture les aurait laissés verts.
+
+Retenu à la place : chaque test **déclare son signataire**, `avecSignataire(db)`
+(`tests/helpers/signataire.ts`). 24 appels explicites. Un futur test qui oublie la déclaration
+échoue, au lieu de passer sur une réponse inventée.
+
+### Un défaut trouvé en chemin
+
+Après le premier jet, les tests portaient **7 copies locales** de la requête du signataire —
+exactement la cause racine que ce dépôt a déjà payée sur `buildCanonicalData` (cp80). Toutes
+pointent désormais le helper. **Une seule définition.**
+
+### Ce qui est en production
+
+Déployé par l'exploitant. `/api/health` 200, `sw.js` reste `izigsm-v2.93` — **inchangé et
+normal** : aucun asset frontend n'a été touché, c'est un déploiement backend pur. Les trois
+assets du ticket 004 sont toujours servis en `application/javascript`, et un asset inexistant
+répond `404` (la parade de l'incident du 2026-08-01 tient).
+
+⚠ **Le refus du signataire introuvable ne sera jamais vérifiable manuellement en production** :
+le bundle du Worker n'est pas lisible de l'extérieur, et le cas est impossible à provoquer sans
+supprimer un utilisateur en base. C'est un garde-fou dont on ne verra l'effet qu'un jour
+d'incident. Les tests unitaires en sont la seule preuve — ⊥ chercher à le « vérifier en prod ».
+
+### Gates
+
+vitest **929/931** (+1 ; les 2 échecs restent les permanents de fuseau `agendaService`),
+Playwright **195/195** rejoué avec la garde active, tsc **32**, build ✓. 40 migrations.
+
+### État et restes
+
+**Dépôt et production alignés**, aucun écart, aucune migration en attente. Le chantier
+`conformite-facturation` est clos depuis le cp87 — les 5 tickets en `done`, tous déployés.
+
+- **Écartée et laissée ouverte** : supprimer la relecture en base, le rôle étant déjà dans le
+  JWT (`JwtPayload` porte `role` et `boutique_id`). Elle tue la classe entière de problème mais
+  touche **121 points de contact** — 111 appels de tests, 10 dans `src/`. Elle change l'entrée
+  de la fonction, pas sa décision : rien à défaire pour la faire plus tard.
+- 🟠 P2 inchangés : chaînage NF525 non vérifié · cache de la boutique précédente ·
+  `clotures_journalieres.date_cloture` `UNIQUE` global.
 
 ## Checkpoint 87 — Le ticket 004 en production, chantier conformité clos (2026-09-09)
 
