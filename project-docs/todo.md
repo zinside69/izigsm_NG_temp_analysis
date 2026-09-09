@@ -55,6 +55,37 @@ ticket 03, et à vérifier sur **toute page gardant un cache local**, pas seulem
 - [ ] Décider : écran « choisissez une boutique » plutôt qu'un affichage trompeur
 - [ ] Vérifier que le cache local porte la boutique dont il provient
 
+## 🟠 P2 — La garde du registre relit en base un rôle qu'elle a déjà (décidé le 2026-09-09)
+
+`assertPeutEcrireAuRegistre()` (`src/lib/nf525.ts`) ne reçoit qu'un `userId` et va donc
+**redemander à D1** le rôle et la boutique du signataire — une information que le JWT porte déjà
+(`JwtPayload.role`, `JwtPayload.boutique_id`, `src/lib/auth.ts` l. 41-42).
+
+Deux conséquences, l'une mesurable, l'autre déjà payée :
+
+- **une requête supplémentaire par acte** inscrit au registre (vente, encaissement, émission,
+  avoir) ;
+- c'est cette relecture qui a créé le cas **« signataire introuvable »**, tranché le 2026-09-09
+  (`decisions.md`) : sans elle, le cas n'existerait pas.
+
+**Corriger, c'est faire passer le rôle depuis la route** jusqu'aux écrivains, et supprimer la
+requête. Plus de cas d'erreur possible, et les tests n'ont plus de signataire à déclarer —
+`tests/helpers/signataire.ts` disparaîtrait avec ses 24 appels.
+
+**Coût mesuré le 2026-09-09** : les 6 fonctions changent de signature, donc **121 points de
+contact** — 10 appels dans `src/`, 111 dans `tests/`. Mécanique, volumineux, et sur le chemin
+d'écriture du registre légal.
+
+⚠ **Rien à défaire pour le faire.** Ce chantier change l'**entrée** de la garde, pas sa
+**décision** : les deux refus (admin plateforme, signataire introuvable) restent tels quels, et
+le second devient simplement inatteignable. ⊥ revenir sur la décision du 2026-09-09 en chemin.
+
+- [ ] Choisir ce qui traverse : le `JwtPayload` entier, ou un booléen déjà calculé par la route
+- [ ] Un écrivain à la fois, tests d'abord — `createVente`, `enregistrerEncaissement`,
+      `emettreFacture`, `createAvoir`, puis les 2 chemins composites
+- [ ] Supprimer `assertPeutEcrireAuRegistre()`'s lecture SQL et `tests/helpers/signataire.ts`
+- [ ] Gates complets à chaque étape, Playwright inclus (chemin d'écriture du registre)
+
 ## 🟠 P2 — Le contrôle d'intégrité NF525 ne détecte pas la suppression d'une ligne (ouvert le 2026-09-04)
 
 Rédigé **sans case à cocher** : aucun ticket n'est écrit, et le sujet touche le contrôle légal —
