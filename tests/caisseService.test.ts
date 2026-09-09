@@ -20,6 +20,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockDatabase } from './helpers/mockDatabase'
 import { createMockD1 } from './helpers/mockD1'
+import { avecSignataire, sansSignataire } from './helpers/signataire'
 import { currentMonthParis, todayParis } from '../src/lib/timezone'
 import {
   getHashPrecedent,
@@ -320,6 +321,7 @@ describe('listClotures', () => {
 
   it('transmet boutique_id et limit en paramètres', async () => {
     const db = createMockDatabase()
+    avecSignataire(db)
 
     await listClotures(db, 3, 25)
 
@@ -375,6 +377,7 @@ describe('createVente()', () => {
 
   it('lève une erreur si aucune ligne', async () => {
     const db = createMockD1()
+    avecSignataire(db)
 
     await expect(
       createVente(db, 1, 5, { lignes: [], mode_paiement: 'especes' })
@@ -383,6 +386,7 @@ describe('createVente()', () => {
 
   it('crée la facture et le journal NF525, retourne les deux', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     setupHappyPath(db)
 
     const result = await createVente(db, 1, 5, {
@@ -395,6 +399,7 @@ describe('createVente()', () => {
 
   it('décrémente le stock et trace un mouvement si produit_id fourni', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     setupHappyPath(db)
     db.__setResponse(SQL_SELECT_STOCK, { stock_actuel: 10 })
 
@@ -415,6 +420,7 @@ describe('createVente()', () => {
 
   it('ne trace aucun mouvement si le produit n\'appartient pas à la boutique', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     setupHappyPath(db)
     // Pas de réponse pour SQL_SELECT_STOCK -> produit introuvable pour cette boutique
 
@@ -429,6 +435,7 @@ describe('createVente()', () => {
 
   it('calcule le rendu monnaie si espèces > montant dû', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     setupHappyPath(db)
 
     const result = await createVente(db, 1, 5, {
@@ -441,6 +448,7 @@ describe('createVente()', () => {
 
   it('pas de rendu monnaie si paiement CB', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     setupHappyPath(db)
 
     const result = await createVente(db, 1, 5, {
@@ -452,6 +460,7 @@ describe('createVente()', () => {
 
   it('lève une erreur si la création de facture échoue', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     // Pas de réponse pour SQL_INSERT_FACTURE → first() retourne null
 
     await expect(
@@ -476,7 +485,7 @@ describe('enregistrerEncaissement()', () => {
     RETURNING *
   `)
 
-  beforeEach(() => { db = createMockDatabase() })
+  beforeEach(() => { db = createMockDatabase(); avecSignataire(db) })
 
   it('lève une erreur si facture introuvable', async () => {
     await expect(
@@ -584,7 +593,7 @@ describe('cloturerJournee()', () => {
     RETURNING *
   `)
 
-  beforeEach(() => { db = createMockDatabase() })
+  beforeEach(() => { db = createMockDatabase(); avecSignataire(db) })
 
   it('lève une erreur si la journée est déjà clôturée', async () => {
     db.__setResponse(SQL_EXISTANTE, { id: 1 })
@@ -685,6 +694,7 @@ describe('createVente() — verrouillage NF525 (ticket 002)', () => {
   }
 
   function setup(db: ReturnType<typeof createMockD1>) {
+    avecSignataire(db)
     db.__setResponseFn(SQL_INSERT_FACTURE, () => ({
       id: 10, numero: 'FAC-2026-00001', total_ht: 80, total_tva: 16, total_ttc: 96,
     }))
@@ -953,12 +963,6 @@ describe('verifierIntegriteChaine — écrivain B (factures et avoirs)', () => {
  * Décision et alternatives écartées : docs/adr/0002-la-plateforme-ne-vend-pas.md
  */
 describe('createVente() — la plateforme ne vend pas (ticket 004)', () => {
-  const SQL_SIGNATAIRE = n(`
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `)
-
   const LIGNE_VENTE = {
     designation: 'Réparation écran', quantite: 1,
     prix_unitaire_ht: 80, tva_taux: 20,
@@ -966,7 +970,7 @@ describe('createVente() — la plateforme ne vend pas (ticket 004)', () => {
 
   it('refuse un admin plateforme, avec un motif qui nomme la raison', async () => {
     const db = createMockD1()
-    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    avecSignataire(db, { role: 'admin', boutique_id: null })
 
     await expect(
       createVente(db, 1, 1, { lignes: [LIGNE_VENTE], mode_paiement: 'especes' })
@@ -975,18 +979,37 @@ describe('createVente() — la plateforme ne vend pas (ticket 004)', () => {
 })
 
 describe('enregistrerEncaissement() — la plateforme ne vend pas (ticket 004)', () => {
-  const SQL_SIGNATAIRE_PORT = n(`
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `)
-
   it('refuse un admin plateforme, avant même de lire la facture', async () => {
     const db = createMockDatabase()
-    db.__setResponse(SQL_SIGNATAIRE_PORT, { role: 'admin', boutique_id: null })
+    avecSignataire(db, { role: 'admin', boutique_id: null })
 
     await expect(
       enregistrerEncaissement(db, 1, 1, 42, 'especes')
     ).rejects.toThrow(/admin plateforme/i)
+  })
+})
+
+/**
+ * Le cas d'incertitude de la garde : la base ne retrouve aucun signataire.
+ *
+ * Le registre légal existe pour dire QUI a émis quoi. Une pièce signée par un identifiant
+ * qui ne correspond à personne est exactement ce qu'il est censé rendre impossible — donc
+ * pas de signataire identifié, pas d'écriture. Décidé le 2026-09-09.
+ *
+ * ⚠ Ce test est le SEUL filet sur ce point. Les autres tests reçoivent un signataire par
+ * défaut des helpers de mock (`tests/helpers/`) : ils ne posent pas la question et ne
+ * prouvent donc rien ici. Si quelqu'un remet le laisser-passer, c'est celui-ci qui rougit.
+ */
+describe('signataire introuvable — pas d\'écriture au registre (2026-09-09)', () => {
+  it('createVente() refuse quand la base ne retrouve pas le signataire', async () => {
+    const db = createMockD1()
+    sansSignataire(db)   // l'utilisateur du jeton n'existe pas (ou plus)
+
+    await expect(
+      createVente(db, 1, 999, {
+        lignes: [{ designation: 'Réparation écran', quantite: 1, prix_unitaire_ht: 80, tva_taux: 20 }],
+        mode_paiement: 'especes',
+      })
+    ).rejects.toThrow(/signataire introuvable/i)
   })
 })

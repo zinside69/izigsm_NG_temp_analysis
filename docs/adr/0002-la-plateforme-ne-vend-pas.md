@@ -41,6 +41,10 @@ trouvé en mesurant les appelants réels, après l'écriture de cet ADR.
 - Les **104 autres routes d'écriture** restent ouvertes : la plateforme corrige la cause d'un
   blocage, l'exploitant signe la pièce.
 - Les lignes **déjà écrites ne sont pas modifiées** — le journal est append-only.
+- **Signataire introuvable en base : la garde refuse** (2026-09-09). Le cas était laissé ouvert
+  par ce ticket. Le registre existe pour dire qui a émis quoi — une pièce signée par un
+  utilisateur inexistant est ce qu'il doit rendre impossible. Motif distinct de celui de l'admin
+  plateforme. Détail et alternatives écartées : `project-docs/decisions.md` § 2026-09-09.
 - **Les chemins composites refusent d'emblée.** `createFactureAcompte()` et
   `createFacture(emettre_encaisser)` insèrent la facture, ses lignes **puis** encaissent avant
   d'émettre : une garde posée dans le seul écrivain terminal les aurait refusés en bout de

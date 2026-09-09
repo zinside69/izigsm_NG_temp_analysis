@@ -1,5 +1,45 @@
 # iziGSM — Décisions
 
+## 2026-09-09 — Signataire introuvable : le registre refuse plutôt que d'écrire
+
+Le fail-open laissé ouvert par le ticket 004 est tranché. `assertPeutEcrireAuRegistre()`
+(`lib/nf525.ts`) lisait en base l'identité du signataire ; quand la base ne retrouvait
+personne, **elle laissait écrire**. Une pièce partait donc au registre légal signée par un
+identifiant ne correspondant à aucun utilisateur.
+
+**Décision : refuser.** Le registre existe pour dire *qui* a émis quoi — une ligne signée par
+un inconnu est exactement ce qu'il doit rendre impossible. Deux motifs distincts désormais :
+signataire introuvable, et admin plateforme. Ils ne disent pas la même chose et ne se
+confondent plus.
+
+**Ce qui a fait basculer l'arbitrage : une mesure, pas un raisonnement.** L'argument du statu
+quo était le coût — « ~120 tests reposent sur ce laisser-passer ». Mesuré en basculant
+temporairement la garde : **56 rouges** (54 + les 2 permanents de fuseau), soit dix fois moins
+que l'estimation. L'estimation était fausse et n'avait jamais été vérifiée.
+
+**Le cas reste quasi inatteignable**, et c'est assumé : aucun `DELETE FROM users` n'existe dans
+`src/`, le jeton d'accès vit 1 h. Il faudrait une suppression à la main en base pendant cette
+fenêtre. On ne corrige pas un incident constaté — on refuse d'écrire dans le doute sur une
+pièce comptable.
+
+| | Décision |
+|---|---|
+| **Signataire introuvable** | **Refus**, motif propre |
+| **Les 54 tests** | Chacun **déclare son signataire**, par `avecSignataire(db)` (`tests/helpers/signataire.ts`) |
+| **Garde-fou** | 1 test neuf, vu rouge avant : `createVente()` + `sansSignataire(db)` → refus attendu |
+| **Écartée — signataire par défaut dans les mocks** | 6 lignes au lieu de 54, mais le test aurait passé sans rien fournir : la dépendance des services envers `users`/`roles` devenait invisible, et une régression sur cette lecture les aurait laissés verts. **Écartée sur objection de l'exploitant** : « il faut que les tests reflètent la réalité » |
+| **Écartée — supprimer la lecture en base** (rôle depuis le JWT) | Tue la classe entière de problème, mais touche 4 signatures et tous leurs appelants. Reste ouvert plus tard : elle change l'entrée de la fonction, pas sa décision |
+
+**Une seule définition de la requête.** Les tests en portaient **7 copies locales** après le
+premier jet — exactement la cause racine que le dépôt a déjà payée sur `buildCanonicalData`
+(§ 2026-09-04). Toutes pointent désormais `tests/helpers/signataire.ts`.
+
+**Ce que coûte le choix retenu, et pourquoi il vaut son prix.** Déclarer le signataire dans
+chaque test qui écrit au registre est plus verbeux qu'un défaut de mock — 24 appels à
+`avecSignataire()`. En échange, un test dit ce que le code fait vraiment : `emettreFacture()`
+lit `users`/`roles`. Un futur test qui oublie la déclaration échoue, au lieu de passer sur une
+réponse inventée.
+
 ## 2026-09-08 — Ticket 004, round 2 : la plateforme ne vend pas (voie 1)
 
 Grilling round 2. **Le round 1 est renversé sur son point B** — et il l'est sur une objection de

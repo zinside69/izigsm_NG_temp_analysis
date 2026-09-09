@@ -400,7 +400,20 @@ export async function assertPeutEcrireAuRegistre(
     ? await db.prepare(SQL).bind(userId).first<Signataire>()
     : await db.get<Signataire>(SQL, [userId])
 
-  if (signataire && signataire.role === 'admin' && !signataire.boutique_id) {
+  // Base muette sur cet identifiant : personne ne signe. Le registre légal existe pour dire
+  // QUI a émis quoi — une pièce signée par un utilisateur inexistant est exactement ce qu'il
+  // doit rendre impossible. On refuse plutôt que d'écrire dans le doute (2026-09-09).
+  //
+  // Le cas n'est pas atteignable par l'application : aucun `DELETE FROM users` n'existe dans
+  // `src/`. Il suppose une suppression à la main en base pendant la fenêtre d'un jeton (1 h).
+  if (!signataire) {
+    throw new Error(
+      "Signataire introuvable : aucune pièce ne peut être inscrite au registre légal au nom " +
+      "d'un utilisateur que la base ne connaît pas."
+    )
+  }
+
+  if (signataire.role === 'admin' && !signataire.boutique_id) {
     throw new Error(
       "Un admin plateforme ne peut pas inscrire de pièce au registre légal d'une boutique. " +
       "La plateforme supervise et débogue ; l'exploitant signe ses pièces."

@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
 import { createMockDatabase } from './helpers/mockDatabase'
+import { avecSignataire } from './helpers/signataire'
 import {
   listFactures,
   getFacture,
@@ -516,7 +517,7 @@ describe('ajouterPaiement()', () => {
 describe('emettreFacture()', () => {
   let db: ReturnType<typeof createMockD1>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockD1(); avecSignataire(db) })
 
   it('lance Error si facture introuvable', async () => {
     db.__setNotFound(SQL_GET_FACTURE_EMETTRE)
@@ -789,7 +790,7 @@ describe('getAvoir()', () => {
 describe('createAvoir()', () => {
   let db: ReturnType<typeof createMockD1>
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockD1(); avecSignataire(db) })
 
   it('lance Error si type invalide', async () => {
     const input: CreateAvoirInput = {
@@ -1073,7 +1074,7 @@ describe('createFactureAcompte()', () => {
     db.__setNotFound(SQL_NF525_LAST_HASH)
   }
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockD1(); avecSignataire(db) })
 
   const BASE_INPUT: CreateFactureAcompteInput = {
     boutique_id: 1, client_id: 3, ticket_id: 42, devis_id: null,
@@ -1192,7 +1193,7 @@ describe('createFacture()', () => {
     db.__setResponseFn(SQL_INSERT_FACTURE, () => ({ id: factureId }))
   }
 
-  beforeEach(() => { db = createMockD1() })
+  beforeEach(() => { db = createMockD1(); avecSignataire(db) })
 
   const BASE_INPUT: CreateFactureInput = {
     boutique_id: 1,
@@ -1498,6 +1499,7 @@ describe('createAvoir() — facture source verrouillée', () => {
 
   it('refuse un avoir sur une vente non verrouillée', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     db.__setResponse(SQL_FACTURE, ventePos(0))
 
     await expect(createAvoir(db, 5, INPUT))
@@ -1506,6 +1508,7 @@ describe('createAvoir() — facture source verrouillée', () => {
 
   it('accepte un avoir sur une vente de caisse verrouillée', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     db.__setResponse(SQL_FACTURE, ventePos(1))
     db.__setResponseFn(SQL_INSERT_AVOIR, () => ({ id: 99 }))
 
@@ -1517,6 +1520,7 @@ describe('createAvoir() — facture source verrouillée', () => {
 
   it('lie l\'avoir à sa facture source', async () => {
     const db = createMockD1()
+    avecSignataire(db)
     db.__setResponse(SQL_FACTURE, ventePos(1))
     db.__setResponseFn(SQL_INSERT_AVOIR, () => ({ id: 99 }))
 
@@ -1536,15 +1540,9 @@ describe('createAvoir() — facture source verrouillée', () => {
  * @see docs/adr/0002-la-plateforme-ne-vend-pas.md
  */
 describe('la plateforme ne vend pas (ticket 004)', () => {
-  const SQL_SIGNATAIRE = `
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `.replace(/\s+/g, ' ').trim()
-
   function dbAvecAdminPlateforme() {
     const db = createMockD1()
-    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    avecSignataire(db, { role: 'admin', boutique_id: null })
     return db
   }
 
@@ -1571,15 +1569,9 @@ describe('la plateforme ne vend pas (ticket 004)', () => {
  * bien faire. Le ticket 004 listait d'ailleurs cette route à tort avant mesure.
  */
 describe('la fermeture ne déborde pas (ticket 004)', () => {
-  const SQL_SIGNATAIRE = `
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `.replace(/\s+/g, ' ').trim()
-
   it("ajouterPaiement() reste ouvert à un admin plateforme", async () => {
     const db = createMockD1()
-    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    avecSignataire(db, { role: 'admin', boutique_id: null })
 
     // Échoue faute de facture, jamais faute de droits : la garde n'est pas sur ce chemin.
     // Assertion sur le message EXACT, et non un `not.toThrow` — qui resterait vert pour
@@ -1603,15 +1595,9 @@ describe('la fermeture ne déborde pas (ticket 004)', () => {
  * écrivains étaient vertes.
  */
 describe('chemins composites — rien n\'est écrit avant le refus (ticket 004)', () => {
-  const SQL_SIGNATAIRE = `
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `.replace(/\s+/g, ' ').trim()
-
   function dbAvecAdminPlateforme() {
     const db = createMockD1()
-    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    avecSignataire(db, { role: 'admin', boutique_id: null })
     return db
   }
 
@@ -1655,15 +1641,9 @@ describe('chemins composites — rien n\'est écrit avant le refus (ticket 004)'
  * `if (true)` passerait inaperçu — et fermerait plus que le ticket ne le demande.
  */
 describe('la fermeture ne déborde pas sur le brouillon (ticket 004)', () => {
-  const SQL_SIGNATAIRE = `
-    SELECT r.nom AS role, u.boutique_id
-    FROM   users u JOIN roles r ON r.id = u.role_id
-    WHERE  u.id = ?
-  `.replace(/\s+/g, ' ').trim()
-
   it("createFacture(brouillon) reste ouvert à un admin plateforme", async () => {
     const db = createMockD1()
-    db.__setResponseFn(SQL_SIGNATAIRE, () => ({ role: 'admin', boutique_id: null }))
+    avecSignataire(db, { role: 'admin', boutique_id: null })
 
     // Échoue sur la donnée manquante, jamais sur les droits.
     await expect(
