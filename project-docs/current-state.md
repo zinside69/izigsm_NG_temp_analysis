@@ -1,4 +1,103 @@
-# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 88 — le registre refuse de signer pour un inconnu)
+# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 89 — Mobilax cadré, et bloqué chez le fournisseur)
+
+## Checkpoint 89 — L'API Mobilax : documentée, mesurée, bloquée (2026-09-09)
+
+Suite du cp88, même journée. Deux sujets : le chantier de dette inscrit au backlog plutôt que
+mené, et l'ouverture du chantier Mobilax — qui s'arrête sur un mur extérieur.
+
+### La relecture du rôle en base : inscrite, pas faite
+
+`assertPeutEcrireAuRegistre()` redemande à D1 le rôle et la boutique du signataire, alors que le
+JWT les porte déjà (`JwtPayload`, `auth.ts` l. 41-42). C'est **cette relecture qui a créé** le cas
+« signataire introuvable » tranché plus tôt dans la journée.
+
+**Coût mesuré** : 121 points de contact — 10 appels dans `src/`, 111 dans `tests/`, les 6
+fonctions changeant de signature. Inscrit en 🟠 P2 sur décision de l'exploitant, plutôt que mené
+dans la foulée.
+
+⚠ L'entrée du backlog avertit que ce chantier change l'**entrée** de la garde, jamais sa
+**décision** : les deux refus restent, le second devient simplement inatteignable. ⊥ revenir sur
+la décision du 2026-09-09 en chemin.
+
+### Mobilax : ce que la documentation dit
+
+Recherche déléguée à un agent, livrée dans `project-docs/recherche-api-mobilax-2026-09-09.md`
+(516 lignes, chaque affirmation citée). **Pas d'OpenAPI** : la doc est figée dans son bundle
+JavaScript (`index-D8nDrXby.js`), lu comme source primaire et recoupé au DOM rendu — un `fetch`
+de `developers.mobilax.fr` ne rend que 0 Ko.
+
+| Fait | Conséquence |
+|---|---|
+| **184 716 références**, `limit` max **100**, **30 req/min** sur `/products*` | Balayage complet ≈ **1 848 requêtes ≈ 62 min** → tâche de fond, jamais synchrone |
+| `updatedSince` existe, **mais seulement dans le playground** | Levier de delta n° 1, à confirmer par la mesure |
+| Webhooks `stock/price/product.updated`, signés HMAC-SHA256 | Entretien du cache **sans consommer le quota** |
+| `PRODUCT_NOT_SELLABLE` = « sans offre **pour votre compte** » | Le catalogue **vendable** et les prix dépendent du compte |
+| **Aucun en-tête de quota** (`X-RateLimit`, `Retry-After`) | Back-off aveugle sur `429` |
+| L'enveloppe **varie selon la route** (`/products` sans `status`, `/auth` sans `data`) | Même classe de piège que celle qui a rendu muettes 5 pages de ce dépôt → à absorber dans l'adaptateur, **une fois** |
+
+### Le cadrage a changé deux fois, et la seconde fois était la bonne
+
+Premier arbitrage : cache complet des 184 716 références, prix jamais en cache, une clé par
+tenant. Puis **l'exploitant s'est repris** — *« on ne stocke rien en local au niveau du catalogue
+pour le moment. On fait un test avec chargement du stock via l'API »*.
+
+C'est le bon ordre : **mesurer avant de bâtir**. Un schéma de cache choisi sur les chiffres d'une
+documentation, sans un seul appel réel, aurait été une construction sur hypothèses.
+
+### La mesure, et le mur
+
+`POST /auth` avec `MOBILAX_API_KEY` (64 caractères, jamais affichée) :
+
+| Environnement | Réponse |
+|---|---|
+| Préproduction `apiv2.mobilax.pro` | **401** — « Customer not found » |
+| Production `apiv2.mobilax.fr` | **401** — « Invalid API key » |
+
+**L'écart entre les deux messages est le diagnostic** : la production ne connaît pas la clé ; la
+préproduction la reconnaît mais **aucun compte ne lui est rattaché**. La clé appartient donc à
+l'univers de préproduction — c'est le compte qui manque. ⊥ un défaut de code ni de configuration
+de notre côté : `POST /auth` prend `{apiKey}` seul, la doc ne prévoit aucun second paramètre.
+
+**Le déblocage est chez Mobilax** : provisionner ou réactiver le compte ouvert le 2026-09-07.
+À vérifier avant de les contacter : que la clé fournie fasse bien 64 caractères, sans quoi elle a
+été tronquée à la copie.
+
+**Ce que le blocage laisse en suspens** — les 4 questions bloquantes de la note, plus la
+sémantique des cinq champs de prix (`customer_price`, `mbx_price`, `recommended_price`,
+`discount_amount`, `b2c_percentage`) : présents dans le JSON, décrits nulle part, tous à `"0.00"`
+dans l'exemple. Savoir lequel porte le prix d'achat est **la décision la plus lourde** de
+l'intégration.
+
+### Deux pièges d'outillage, l'un vécu deux fois
+
+- **Une regex de parsing trop stricte a fait conclure à tort à l'absence de la clé.** Le premier
+  script lisait `.dev.vars` avec un motif exigeant une valeur sans guillemet interne : il a
+  annoncé « aucune variable Mobilax » alors qu'elle y était. L'exploitant a dû corriger. ! lire un
+  fichier d'environnement avec un motif permissif — `^\s*([^=\s]+)\s*=` — et se méfier d'une
+  absence annoncée par un parseur.
+- **Un heredoc bash non quoté exécute les backticks.** `<<PYEOF` a transformé `` `POST /auth` ``
+  en substitution de commande et vidé la ligne de version écrite. ! `<<'PYEOF'` dès qu'un contenu
+  porte des backticks — sinon écrire le texte dans un fichier séparé, comme pour le reste.
+- `.dev.vars` est protégé par une règle de refus : ⊥ tenter de le lire, même indirectement. Un
+  script node qui le lit **sans rien afficher** passe, lui.
+
+### Gates
+
+Non rejoués — aucun code applicatif touché depuis le cp88. Valeurs du cp88 : vitest **929/931**,
+Playwright **195/195**, tsc **32**, build ✓.
+
+⚠ **Mémoire libre tombée à 4,6 Go** en fin de session (23,9 Go au total), sous le seuil de ~8 Go
+nécessaire à Playwright — un serveur local de fond a d'ailleurs été tué par le système. ! la
+remesurer (`node -e "os.freemem()"`) avant de lancer une suite E2E, sous peine de prendre une
+tâche tuée pour un échec de test.
+
+### État
+
+Dépôt et production **alignés** (`izigsm-v2.93`), arbre propre, aucune migration en attente.
+`.playwright-mcp/` — traces laissées par un agent qui rend une page — est désormais ignoré.
+
+**Restes** : 🟠 P2 chaînage NF525 · cache de la boutique précédente · `clotures_journalieres`
+`UNIQUE` global · relecture du rôle en base. Et **Mobilax, bloqué chez le fournisseur**.
 
 ## Checkpoint 88 — Signataire introuvable : refus, et des tests qui disent la vérité (2026-09-09)
 

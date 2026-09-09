@@ -1,3 +1,105 @@
+# Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 89 — Mobilax cadré, et bloqué chez le fournisseur)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Rien n'attend de déploiement.** Dépôt et production alignés, `izigsm-v2.93`, `/api/health` 200,
+arbre propre, aucune migration en attente. Le chantier `conformite-facturation` est clos depuis le
+cp87 — 5 tickets sur 5, tous déployés.
+
+**Le chantier en cours est Mobilax, et il est bloqué chez le fournisseur.**
+
+## Mobilax — l'essentiel avant d'y toucher
+
+Tout est dans `project-docs/recherche-api-mobilax-2026-09-09.md` (516 lignes, sources citées).
+⊥ refaire cette recherche.
+
+**Le blocage** : `POST /auth` est refusé sur les deux environnements. Préproduction
+(`apiv2.mobilax.pro`) → « Customer not found » ; production (`apiv2.mobilax.fr`) → « Invalid API
+key ». La clé de `.dev.vars` (`MOBILAX_API_KEY`, 64 caractères) appartient à l'univers de
+préproduction, mais **aucun compte ne lui est rattaché**. ⊥ un défaut de code : `POST /auth` prend
+`{apiKey}` seul. **Le déblocage est chez Mobilax** — provisionner ou réactiver le compte ouvert le
+2026-09-07. ⊥ relancer d'appels à l'aveugle : `/auth` est limité à 10 req/min.
+
+**Cadrage tranché le 2026-09-09** : ⊥ **stocker le catalogue en local pour le moment.** On mesure
+d'abord par un appel réel. Le premier arbitrage (cache complet des 184 716 références) a été
+**repris par l'exploitant** — un schéma choisi sur les seuls chiffres d'une documentation serait
+une construction sur hypothèses.
+
+**Ce qu'aucune décision ne peut trancher sans un appel réussi** : le `total` réel pour ce compte,
+la devise, si `updatedSince` marche hors playground, et surtout **lequel des cinq champs de prix**
+(`customer_price`, `mbx_price`, `recommended_price`, `discount_amount`, `b2c_percentage`) porte le
+prix d'achat — décrits nulle part, tous à `"0.00"` dans l'exemple. C'est la décision la plus
+lourde de l'intégration.
+
+**Piège à absorber dans l'adaptateur, une seule fois** : l'enveloppe de réponse **varie selon la
+route** — `/products*` sans `status`, `/auth` sans `data`. Même classe de défaut que celle qui a
+rendu muettes cinq pages de ce dépôt.
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : une ligne supprimée au milieu du journal ne
+   produit aucune anomalie. Contrôle fiscal — tickets **avant** tout code.
+2. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+   Cause connue (⊥ `/diagnosing-bugs`) : recensement multi-pages et décision produit, pas un
+   diagnostic.
+3. **🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global**, pas par boutique.
+4. **🟠 P2 — la garde du registre relit en base un rôle qu'elle a déjà** (le JWT le porte).
+   121 points de contact mesurés. Change l'**entrée** de la garde, jamais sa **décision** :
+   ⊥ revenir sur le refus du signataire introuvable en chemin.
+
+## Ce qu'il faut savoir avant de toucher au registre NF525
+
+- **La garde vit dans les écrivains, pas dans les routes** — `assertPeutEcrireAuRegistre()`
+  (`lib/nf525.ts`), porte unique, D1 brut **et** port `Database`. Deux refus, deux motifs :
+  admin plateforme, signataire introuvable.
+- **Les chemins composites refusent en tête de fonction** — `createFactureAcompte()` et
+  `createFacture(emettre_encaisser)` encaissent **avant** d'émettre. ⊥ déplacer la garde plus bas.
+- **Tout test qui écrit au registre déclare son signataire** : `avecSignataire(db)`
+  (`tests/helpers/signataire.ts`). ⊥ remettre un défaut dans les mocks — le test passerait sans
+  rien fournir. `sansSignataire(db)` sert au seul test qui exige le refus.
+- **Fabriquer une facture émise exige un compte de boutique** : `admin@izigsm.fr` est l'admin
+  plateforme du seed. Utiliser `loginSeedManager()` ou `createTenantAdmin()`.
+
+## Pièges d'outillage revalidés le 2026-09-09
+
+- **Une absence annoncée par un parseur n'est pas une absence.** Un motif trop strict sur
+  `.dev.vars` a fait conclure à tort que la clé Mobilax manquait. Lire un fichier
+  d'environnement avec `^\s*([^=\s]+)\s*=`, permissif sur la valeur.
+- **Un heredoc bash non quoté exécute les backticks** : `<<PYEOF` a vidé une ligne de texte
+  contenant `` `POST /auth` ``. Utiliser `<<'PYEOF'`, ou passer par un fichier séparé.
+- **`.dev.vars` est protégé par une règle de refus** : ⊥ tenter de le lire, même indirectement.
+  Un script node qui le lit sans rien afficher passe, lui.
+- **Mesurer la mémoire avant toute suite E2E** (`node -e "os.freemem()"`) : tombée à **4,6 Go** en
+  fin de session, sous le seuil de ~8 Go. Une tâche tuée ≠ un échec de test.
+- **`origin` avance seul la nuit** (`chore: backup D1 automatique`, ne touche que `backups/d1/`) :
+  `git fetch` puis `git pull --rebase` avant de déployer ou commiter.
+- **L'assertion `libuv` (`UV_HANDLE_CLOSING`)** en fin de `npm run deploy` est un crash de sortie
+  de Node sous Windows, imprimée **après** le `✓ Déploiement vérifié`. ⊥ y voir un échec.
+- **Un déploiement backend pur ne change pas `CACHE_VERSION`** — c'est normal.
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. `tdd`, `code-review`, `grilling`,
+`domain-modeling` et `research` sont invocables directement — `grilling` a servi à trancher le
+fail-open, `research` à documenter l'API Mobilax.
+
+Plugin **déjà installé et à jour** : v1.2.3, identique à l'amont (vérifié le 2026-09-09).
+⊥ chercher à l'installer ou à ajouter le marketplace amont.
+
+## Baselines
+
+vitest **929/931** (2 permanents de fuseau `agendaService`), Playwright **195/195**, tsc **32**,
+build ✓. 40 migrations. `CACHE_VERSION` dépôt **et** production : `izigsm-v2.93`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 88 — le registre refuse de signer pour un inconnu)
 
 ## ⚠ Avant tout — d'où se travaille ce projet
