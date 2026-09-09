@@ -70,3 +70,9 @@ scripts/loop/.graph-update-failures
 # Fichiers de travail temporaires (ex. pick-task.mjs --all redirige vers ce nom
 # pendant une investigation manuelle du backlog) — jamais suivis, regenerables.
 *.tmp.json
+
+# Traces du serveur MCP Playwright, écrites à la racine quand un agent doit rendre une
+# page pour la lire (console-*.log, page-*.yml). Régénérables, sans valeur à conserver —
+# et un dépôt public n'a pas à porter le rendu de pages tierces. Apparues le 2026-09-09
+# pendant la recherche sur l'API Mobilax.
+.playwright-mcp/
