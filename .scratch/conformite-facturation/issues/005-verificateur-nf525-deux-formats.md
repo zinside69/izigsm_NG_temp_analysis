@@ -1,7 +1,7 @@
 ---
 id: 005
 titre: Le vérificateur NF525 et l'écrivain des factures/avoirs ne parlent pas le même format
-statut: done-pending-prod-check
+statut: done
 bloque-par: []
 ---
 

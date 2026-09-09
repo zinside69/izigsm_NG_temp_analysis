@@ -1,7 +1,7 @@
 ---
 id: 004
 titre: La plateforme ne vend pas — fermer les actes inscrits au registre légal d'une boutique
-statut: done-pending-prod-check
+statut: done
 bloque-par: [001, 002]
 ---
 
@@ -101,6 +101,25 @@ est plus discutable qu'un trou expliqué, et toucher aux numéros émis casserai
 La note traçable (numéros, boutique, cause, date) **n'est pas produite maintenant** : ces trous
 appartiennent à un système qui n'est pas en service, la note n'a donc aujourd'hui ni comptable ni
 contrôleur pour destinataire. À reprendre au moment de la mise en service.
+
+## Vérifié en production le 2026-09-09
+
+Déployé : prod `izigsm-v2.92` → **`v2.93`**, aucune migration (le ticket n'en a ajouté aucune).
+
+| Contrôle | Résultat |
+|---|---|
+| `sw.js` prod | `izigsm-v2.93` |
+| `/api/health` | `200` |
+| `factures.21e3b681.js` réellement servi | `application/javascript`, ⊥ HTML — `peutSigner`, `btnEmettre`, `btnAvoir` présents |
+| `caisse.2529fecd.js` réellement servi | `application/javascript`, ⊥ HTML — garde et `btn-nouvelle-vente` présents |
+| Écran, admin plateforme | commandes masquées — constaté par l'exploitant |
+| Écran, compte de boutique | `FAC-2026-00001` et `00002` gardent 🔒 et l'avoir — la fermeture ne déborde pas |
+
+**Deux limites à ne pas surinterpréter.** Le contrôle du compte de boutique est une lecture
+**visuelle** d'une capture, pas une lecture du DOM par `title` ; il conclut sur `peutSigner`, que
+les deux boutons partagent. Et le volet **serveur** (`assertPeutEcrireAuRegistre()`) n'a pas été
+mesuré en production : le bundle du Worker n'est pas lisible de l'extérieur, et le prouver
+exigerait de tenter une écriture sous une session d'admin plateforme.
 
 ## Effets de bord sur la suite existante — traités
 

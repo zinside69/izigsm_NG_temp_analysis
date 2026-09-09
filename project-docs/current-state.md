@@ -1,4 +1,63 @@
-# iziGSM — État courant (MàJ : 2026-09-08, checkpoint 86 — la plateforme ne vend plus, et la revue a rattrapé une corruption d'état)
+# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 87 — le chantier conformité est en production)
+
+## Checkpoint 87 — Le ticket 004 en production, chantier conformité clos (2026-09-09)
+
+Session courte : un déploiement, sa vérification, la clôture du chantier. Aucun code écrit.
+
+### Ce qui est en production
+
+**Ticket 004 déployé** — prod `izigsm-v2.92` → **`v2.93`**, `/api/health` 200. Aucune migration
+(le ticket n'en avait ajouté aucune), donc l'ordre migrations→déploiement était sans objet.
+
+Vérifié sur les **assets hashés réellement servis**, pas sur le build local :
+`factures.21e3b681.js` et `caisse.2529fecd.js` répondent en `application/javascript` (⊥ HTML) et
+portent `peutSigner`, `btnEmettre`, `btnAvoir`, la garde de caisse et `btn-nouvelle-vente`.
+
+**Geste métier constaté par l'exploitant** : en admin plateforme, les commandes sont masquées ;
+sur un compte de boutique, `FAC-2026-00001` et `00002` gardent 🔒 et l'avoir — la fermeture ne
+déborde pas.
+
+**Le chantier `.scratch/conformite-facturation/` est clos** : 001, 002, 003, 004 en `done`, tous
+en production.
+
+### Deux limites, écrites plutôt que tues
+
+- Le contrôle du compte de boutique est une lecture **visuelle** d'une capture, pas une lecture
+  du DOM par `title`. Il conclut sur `peutSigner`, que les deux boutons partagent : l'avoir
+  s'affichant, « Émettre » s'afficherait aussi sur un brouillon. Raisonnement solide, mesure
+  indirecte.
+- **Le volet serveur n'a pas été mesuré en production.** `assertPeutEcrireAuRegistre()` vit dans
+  le Worker, dont le bundle n'est pas lisible de l'extérieur ; le prouver exigerait de tenter une
+  écriture sous une session d'admin plateforme. Les 6 tests unitaires le couvrent en local.
+
+### Ce que la session a appris sur l'outillage
+
+- **`origin` avait avancé pendant la nuit** (`c4e00ef chore: backup D1 automatique 2026-09-09`).
+  Rebasé avant de déployer. Le commit ne touche qu'un dump sous `backups/d1/`, jamais du code —
+  vérifié plutôt que supposé.
+- **`npm run deploy` est passé sans blocage du classificateur** cette fois. L'exploitant a demandé
+  la commande PowerShell en cours de route, alors que le déploiement était déjà vérifié : la
+  proposer d'emblée aurait évité l'aller-retour.
+- L'assertion `libuv` en fin de `npm run deploy` (`UV_HANDLE_CLOSING`) est un crash de sortie de
+  Node sous Windows, **après** le `✓ Déploiement vérifié`. Sans effet sur le déploiement, vue
+  deux jours de suite. ⊥ la prendre pour un échec.
+
+### Gates
+
+Non rejoués — aucun code touché cette session. Valeurs du cp86 : vitest **928/930**,
+Playwright **195/195**, tsc **32**, build ✓. 40 migrations.
+
+### État
+
+**Dépôt et production alignés** (`izigsm-v2.93`), aucun écart, aucune migration en attente.
+
+**Les 5 tickets du chantier sont en `done`.** Le 005 traînait un `done-pending-prod-check`
+depuis le cp83, alors que son contrôle production y avait été fait : statut aligné ce jour. Plus
+aucune valeur hors du vocabulaire de `docs/agents/triage-labels.md` dans ce chantier.
+
+**Restes, inchangés** : le fail-open sur signataire introuvable (décision d'exploitant, non
+tranchée) · 🟠 P2 chaînage NF525, cache de la boutique précédente, `clotures_journalieres`
+`UNIQUE` global.
 
 ## Checkpoint 86 — La plateforme ne vend plus (ticket 004, serveur et écran) (2026-09-08)
 

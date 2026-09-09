@@ -1,3 +1,77 @@
+# Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 87 — le chantier conformité est en production)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Rien n'attend de déploiement, rien n'attend de décision urgente.** Dépôt et production alignés :
+`izigsm-v2.93`, `/api/health` 200, aucune migration en attente.
+
+**Le chantier `.scratch/conformite-facturation/` est clos** — 001, 002, 003, 004 en `done`, tous
+en production. Le prochain chantier se choisit librement dans `todo.md`.
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : `verifierIntegriteChaine()` ne compare jamais
+   `hash_precedent` au `hash_courant` de la ligne précédente, donc une ligne supprimée au milieu
+   du journal ne produit aucune anomalie. C'est le contrôle fiscal — passer par
+   `/mattpocock-skills:to-tickets` **avant** tout code.
+2. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+   Cause connue (⊥ `/diagnosing-bugs`) : il manque un recensement multi-pages et une décision
+   produit, pas un diagnostic.
+3. **🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global**, pas par boutique : dès
+   que deux boutiques exploitent le même jour, la seconde ne peut pas clôturer.
+4. **Le fail-open de `assertPeutEcrireAuRegistre()`** : signataire introuvable ⇒ l'écriture passe.
+   Délibéré — c'est ce qui tient les ~120 tests existants verts. Le changer est une décision
+   d'exploitant, jamais un correctif de développeur.
+
+## Ce qu'il faut savoir avant de toucher au ticket 004
+
+- **La garde vit dans les écrivains, pas dans les routes** — `assertPeutEcrireAuRegistre()`
+  (`lib/nf525.ts`), porte unique, acceptant le D1 brut **et** le port `Database`.
+- **Les chemins composites refusent en tête de fonction.** `createFactureAcompte()` et
+  `createFacture(emettre_encaisser)` encaissent **avant** d'émettre : une garde placée dans le
+  seul écrivain terminal laissait un brouillon et un paiement orphelins. ⊥ la déplacer plus bas.
+- **Fabriquer une facture émise ou un avoir dans un test exige un compte de boutique.**
+  `admin@izigsm.fr` est l'admin plateforme du seed (`boutique_id` NULL) : il ne peut plus signer.
+  Utiliser `loginSeedManager()` (isolation) ou `createTenantAdmin()`, qui expose son mot de passe.
+- **Le volet serveur n'a jamais été mesuré en production** : le bundle du Worker n'est pas lisible
+  de l'extérieur. Seuls les tests unitaires le couvrent.
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. Le harnais interdit d'en rejouer
+le processus autrement. `tdd`, `code-review`, `grilling` et `domain-modeling` sont invocables
+directement — c'est la voie employée pour le ticket 004.
+
+Le plugin est **déjà installé et à jour** : v1.2.3, identique à l'amont `mattpocock/skills`
+(vérifié le 2026-09-09). ⊥ chercher à l'installer ou à ajouter le marketplace amont.
+
+## Pièges de déploiement revalidés le 2026-09-09
+
+- **`origin` avance tout seul pendant la nuit** (`chore: backup D1 automatique`). `git fetch` puis
+  `git pull --rebase` **avant** de déployer ou de commiter. Ce commit ne touche que `backups/d1/`.
+- **L'assertion `libuv` (`UV_HANDLE_CLOSING`) en fin de `npm run deploy`** est un crash de sortie
+  de Node sous Windows, **après** le `✓ Déploiement vérifié`. ⊥ la prendre pour un échec.
+- **Vérifier sur l'asset hashé réellement servi**, jamais sur `dist/` ni sur `/static/js/app.js`.
+  Le nom hashé se lit dans `dist/static/manifest.json`.
+- **`npm run deploy` peut être bloqué par le classificateur** selon les sessions. Proposer d'emblée
+  la commande PowerShell à lancer avec `!` :
+  `cd C:\Users\Said\Downloads\claude-test\izigsm\webapp ; npm run deploy`
+
+## Baselines
+
+Non rejouées au cp87 (aucun code touché). Valeurs du cp86 : vitest **928/930** (2 permanents de
+fuseau `agendaService`), Playwright **195/195**, tsc **32**, build ✓. 40 migrations.
+`CACHE_VERSION` dépôt **et** production : `izigsm-v2.93`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-08 (checkpoint 86 — la plateforme ne vend plus)
 
 ## ⚠ Avant tout — d'où se travaille ce projet
