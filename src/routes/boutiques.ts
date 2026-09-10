@@ -18,6 +18,7 @@
  *   POST   /api/boutiques                    → Créer boutique (admin seulement)
  *   PUT    /api/boutiques/:id                → Modifier infos boutique (admin/manager)
  *   PUT    /api/boutiques/:id/settings       → Modifier paramètres boutique (admin/manager)
+ *   PUT    /api/boutiques/:id/marges         → Taux de marge par défaut et par famille (admin/manager)
  *   GET    /api/boutiques/:id/creneaux       → Planning créneaux RDV bookables (MOD-14)
  *   PUT    /api/boutiques/:id/creneaux       → Remplacer le planning créneaux (admin/manager)
  *   GET    /api/boutiques/:id/stats          → KPIs globaux boutique
@@ -43,7 +44,9 @@ import {
   createBoutique,
   updateBoutique,
   updateBoutiqueSettings,
+  updateTauxMarge,
   getStatsBoutique,
+  type TauxMarge,
   type CreateBoutiqueInput,
   type UpdateBoutiqueInput,
   type UpdateSettingsInput,
@@ -297,6 +300,61 @@ boutiques.put('/:id/settings', requireRole('admin', 'manager'), async (c) => {
 
   await updateBoutiqueSettings(c.get('db'), id, input)
   return c.json({ success: true, message: 'Paramètres mis à jour.' })
+})
+
+// ─── PUT /api/boutiques/:id/marges ───────────────────────────────────────────
+
+/** Les cinq taux de marge, dans l'ordre attendu par `updateTauxMarge()`. */
+const CHAMPS_MARGE: (keyof TauxMarge)[] = [
+  'marge_taux_defaut', 'marge_taux_piece', 'marge_taux_accessoire',
+  'marge_taux_appareil', 'marge_taux_consommable',
+]
+
+/**
+ * PUT /api/boutiques/:id/marges
+ * Enregistre les taux de marge d'une boutique (ticket 02, chantier Mobilax).
+ *
+ * Route dédiée, et non un champ de plus sur `PUT /:id/settings` : celle-ci appelle
+ * toujours `updateBoutiqueSettings()`, qui assigne la TVA et les paiements sans
+ * COALESCE — un corps ne portant que les marges y remettrait la TVA à 20 % (`bugs.md`).
+ *
+ * Remplacement complet : un champ absent du corps vaut `null` (« non fixé »), comme un
+ * `null` explicite. L'écran envoie toujours les cinq.
+ *
+ * Isolation plus stricte que `/:id/settings` : un compte rattaché à une boutique n'écrit
+ * que chez lui, **rôle admin compris**. Seul l'admin plateforme (`boutique_id` NULL)
+ * écrit sur la boutique qu'il consulte — action tracée par le journal de plateforme.
+ *
+ * @param id  Identifiant numérique de la boutique
+ * @body      Les cinq `marge_taux_*` : nombre ≥ 0 ou `null`
+ * @returns 200 `{ success: true, message }`
+ * @returns 403 si le compte vise une autre boutique que la sienne
+ * @returns 404 si la boutique n'existe pas ou n'est plus active
+ * @returns 422 si un taux n'est ni `null` ni un nombre positif ou nul
+ */
+boutiques.put('/:id/marges', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  if (user.boutique_id != null && user.boutique_id !== id)
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  const body   = await c.req.json()
+  const marges = {} as TauxMarge
+  for (const champ of CHAMPS_MARGE) {
+    const valeur = body?.[champ] ?? null
+    // Une chaîne (même numérique) est refusée : l'écran envoie des nombres ou null.
+    if (valeur !== null && (typeof valeur !== 'number' || !Number.isFinite(valeur) || valeur < 0))
+      return c.json({ success: false, error: `${champ} doit être un nombre positif ou nul, ou vide.` }, 422)
+    marges[champ] = valeur
+  }
+
+  // Sans ce contrôle, un UPDATE sur une boutique absente ne touche aucune ligne et la
+  // route annoncerait « mis à jour » (admin plateforme, identifiant erroné).
+  if (!(await getBoutiqueById(c.get('db'), id)))
+    return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
+
+  await updateTauxMarge(c.get('db'), id, marges)
+  return c.json({ success: true, message: 'Taux de marge mis à jour.' })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════

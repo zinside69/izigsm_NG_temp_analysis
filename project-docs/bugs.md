@@ -1,5 +1,37 @@
 # iziGSM — Bugs connus
 
+## ⚠ Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, NON corrigé)
+
+Trouvé en implémentant le ticket 02 du chantier Mobilax (taux de marge) — sans rapport avec
+Mobilax. **Mesuré en local sur un tenant neuf**, avec les corps exacts envoyés par
+`settings.html` :
+
+| Geste | Avant | Après | Réponse |
+|---|---|---|---|
+| Onglet Facturation : TVA 5,5 % | — | TVA 5,5 | 200 |
+| Onglet Paiements : espèces + CB + notif. email | TVA 5,5 | **TVA 20** | 200 |
+| Onglet Numérotation : préfixe ticket | TVA 20, espèces 1, CB 1, notif 1 | **TVA 20, espèces 0, CB 0, notif 0** | 200 |
+
+**Cause** : `updateBoutiqueSettings()` (`boutiqueService.ts`) assigne `tva_taux_defaut=?`,
+`paiement_*=?` et `notif_*=?` **sans COALESCE**, avec des replis `?? 20` / `?? 0` — alors que
+chaque onglet de `settings.html` n'envoie **que ses propres champs**. Un champ absent devient
+donc 20 % ou « décoché ». Les autres paramètres (préfixes, mentions, email) sont bien sous
+COALESCE et survivent.
+
+**Gravité** : une boutique en **franchise de TVA** (0 %) qui enregistre ses moyens de paiement
+repasse silencieusement à 20 % — or `tva_taux_defaut === 0` pilote la mention légale
+« TVA non applicable, article 293 B du CGI » des factures (`CLAUDE.md` § Factures). Et tout
+enregistrement de la numérotation décoche tous les moyens de paiement.
+
+**Contourné, pas corrigé, par le ticket 02** : les taux de marge ont leur propre route
+(`PUT /api/boutiques/:id/marges`), pour ne pas hériter du défaut. Constat voisin : `monnaie`,
+envoyé par l'onglet Facturation, n'est lu par aucune route — le choix est perdu.
+
+**Correction probable** : COALESCE sur ces huit colonnes, en distinguant `false` (décoché, à
+écrire) de l'absence du champ (à conserver). `toInt()` les distingue déjà (`0` contre `null`) ;
+c'est le repli `?? 0` / `?? 20` appliqué ensuite qui transforme l'absence en valeur. Test de rendu : enregistrer un onglet,
+recharger, relire les autres.
+
 ## ⚠ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, NON corrigé)
 
 Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec ce ticket.

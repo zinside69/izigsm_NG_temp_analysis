@@ -64,6 +64,9 @@
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="facturation" onclick="Settings.switchTab('facturation')">
         <i class="fas fa-file-invoice mr-1"></i>Facturation
       </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="marges" onclick="Settings.switchTab('marges')">
+        <i class="fas fa-percent mr-1"></i>Marges
+      </button>
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="paiements" onclick="Settings.switchTab('paiements')">
         <i class="fas fa-credit-card mr-1"></i>Paiements
       </button>
@@ -268,6 +271,47 @@
             <div class="form-group col-span-2">
               <label>Pied de page factures</label>
               <textarea id="pied_de_page" rows="2" placeholder="Ex: Toute réclamation doit être faite dans les 48h suivant la livraison."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: Marges (ticket 02 chantier Mobilax — route dédiée PUT /:id/marges) -->
+    <div id="tab-marges" class="tab-content">
+      <form id="form-marges" onsubmit="Settings.saveMarges(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-2"><i class="fas fa-percent text-blue-600 mr-2"></i>Taux de marge</h3>
+          <p class="text-sm text-gray-500 mb-4">
+            Appliqué au prix d'achat des pièces importées du fournisseur : prix de vente = prix d'achat × (1 + taux / 100).
+            Les prestations de réparation gardent le tarif que vous leur fixez.
+            Laissez une famille vide pour lui appliquer le taux par défaut ; sans taux par défaut, aucune marge n'est proposée.
+          </p>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group col-span-2">
+              <label>Taux par défaut (%)</label>
+              <input type="number" id="marge_taux_defaut" min="0" step="0.1" placeholder="Aucun">
+            </div>
+            <div class="form-group">
+              <label>Pièces détachées (%)</label>
+              <input type="number" id="marge_taux_piece" min="0" step="0.1" placeholder="Taux par défaut">
+            </div>
+            <div class="form-group">
+              <label>Accessoires (%)</label>
+              <input type="number" id="marge_taux_accessoire" min="0" step="0.1" placeholder="Taux par défaut">
+            </div>
+            <div class="form-group">
+              <label>Appareils (%)</label>
+              <input type="number" id="marge_taux_appareil" min="0" step="0.1" placeholder="Taux par défaut">
+            </div>
+            <div class="form-group">
+              <label>Consommables (%)</label>
+              <input type="number" id="marge_taux_consommable" min="0" step="0.1" placeholder="Taux par défaut">
             </div>
           </div>
         </div>
@@ -484,6 +528,12 @@ const Settings = (() => {
       if (_settings.mention_facture)          document.getElementById('mention_facture').value   = _settings.mention_facture;
       if (_settings.pied_de_page)             document.getElementById('pied_de_page').value      = _settings.pied_de_page;
 
+      // Onglet marges — un taux non fixé (null) reste un champ vide, jamais « 0 »
+      CHAMPS_MARGE.forEach(f => {
+        const el = document.getElementById(f);
+        if (el) el.value = _settings[f] ?? '';
+      });
+
       // Onglet paiements
       ['paiement_especes','paiement_cb','paiement_cheque','paiement_virement',
        'notif_email_actif','notif_sms_actif'].forEach(f => {
@@ -580,6 +630,28 @@ const Settings = (() => {
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, body);
       r.data?.success ? showToast('✅ Facturation mise à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  /** Les cinq taux de marge, identifiants des champs = noms des colonnes. */
+  const CHAMPS_MARGE = ['marge_taux_defaut', 'marge_taux_piece', 'marge_taux_accessoire',
+                        'marge_taux_appareil', 'marge_taux_consommable'];
+
+  /**
+   * Enregistre les taux de marge par la route dédiée — jamais par `/settings`, qui
+   * réécrit la TVA et les paiements à chaque appel (`bugs.md`, 2026-09-10).
+   * Envoie toujours les cinq champs : un champ vide part en `null` (« non fixé »).
+   */
+  async function saveMarges(e) {
+    e.preventDefault();
+    const body = {};
+    CHAMPS_MARGE.forEach(f => {
+      const v = document.getElementById(f)?.value?.trim() ?? '';
+      body[f] = v === '' ? null : Number(v);
+    });
+    try {
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/marges`, body);
+      r.data?.success ? showToast('✅ Taux de marge mis à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -727,7 +799,7 @@ const Settings = (() => {
   }
 
   return {
-    init, switchTab, saveGeneral, saveNumerotation, saveFacturation, savePaiements, saveEmail, sendTestEmail,
+    init, switchTab, saveGeneral, saveNumerotation, saveFacturation, saveMarges, savePaiements, saveEmail, sendTestEmail,
     addPlage, saveHoraires,
   };
 })();

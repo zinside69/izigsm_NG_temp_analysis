@@ -24,6 +24,23 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
+## 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10)
+
+Trouvé en implémentant le ticket 02 du chantier Mobilax — sans rapport avec Mobilax. Mesure et
+cause : `bugs.md` § du même titre.
+
+Enregistrer l'onglet **Paiements** remet la TVA par défaut à 20 % ; enregistrer
+**Numérotation** (ou Facturation) décoche tous les moyens de paiement et les notifications.
+Réponse 200 à chaque fois, aucun signal. Une boutique en franchise de TVA perd donc sa mention
+« art. 293 B » sans le savoir.
+
+- [ ] COALESCE sur `tva_taux_defaut`, `paiement_*`, `notif_*` dans `updateBoutiqueSettings()` —
+      retirer les replis `?? 20` / `?? 0` qui transforment l'absence en valeur
+- [ ] Test vu rouge : enregistrer un onglet, recharger, relire les autres (E2E, sur le modèle de
+      `tests/e2e/reglages-taux-marge.spec.ts`)
+- [ ] Vérifier en production si des boutiques ont déjà perdu leur taux de TVA (aucun historique
+      des réglages : seule la comparaison avec les factures émises peut le dire)
+
 ## 🔴 P1 — `/fournisseurs` n'affiche jamais son contenu, aucun onglet, aucun rôle (trouvé le 2026-09-10)
 
 Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec Mobilax.
@@ -386,7 +403,10 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       `fournisseurs`, jamais renvoyée en clair. `getApiKeyDechiffree()` vérifie elle-même
       `boutique_id`, non exposée par aucune route. Secret `FOURNISSEUR_CRYPTO_KEY` documenté.
       **Non déployé.**
-- [ ] **02** — Taux de marge configurables (défaut boutique + par famille) — sans blocage
+- [x] **02** — Taux de marge configurables (défaut boutique + par famille) (2026-09-10) —
+      migration `0042` (5 colonnes nullables sur `boutique_settings`), `resoudreTauxMarge()`
+      renvoie **`null`** sans taux (le ticket 06 doit le gérer), route dédiée
+      `PUT /api/boutiques/:id/marges`, onglet Marges de `/settings`. **Non déployé.**
 - [ ] **03** — Recherche Mobilax dans Stock (sans import) — bloqué par 01
 - [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04

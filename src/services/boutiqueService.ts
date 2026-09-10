@@ -1,4 +1,5 @@
 import type { Database } from '../ports/database'
+import type { FamilleProduit } from './stockService'
 
 /**
  * @module services/boutiqueService
@@ -22,6 +23,8 @@ import type { Database } from '../ports/database'
  *   - `createBoutique()`        → INSERT boutique + boutique_settings
  *   - `updateBoutique()`        → UPDATE COALESCE infos boutique
  *   - `updateBoutiqueSettings()` → UPDATE COALESCE paramètres boutique
+ *   - `updateTauxMarge()`       → UPDATE des 5 taux de marge, sans COALESCE ni autre champ
+ *   - `resoudreTauxMarge()`     → taux de marge applicable à une famille (pure, sans SQL)
  *   - `getStatsBoutique()`      → 4 KPIs en parallèle (Promise.all)
  *
  * Conventions SQL :
@@ -73,9 +76,24 @@ export interface BoutiqueAvecComptes extends Boutique {
 }
 
 /**
+ * Taux de marge d'une boutique, en pourcentage du prix d'achat (définition comptable :
+ * prix de vente = prix d'achat × (1 + taux / 100)). Ticket 02 du chantier Mobilax.
+ *
+ * `null` signifie « non fixé » : une famille non fixée retombe sur `marge_taux_defaut`,
+ * et un défaut non fixé ne donne aucune marge — jamais un taux inventé.
+ */
+export interface TauxMarge {
+  marge_taux_defaut:      number | null
+  marge_taux_piece:       number | null
+  marge_taux_accessoire:  number | null
+  marge_taux_appareil:    number | null
+  marge_taux_consommable: number | null
+}
+
+/**
  * Paramètres opérationnels d'une boutique (`boutique_settings`).
  */
-export interface BoutiqueSettings {
+export interface BoutiqueSettings extends TauxMarge {
   boutique_id:                number
   tva_taux_defaut:            number
   paiement_especes:           number
@@ -264,6 +282,30 @@ export async function getBoutiqueSettings(
   return db.get<BoutiqueSettings>('SELECT * FROM boutique_settings WHERE boutique_id = ?', [boutiqueId])
 }
 
+// ─── resoudreTauxMarge ────────────────────────────────────────────────────────
+
+/**
+ * Résout le taux de marge applicable à un produit d'une famille donnée.
+ *
+ * Ordre : taux propre à la famille s'il est fixé, sinon taux par défaut de la boutique,
+ * sinon `null`. Un taux de famille à `0` est un choix (vendre au prix d'achat) et
+ * l'emporte sur le défaut — d'où `??` et non `||`.
+ *
+ * Fonction pure : l'appelant lit les paramètres de **sa** boutique
+ * (`getBoutiqueSettings()`), la résolution ne voit jamais ceux d'une autre.
+ *
+ * @param settings Taux de la boutique, ou `null` si ses paramètres n'existent pas
+ * @param famille  Famille du produit (`piece`, `accessoire`, `appareil`, `consommable`)
+ * @returns        Taux en pourcentage, ou `null` si aucun taux n'est fixé
+ */
+export function resoudreTauxMarge(
+  settings: TauxMarge | null,
+  famille: FamilleProduit
+): number | null {
+  if (!settings) return null
+  return settings[`marge_taux_${famille}`] ?? settings.marge_taux_defaut ?? null
+}
+
 // ─── createBoutique ───────────────────────────────────────────────────────────
 
 /**
@@ -419,6 +461,45 @@ export async function updateBoutiqueSettings(
     toInt(data.email_notif_ticket_termine),
     toInt(data.email_notif_sav_ouvert),
     toInt(data.email_notif_relance),
+    boutiqueId
+  ])
+}
+
+// ─── updateTauxMarge ──────────────────────────────────────────────────────────
+
+/**
+ * Enregistre les cinq taux de marge d'une boutique (ticket 02, chantier Mobilax).
+ *
+ * Distincte d'`updateBoutiqueSettings()`, à dessein :
+ *   - **aucun COALESCE** : un `null` explicite efface le taux d'une famille pour la
+ *     renvoyer au défaut — sous COALESCE, un taux saisi ne pourrait plus être retiré ;
+ *   - **aucun autre paramètre touché** : chaque onglet des réglages envoie un corps
+ *     partiel, et la requête commune assigne déjà la TVA et les paiements sans COALESCE
+ *     (`bugs.md`, défaut consigné le 2026-09-10). Y loger les marges les ferait écraser
+ *     par l'enregistrement de n'importe quel autre onglet.
+ *
+ * @param db         Port Database
+ * @param boutiqueId Boutique dont on écrit les taux — seule ligne visée par le WHERE
+ * @param marges     Les cinq taux, `null` pour « non fixé »
+ * @returns          Promesse résolue après l'UPDATE (pas de valeur de retour)
+ */
+export async function updateTauxMarge(
+  db: Database,
+  boutiqueId: number,
+  marges: TauxMarge
+): Promise<void> {
+  await db.run(`
+    UPDATE boutique_settings SET
+      marge_taux_defaut = ?, marge_taux_piece = ?, marge_taux_accessoire = ?,
+      marge_taux_appareil = ?, marge_taux_consommable = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE boutique_id = ?
+  `, [
+    marges.marge_taux_defaut,
+    marges.marge_taux_piece,
+    marges.marge_taux_accessoire,
+    marges.marge_taux_appareil,
+    marges.marge_taux_consommable,
     boutiqueId
   ])
 }

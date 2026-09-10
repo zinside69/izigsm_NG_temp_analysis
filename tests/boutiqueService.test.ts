@@ -24,6 +24,8 @@ import {
   updateBoutique,
   updateBoutiqueSettings,
   getStatsBoutique,
+  resoudreTauxMarge,
+  updateTauxMarge,
   type Boutique,
   type BoutiqueAvecComptes,
   type BoutiqueSettings,
@@ -60,6 +62,8 @@ const SETTINGS_1: BoutiqueSettings = {
   garantie_defaut_jours: 30, delai_relance_jours: 7,
   mention_facture: null, pied_de_page: null,
   email_provider: null, email_from: null,
+  marge_taux_defaut: null, marge_taux_piece: null, marge_taux_accessoire: null,
+  marge_taux_appareil: null, marge_taux_consommable: null,
 }
 
 // ─── listAllBoutiques ─────────────────────────────────────────────────────────
@@ -200,6 +204,91 @@ describe('getBoutiqueSettings', () => {
     const result = await getBoutiqueSettings(db, 99)
 
     expect(result).toBeNull()
+  })
+})
+
+// ─── resoudreTauxMarge ────────────────────────────────────────────────────────
+// Ticket 02 chantier Mobilax : taux de la famille s'il est défini, sinon taux par
+// défaut de la boutique, sinon null (aucune marge inventée — décision 2026-09-10).
+
+describe('resoudreTauxMarge', () => {
+  const AUCUN_TAUX = {
+    marge_taux_defaut: null, marge_taux_piece: null, marge_taux_accessoire: null,
+    marge_taux_appareil: null, marge_taux_consommable: null,
+  }
+
+  it('retourne le taux par défaut quand seul celui-ci est fixé', () => {
+    const settings = { ...AUCUN_TAUX, marge_taux_defaut: 30 }
+
+    expect(resoudreTauxMarge(settings, 'piece')).toBe(30)
+    expect(resoudreTauxMarge(settings, 'accessoire')).toBe(30)
+  })
+
+  it('retourne le taux de la famille quand il surcharge le défaut', () => {
+    const settings = { ...AUCUN_TAUX, marge_taux_defaut: 30, marge_taux_accessoire: 80 }
+
+    expect(resoudreTauxMarge(settings, 'accessoire')).toBe(80)
+  })
+
+  it('retombe sur le défaut pour une famille sans taux propre', () => {
+    const settings = { ...AUCUN_TAUX, marge_taux_defaut: 30, marge_taux_accessoire: 80 }
+
+    expect(resoudreTauxMarge(settings, 'piece')).toBe(30)
+  })
+
+  it('respecte un taux de famille fixé à 0 % au lieu de retomber sur le défaut', () => {
+    const settings = { ...AUCUN_TAUX, marge_taux_defaut: 30, marge_taux_consommable: 0 }
+
+    expect(resoudreTauxMarge(settings, 'consommable')).toBe(0)
+  })
+
+  it('retourne null quand la boutique n\'a saisi aucun taux', () => {
+    expect(resoudreTauxMarge(AUCUN_TAUX, 'piece')).toBeNull()
+  })
+
+  it('retourne null quand la boutique n\'a pas de paramètres', () => {
+    expect(resoudreTauxMarge(null, 'appareil')).toBeNull()
+  })
+})
+
+// ─── updateTauxMarge ──────────────────────────────────────────────────────────
+// Écriture dédiée, distincte d'updateBoutiqueSettings() : les 5 taux sont assignés
+// tels quels (null = retour au repli), sans COALESCE — et aucun autre paramètre
+// n'est touché, pour qu'un onglet ne puisse pas écraser l'autre.
+
+describe('updateTauxMarge', () => {
+  const MARGES = {
+    marge_taux_defaut: 30, marge_taux_piece: null, marge_taux_accessoire: 80,
+    marge_taux_appareil: null, marge_taux_consommable: 0,
+  }
+
+  it('écrit les cinq taux sur la boutique visée, et elle seule', async () => {
+    const db = createMockDatabase()
+
+    await updateTauxMarge(db, 7, MARGES)
+
+    const calls = db.__getCalls()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].sql).toContain('UPDATE boutique_settings SET')
+    expect(calls[0].sql).toContain('WHERE boutique_id = ?')
+    expect(calls[0].params).toEqual([30, null, 80, null, 0, 7])
+  })
+
+  it('efface un taux de famille par un null explicite, sans le conserver', async () => {
+    const db = createMockDatabase()
+
+    await updateTauxMarge(db, 1, MARGES)
+
+    expect(db.__getCalls()[0].sql).not.toContain('COALESCE')
+  })
+
+  it('ne touche aucun autre paramètre de la boutique', async () => {
+    const db = createMockDatabase()
+
+    await updateTauxMarge(db, 1, MARGES)
+
+    const sql = db.__getCalls()[0].sql
+    expect(sql).not.toMatch(/tva_taux_defaut|paiement_|notif_|prefix_|email_/)
   })
 })
 
