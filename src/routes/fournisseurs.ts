@@ -28,7 +28,10 @@ import {
   receptionnerBonCommande, getKpisFournisseurs, getProduitsACommander, getBonCommandeBoutiqueId
 } from '../services/fournisseursService'
 
-type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
+// FOURNISSEUR_CRYPTO_KEY : secret de plateforme, clé de chiffrement AES-256 (hex, 64
+// caractères) de `lib/chiffrement.ts`. Chiffre `api_key` d'un fournisseur (Mobilax ou
+// tout autre) avant persistance — jamais lu en clair par une route (ticket 01).
+type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string; FOURNISSEUR_CRYPTO_KEY: string }
 type Variables = { user: any; db: Database }
 
 const fournisseurs = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -79,7 +82,7 @@ fournisseurs.post('/fournisseurs', requireRole('admin', 'manager'), async (c) =>
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const id = await createFournisseur(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+  const id = await createFournisseur(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub, c.env.FOURNISSEUR_CRYPTO_KEY)
   return c.json({ success: true, id, message: 'Fournisseur créé.' }, 201)
 })
 
@@ -111,7 +114,7 @@ fournisseurs.put('/fournisseurs/:id', requireRole('admin', 'manager'), async (c)
   const deny = assertBoutiqueOwnership(user, fournisseur, 'Fournisseur')
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
-  await updateFournisseur(c.env.DB, id, body, user.sub)
+  await updateFournisseur(c.env.DB, id, body, user.sub, c.env.FOURNISSEUR_CRYPTO_KEY)
   return c.json({ success: true, message: 'Fournisseur mis à jour.' })
 })
 

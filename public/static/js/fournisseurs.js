@@ -452,8 +452,9 @@ function openModalFournisseur(id = null) {
   document.getElementById('f-id').value                = id ?? ''
   document.getElementById('f-error').classList.add('hidden')
 
-  // Vider les champs
-  ;['f-nom','f-contact','f-email','f-telephone','f-adresse','f-site-web','f-notes'].forEach(i => {
+  // Vider les champs. f-api-key n'est JAMAIS pré-rempli, même en édition — le serveur ne
+  // renvoie jamais la clé en clair (ticket 01) ; laisser vide au save = ne pas la modifier.
+  ;['f-nom','f-contact','f-email','f-telephone','f-adresse','f-site-web','f-api-key','f-notes'].forEach(i => {
     document.getElementById(i).value = ''
   })
 
@@ -489,6 +490,9 @@ async function saveFournisseur() {
     adresse:   document.getElementById('f-adresse').value.trim()   || null,
     site_web:  document.getElementById('f-site-web').value.trim()  || null,
     notes:     document.getElementById('f-notes').value.trim()     || null,
+    // Champ laissé vide → absent du corps, le serveur conserve la clé existante (COALESCE).
+    ...(document.getElementById('f-api-key').value.trim()
+      ? { api_key: document.getElementById('f-api-key').value.trim() } : {}),
   }
 
   const res = (id

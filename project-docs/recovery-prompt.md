@@ -1,3 +1,83 @@
+# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 91 — chantier Mobilax spécifié, ticket 01 en place)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Le chantier Mobilax a un plan formel.** `.scratch/integration-mobilax/spec.md` (23 user
+stories, décisions d'architecture) + 9 tickets (`issues/01-09`), issus d'un grilling en 3
+rounds le 2026-09-10. **Le ticket 01 est fait, commité, non déployé.** Les tickets 02-09
+restent `ready-for-agent`.
+
+⊥ **relire `project-docs/todo.md` § Mobilax comme la source du cadrage** — c'est un suivi qui
+accumule (règle du projet : jamais de suppression, seulement des annotations `[x]` + note). Le
+cadrage à jour vit dans `spec.md`. Les sections écrites avant le 2026-09-10 y restent pour la
+trace, avec des notes de résolution ajoutées à côté, pas à la place.
+
+## Ticket 01 — ce qu'il faut savoir avant d'y toucher
+
+- **Premier chiffrement réversible du dépôt** : `src/lib/chiffrement.ts` (AES-GCM), détail
+  complet dans `CLAUDE.md` § Secret fournisseur chiffré au repos.
+- **`FOURNISSEUR_CRYPTO_KEY`** (secret Cloudflare, comme `JWT_SECRET`) — documenté dans
+  `wrangler.jsonc`, `docs/DEPLOIEMENT.md`, `docs/INSTALLATION.md`, `README.md`. **Non encore
+  posé en production** — `npx wrangler pages secret put FOURNISSEUR_CRYPTO_KEY` avant tout
+  déploiement touchant un fournisseur avec clé API.
+- **`getApiKeyDechiffree()` vérifie elle-même `boutique_id`**, n'est exposée par aucune route.
+  Le ticket 03 (service Mobilax) sera son premier appelant réel.
+- **`api_key_chiffree` sur `fournisseurs` est générique** — n'importe quel fournisseur, pas de
+  traitement spécial Mobilax.
+- **Migration `0041`** ajoutée, en attente de déploiement (appliquer à distance **avant** le
+  Worker, comme toujours).
+
+## Un vrai bug trouvé en marge, sans rapport avec Mobilax
+
+**`/fournisseurs` n'affiche jamais son contenu, pour personne, sur aucun des trois onglets.**
+`main.css` exige `.tab-content.active` ; `fournisseurs.js` a réimplémenté son propre système
+d'onglets avec un vocabulaire de classes qui ne correspond à aucune règle CSS. `app.js` et
+`tickets.js` ont le bon pattern — seule `fournisseurs.js` diverge. 🔴 P1 dans `todo.md`/`bugs.md`,
+non corrigé, cause et piste déjà identifiées.
+
+## Leçon de méthode du jour, à ne pas répéter
+
+**Une réécriture condensée de `todo.md` a supprimé du contenu sans le proposer d'abord** —
+violation directe d'une règle mémorisée (« proposer avant de modifier, jamais supprimer sans
+accord »). Corrigé par `git checkout` puis réinsertion en respectant le pattern d'accumulation
+déjà en vigueur dans ce fichier pour les tickets 001-005. **Pour tout fichier qui accumule
+(`todo.md`, historiques de version) : ajouter et annoter, ne jamais réécrire en condensant —
+même quand la version condensée semble objectivement plus claire.**
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🔴 P1 — `/fournisseurs` invisible**, voir ci-dessus.
+2. **🟠 P2 — `email_api_key` en clair** (`bugs.md`, trouvé le 2026-09-10 en marge de ce chantier).
+3. **🟠 P2 — le chaînage NF525 n'est pas vérifié.**
+4. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+5. **🟠 P2 — `clotures_journalieres.date_cloture` `UNIQUE` global.**
+6. **🟠 P2 — la garde du registre relit en base un rôle qu'elle a déjà** (121 points de contact).
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. `tdd`, `code-review`, `grilling`,
+`domain-modeling` et `research` sont invocables directement. `AskUserQuestion` sert de substitut
+acceptable à `grilling` quand le contexte s'y prête (utilisé pour les rounds 1-2 du grilling
+Mobilax) — mais `grilling` reste préférable quand disponible, pour le tracking formel de frontier.
+
+## Baselines
+
+vitest **945/947** (2 permanents de fuseau `agendaService`), Playwright **196/196**, tsc **32**,
+build ✓. 41 migrations (`0041` en attente de déploiement). `CACHE_VERSION` dépôt **et**
+production : `izigsm-v2.93`, **inchangé délibérément** — le ticket 01 touche
+`fournisseurs.html`/`.js`, mais la règle (`CLAUDE.md`) dit d'incrémenter sur la **dernière**
+tâche frontend d'un chantier, et les tickets 06-09 en toucheront encore. Incrémenter au dernier
+ticket frontend du chantier Mobilax, pas avant.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 90 — Mobilax débloqué, et une clé trouvée en clair au passage)
 
 ## ⚠ Avant tout — d'où se travaille ce projet

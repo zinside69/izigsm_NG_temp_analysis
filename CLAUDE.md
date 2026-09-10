@@ -482,6 +482,35 @@ fait de conception, pas un accident à corriger :
 - `cloturerJournee()` écrit dans `clotures_journalieres`, **pas** dans `journal_nf525` : ce n'est
   pas un écrivain de cette chaîne.
 
+## Secret fournisseur chiffré au repos (depuis 2026-09-10, ticket 01 chantier Mobilax)
+
+Premier chiffrement **réversible** de ce dépôt — les usages précédents de `crypto.subtle`
+(mot de passe PBKDF2, JWT/photoToken HMAC, chaînage SHA-256 NF525) sont tous à sens unique ou
+du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir relire en clair.
+
+- **`src/lib/chiffrement.ts`** — `chiffrer()`/`dechiffrer()`, AES-GCM, IV aléatoire par appel,
+  format stocké `<iv_hex>:<ciphertext_hex>`. Fonctions pures, testées contre l'implémentation
+  réelle de Web Crypto (jamais mockées), la clé passée en paramètre plutôt que lue depuis
+  l'environnement.
+- **La clé d'enveloppe est un secret Cloudflare global** (`FOURNISSEUR_CRYPTO_KEY`, même
+  mécanisme que `JWT_SECRET`), **jamais** une valeur par boutique — c'est le texte chiffré qui
+  varie par ligne, pas la clé qui le déchiffre.
+- **`fournisseursService.ts` porte le seul précédent d'usage** : `api_key_chiffree` sur
+  `fournisseurs` (n'importe quel fournisseur, pas de traitement spécial Mobilax).
+  `getFournisseur()`/`listFournisseurs()` s'en protègent par **deux** mécanismes — colonnes SQL
+  explicites (jamais `SELECT *`) **et** un mapping de sortie explicite
+  (`versFournisseurPublic()`) qui omet le champ même si la ligne source le portait. Le second
+  filet compte : le mock de test le prouve en configurant une ligne qui porte volontairement le
+  champ — seule la structure du mapping l'empêche de ressortir.
+- **`getApiKeyDechiffree()` vérifie elle-même `boutique_id`** dans sa requête, plutôt que de
+  compter sur un futur appelant pour le faire — leçon du reste des routes par ID (§ Invariants
+  isolation ci-dessus). Elle n'est exposée par **aucune** route.
+- **⚠ Anti-pattern déjà payé, à ne pas reproduire** : `boutique_settings.email_api_key` (clé
+  Resend par boutique) est stockée en clair malgré un commentaire de migration qui prétend le
+  contraire, et `GET /api/boutiques/:id` la renvoyait sans filtrage (`bugs.md`, trouvé le
+  2026-09-10 en cherchant précisément un pattern à réutiliser pour Mobilax — il n'y en avait
+  pas). Non corrigé, hors périmètre du ticket qui l'a trouvé.
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +

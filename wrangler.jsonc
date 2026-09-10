@@ -36,4 +36,11 @@
   // ── Secrets ──────────────────────────────────────────────────────────────
   // Configurer via : npx wrangler pages secret put JWT_SECRET --project-name izigsm
   //                  npx wrangler pages secret put RESEND_API_KEY --project-name izigsm
+  //                  npx wrangler pages secret put FOURNISSEUR_CRYPTO_KEY --project-name izigsm
+  // FOURNISSEUR_CRYPTO_KEY : clé AES-256 en hex (64 caractères), ex. génération locale
+  // avec `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+  // Chiffre les clés API des fournisseurs (ex. Mobilax) au repos — src/lib/chiffrement.ts,
+  // ticket 01 du chantier `integration-mobilax`. ⊥ à confondre avec une clé par boutique :
+  // c'est la clé d'enveloppe, globale, qui déchiffre une valeur propre à chaque ligne
+  // `fournisseurs`.
 }

@@ -1,5 +1,35 @@
 # iziGSM — Bugs connus
 
+## ⚠ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, NON corrigé)
+
+Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec ce ticket.
+L'écran s'affichait sans erreur, mais aucun des trois onglets (« Bons de commande »,
+« Fournisseurs », « À commander ») ne montre jamais son contenu.
+
+**Cause** : `main.css` définit `.tab-content { display: none } .tab-content.active { display:
+block }` — la visibilité dépend de la classe `.active`. Mais `fournisseurs.js` (`initTabs()`)
+ne pose **jamais** cette classe : il toggle `.hidden` sur les sections et `.tab-active`
+(orthographe différente) sur les boutons. `.tab-active` ne correspond à **aucune** règle CSS
+(seule `.tab-btn.active` existe). Les deux mécanismes — CSS et JS — parlent un vocabulaire de
+classes différent depuis un refactor dont l'autre moitié n'a pas suivi.
+
+**Mesuré** : `#tab-fournisseurs.tab-content` (sans `.hidden` après clic sur l'onglet) a un
+`getComputedStyle().display` correct sur ses enfants, mais `boundingBox()` renvoie `null` —
+signe que l'ancêtre `.tab-content` reste effectivement `display: none`, faute de `.active`.
+Vrai pour **les trois onglets**, y compris celui affiché par défaut au chargement de la page.
+
+**Portée** : n'importe quel utilisateur, tout rôle confondu — pas une question d'isolation ou
+de droits. Le formulaire de création/édition, lui, fonctionne : il vit hors `.tab-content`.
+
+**Isolé, pas généralisé** : `app.js` (helper de bascule partagé) et `tickets.js` posent
+correctement `.classList.add('active')` sur `.tab-content` — le mécanisme CSS est respecté
+ailleurs. `fournisseurs.js` a réimplémenté son propre `initTabs()` local avec un vocabulaire de
+classes différent, au lieu de reprendre le helper déjà correct.
+
+**Non corrigé** : sans rapport avec le chantier Mobilax qui l'a trouvé. Contournement employé
+dans `tests/e2e/fournisseur-api-key-chiffree.spec.ts` : lire via l'API et appeler
+`openModalFournisseur()` directement plutôt que de passer par le tableau invisible.
+
 ## ⚠ `boutique_settings.email_api_key` stockée en clair et renvoyée sans filtrage (trouvé le 2026-09-10, NON corrigé)
 
 Trouvé en explorant le dépôt à la recherche d'un pattern de secret chiffré par boutique, pour

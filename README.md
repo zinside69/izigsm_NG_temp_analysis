@@ -183,6 +183,7 @@ npx wrangler d1 migrations apply izigsm-production
 |---|---|
 | `JWT_SECRET` | ✅ Auth JWT HMAC-SHA256 |
 | `RESEND_API_KEY` | ✅ Emails transactionnels |
+| `FOURNISSEUR_CRYPTO_KEY` | ⚠️ À configurer avant déploiement — chiffrement clé API fournisseurs (ticket 01, chantier `integration-mobilax`), non déployé |
 | `GOOGLE_CLIENT_ID` | ⚠️ À configurer — OAuth Google One Tap |
 | `FRONTEND_URL` | ⚠️ À confirmer — liens emails reset-password |
 

@@ -60,10 +60,12 @@ Créer un fichier `.dev.vars` à la racine du projet (il ne sera jamais commité
 # .dev.vars
 JWT_SECRET=dev-secret-local-minimum-32-caracteres
 RESEND_API_KEY=re_xxxxxxxxxxxx
+FOURNISSEUR_CRYPTO_KEY=<64 caractères hex>
 ```
 
 > **JWT_SECRET** : chaîne aléatoire d'au moins 32 caractères — utilisée pour signer les tokens d'authentification.  
-> **RESEND_API_KEY** : clé API Resend pour l'envoi d'emails (optionnel en développement local — les emails ne seront simplement pas envoyés).
+> **RESEND_API_KEY** : clé API Resend pour l'envoi d'emails (optionnel en développement local — les emails ne seront simplement pas envoyés).  
+> **FOURNISSEUR_CRYPTO_KEY** : clé AES-256 en hex (64 caractères) — chiffre au repos la clé API d'un fournisseur (ex. Mobilax, ticket 01). Générer avec `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Requise dès qu'un fournisseur porte une clé API ; sinon `createFournisseur()`/`updateFournisseur()` refusent explicitement plutôt que d'échouer en silence.
 
 ### Étape 4 — Initialiser la base de données locale
 
@@ -105,6 +107,7 @@ cd izigsm_NG_temp_analysis
 npm install
 echo 'JWT_SECRET=dev-secret-local-minimum-32-caracteres' > .dev.vars
 echo 'RESEND_API_KEY=' >> .dev.vars
+node -e "console.log('FOURNISSEUR_CRYPTO_KEY=' + require('crypto').randomBytes(32).toString('hex'))" >> .dev.vars
 npx wrangler d1 migrations apply DB --local
 npm run build
 npx wrangler pages dev dist --local --port 3000

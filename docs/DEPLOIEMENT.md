@@ -108,6 +108,11 @@ npx wrangler pages secret put JWT_SECRET --project-name izigsm
 npx wrangler pages secret put RESEND_API_KEY --project-name izigsm
 # Saisir : re_XXXXXXXXXXXXXXXXXXXXXXXXXX (depuis resend.com)
 
+# 6.2b — Chiffrement des clés API fournisseurs (OBLIGATOIRE dès le premier fournisseur
+#        avec clé API, ex. Mobilax — ticket 01, chantier integration-mobilax)
+npx wrangler pages secret put FOURNISSEUR_CRYPTO_KEY --project-name izigsm
+# Saisir : 64 caractères hex, ex: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
 # 6.3 — Vérifier les secrets configurés
 npx wrangler pages secret list --project-name izigsm
 ```
@@ -224,6 +229,7 @@ jobs:
 |---|---|---|---|
 | `JWT_SECRET` | ✅ OUI | Signature JWT sessions | `openssl rand -hex 32` |
 | `RESEND_API_KEY` | ❌ NON | Envoi emails Resend | `re_XXXXXXXX` |
+| `FOURNISSEUR_CRYPTO_KEY` | ✅ OUI dès qu'un fournisseur porte une clé API | Chiffrement clés API fournisseurs (ex. Mobilax) | `randomBytes(32).toString('hex')` |
 | `CLOUDFLARE_API_TOKEN` | CI/CD | Token API CF | `cf_...` |
 | `CLOUDFLARE_ACCOUNT_ID` | CI/CD | ID compte CF | UUID |
 

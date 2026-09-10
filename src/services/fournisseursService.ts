@@ -25,6 +25,7 @@
  */
 
 import { parsePagination, auditLog } from '../lib/db'
+import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -40,6 +41,19 @@ export interface Fournisseur {
   site_web:    string | null
   notes:       string | null
   actif:       number
+}
+
+/**
+ * Ne garde que les champs publics d'une ligne `fournisseurs`, quels que soient ceux
+ * portés par la ligne source. Filet en plus de la sélection SQL explicite (jamais
+ * `SELECT *`) : même si une ligne venait à porter `api_key_chiffree` — colonne existante
+ * mais jamais destinée à sortir de ce service — l'objet renvoyé à un appelant ne l'aura
+ * jamais. Ticket 01, bugs.md § email_api_key : cette classe de défaut ne doit plus se
+ * reproduire ailleurs dans ce dépôt.
+ */
+function versFournisseurPublic(ligne: any): Fournisseur {
+  const { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif } = ligne
+  return { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif }
 }
 
 export interface BonCommande {
@@ -103,8 +117,11 @@ export async function listFournisseurs(
     bindings
   )
 
+  // ⚠ Colonnes explicites, jamais `f.*` : `api_key_chiffree` ne doit jamais pouvoir
+  // remonter par accident dans une réponse API (ticket 01, bugs.md § email_api_key).
   const rows = await db.all<any>(`
-    SELECT f.*,
+    SELECT f.id, f.boutique_id, f.nom, f.contact, f.email, f.telephone, f.adresse,
+           f.site_web, f.notes, f.actif,
            COUNT(bc.id)  as nb_commandes,
            SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente
     FROM   fournisseurs f
@@ -116,7 +133,13 @@ export async function listFournisseurs(
   `, [...bindings, limit, offset])
 
   return {
-    data:       rows,
+    // Mapping explicite (pas un ...rows brut) : mêmes garanties que versFournisseurPublic,
+    // en gardant les deux agrégats calculés par la requête.
+    data: rows.map((r: any) => ({
+      ...versFournisseurPublic(r),
+      nb_commandes:   r.nb_commandes,
+      nb_en_attente:  r.nb_en_attente,
+    })),
     pagination: { page, limit, total: total?.cnt ?? 0, pages: Math.ceil((total?.cnt ?? 0) / limit) }
   }
 }
@@ -131,10 +154,41 @@ export async function listFournisseurs(
 export async function getFournisseur(
   db: Database, id: number
 ): Promise<Fournisseur | null> {
-  return db.get<Fournisseur>(
-    `SELECT * FROM fournisseurs WHERE id = ? AND actif = 1`,
+  // ⚠ Colonnes explicites, jamais `SELECT *` : `api_key_chiffree` ne doit jamais pouvoir
+  // remonter par accident dans une réponse API (ticket 01, bugs.md § email_api_key).
+  const row = await db.get<any>(
+    `SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif
+     FROM fournisseurs WHERE id = ? AND actif = 1`,
     [id]
   )
+  return row ? versFournisseurPublic(row) : null
+}
+
+/**
+ * Lit et déchiffre la clé API d'un fournisseur, pour un usage serveur uniquement.
+ *
+ * **⚠ N'est exposée par AUCUNE route.** C'est le seul point du dépôt qui relit une clé
+ * fournisseur en clair — réservé aux services qui doivent appeler l'API du fournisseur au
+ * nom de la boutique (ex. le service Mobilax, ticket 03). Ne jamais transmettre son
+ * résultat dans une réponse HTTP.
+ *
+ * @param db             Port Database
+ * @param fournisseurId  Identifiant du fournisseur
+ * @param cleChiffrement Clé de chiffrement (secret de plateforme)
+ * @returns              La clé en clair, ou `null` si le fournisseur n'en a pas / n'existe pas
+ */
+export async function getApiKeyDechiffree(
+  db: Database, fournisseurId: number, boutiqueId: number, cleChiffrement: string
+): Promise<string | null> {
+  // La vérification d'appartenance est ICI, dans la requête — pas déléguée au futur
+  // appelant (ticket 03, service Mobilax). Ce dépôt a déjà payé le prix d'une isolation
+  // tenue par un filtre en amont supposé suffisant (CLAUDE.md § isolation multi-tenant).
+  const row = await db.get<{ api_key_chiffree: string | null }>(
+    `SELECT api_key_chiffree FROM fournisseurs WHERE id = ? AND boutique_id = ? AND actif = 1`,
+    [fournisseurId, boutiqueId]
+  )
+  if (!row?.api_key_chiffree) return null
+  return dechiffrer(row.api_key_chiffree, cleChiffrement)
 }
 
 /**
@@ -150,12 +204,22 @@ export async function createFournisseur(
   data: {
     boutique_id: number; nom: string; contact?: string; email?: string
     telephone?: string; adresse?: string; site_web?: string; notes?: string
+    /** Clé API en clair (ex. Mobilax) — chiffrée avant stockage, jamais persistée telle quelle. */
+    api_key?: string
   },
-  userId: number
+  userId: number,
+  /** Clé de chiffrement (secret de plateforme). Requise seulement si `data.api_key` est fourni. */
+  cleChiffrement?: string
 ): Promise<number> {
+  if (data.api_key && !cleChiffrement)
+    throw new Error('cleChiffrement requise pour stocker api_key.')
+  const apiKeyChiffree = data.api_key
+    ? await chiffrer(data.api_key, cleChiffrement!)
+    : null
+
   const result = await db.prepare(`
-    INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     data.boutique_id,
@@ -165,7 +229,8 @@ export async function createFournisseur(
     data.telephone ?? null,
     data.adresse   ?? null,
     data.site_web  ?? null,
-    data.notes     ?? null
+    data.notes     ?? null,
+    apiKeyChiffree
   ).first<{ id: number }>()
 
   await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_FOURNISSEUR', entite_type: 'fournisseur', entite_id: result?.id })
@@ -185,9 +250,22 @@ export async function createFournisseur(
 export async function updateFournisseur(
   db: D1Database,
   id: number,
-  data: { nom?: string; contact?: string; email?: string; telephone?: string; adresse?: string; site_web?: string; notes?: string },
-  userId: number
+  data: {
+    nom?: string; contact?: string; email?: string; telephone?: string; adresse?: string
+    site_web?: string; notes?: string
+    /** Nouvelle clé API en clair — chiffrée avant persistance. Absente = clé inchangée. */
+    api_key?: string
+  },
+  userId: number,
+  /** Clé de chiffrement (secret de plateforme). Requise seulement si `data.api_key` est fourni. */
+  cleChiffrement?: string
 ): Promise<void> {
+  if (data.api_key && !cleChiffrement)
+    throw new Error('cleChiffrement requise pour stocker api_key.')
+  const apiKeyChiffree = data.api_key
+    ? await chiffrer(data.api_key, cleChiffrement!)
+    : null
+
   await db.prepare(`
     UPDATE fournisseurs SET
       nom       = COALESCE(?, nom),
@@ -197,6 +275,7 @@ export async function updateFournisseur(
       adresse   = COALESCE(?, adresse),
       site_web  = COALESCE(?, site_web),
       notes     = COALESCE(?, notes),
+      api_key_chiffree = COALESCE(?, api_key_chiffree),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND actif = 1
   `).bind(
@@ -207,6 +286,7 @@ export async function updateFournisseur(
     data.adresse     ?? null,
     data.site_web    ?? null,
     data.notes       ?? null,
+    apiKeyChiffree,
     id
   ).run()
   await auditLog(db, { user_id: userId, action: 'UPDATE_FOURNISSEUR', entite_type: 'fournisseur', entite_id: id })

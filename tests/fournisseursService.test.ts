@@ -26,6 +26,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
 import { createMockDatabase } from './helpers/mockDatabase'
+import { chiffrer } from '../src/lib/chiffrement'
 import {
   listFournisseurs,
   getFournisseur,
@@ -39,6 +40,7 @@ import {
   receptionnerBonCommande,
   getKpisFournisseurs,
   getProduitsACommander,
+  getApiKeyDechiffree,
   type Fournisseur,
   type BonCommande,
   type LigneBonCommande,
@@ -90,13 +92,18 @@ const LIGNE_ROW: LigneBonCommande = {
 
 const SQL_COUNT_FOURNISSEURS = 'SELECT COUNT(*) as cnt FROM fournisseurs f WHERE f.boutique_id = ? AND f.actif = 1'
 
-const SQL_LIST_FOURNISSEURS = `SELECT f.*, COUNT(bc.id) as nb_commandes, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1 GROUP BY f.id ORDER BY f.nom ASC LIMIT ? OFFSET ?`
+const SQL_LIST_FOURNISSEURS = `SELECT f.id, f.boutique_id, f.nom, f.contact, f.email, f.telephone, f.adresse, f.site_web, f.notes, f.actif, COUNT(bc.id) as nb_commandes, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1 GROUP BY f.id ORDER BY f.nom ASC LIMIT ? OFFSET ?`
 
-const SQL_GET_FOURNISSEUR = 'SELECT * FROM fournisseurs WHERE id = ? AND actif = 1'
+// ⚠ Colonnes explicites, JAMAIS `SELECT *` : api_key_chiffree ne doit jamais pouvoir
+// remonter par accident dans l'objet Fournisseur public (ticket 01, bugs.md § email_api_key).
+const SQL_GET_FOURNISSEUR = 'SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif FROM fournisseurs WHERE id = ? AND actif = 1'
 
-const SQL_INSERT_FOURNISSEUR = 'INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+const SQL_INSERT_FOURNISSEUR = 'INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+// boutique_id dans le WHERE, pas seulement id : la fonction doit vérifier elle-même
+// l'appartenance, sans compter sur un futur appelant pour ne pas s'y tromper
+// (CLAUDE.md § isolation multi-tenant — leçon déjà payée plusieurs fois sur ce dépôt).
+const SQL_GET_API_KEY_FOURNISSEUR = 'SELECT api_key_chiffree FROM fournisseurs WHERE id = ? AND boutique_id = ? AND actif = 1'
 
-const SQL_UPDATE_FOURNISSEUR = `UPDATE fournisseurs SET nom = COALESCE(?, nom), contact = COALESCE(?, contact), email = COALESCE(?, email), telephone = COALESCE(?, telephone), adresse = COALESCE(?, adresse), site_web = COALESCE(?, site_web), notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND actif = 1`
 
 const SQL_DELETE_FOURNISSEUR = 'UPDATE fournisseurs SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
 
@@ -999,5 +1006,159 @@ describe('getProduitsACommander()', () => {
     const result = await getProduitsACommander(db, 1)
 
     expect(result[0]).toMatchObject({ alerte: 'rupture', fournisseur_nom: null })
+  })
+})
+
+// ─── api_key_chiffree — ticket 01, chantier Mobilax ────────────────────────────
+
+/**
+ * Un fournisseur peut porter une clé API chiffrée (ex. Mobilax, mais rien de spécifique
+ * à Mobilax ici — n'importe quel fournisseur). Elle ne doit JAMAIS apparaître dans un
+ * objet renvoyé par le service — même si la ligne remontée par la base la portait, pour
+ * ne pas retomber dans la classe de défaut déjà trouvée sur `email_api_key` (`bugs.md`).
+ */
+describe('api_key_chiffree — jamais renvoyée en clair (ticket 01)', () => {
+  const CLE_TEST = 'a'.repeat(64)
+
+  it('getFournisseur() ne renvoie jamais api_key_chiffree, même si la ligne la porte', async () => {
+    const db = createMockDatabase()
+    db.__setResponse(SQL_GET_FOURNISSEUR, { ...FOURNISSEUR_ROW, api_key_chiffree: 'iv_hex:cipher_hex' })
+
+    const result = await getFournisseur(db, 1)
+
+    expect(result).not.toHaveProperty('api_key_chiffree')
+  })
+
+  it('listFournisseurs() ne renvoie jamais api_key_chiffree, même si la ligne la porte', async () => {
+    const db = createMockDatabase()
+    db.__setResponse(SQL_COUNT_FOURNISSEURS, { cnt: 1 })
+    db.__setListResponse(SQL_LIST_FOURNISSEURS, [
+      { ...FOURNISSEUR_ROW, nb_commandes: 3, nb_en_attente: 1, api_key_chiffree: 'iv_hex:cipher_hex' },
+    ])
+
+    const res = await listFournisseurs(db, 1, {})
+
+    expect(res.data[0]).not.toHaveProperty('api_key_chiffree')
+  })
+
+  it('createFournisseur() chiffre la clé API avant de l\'insérer, jamais en clair', async () => {
+    const db = createMockD1()
+    db.__setResponse(SQL_INSERT_FOURNISSEUR, { id: 1 })
+
+    await createFournisseur(
+      db,
+      { boutique_id: 1, nom: 'Mobilax', api_key: 'sk_live_reconnaissable' },
+      5,
+      CLE_TEST
+    )
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql.startsWith('INSERT INTO fournisseurs'))
+    const valeurStockee = insertCall?.params[insertCall.params.length - 1] as string
+
+    expect(valeurStockee).not.toContain('sk_live_reconnaissable')
+  })
+
+  it('createFournisseur() refuse clairement un api_key sans cleChiffrement, plutôt qu\'une erreur confuse', async () => {
+    const db = createMockD1()
+
+    await expect(
+      createFournisseur(db, { boutique_id: 1, nom: 'Sans clé de chiffrement', api_key: 'sk_live_x' }, 5)
+    ).rejects.toThrow(/cleChiffrement/i)
+  })
+
+  it('createFournisseur() sans clé API n\'insère rien de chiffré (colonne null)', async () => {
+    const db = createMockD1()
+    db.__setResponse(SQL_INSERT_FOURNISSEUR, { id: 1 })
+
+    await createFournisseur(db, { boutique_id: 1, nom: 'Sans clé' }, 5)
+
+    const calls = db.__getCalls()
+    const insertCall = calls.find(c => c.sql.startsWith('INSERT INTO fournisseurs'))
+    expect(insertCall?.params[insertCall.params.length - 1]).toBeNull()
+  })
+
+  it('updateFournisseur() chiffre la clé API fournie avant de la persister', async () => {
+    const db = createMockD1()
+
+    await updateFournisseur(db, 1, { api_key: 'sk_live_modifiee' }, 5, CLE_TEST)
+
+    const calls = db.__getCalls()
+    const updateCall = calls.find(c => c.sql.startsWith('UPDATE fournisseurs'))
+    const valeurStockee = updateCall?.params[updateCall.params.length - 2] as string // avant l'id du WHERE
+
+    expect(updateCall?.sql).toContain('api_key_chiffree')
+    expect(valeurStockee).not.toContain('sk_live_modifiee')
+    expect(valeurStockee).toMatch(/^[0-9a-f]+:[0-9a-f]+$/)
+  })
+
+  it('updateFournisseur() refuse clairement un api_key sans cleChiffrement, plutôt qu\'une erreur confuse', async () => {
+    const db = createMockD1()
+
+    await expect(
+      updateFournisseur(db, 1, { api_key: 'sk_live_x' }, 5)
+    ).rejects.toThrow(/cleChiffrement/i)
+  })
+
+  it('updateFournisseur() sans clé API fournie conserve l\'existante (COALESCE, null transmis)', async () => {
+    const db = createMockD1()
+
+    await updateFournisseur(db, 1, { nom: 'Sans toucher la clé' }, 5)
+
+    const calls = db.__getCalls()
+    const updateCall = calls.find(c => c.sql.startsWith('UPDATE fournisseurs'))
+    expect(updateCall?.params[updateCall.params.length - 2]).toBeNull()
+  })
+
+  it('getApiKeyDechiffree() redonne la clé en clair pour un fournisseur qui en a une', async () => {
+    // getApiKeyDechiffree() lit via le port Database (comme getFournisseur()), pas D1Database
+    // (comme createFournisseur()) — la valeur chiffrée est calculée directement ici plutôt
+    // que chaînée depuis un autre mock, les deux ports n'étant pas interchangeables.
+    const valeurChiffree = await chiffrer('sk_live_ronde_trip', CLE_TEST)
+    const db = createMockDatabase()
+    db.__setResponse(SQL_GET_API_KEY_FOURNISSEUR, { api_key_chiffree: valeurChiffree })
+
+    const clair = await getApiKeyDechiffree(db, 1, 1, CLE_TEST)
+
+    expect(clair).toBe('sk_live_ronde_trip')
+  })
+
+  it('getApiKeyDechiffree() renvoie null si le fournisseur n\'a pas de clé', async () => {
+    const db = createMockDatabase()
+    db.__setResponse(SQL_GET_API_KEY_FOURNISSEUR, { api_key_chiffree: null })
+
+    const clair = await getApiKeyDechiffree(db, 1, 1, CLE_TEST)
+
+    expect(clair).toBeNull()
+  })
+
+  /**
+   * Isolation : la fonction vérifie elle-même l'appartenance à la boutique, sans compter
+   * sur un futur appelant (ticket 03, service Mobilax) pour ne pas s'y tromper. Précédent
+   * direct : les isolations déjà corrigées de ce dépôt tenaient à un filtre en amont
+   * supposé suffisant — jamais assez, d'après `bugs.md`.
+   */
+  it('getApiKeyDechiffree() interroge par id ET boutique_id — jamais id seul', async () => {
+    const db = createMockDatabase()
+    db.__setResponse(SQL_GET_API_KEY_FOURNISSEUR, { api_key_chiffree: null })
+
+    await getApiKeyDechiffree(db, 42, 7, CLE_TEST)
+
+    const calls = db.__getCalls()
+    const getCall = calls.find((c: any) => c.sql.includes('api_key_chiffree'))
+    expect(getCall?.sql).toContain('boutique_id')
+    expect(getCall?.params).toEqual([42, 7])
+  })
+
+  it('getApiKeyDechiffree() renvoie null si le fournisseur appartient à une autre boutique', async () => {
+    // Le mock ne simule pas le WHERE réel : ce test prouve seulement que la boutique
+    // appelante est bien transmise à la requête (test précédent) ET que « rien trouvé »
+    // (le cas réel d'un id hors de la boutique) redonne null, jamais une exception.
+    const db = createMockDatabase()
+    db.__setNotFound(SQL_GET_API_KEY_FOURNISSEUR)
+
+    const clair = await getApiKeyDechiffree(db, 42, 999, CLE_TEST)
+
+    expect(clair).toBeNull()
   })
 })

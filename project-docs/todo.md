@@ -24,6 +24,29 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
+## 🔴 P1 — `/fournisseurs` n'affiche jamais son contenu, aucun onglet, aucun rôle (trouvé le 2026-09-10)
+
+Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec Mobilax.
+Détail et cause exacte : `bugs.md` § du même titre.
+
+`main.css` exige `.tab-content.active` pour afficher un onglet ; `fournisseurs.js` ne pose
+jamais cette classe (il gère `.hidden` et `.tab-active`, qui ne correspond à aucune règle CSS).
+**Les trois onglets — Bons de commande, Fournisseurs, À commander — restent vides pour tout le
+monde**, y compris l'onglet affiché par défaut au chargement. Seul le formulaire de
+création/édition fonctionne, car il vit hors de ce mécanisme.
+
+**Autres pages, vérifié** : `app.js` (helper de bascule d'onglet partagé) et `tickets.js`
+posent correctement `.classList.add('active')` sur `.tab-content` — elles n'ont pas ce défaut.
+`fournisseurs.js` est la seule page à avoir réimplémenté son propre `initTabs()` local, avec un
+vocabulaire de classes différent (`.hidden`/`tab-active`) au lieu de reprendre le helper déjà
+correct utilisé ailleurs. La correction consiste vraisemblablement à faire converger
+`fournisseurs.js` sur ce même mécanisme, pas à inventer une troisième variante.
+
+- [ ] Faire poser `.active` par `fournisseurs.js` (aligné sur `app.js`/`tickets.js`), au lieu
+      de `.hidden`/`tab-active` — vérifier qu'aucun autre code ne lit `tab-active` avant de le
+      retirer
+- [ ] Test de rendu (pas seulement un test qui contourne le bug comme celui du ticket 01)
+
 ## 🟠 P2 — `boutique_settings.email_api_key` stockée en clair, renvoyée sans filtrage (trouvé le 2026-09-10)
 
 Trouvé en cherchant, pour le chantier Mobilax, un pattern existant de secret chiffré par
@@ -246,6 +269,15 @@ Mobilax (`mobilax.fr`) est un fournisseur de pièces détachées et d'accessoire
 2. **calculer les marges** à partir des prix fournisseur, dans les devis et les tickets ;
 3. **passer commande** directement depuis `repairdesk.fr`.
 
+⚠ **Cadrage formalisé le 2026-09-10** : un grilling en 3 rounds a élargi ce chantier au-delà du
+catalogue seul — stock, devis, factures, caisse **et** prise en charge (facturer indépendamment
+d'une prise en charge se fait déjà via `/caisse`, existant, rien à inventer). Le cadrage complet
+— 23 user stories, décisions d'architecture, seams de test — vit désormais dans
+`.scratch/integration-mobilax/spec.md`, découpé en **9 tickets**
+(`.scratch/integration-mobilax/issues/01` à `09`). **Ce todo.md reste le suivi**, pas la source
+du cadrage — les sections ci-dessous, écrites avant ce grilling, restent pour la trace mais ne
+plus les prendre pour le plan à jour. Détail : § « Ticket 01 et la suite » en bas de ce chantier.
+
 ### 🔒 Le jeton ne doit jamais entrer dans ce dépôt
 
 **Ce dépôt est public sur GitHub.** Le token de préproduction vit dans `.dev.vars` en local
@@ -279,6 +311,10 @@ Cloudflare) — ou déléguer la saisie à chaque boutique sans jamais le relire
 arbitrer en premier, ça détermine le schéma. **Reste ouvert le 2026-09-10** — le test du jour
 n'a utilisé que le jeton de préproduction commun, pas encore un jeton par tenant.
 
+✅ **Tranché le 2026-09-10** (round 1 du grilling) : **chiffrement au repos**, sur la ligne
+`fournisseurs` existante (pas de nouvelle table) — implémenté au ticket 01,
+`src/lib/chiffrement.ts`, `CLAUDE.md` § Secret fournisseur chiffré au repos.
+
 ### Contraintes du dépôt qui s'appliquent à ce chantier
 
 - **0 SQL inline** : toute requête dans un `mobilaxService.ts`, jamais dans un controller.
@@ -296,12 +332,17 @@ n'a utilisé que le jeton de préproduction commun, pas encore un jeton par tena
       dans le bundle JS, lue comme source primaire. `project-docs/recherche-api-mobilax-2026-09-09.md`
 - [x] Premier appel de vérification en préproduction (2026-09-10, compte provisionné par Mobilax
       entre le 09 et le 10) — voir mesure ci-dessous
-- [ ] Trancher le stockage du secret par boutique (voir question ouverte ci-dessus)
-- [ ] Migration D1 : tables du cache catalogue + identifiants fournisseur par boutique
-- [ ] `mobilaxService.ts` + adaptateur, tests unitaires
-- [ ] Écran de recherche de pièces, avec relecture du prix en direct à la sélection
+- [x] Trancher le stockage du secret par boutique (voir question ouverte ci-dessus) — chiffré
+      sur `fournisseurs`, ticket 01, 2026-09-10
+- [ ] Migration D1 : tables du cache catalogue + identifiants fournisseur par boutique —
+      **précisé par le grilling** : identifiants faits (ticket 01, migration `0041`), le
+      catalogue reste volontairement sans cache (décision du 2026-09-09, toujours en vigueur)
+- [ ] `mobilaxService.ts` + adaptateur, tests unitaires — ticket 03
+- [ ] Écran de recherche de pièces, avec relecture du prix en direct à la sélection — tickets
+      03 (stock), 06-09 (devis/facture/caisse/prise en charge)
 - [ ] Job de rafraîchissement du cache — **hors périmètre tant que la décision du 2026-09-09
-      (pas de cache) n'est pas retranchée**
+      (pas de cache) n'est pas retranchée** — le rafraîchissement **manuel** d'un produit
+      importé (pas un cache) est prévu au ticket 05, différent de ce point
 
 ### Mesure réelle du 2026-09-10 — le compte de préproduction répond
 
@@ -329,6 +370,35 @@ compte** ? Coïncide exactement avec l'exemple de la doc — à ne pas prendre p
 sans un second compte de comparaison.
 
 Détail complet et script de mesure (jetable, hors dépôt) : `recovery-prompt.md` cp90 à venir.
+
+### Ticket 01 et la suite (2026-09-10)
+
+Grilling en 3 rounds (`AskUserQuestion` en substitut de `grill-with-docs`/`grilling` pour les
+2 premiers, `grilling` invoqué directement pour le 3e), spec publié et découpé en 9 tickets —
+voir la note en tête de ce chantier. Deux corrections venues de l'exploitant en cours de
+route : la facturation indépendante d'une prise en charge passe par `/caisse` (existant, rien
+à inventer) ; la marge automatique ne s'applique **pas** aux prestations de réparation
+(table `services`, sans lien Mobilax), seulement aux produits importés, avec un override par
+`famille` plutôt que par `categorie_id` libre.
+
+- [x] **01** — Identifiants Mobilax chiffrés par boutique (2026-09-10) — `src/lib/chiffrement.ts`
+      (AES-GCM, premier chiffrement réversible du dépôt), colonne `api_key_chiffree` sur
+      `fournisseurs`, jamais renvoyée en clair. `getApiKeyDechiffree()` vérifie elle-même
+      `boutique_id`, non exposée par aucune route. Secret `FOURNISSEUR_CRYPTO_KEY` documenté.
+      **Non déployé.**
+- [ ] **02** — Taux de marge configurables (défaut boutique + par famille) — sans blocage
+- [ ] **03** — Recherche Mobilax dans Stock (sans import) — bloqué par 01
+- [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
+- [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
+- [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
+- [ ] **07** — Même widget sur Facture — bloqué par 06
+- [ ] **08** — Même widget sur Caisse — bloqué par 06
+- [ ] **09** — Widget sur Prise en charge (pré-remplit `prix_estime`) — bloqué par 06
+
+Hors périmètre, explicitement (spec.md § Out of Scope) : agent IA de suggestion de prix par
+historique de ventes (chantier séparé, sans lien avec Mobilax) · synchronisation automatique
+du stock (webhooks) · marge par `categorie_id` libre · commande directe auprès de Mobilax
+(volet 3) · correction d'`email_api_key` (🟠 P2 séparée, ci-dessus).
 
 ## 🔴 P1 — Prise en charge : ergonomie du modal et valeur juridique de la signature (demandé le 2026-09-07)
 
