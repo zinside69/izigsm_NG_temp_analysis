@@ -242,9 +242,14 @@ Mobilax** une fois l'intégration en place.
 | Question | Décision |
 |---|---|
 | Périmètre de ce chantier | **Catalogue seul.** Marges/devis et commandes = chantiers suivants |
-| Exploitation du catalogue | **Hybride** : cache D1 (références, libellés, compatibilités) + prix et stock revérifiés en direct au moment d'ajouter la pièce à un devis ou une commande |
-| Compte fournisseur | **Un compte par boutique** — tarifs négociés propres à chaque réparateur, commandes rattachées à son compte, cohérent avec l'isolation multi-tenant |
+| Compte fournisseur | **Un compte API par tenant/boutique** — tarifs négociés propres à chaque réparateur, commandes rattachées à son compte, cohérent avec l'isolation multi-tenant. **Impératif** : chaque tenant a ses propres prix chez Mobilax |
 | Priorité | P1, **après** les tickets 003 et 004 de la conformité facturation (contrôle légal NF525) |
+
+⚠ **Révisé le 2026-09-09** : la ligne « Exploitation du catalogue — Hybride (cache D1) » actée le
+2026-09-07 est **remplacée**. Décision de l'exploitant : *« on ne stocke rien en local au niveau
+du catalogue pour le moment. On fait un test avec chargement du stock via l'API. »* Pas de
+migration, pas de cache tant que ce n'est pas retranché explicitement. Détail :
+`decisions.md` § 2026-09-09 et `recovery-prompt.md` cp89.
 
 ### Question ouverte à trancher avant d'écrire du code
 
@@ -252,7 +257,8 @@ Mobilax** une fois l'intégration en place.
 Worker. Il faudra donc le stocker en base, et un identifiant fournisseur en clair dans D1 n'est
 pas acceptable : prévoir un chiffrement au repos (la clé de chiffrement, elle, en secret
 Cloudflare) — ou déléguer la saisie à chaque boutique sans jamais le relire côté serveur. À
-arbitrer en premier, ça détermine le schéma.
+arbitrer en premier, ça détermine le schéma. **Reste ouvert le 2026-09-10** — le test du jour
+n'a utilisé que le jeton de préproduction commun, pas encore un jeton par tenant.
 
 ### Contraintes du dépôt qui s'appliquent à ce chantier
 
@@ -267,15 +273,43 @@ arbitrer en premier, ça détermine le schéma.
 
 ### Tâches
 
-- [ ] Lire `https://developers.mobilax.fr/` et consigner : endpoints, pagination, format des
-      prix (HT/TTC, devise), gestion du stock, limites de débit, durée de vie du jeton
-- [ ] Premier appel de vérification en préproduction, jeton lu depuis `.dev.vars` — mesurer la
-      taille réelle du catalogue avant de choisir le schéma
+- [x] Lire `https://developers.mobilax.fr/` et consigner (2026-09-09) — pas d'OpenAPI, doc figée
+      dans le bundle JS, lue comme source primaire. `project-docs/recherche-api-mobilax-2026-09-09.md`
+- [x] Premier appel de vérification en préproduction (2026-09-10, compte provisionné par Mobilax
+      entre le 09 et le 10) — voir mesure ci-dessous
 - [ ] Trancher le stockage du secret par boutique (voir question ouverte ci-dessus)
 - [ ] Migration D1 : tables du cache catalogue + identifiants fournisseur par boutique
 - [ ] `mobilaxService.ts` + adaptateur, tests unitaires
 - [ ] Écran de recherche de pièces, avec relecture du prix en direct à la sélection
-- [ ] Job de rafraîchissement du cache + conduite à tenir quand l'API est indisponible
+- [ ] Job de rafraîchissement du cache — **hors périmètre tant que la décision du 2026-09-09
+      (pas de cache) n'est pas retranchée**
+
+### Mesure réelle du 2026-09-10 — le compte de préproduction répond
+
+Le blocage du 2026-09-09 (`Customer not found`) est levé : Mobilax a provisionné le compte entre
+le 09 et le 10. `POST /auth` en préproduction (`apiv2.mobilax.pro`) → **200**, avec le jeton
+`MOBILAX_API_KEY` de `.dev.vars` (64 caractères, jamais affiché ni journalisé). 4 requêtes de
+lecture, aucune écriture.
+
+| Question de la recherche | Réponse mesurée |
+|---|---|
+| Taille du catalogue | **`total: 184716`** — confirme exactement le chiffre de l'exemple de la doc |
+| En-têtes de quota (doc annonçait « aucun ») | **Corrigé : ils existent.** `ratelimit-limit`, `ratelimit-policy`, `ratelimit-remaining`, `ratelimit-reset` sur `/auth` **et** `/products`. Ex. : `10;w=60` sur `/auth` |
+| `expireIn` en préprod | `"1h"` — diffère de l'exemple `"120m"` de la doc, confirme qu'il ne faut jamais le coder en dur |
+| `updatedSince` hors playground | **Semble fonctionner** — filtre `total` de 184716 à 7 sur les dernières 24 h. À confirmer par un second test sur une fenêtre connue |
+| Forme réelle de l'enveloppe `/products` | `{ data: { currentPage, limit, offset, total, totalPage, products: [...] } }` — plus précise que ce que la doc laissait deviner |
+| Champs d'un produit réel | `id, ean13, name, short_name, quantity, price, updated_at, main_image` — **un seul champ `price`**, pas les 5 champs (`customer_price`/`mbx_price`/…) vus dans un autre exemple de la doc. Aucun champ devise |
+| Stock | `quantity` — valeur entière réelle observée (10, 12) |
+| `/products/:id/compatibilities` | **200**, l'endpoint répond |
+
+⚠ **Toujours pas tranché** : la sémantique des 5 champs de prix vus dans la doc
+(`customer_price`, `mbx_price`, `recommended_price`, `discount_amount`, `b2c_percentage`) —
+absents de cette réponse de liste, peut-être présents seulement sur un endpoint de détail
+produit, pas encore appelé. Et `184716` est-il le catalogue **entier** ou celui **de ce
+compte** ? Coïncide exactement avec l'exemple de la doc — à ne pas prendre pour argent comptant
+sans un second compte de comparaison.
+
+Détail complet et script de mesure (jetable, hors dépôt) : `recovery-prompt.md` cp90 à venir.
 
 ## 🔴 P1 — Prise en charge : ergonomie du modal et valeur juridique de la signature (demandé le 2026-09-07)
 

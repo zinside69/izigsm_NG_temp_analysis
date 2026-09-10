@@ -505,6 +505,73 @@ d'achat réel.
 répertoire temporaire de session et se réécrit en quelques lignes — deux `fetch`, aucun état.
 
 
+## Mesure réelle du 2026-09-10 — le compte répond, plusieurs points corrigés
+
+Le blocage du 2026-09-09 est levé : Mobilax a provisionné le compte de préproduction entre le 09
+et le 10. `POST /auth` (`apiv2.mobilax.pro`) avec `MOBILAX_API_KEY` (`.dev.vars`, 64 caractères,
+jamais affiché) → **200**. Quatre requêtes de lecture au total, aucune écriture, largement sous
+les quotas documentés (`/auth` 10/min, `/products*` 30/min).
+
+### Correction d'une affirmation de la version 1.0
+
+**« Aucun en-tête de quota documenté ni observé »** (§ Limites de débit) était **faux** sur le
+volet observé. Les deux réponses portent des en-têtes de quota standard :
+
+```
+ratelimit-limit:     10
+ratelimit-policy:    10;w=60
+ratelimit-remaining: 9
+ratelimit-reset:     60
+```
+
+Présents sur `POST /auth` et `GET /products`. La question 6 de la section précédente
+(« Existe-t-il des en-têtes `X-RateLimit-*` / `Retry-After` sur un `429` ? ») reste partiellement
+ouverte — ces en-têtes n'ont été vus que sur des réponses `200`, pas sur un `429` provoqué — mais
+un back-off n'est plus aveugle : `ratelimit-remaining` et `ratelimit-reset` sont lisibles à
+chaque appel, sans attendre l'erreur.
+
+### Ce que la mesure confirme
+
+| Point | Résultat |
+|---|---|
+| `expireIn` | `"1h"` en préproduction (l'exemple de la doc montrait `"120m"`) — confirme qu'il ne faut jamais le coder en dur (§ Authentification) |
+| Taille du catalogue | `total: 184716` — coïncide **exactement** avec l'exemple de la doc. Coïncidence troublante : à vérifier avec un second compte avant de le tenir pour la taille réelle du catalogue de ce tenant |
+| `updatedSince` hors playground | **Semble fonctionner** : `total` passe de 184716 à 7 avec `updatedSince=<24h>`. Question 1 de la section précédente en partie levée — à confirmer sur une fenêtre de dates connue, pas seulement « il y a 24 h » |
+| `/products/:id/compatibilities` | Répond `200` |
+
+### Forme réelle de l'enveloppe `/products` — plus précise que ce que la doc laissait deviner
+
+```json
+{
+  "data": {
+    "currentPage": 1, "limit": 5, "offset": 0, "total": 184716, "totalPage": 36944,
+    "products": [ { "id": 17, "ean13": "…", "name": "…", "short_name": "…",
+                     "quantity": 10, "price": 8.68, "updated_at": "2026-08-26T14:11:26.600Z",
+                     "main_image": { … } } ]
+  }
+}
+```
+
+Un produit réel de la liste porte **un seul champ de prix (`price`)**, pas les cinq champs
+(`customer_price`, `mbx_price`, `recommended_price`, `discount_amount`, `b2c_percentage`) décrits
+comme présents « sur un produit » dans la section précédente. **Hypothèse à vérifier** : ces cinq
+champs vivent peut-être sur un endpoint de détail produit (`GET /products/:id`), non encore
+appelé, et non sur l'endpoint de liste. Aucun champ de devise dans les deux cas.
+
+### Ce qui reste bloquant
+
+- **La sémantique des cinq champs de prix** — question la plus lourde de l'intégration — n'a pas
+  pu être tranchée : ils n'apparaissent pas sur l'endpoint appelé.
+- **184716 = catalogue entier ou catalogue de ce compte ?** La coïncidence avec l'exemple de la
+  doc est un signal à ne pas ignorer, dans un sens ou dans l'autre.
+- Aucun test encore mené avec un **second compte tenant** — la décision du 2026-09-07 (un compte
+  API par boutique) implique que le catalogue ou les prix diffèrent peut-être d'un compte à
+  l'autre ; rien ne le confirme ni ne l'infirme à ce stade.
+
+**Cadrage inchangé** (`decisions.md` § 2026-09-09, `todo.md`) : aucun stockage local pour
+l'instant. Cette mesure reste un test de lecture directe, pas un chantier de cache.
+
+
 ---
 
 _Version 1.0 — 2026-09-09 — première recherche documentaire, source primaire = bundle JS de
@@ -514,3 +581,8 @@ Aucun appel authentifié, aucun secret manipulé._
 _Version 1.1 — 2026-09-09 — mesure réelle ajoutée : `POST /auth` refusé sur les deux
 environnements, compte de préproduction non provisionné. Aucune des questions bloquantes n'a
 pu être tranchée._
+
+_Version 1.2 — 2026-09-10 — le compte de préproduction répond, mesure réelle menée.
+Corrige la version 1.0 : les en-têtes de quota existent. Confirme le total du catalogue,
+suggère qu'`updatedSince` fonctionne hors playground. La sémantique des 5 champs de prix
+reste non tranchée._
