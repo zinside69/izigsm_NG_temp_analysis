@@ -638,3 +638,41 @@ tous ensemble. Corrige une glose non sourcée de la v1.0 sur `b2c_price` (« pri
 client final du revendeur » n'est pas dans la doc). Corrige aussi « tous à 0.00 » :
 `recommended_price` vaut `"100.00"` dans l'exemple documenté. Sémantique toujours non
 tranchée — nécessite un appel authentifié réel sur `/products/:id/full`._
+
+## Mesure réelle du 2026-09-10 (bis) — `GET /products/:id/full`, un vrai produit
+
+Appel authentifié sur `GET /products/17/full` (préproduction), le même produit vu la veille
+sur la liste (`price: 8.68`, cohérent entre les deux endpoints — bon signe de fiabilité du
+champ). 2 requêtes, aucune écriture.
+
+```
+price              = 8.68   (nombre)
+recommended_price  = "8.90" (chaîne)
+customer_price     = "0.00" (chaîne)
+mbx_price          = "0.00" (chaîne)
+discount_amount    = "0.00" (chaîne)
+```
+
+**Ce que ça change par rapport à l'exemple de la doc** :
+
+- `recommended_price` n'est **pas** un multiplicateur fixe. Dans l'exemple de la doc, il valait
+  2,5× le `price` (100 vs 40) ; ici, seulement **+2,5 %** (8,90 vs 8,68). Varie donc par
+  produit — cohérent avec un usage de type « prix de vente conseillé », mais toujours pas
+  confirmé par un texte.
+- `customer_price` et `mbx_price` sont à **`"0.00"` sur les deux produits réels observés** (celui
+  de l'exemple de doc, et celui-ci). Ce n'est plus un artefact d'exemple : deux mesures
+  indépendantes convergent. Hypothèse renforcée, toujours pas confirmée en texte : **ces deux
+  champs ne sont pas activés pour ce compte** (pas de tarif négocié configuré en
+  préproduction), plutôt qu'une valeur métier à zéro.
+
+**Conclusion pratique, pour armer une décision de schéma** : `price` (nombre, cohérent entre
+`/products` et `/products/:id/full`) est le candidat le plus solide comme prix d'achat de base
+utilisable dès maintenant. `customer_price`/`mbx_price` restent à vérifier — soit avec un
+compte de préproduction portant un tarif négocié actif, soit en écrivant directement à
+Mobilax pour leur sémantique.
+
+_Version 1.4 — 2026-09-10 — mesure réelle sur `GET /products/17/full`. `recommended_price`
+n'est pas un multiplicateur fixe (+2,5 % ici, contre ×2,5 dans l'exemple de la doc).
+`customer_price`/`mbx_price` à `"0.00"` sur les deux produits réels observés : hypothèse
+renforcée qu'ils ne sont pas activés pour ce compte. `price` retenu comme candidat le plus
+solide pour le prix d'achat de base._
