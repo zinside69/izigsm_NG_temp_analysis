@@ -253,10 +253,14 @@ données par `boutique_id`. Un cache global ne serait juste que pour les référ
 `/catalog/*` et les libellés/images produit.
 
 **Champs de prix supplémentaires** exposés par `/products/:id` et `/products/:id/full` :
-`b2c_enabled`, `b2c_percentage`, `b2c_price` (prix de revente au client final du revendeur),
-`customer_price`, `mbx_price`, `recommended_price`, `discount_amount`. **Aucun n'est décrit
-en texte dans la doc** — ils n'apparaissent que dans les exemples JSON, avec des valeurs à
-`"0.00"` qui n'enseignent rien sur leur sémantique.
+`b2c_enabled`, `b2c_percentage`, `b2c_price`, `customer_price`, `mbx_price`,
+`recommended_price`, `discount_amount`. **Aucun n'est décrit en texte dans la doc** — ils
+n'apparaissent que dans les exemples JSON. ⚠ **Correction du 2026-09-10** : la parenthèse
+« prix de revente au client final du revendeur » ci-dessus dans la v1.0 n'était **pas une
+citation de la doc** — les chaînes « revendeur » et « client final » sont absentes du bundle
+(0 occurrence, vérifié). C'était une glose du chercheur, présentée sans le dire comme telle.
+Voir la mesure du 2026-09-10 ci-dessous pour la répartition réelle, sourcée, de ces champs
+entre deux endpoints distincts.
 
 ---
 
@@ -572,6 +576,47 @@ appelé, et non sur l'endpoint de liste. Aucun champ de devise dans les deux cas
 l'instant. Cette mesure reste un test de lecture directe, pas un chantier de cache.
 
 
+## Approfondissement du 2026-09-10 — répartition réelle des champs de prix entre deux endpoints
+
+Recherche documentaire complémentaire, bundle inchangé (`index-D8nDrXby.js`, 337 536 octets,
+même version qu'au 2026-09-09). Aucun appel API, documentation publique uniquement.
+
+**Ce qui était confus dans la v1.0 est maintenant établi : ces 7 champs ne sont jamais tous
+sur le même produit.** Ils se répartissent sur deux endpoints distincts, chacun cité une
+seule fois dans tout le bundle :
+
+| Endpoint | Champs de prix dans l'exemple documenté | Type |
+|---|---|---|
+| `GET /products/:id` (détail léger) | `price`, `b2c_enabled`, `b2c_percentage`, `b2c_price` | nombres |
+| `GET /products/:id/full` (fiche complète) | `price`, `customer_price`, `mbx_price`, `discount_amount`, `recommended_price` | chaînes |
+
+Exemple documenté de `/products/:id/full` (produit `id: 33159`) — et ce n'est **pas** « tous à
+`0.00` » comme l'affirmait la v1.0 :
+
+```json
+"price": 40,
+"recommended_price": "100.00",
+"customer_price": "0.00",
+"mbx_price": "0.00",
+"discount_amount": "0.00"
+```
+
+Seuls trois des quatre champs sont à zéro. `recommended_price` vaut `"100.00"`, 2,5× le
+`price`. **Indice, pas confirmation** : pourrait être un prix de revente conseillé distinct
+du prix d'achat — mais aucun texte du bundle (recherché : « recommand », « conseill »,
+« remise », « marge », « réduction », « wholesale », « retail », « achat », « revendeur »,
+« client final » — **zéro occurrence pour chacun**) ne le confirme. Pas de changelog, pas de
+FAQ dans le bundle.
+
+**Toujours introuvable** : la sémantique de `customer_price`, `mbx_price`, `recommended_price`,
+`discount_amount` — aucun texte ne les explique. `GET /products/b2c` reste une citation isolée,
+sans section ni exemple. Aucun champ de devise nulle part (`currency`/`devise`/`€` : 0
+occurrence ; `EUR` : 1 occurrence, faux positif — substring de `CODE_ERREUR`).
+
+**Ce que ça débloque** : le compte de préproduction étant désormais provisionné, la prochaine
+mesure utile est un appel authentifié réel sur `GET /products/:id/full`, pour voir des valeurs
+non nulles en conditions réelles plutôt que dans l'exemple de la doc.
+
 ---
 
 _Version 1.0 — 2026-09-09 — première recherche documentaire, source primaire = bundle JS de
@@ -586,3 +631,10 @@ _Version 1.2 — 2026-09-10 — le compte de préproduction répond, mesure rée
 Corrige la version 1.0 : les en-têtes de quota existent. Confirme le total du catalogue,
 suggère qu'`updatedSince` fonctionne hors playground. La sémantique des 5 champs de prix
 reste non tranchée._
+
+_Version 1.3 — 2026-09-10 — approfondissement documentaire : les champs de prix se
+répartissent sur deux endpoints distincts (`/products/:id` vs `/products/:id/full`), jamais
+tous ensemble. Corrige une glose non sourcée de la v1.0 sur `b2c_price` (« prix de revente au
+client final du revendeur » n'est pas dans la doc). Corrige aussi « tous à 0.00 » :
+`recommended_price` vaut `"100.00"` dans l'exemple documenté. Sémantique toujours non
+tranchée — nécessite un appel authentifié réel sur `/products/:id/full`._

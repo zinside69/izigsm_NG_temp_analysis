@@ -24,6 +24,25 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
+## 🟠 P2 — `boutique_settings.email_api_key` stockée en clair, renvoyée sans filtrage (trouvé le 2026-09-10)
+
+Trouvé en cherchant, pour le chantier Mobilax, un pattern existant de secret chiffré par
+boutique — sans rapport avec Mobilax lui-même. Détail : `bugs.md` § du même titre.
+
+Le commentaire de `migrations/0020_email_notifications.sql:7` dit « clé API chiffrée (ou via
+Worker secret) » — **rien n'est chiffré**. La clé Resend de chaque boutique vit en clair dans
+`boutique_settings.email_api_key`, et **`GET /api/boutiques/:id` la renvoie sans expurgation**
+à quiconque a le droit de consulter la boutique.
+
+- [ ] Chiffrer `email_api_key` au repos — AES-GCM via `crypto.subtle`, clé d'enveloppe en
+      secret Cloudflare. **Premier usage de chiffrement réversible dans ce dépôt** : seuls
+      hash à sens unique (PBKDF2, SHA-256) et HMAC existent aujourd'hui (`auth.ts`, `nf525.ts`,
+      `photoToken.ts`) — rien à réutiliser, ce pattern est à construire
+- [ ] Expurger `email_api_key` de `GET /api/boutiques/:id`
+- [ ] Corriger le commentaire trompeur de la migration `0020`, ou migration corrective posant
+      la vraie contrainte
+- [ ] Vérifier si d'autres champs du dépôt portent la même fausse promesse de chiffrement
+
 ## 🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global, pas par boutique (trouvé le 2026-09-08)
 
 Trouvé en recensant les tables du domaine facturation/caisse, sans rapport avec le ticket qui

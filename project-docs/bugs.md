@@ -1,5 +1,37 @@
 # iziGSM — Bugs connus
 
+## ⚠ `boutique_settings.email_api_key` stockée en clair et renvoyée sans filtrage (trouvé le 2026-09-10, NON corrigé)
+
+Trouvé en explorant le dépôt à la recherche d'un pattern de secret chiffré par boutique, pour
+le chantier Mobilax — sans rapport avec Mobilax lui-même.
+
+**Le commentaire de la migration ment.** `migrations/0020_email_notifications.sql:7` :
+```sql
+ALTER TABLE boutique_settings ADD COLUMN email_api_key TEXT;  -- clé API chiffrée (ou via Worker secret)
+```
+Le commentaire dit « chiffrée » — le code ne chiffre rien. Écriture
+(`src/services/boutiqueService.ts:390,416`) : `COALESCE(?, email_api_key)`, aucun passage par
+une fonction de chiffrement. Lecture (`src/services/emailService.ts:80,91,95`) : lue et
+utilisée telle quelle comme clé Bearer vers Resend.
+
+**Aggravant : elle repart en clair dans une réponse API.** `GET /api/boutiques/:id`
+(`src/routes/boutiques.ts:106-119`) renvoie `{ ...boutique, settings }` sans expurgation —
+`email_api_key` est donc lisible par quiconque a le droit de consulter cette boutique (admin ou
+manager de la boutique elle-même — pas une fuite inter-tenant, mais une clé tierce qui ne
+devrait jamais apparaître dans le corps d'une réponse GET). Aucun mécanisme de masquage
+n'existe pour ce champ ; le seul expurgateur du dépôt (`journalPlateformeService.ts`) protège
+le **journal d'audit**, pas les réponses API.
+
+**Pourquoi c'est resté invisible** : le commentaire de migration affirme un chiffrement qui
+n'existe pas — un lecteur pressé du schéma conclurait à tort que c'est traité.
+
+**Non corrigé** : ce n'est pas le sujet du chantier qui l'a trouvé. `verifierIntegriteChaine()`
+et le reste du registre NF525 ne sont pas concernés — `email_api_key` n'a aucun rapport avec la
+facturation. À traiter comme son propre ticket : chiffrer au repos (aucun pattern
+`crypto.subtle.encrypt`/`decrypt` réversible n'existe encore dans ce dépôt — seuls hash à sens
+unique et HMAC sont utilisés, voir `src/lib/auth.ts`/`nf525.ts`/`photoToken.ts`) et expurger
+`GET /api/boutiques/:id`.
+
 ## ✅ `f.locked` ignoré au rendu de `factures.js` — l'avoir n'était pas proposé (trouvé en production le 2026-09-07, **CORRIGÉ le 2026-09-07**)
 
 Trouvé en vérifiant le ticket 003 en production, avec une session admin plateforme. **Défaut
