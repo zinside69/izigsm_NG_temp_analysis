@@ -1,4 +1,28 @@
-# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 91 — chantier Mobilax spécifié, ticket 01 en place)
+# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 92 — tickets 01 et 02 Mobilax en place)
+
+## Ce qui a changé au checkpoint 92
+
+**Ticket 02 fait, commité (`6c432dc`), non déployé** — taux de marge par défaut et par famille,
+onglet Marges de `/settings`. À savoir avant le ticket 06, qui l'utilisera :
+
+- **`resoudreTauxMarge(settings, famille)`** (`boutiqueService.ts`, pure) : famille, sinon
+  défaut, sinon **`null`**. Le ticket 06 doit gérer ce `null` — décision de l'exploitant : jamais
+  de marge inventée. Un taux de famille à `0` l'emporte sur le défaut.
+- Taux = % du prix d'achat : prix de vente = prix d'achat × (1 + taux / 100).
+- Écriture par **`PUT /api/boutiques/:id/marges`** seule, **jamais** par `/:id/settings`.
+- Migration **`0042`** en attente, derrière `0041`.
+
+**🔴 Nouveau P1, sans rapport avec Mobilax** : enregistrer un onglet des Réglages écrase la TVA
+et les moyens de paiement (mesuré, `bugs.md`). Toute future donnée de réglage doit avoir sa
+propre route, ou attendre la correction de `updateBoutiqueSettings()`.
+
+**Pratique E2E** : ne pas lancer vitest/`tsc` pendant la suite Playwright complète — wrangler
+local renvoie des `socket hang up` sous la charge (faux rouge vécu au cp92).
+
+---
+
+_Contenu du checkpoint 91, toujours valable — sauf l'état des tickets : **01 et 02 sont faits**,
+03-09 restent `ready-for-agent` :_
 
 ## ⚠ Avant tout — d'où se travaille ce projet
 
@@ -52,6 +76,8 @@ même quand la version condensée semble objectivement plus claire.**
 
 ## Ce qui reste ouvert, par ordre de coût d'erreur
 
+0. **🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les paiements** (cp92,
+   mesuré en local) — une boutique en franchise de TVA perd sa mention art. 293 B. `bugs.md`.
 1. **🔴 P1 — `/fournisseurs` invisible**, voir ci-dessus.
 2. **🟠 P2 — `email_api_key` en clair** (`bugs.md`, trouvé le 2026-09-10 en marge de ce chantier).
 3. **🟠 P2 — le chaînage NF525 n'est pas vérifié.**

@@ -1,5 +1,27 @@
 # iziGSM — Décisions
 
+## 2026-09-10 — Taux de marge : `null` sans saisie, route dédiée, défaut des Réglages laissé ouvert (ticket 02 Mobilax)
+
+Trois arbitrages de l'exploitant, pris avant la première ligne de test.
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Boutique sans aucun taux | **`resoudreTauxMarge()` renvoie `null`** — aucune marge inventée | 0 % : vente au prix d'achat sans que personne s'en aperçoive · `DEFAULT` SQL (ex. 30 %) : taux arbitraire imposé à toutes les boutiques existantes |
+| Où écrire les taux | **Route dédiée `PUT /api/boutiques/:id/marges`** | Un champ de plus sur `/:id/settings` : cette route réécrit la TVA et les paiements à chaque appel — un corps ne portant que les marges aurait remis la TVA à 20 % |
+| Défaut d'écrasement entre onglets | **Consigné, non corrigé** (🔴 P1) | Le corriger ici : diff élargi, et la TVA pilote la mention légale des factures — mérite son propre ticket, test vu rouge compris |
+
+**Précisions qui en découlent** :
+
+- Taux = pourcentage du **prix d'achat** (définition comptable du taux de marge, pas du taux de
+  marque) : prix de vente = prix d'achat × (1 + taux / 100). Appliqué au ticket 06.
+- Un taux de famille à `0` est un **choix** et l'emporte sur le défaut (`??`, jamais `||`).
+- La route `/marges` remplace les cinq taux d'un coup : un champ absent vaut `null`.
+- Garde **plus stricte** que `/settings` : un compte rattaché à une boutique n'écrit que chez
+  lui, rôle `admin` compris. `/settings` laisse tout rôle `admin` viser n'importe quelle
+  boutique — non modifié, hors périmètre.
+- Granularité par `famille` (4 valeurs fixes) et non par `categorie_id` : tranchée au grilling
+  du cp91, rappelée ici pour mémoire.
+
 ## 2026-09-09 — Signataire introuvable : le registre refuse plutôt que d'écrire
 
 Le fail-open laissé ouvert par le ticket 004 est tranché. `assertPeutEcrireAuRegistre()`

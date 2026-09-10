@@ -511,6 +511,23 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   2026-09-10 en cherchant précisément un pattern à réutiliser pour Mobilax — il n'y en avait
   pas). Non corrigé, hors périmètre du ticket qui l'a trouvé.
 
+## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
+
+- **`resoudreTauxMarge(settings, famille)`** (`boutiqueService.ts`, pure) est le seul point de
+  résolution : taux de la famille, sinon `marge_taux_defaut`, sinon **`null`**. ⊥ remplacer ce
+  `null` par un taux de repli (0 %, 30 %…) chez un appelant : une boutique qui n'a rien saisi ne
+  se voit imposer aucune marge (`decisions.md`). Un taux de famille à `0` l'emporte sur le défaut
+  — `??`, jamais `||`.
+- Taux = % du **prix d'achat** : prix de vente = prix d'achat × (1 + taux / 100). Il s'applique
+  aux produits importés, **jamais** aux prestations de réparation (table `services`).
+- **Les taux s'écrivent par `PUT /api/boutiques/:id/marges` seule** (`updateTauxMarge()`,
+  remplacement complet des cinq colonnes). ⊥ les ajouter à `PUT /:id/settings`.
+- **⚠ `PUT /:id/settings` écrase ce qu'on ne lui envoie pas** : `updateBoutiqueSettings()`
+  assigne `tva_taux_defaut`, `paiement_*`, `notif_*` sans COALESCE, alors que chaque onglet de
+  `settings.html` n'envoie que ses champs (`bugs.md`, 🔴 P1 non corrigé). Tant qu'il n'est pas
+  corrigé, **tout nouveau réglage prend sa propre route** — sinon il sera remis à zéro par
+  l'enregistrement de n'importe quel autre onglet.
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +

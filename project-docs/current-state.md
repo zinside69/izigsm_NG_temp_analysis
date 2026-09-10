@@ -1,4 +1,62 @@
-# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 91 — chantier Mobilax spécifié, ticket 01 en place)
+# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 92 — ticket 02 Mobilax en place, défaut des Réglages mesuré)
+
+## Checkpoint 92 — Ticket 02 : taux de marge configurables, et les Réglages qui s'écrasent entre onglets (2026-09-10)
+
+Suite directe du cp91. `/mattpocock-skills:implement ticket 02` invoqué par l'exploitant, TDD
+en 4 tranches sur des seams **convenus avant la première ligne de test** (résolution pure,
+écriture en service, route, écran), puis `/code-review high`. Commit `6c432dc`.
+
+### Trois décisions prises avec l'exploitant
+
+- **Sans taux, `null`** : `resoudreTauxMarge()` renvoie `null` quand ni la famille ni le défaut
+  ne sont fixés — aucune marge inventée. Écartés : 0 % (vente à perte silencieuse) et un
+  `DEFAULT` SQL arbitraire imposé aux boutiques existantes. **Conséquence pour le ticket 06** :
+  il doit gérer ce `null` (prix à saisir, ou message « marge non configurée »).
+- **Route dédiée** `PUT /api/boutiques/:id/marges`, et non un champ de plus sur
+  `/:id/settings` — décidé en cours de route, après avoir lu que cette dernière appelle
+  toujours `updateBoutiqueSettings()` (voir plus bas). Garde plus stricte que `/settings` : un
+  compte rattaché à une boutique n'écrit que chez lui, **rôle admin compris**.
+- **Défaut des Réglages consigné, pas corrigé** — hors périmètre, pour garder le ticket
+  chirurgical.
+
+### Le défaut trouvé en lisant le code, puis mesuré
+
+`updateBoutiqueSettings()` assigne `tva_taux_defaut`, `paiement_*` et `notif_*` **sans
+COALESCE**, avec replis `?? 20` / `?? 0`, alors que chaque onglet de `settings.html` n'envoie
+que ses propres champs. **Mesuré en local sur un tenant neuf**, corps exacts de l'écran :
+Paiements enregistré → TVA 5,5 → **20** ; Numérotation enregistrée → espèces, CB, notif. →
+**0**. Toujours 200. Une boutique en franchise de TVA perd sa mention art. 293 B sans le savoir.
+🔴 P1 dans `todo.md`/`bugs.md`, avec la correction probable et une vérification à faire en prod.
+
+### Ce que la revue a ajouté
+
+Une seule remarque, de gravité faible, corrigée en TDD : la route répondait 200 sur une
+boutique inexistante (l'UPDATE ne touchait aucune ligne). 404 désormais, via
+`getBoutiqueById()` — les deux mocks D1 forcent `changes: 1`, lire le nombre de lignes aurait
+exigé de modifier deux helpers partagés par 30 suites.
+
+### Un faux rouge écarté par la mesure, pas par l'intuition
+
+Suite Playwright complète : 197/198, échec `console-boutiques` en `socket hang up` sur
+`/api/auth/login`, à l'instant où vitest et `tsc` tournaient en parallèle. Rejoué seul sur un
+build à jour : 10/10. **Ne pas lancer vitest/tsc pendant une suite E2E complète** — wrangler
+local coupe des connexions sous la charge.
+
+### Gates
+
+vitest **965/967** (+20 ; les 2 échecs restent les permanents `agendaService`), Playwright
+**197/198** en suite complète + rejeu isolé 10/10, tsc **32** inchangé, build ✓.
+
+### État
+
+**Ticket 02 complet, commité, non déployé.** Migrations `0041` puis `0042` à appliquer à distance
+avant le Worker, secret `FOURNISSEUR_CRYPTO_KEY` à poser. `CACHE_VERSION` toujours `v2.93` : les
+tickets 01 et 02 ont touché `public/` — à incrémenter si on déploie avant la fin du chantier.
+Tickets 03-09 `ready-for-agent` ; 03 et 06 débloqués côté marge (06 attend encore 03).
+
+**Restes** : 🔴 P1 Réglages qui s'écrasent (nouveau) · 🔴 P1 `/fournisseurs` invisible ·
+🟠 P2 `email_api_key` en clair · chaînage NF525 · cache de la boutique précédente ·
+`clotures_journalieres` `UNIQUE` global · relecture du rôle en base. Chantier Mobilax : 03-09.
 
 ## Checkpoint 91 — Grilling → spec → 9 tickets → ticket 01 implémenté et revu (2026-09-10)
 
