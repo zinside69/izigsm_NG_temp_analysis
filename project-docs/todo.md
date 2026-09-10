@@ -415,6 +415,41 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
 - [ ] **08** — Même widget sur Caisse — bloqué par 06
 - [ ] **09** — Widget sur Prise en charge (pré-remplit `prix_estime`) — bloqué par 06
 
+### 🔴 À faire en début de prochaine session — poser `FOURNISSEUR_CRYPTO_KEY` en production (ajouté le 2026-09-10)
+
+**Ce que c'est** : la clé maîtresse AES-256 qui chiffre la clé API Mobilax de chaque boutique
+(`fournisseurs.api_key_chiffree`, `src/lib/chiffrement.ts`). Secret Cloudflare, même mécanisme
+que `JWT_SECRET` : ni dans le code, ni en base. Existe en local (`.dev.vars`), **pas encore en
+production**. Préalable au déploiement des tickets 01-02. Référence : `docs/DEPLOIEMENT.md`
+§ 6.2.
+
+**Mode opératoire** — l'exploitant lance lui-même ces commandes (préfixe `!`, PowerShell, depuis
+`izigsm/webapp`), pour que la valeur ne transite **pas** par la conversation :
+
+- [ ] 1. Générer une clé propre à la production (32 octets → 64 caractères hex) :
+      `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+- [ ] 2. La ranger **tout de suite** dans le gestionnaire de mots de passe
+- [ ] 3. L'enregistrer chez Cloudflare (la commande demande la valeur — coller celle de l'étape 1) :
+      `npx wrangler pages secret put FOURNISSEUR_CRYPTO_KEY --project-name izigsm`
+- [ ] 4. Vérifier sa présence (la liste montre le nom, jamais la valeur) :
+      `npx wrangler pages secret list --project-name izigsm`
+
+**Précautions** :
+
+- ⊥ recopier la clé de `.dev.vars` : la production a la sienne.
+- ⊥ la perdre ni la changer une fois des clés Mobilax enregistrées : toutes deviendraient
+  indéchiffrables, chaque boutique devrait ressaisir la sienne.
+- ⊥ la coller dans une conversation (même classe de risque que le jeton Mobilax de
+  préproduction, à faire tourner — ci-dessus).
+- Si oubliée : enregistrer un fournisseur **avec** clé API échoue avec un message explicite ;
+  rien n'est corrompu.
+- Erreur `7403` sur la commande wrangler : jeton de `.dev.vars` exporté dans le shell, voir
+  `CLAUDE.md` § Déploiement.
+
+**Enchaînement ensuite (déploiement, sur confirmation explicite)** : migrations `0041` puis
+`0042` à distance → `CACHE_VERSION` incrémenté dans `public/sw.js` (tickets 01-02 touchent
+`public/`) → `npm run deploy`.
+
 Hors périmètre, explicitement (spec.md § Out of Scope) : agent IA de suggestion de prix par
 historique de ventes (chantier séparé, sans lien avec Mobilax) · synchronisation automatique
 du stock (webhooks) · marge par `categorie_id` libre · commande directe auprès de Mobilax

@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 92 — ticket 02 Mobilax en place, défaut des Réglages mesuré)
+# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 93 — mode opératoire du secret de chiffrement planifié)
+
+## Checkpoint 93 — `FOURNISSEUR_CRYPTO_KEY` : expliqué, et planifié pour la prochaine session (2026-09-10)
+
+Suite directe du cp92, sans code touché. L'exploitant a demandé ce que recouvrait « poser le
+secret `FOURNISSEUR_CRYPTO_KEY` » — préalable au déploiement des tickets 01-02. Explication
+vérifiée contre `docs/DEPLOIEMENT.md` § 6.2 et `src/lib/chiffrement.ts` (AES-256, clé hex de
+64 caractères), puis mode opératoire inscrit dans `todo.md` § Mobilax, **en tête des actions de
+la prochaine session** : génération, rangement dans le gestionnaire de mots de passe,
+`wrangler pages secret put`, vérification par `secret list`.
+
+**Choix de méthode** : les commandes sont lancées par l'exploitant (préfixe `!`), pas par la
+session — la valeur générée ne doit pas transiter par la conversation.
+
+**État** : inchangé depuis le cp92 — tickets 01-02 faits, poussés, non déployés. Aucune gate
+rejouée (docs seulement).
+
 
 ## Checkpoint 92 — Ticket 02 : taux de marge configurables, et les Réglages qui s'écrasent entre onglets (2026-09-10)
 

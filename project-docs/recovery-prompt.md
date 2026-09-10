@@ -1,4 +1,11 @@
-# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 92 — tickets 01 et 02 Mobilax en place)
+# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 93 — tickets 01 et 02 Mobilax en place)
+
+## 🔴 Première action de cette session (cp93)
+
+**Poser le secret `FOURNISSEUR_CRYPTO_KEY` en production** — mode opératoire pas à pas dans
+`project-docs/todo.md` § Mobilax (« À faire en début de prochaine session »). Proposer à
+l'exploitant de lancer **lui-même** les commandes avec `!` : la valeur ne doit pas passer par la
+conversation. Préalable au déploiement des tickets 01-02, qui reste sur confirmation explicite.
 
 ## Ce qui a changé au checkpoint 92
 
