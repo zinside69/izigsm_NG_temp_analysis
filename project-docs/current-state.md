@@ -1,4 +1,107 @@
-# iziGSM — État courant (MàJ : 2026-09-09, checkpoint 89 — Mobilax cadré, et bloqué chez le fournisseur)
+# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 90 — Mobilax débloqué, et une clé trouvée en clair au passage)
+
+## Checkpoint 90 — Le compte Mobilax répond, la sémantique des prix s'éclaire, un vrai bug de sécurité trouvé en marge (2026-09-10)
+
+Suite directe du cp89. Le blocage du fournisseur est levé, deux agents en parallèle ont fait
+avancer le chantier, et l'un d'eux a débusqué un défaut sans rapport avec Mobilax.
+
+### Le compte de préproduction répond
+
+Mobilax a provisionné le compte entre le 09 et le 10. `POST /auth` (`apiv2.mobilax.pro`) avec
+`MOBILAX_API_KEY` (`.dev.vars`, 64 caractères, jamais affichée) → **200**. **9 requêtes de
+lecture** au total sur la journée (3 scripts successifs), aucune écriture, largement sous les
+quotas (`/auth` 10/min, `/products*` 30/min).
+
+**Ce que la mesure a confirmé et corrigé** :
+
+- `total: 184716` — coïncide exactement avec l'exemple de la doc, toujours pas confirmé si
+  c'est le catalogue entier ou celui de ce compte.
+- **Les en-têtes de quota existent** (`ratelimit-limit/policy/remaining/reset`), contrairement
+  à ce que la recherche du 2026-09-09 affirmait. Un back-off n'est donc plus aveugle.
+- `expireIn` = `"1h"` en préprod (l'exemple de doc montrait `"120m"`) — confirme qu'il ne faut
+  jamais le coder en dur.
+- `updatedSince` semble fonctionner hors playground (`total` filtré de 184716 à 7 sur 24 h).
+
+### La sémantique des prix — résolue par la mesure, pas par la doc
+
+Deux agents lancés en parallèle : l'un a creusé la doc pour situer les 5 champs de prix,
+l'autre a cherché dans le dépôt un pattern de secret chiffré par boutique à réutiliser.
+
+**Les 5 champs se répartissent sur 2 endpoints distincts**, jamais ensemble : `/products/:id`
+porte `price`/`b2c_enabled`/`b2c_percentage`/`b2c_price` (nombres) ; `/products/:id/full` porte
+`price`/`customer_price`/`mbx_price`/`discount_amount`/`recommended_price` (chaînes).
+
+⚠ **Deux erreurs de la note du 2026-09-09 corrigées.** La parenthèse « prix de revente au
+client final du revendeur » sur `b2c_price` n'était **pas une citation de la doc** — une glose
+non signalée comme telle par l'agent de la veille, absente du bundle (0 occurrence vérifiée).
+Et « tous à `0.00` » était faux : `recommended_price` vaut `"100.00"` dans l'exemple documenté.
+**Leçon reprise du cp89** : une affirmation d'agent doit être vérifiée avant d'être tenue pour
+sourcée, même dans une note qu'on a soi-même relue et poussée.
+
+**Puis un appel réel a tranché plus que la doc ne le permettait.** `GET /products/17/full` —
+même produit vu la veille sur la liste, `price: 8.68` cohérent entre les deux endpoints :
+
+```
+price              = 8.68   (nombre)
+recommended_price  = "8.90" (chaîne, +2,5 % — PAS ×2,5 comme l'exemple de doc)
+customer_price     = "0.00"
+mbx_price          = "0.00"
+discount_amount    = "0.00"
+```
+
+`customer_price`/`mbx_price` à zéro sur **deux** produits réels indépendants désormais —
+hypothèse renforcée qu'ils ne sont pas activés pour ce compte de préproduction, plutôt qu'une
+valeur métier. **`price` retenu comme candidat solide pour le prix d'achat de base**,
+utilisable dès maintenant. La sémantique exacte de `customer_price`/`mbx_price` reste ouverte.
+
+### Un défaut de sécurité trouvé en marge, sans rapport avec Mobilax
+
+L'agent chargé de chercher un pattern de secret chiffré par boutique (pour la clé API Mobilax
+par tenant) n'en a trouvé aucun de réutilisable — mais un précédent comparable, qui est un
+**anti-pattern** : `boutique_settings.email_api_key` (clé Resend par boutique) est **stockée en
+clair**, malgré un commentaire de migration (`0020`) qui affirme « clé API chiffrée ». Pire,
+`GET /api/boutiques/:id` la **renvoie sans filtrage** à quiconque consulte la boutique.
+
+Consigné dans `bugs.md` et `todo.md` (🟠 P2), **non corrigé** — sujet distinct, à traiter comme
+son propre ticket. L'exploitant a choisi de le traiter après Mobilax, pas maintenant.
+
+Constat utile pour la suite : **aucun pattern de chiffrement réversible n'existe dans ce
+dépôt**. `auth.ts`/`nf525.ts`/`photoToken.ts` n'utilisent que du hash à sens unique (PBKDF2,
+SHA-256) et du HMAC. Construire AES-GCM pour la clé Mobilax par tenant sera un premier usage,
+pas une réutilisation — et l'occasion de corriger `email_api_key` au passage, un jour.
+
+### Où en est la question ouverte du stockage du secret
+
+**Toujours pas tranchée.** L'exploitant a précisé : « une clé API par tenant, **impérative**
+car chaque tenant a ses propres prix chez Mobilax » — ça répond à *quelle* clé, pas à *où* elle
+vit. Les deux options restent : chiffrée en D1 (le serveur peut agir pour le tenant) ou jamais
+relue côté serveur (aucune action automatique possible). Le constat sur `email_api_key`
+plaide clairement pour la première option, correctement implémentée cette fois.
+
+### Leçon du cp89 appliquée avec succès
+
+Le piège du heredoc bash non quoté qui mange les backticks (cp89, deux incidents le
+2026-09-09 sur ce même fichier) ne s'est **pas reproduit** aujourd'hui : les quatre éditions
+de la note de recherche sont toutes passées par l'outil `Edit` (ancre exacte), zéro heredoc
+bash pour du contenu Markdown. Confirmation que la parade tient — à garder comme réflexe pour
+tout fichier portant des backticks, pas seulement pour ce fichier-ci.
+
+### Gates
+
+Non rejoués — aucun code applicatif touché, seulement de la documentation et deux appels de
+lecture à une API externe. Valeurs du cp88 (dernier changement de code) : vitest **929/931**,
+Playwright **195/195**, tsc **32**, build ✓.
+
+### État
+
+Dépôt et production **alignés** (`izigsm-v2.93`), arbre propre, aucune migration en attente.
+Trois commits poussés dans la journée avant ce checkpoint (`0d6de77`, `b99c003`, `9c8e4d6`),
+tous vérifiés par un `fetch` postérieur.
+
+**Restes** : 🟠 P2 `email_api_key` en clair (nouveau) · chaînage NF525 · cache de la boutique
+précédente · `clotures_journalieres` `UNIQUE` global · relecture du rôle en base. Et **Mobilax**
+: stockage du secret par tenant toujours à trancher, sémantique de `customer_price`/`mbx_price`
+toujours ouverte.
 
 ## Checkpoint 89 — L'API Mobilax : documentée, mesurée, bloquée (2026-09-09)
 

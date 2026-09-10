@@ -1,3 +1,109 @@
+# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 90 — Mobilax débloqué, et une clé trouvée en clair au passage)
+
+## ⚠ Avant tout — d'où se travaille ce projet
+
+**Depuis le dossier `izigsm/webapp` du workspace, jamais depuis la racine.** Seul moyen de charger
+le `CLAUDE.md` qui porte les invariants NF525, l'isolation multi-tenant et la procédure de
+déploiement.
+
+## Reprendre ici
+
+**Rien n'attend de déploiement.** Dépôt et production alignés, `izigsm-v2.93`, arbre propre,
+aucune migration en attente.
+
+**Deux chantiers ouverts, aucun bloqué de l'extérieur :**
+
+1. **Mobilax** — le compte de préproduction répond. Deux inconnues bloquantes du cp89 sont
+   résolues par des mesures réelles (taille du catalogue, champ de prix à utiliser). Reste :
+   trancher le stockage du secret par tenant, et confirmer la sémantique de
+   `customer_price`/`mbx_price`.
+2. **`boutique_settings.email_api_key` en clair** — 🟠 P2, trouvé en marge de Mobilax. Traiter
+   **après** Mobilax (décision explicite de l'exploitant le 2026-09-10).
+
+## Mobilax — l'essentiel avant d'y toucher
+
+Tout est dans `project-docs/recherche-api-mobilax-2026-09-09.md` (v1.4, sources citées,
+**historique d'erreurs corrigées inclus — lire les notes de version avant de citer un passage
+du corps du texte**). ⊥ refaire cette recherche.
+
+**Ce qui est désormais mesuré et tranché** :
+- Catalogue : `total: 184716` (coïncide avec l'exemple de la doc — pas encore confirmé si
+  c'est le catalogue entier ou celui de ce compte).
+- **`price` (nombre) est le candidat solide pour le prix d'achat de base** — cohérent entre
+  `/products` (liste) et `/products/:id/full` (détail), 8.68 sur les deux, pour le même produit.
+- `customer_price`/`mbx_price` à `"0.00"` sur **deux** produits réels indépendants : probablement
+  non activés pour ce compte de préproduction, pas une valeur métier. Pas confirmé en texte.
+- `recommended_price` varie par produit (+2,5 % sur un produit réel, ×2,5 dans l'exemple de
+  doc) — pas un multiplicateur fixe.
+- Les en-têtes de quota **existent** (`ratelimit-limit/policy/remaining/reset`) — corrige une
+  affirmation fausse de la v1.0. Back-off possible sans attendre un `429`.
+- `updatedSince` semble fonctionner hors playground.
+
+**Ce qui reste ouvert** : sémantique textuelle de `customer_price`/`mbx_price` (jamais
+documentée) ; `184716` = catalogue entier ou par compte ; **où vit la clé de chaque tenant**
+(chiffrée en D1, jamais relue côté serveur — la question ouverte du 2026-09-07/09 n'est
+toujours pas tranchée). L'exploitant a confirmé le 2026-09-09 : **une clé API par tenant est
+impérative**, chaque tenant a ses propres prix chez Mobilax — ça répond à *quelle* clé, pas à
+*où* elle vit.
+
+**Cadrage inchangé depuis le 2026-09-09** : ⊥ stocker le catalogue en local pour l'instant. On
+mesure par appel réel avant de bâtir un schéma.
+
+## `boutique_settings.email_api_key` — le défaut trouvé en marge
+
+`bugs.md` § du même titre, `todo.md` 🟠 P2. La clé Resend de chaque boutique est **stockée en
+clair** malgré un commentaire de migration (`0020`) qui affirme le contraire, et **`GET
+/api/boutiques/:id` la renvoie sans filtrage**. Aucun pattern de chiffrement réversible
+n'existe dans ce dépôt (`auth.ts`/`nf525.ts`/`photoToken.ts` : hash à sens unique et HMAC
+seulement) — construire AES-GCM pour Mobilax sera un premier usage, l'occasion de corriger
+`email_api_key` au passage. **L'exploitant a choisi de le traiter après Mobilax.**
+
+## Ce qui reste ouvert, par ordre de coût d'erreur
+
+1. **🟠 P2 — `email_api_key` en clair**, voir ci-dessus.
+2. **🟠 P2 — le chaînage NF525 n'est pas vérifié** : une ligne supprimée au milieu du journal ne
+   produit aucune anomalie. Contrôle fiscal — tickets **avant** tout code.
+3. **🟠 P2 — sans boutique sélectionnée, une page affiche le cache de la boutique précédente.**
+4. **🟠 P2 — `clotures_journalieres.date_cloture` est `UNIQUE` global**, pas par boutique.
+5. **🟠 P2 — la garde du registre relit en base un rôle qu'elle a déjà** (121 points de contact
+   mesurés). Change l'**entrée** de la garde, jamais sa **décision** : ⊥ revenir sur le refus du
+   signataire introuvable en chemin.
+
+## Comment lancer les skills mattpocock
+
+`to-spec`, `to-tickets`, `implement`, `grill-with-docs`, `triage` sont `disable-model-invocation` :
+**l'exploitant les tape lui-même**, `/mattpocock-skills:<nom>`. `tdd`, `code-review`, `grilling`,
+`domain-modeling` et `research` sont invocables directement.
+
+Plugin **déjà installé et à jour** : v1.2.3. ⊥ chercher à l'installer ou à ajouter le
+marketplace amont.
+
+## Comment déléguer à des agents en parallèle — pattern confirmé le 2026-09-10
+
+Deux agents lancés côte à côte dans le même tour (doc Mobilax + exploration du dépôt), rendu
+en une seule synthèse consolidée. Règles qui ont tenu :
+- **⊥ déléguer un appel API réel** touchant `MOBILAX_API_KEY` à un agent : garder ça dans le
+  fil principal, où chaque ligne imprimée est sous contrôle direct.
+- **La construction du service** (`mobilaxService.ts`, tests, migration) suit le circuit
+  mattpocock du `CLAUDE.md`, pas des `Agent` génériques.
+- Un agent de recherche peut **corriger un travail d'agent précédent** — celui du 09-09 avait
+  glissé une glose non sourcée présentée comme citation ; celui du 10 l'a repérée et corrigée.
+  ⊥ tenir une note de recherche pour définitivement vraie sans revérification.
+
+## Piège d'outillage confirmé résolu
+
+Le heredoc bash non quoté qui mange les backticks (2 incidents le 2026-09-09, même fichier) ne
+s'est pas reproduit le 2026-09-10 : les 4 éditions de la note sont passées par l'outil `Edit`
+(ancre exacte). Réflexe à garder pour tout fichier Markdown portant des backticks.
+
+## Baselines
+
+Non rejouées au cp90 — aucun code applicatif touché depuis le cp88. vitest **929/931** (2
+permanents de fuseau `agendaService`), Playwright **195/195**, tsc **32**, build ✓.
+`CACHE_VERSION` dépôt **et** production : `izigsm-v2.93`.
+
+---
+
 # Recovery Prompt — iziGSM — 2026-09-09 (checkpoint 89 — Mobilax cadré, et bloqué chez le fournisseur)
 
 ## ⚠ Avant tout — d'où se travaille ce projet
