@@ -11,11 +11,11 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 40 migrations dans `migrations/`
-  (dernière : `0040_facture_numero_nullable.sql`)
+- Base de données : Cloudflare D1 (SQLite edge) — 44 migrations dans `migrations/`
+  (dernière : `0044_bon_commande_date_paiement.sql`, compté le 2026-09-11)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (914/916 au 2026-09-04, 27 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (987/989 au 2026-09-11, 33 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -554,6 +554,32 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   n'applique aucune contrainte. Tout nouveau `EmailType` doit être
   ajouté au CHECK **par migration**, sinon il rejoint cette classe.
 
+## Bons de commande fournisseur — invariants (depuis 2026-09-11, checkpoint 100)
+
+- **Le bon de commande est interne** : réception → stock + CUMP, suivi du règlement. **Rien ne
+  part chez le fournisseur** — ni « Envoyer » (simple passage en `awaiting_delivery`), ni aucune
+  autre action. La commande réelle chez Mobilax est un chantier distinct (`decisions.md`) : ⊥
+  écrire un message qui laisse croire le contraire.
+- **« Impayés fournisseurs » = `statut = 'received'` et `statut_paiement != 'paid'`.** Un
+  brouillon ou un bon envoyé non reçu ne doit rien. ⊥ revenir à « tout bon non annulé ».
+- **`marquerBonCommandeRegle()` est le seul écrivain de `statut_paiement = 'paid'`** (et de
+  `date_paiement`, migration `0044`). Refus : brouillon, annulé, déjà réglé — la date d'origine
+  n'est jamais réécrite. Avant lui, `paid` n'était écrit par personne et le KPI ne pouvait que
+  grossir.
+- **Une règle portée par le SQL se prouve contre la vraie D1 locale**, jamais par les mocks du
+  dépôt : `createMockD1`/`createMockDatabase` renvoient ce qu'on leur configure quelle que soit
+  la requête (`tests/e2e/bon-commande-reglement.spec.ts`).
+- ⚠ `updateStatutBonCommande()` ne contrôle **aucune** transition (un bon reçu peut être annulé
+  par l'API, sans retour du stock). L'écran ne le propose plus ; le serveur l'accepte encore.
+
+**Vocabulaire CSS des pages hors socle.** `fournisseurs.html` employait 15 classes définies
+nulle part (`modal-backdrop`, `input-field`, `td-cell`, `badge-*`…) et `btn-primary` sans `btn` :
+boutons en texte brut, fenêtre rendue dans le flux sous la barre latérale. Elles sont désormais
+définies dans un `<style>` local à la page (précédent : `sav.html`). Toute fenêtre de saisie
+posée à côté de la barre doit avoir un `z-index` ≥ 500 (barre : 100, bandeau : 900) —
+`sav.html` est à 40, probablement sous la barre, non vérifié. Tout bouton du socle = `btn` +
+variante (`btn-primary`…) + taille (`btn-sm`).
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +
@@ -677,6 +703,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-11 (checkpoint 100) : aucune migration en attente — dépôt et production
+alignés.** `0044` (`bons_commande.date_paiement`) appliquée à distance **puis** le Worker déployé,
+par l'exploitant. Relu en production : `d1_migrations` distant s'arrête à `0044`, colonne
+présente, apex sert l'asset hashé du manifeste local, `sw.js` `izigsm-v2.97`, `POST
+/api/bons-commande/:id/regler` sans jeton → 401. Validé à l'écran par l'exploitant.
 
 **État au 2026-09-11 (soir) : aucune migration en attente — dépôt et production alignés.**
 `0043` (CHECK de `email_logs.type`, recréation de table) appliquée à distance à 13:36:17, sans

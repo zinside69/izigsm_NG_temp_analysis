@@ -1,4 +1,22 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 99 — dépôt et production alignés, P1 emails résolu)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 100 — /fournisseurs réparé, bons réglables, 0044 en production)
+
+## Ce qui a changé au checkpoint 100
+
+**Dépôt et production alignés, aucune migration en attente** — `0044` (`bons_commande.date_paiement`)
+appliquée à distance puis Worker déployé (`izigsm-v2.97`), relu en production, validé à l'écran.
+
+**`/fournisseurs` refait** : onglets visibles (P1 clos), boutons et fenêtres stylés (classes
+locales à la page), fenêtre de détail d'un bon avec actions, « Marquer réglé »,
+« Impayés fournisseurs » = reçu non réglé. Invariants : `CLAUDE.md` § « Bons de commande
+fournisseur ». ⚠ Un bon de commande **n'envoie rien** au fournisseur.
+
+**Pistes** : ouvrir le chantier **commande Mobilax** (panier puis validation — `decisions.md`,
+`todo.md`) : l'exploitant tape `/mattpocock-skills:grill-with-docs` ; il dépend du **ticket 03
+Mobilax** (service + authentification), qui reste le préalable · 🟡 transitions de
+`updateStatutBonCommande()` · `sav.html` z-index · restes P2 emails · P2 secrets · P3 JSON → 500.
+
+**Méthode E2E à retenir** : si :3000 n'est pas à toi, serveur dédié :3100 + `PW_BASE_URL`
+(mémoire `feedback-wrangler-relance-apres-build`).
 
 ## Ce qui a changé au checkpoint 99
 

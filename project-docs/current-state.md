@@ -1,4 +1,34 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 99 — migration 0043 en production, P1 emails résolu)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 100 — /fournisseurs réparé, bons de commande réglables, migration 0044 en production)
+
+## Checkpoint 100 — `/fournisseurs` utilisable de bout en bout, et les impayés deviennent justes (2026-09-11)
+
+Trois livraisons successives, chacune déployée et **validée à l'écran par l'exploitant** :
+
+1. **Onglets** (`47e0592`, `izigsm-v2.95`) — le 🔴 P1 : `fournisseurs.js` basculait
+   `.hidden`/`tab-active`, `main.css` exige `.active` ; les trois onglets restaient vides pour
+   tout rôle. Test `fournisseurs-onglets.spec.ts` vu rouge.
+2. **Écran** (`25144c1`, `izigsm-v2.96`) — signalé sur captures : boutons en texte brut,
+   fenêtre de saisie tronquée sous la barre, rappel « ① » obscur. Cause : 15 classes définies
+   nulle part + `btn-primary` sans `btn`. `<style>` local, `btn btn-sm`, rappel « N produits
+   sous le seuil ». Test `fournisseurs-ecran.spec.ts` vu rouge (bouton 24 px, fenêtre à 2 258 px).
+3. **Bons de commande** (`d9a006f`, `izigsm-v2.97`, migration `0044`) — le détail était une
+   `alert()` (« draft »), le KPI comptait un brouillon (57,60 €), et **rien n'écrivait jamais
+   `paid`**. Fenêtre de détail + actions par statut, impayé = reçu non réglé,
+   `POST /regler`, `date_paiement`. E2E sur D1 locale réelle vu rouge (+12 € sur un brouillon).
+   Migration appliquée **puis** déployée par l'exploitant ; relu en production.
+
+**Décisions** (`decisions.md`) : commande Mobilax en deux étapes (panier `/cart`, puis
+validation `POST /payments/orders`) — chantier distinct, dépend du ticket 03 ; paiement réel
+Mobilax = encours mensuel réglé le 2 du mois suivant. Bons : détail + actions, impayé = reçu,
+bouton « Marquer réglé ».
+
+**Méthode** : serveur local de l'exploitant (:3000) laissé intact, E2E sur un serveur dédié
+:3100 via `PW_BASE_URL` (mémoire persistante). Son `workerd` enfant survit à l'arrêt : tué par PID.
+
+**Gates** : vitest **987/989** (+6), tsc **32**, 130 E2E dont le balayage du menu.
+
+**Restes** : `updateStatutBonCommande()` sans contrôle de transition (🟡) · `sav.html`
+`z-index: 40` sous la barre (non vérifié) · restes P2 emails · P2 secrets · ticket 03 Mobilax.
 
 ## Checkpoint 99 — Étape 2 : la migration du CHECK de `email_logs`, en TDD, appliquée en production (2026-09-11)
 
