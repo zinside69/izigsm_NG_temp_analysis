@@ -24,6 +24,25 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
+## 🟠 P2 — Emails : `ticket_livre` et `relance_devis` jamais journalisés, et trois sorties encore muettes (trouvé le 2026-09-11)
+
+Détail : `bugs.md` § « `email_logs.type` refuse `ticket_livre` et `relance_devis` » et
+§ « Confirmations de dépôt jamais envoyées ni journalisées ». Déjà fait le 2026-09-11 (TDD) :
+route « Envoyer test » branchée sur la clé globale ; notification désactivée et échec de
+`sendTicketCree()` désormais tracés ; `journaliserSansLever()` avec repli `console.error`.
+
+- [ ] Migration élargissant le `CHECK` de `email_logs.type` à `ticket_livre` et
+      `relance_devis` — recréation de table selon le patron de `0040` (table de transit ;
+      `PRAGMA foreign_key_check` à 0 sur la base visée avant). Test vu rouge : un `logEmail`
+      de type `ticket_livre` contre une vraie base SQLite
+- [ ] Même enveloppe que `sendTicketCree()` pour `sendTicketTermine()`, `sendTicketLivre()`,
+      `sendSavOuvert()` — appelés avec `.catch(() => {})`, leurs exceptions avant l'envoi
+      restent muettes
+- [ ] `reply_to` = email de la boutique dans l'envoi Resend : aujourd'hui une réponse du
+      client part vers `noreply@mail.repairdesk.fr` (proposé le 2026-09-11, option C)
+- [ ] L'écran « Envoyer test » dit « aucune clé API configurée » pour tout envoi simulé —
+      dire plutôt « ni clé propre, ni clé plateforme »
+
 ## ✅ 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11, non déployé**)
 
 **Corrigé en TDD le 2026-09-11** — COALESCE sur les huit colonnes, replis `?? 20` / `?? 0`
@@ -69,6 +88,45 @@ correct utilisé ailleurs. La correction consiste vraisemblablement à faire con
       de `.hidden`/`tab-active` — vérifier qu'aucun autre code ne lit `tab-active` avant de le
       retirer
 - [ ] Test de rendu (pas seulement un test qui contourne le bug comme celui du ticket 01)
+
+## 🟠 P2 — Secrets de production : les ranger, en recréer deux, vérifier ce que `sync push` copie (ajouté le 2026-09-11)
+
+Né de la pose de `FOURNISSEUR_CRYPTO_KEY` : **Cloudflare ne rend jamais la valeur d'un secret**
+(écriture seule). Un secret de production qui n'est rangé nulle part est donc perdu dès qu'il
+est posé. `FOURNISSEUR_CRYPTO_KEY` est rangé (gestionnaire de mots de passe, hors workspace) —
+c'était le seul dont la perte détruit des données. Les autres sont récupérables ou
+régénérables, d'où P2 et non P1.
+
+**Ranger dans le gestionnaire de mots de passe** (hors de `claude-test`) :
+
+- [ ] Les identifiants de `.dev.vars` qui donnent un accès réel : `CLOUDFLARE_API_TOKEN`,
+      `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`
+- [ ] `GOOGLE_CLIENT_ID` — recopié depuis Google Cloud Console (*API et services* →
+      *Identifiants*) ; identifiant public, rangé par commodité
+
+**Recréer ce qui n'est lisible nulle part** — générer, **ranger d'abord**, puis poser :
+
+- [ ] `RESEND_API_KEY` : nouvelle clé sur resend.com → `npx wrangler pages secret put
+      RESEND_API_KEY --project-name izigsm` → **supprimer l'ancienne** chez Resend
+- [ ] `JWT_SECRET` : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+      → `npx wrangler pages secret put JWT_SECRET --project-name izigsm`. ⚠ **Déconnecte tous
+      les utilisateurs une fois** (jetons invalidés) — aucune donnée perdue, mais à faire hors
+      des heures d'ouverture des boutiques
+- Rappel, déjà au § Mobilax : `MOBILAX_API_KEY` (préproduction) a transité en clair dans une
+  conversation — à faire tourner chez Mobilax avant la mise en production réelle
+
+**Vérifier ce que `sync push` copie** :
+
+- [x] Côté GitHub (`zinside69/claude-projects`) — **vérifié le 2026-09-11** : le git du
+      workspace ignore tout `izigsm/webapp/` (`.gitignore:52`), `.dev.vars` n'y est ni suivi
+      ni présent dans l'historique (`git log --all -- izigsm/webapp/.dev.vars` vide)
+- [ ] Côté **disque externe** — non vérifié. Aucun `sync-push.ps1` dans `claude-test/scripts/` ;
+      le script vit vraisemblablement dans `C:\Users\Said\claude-config-sync\` (mémoire
+      `project_sync_setup`). Chercher si la copie des projets exclut `.dev.vars` / `*.env` /
+      `*.env*`. Sinon, ces accès voyagent **en clair** sur le disque — l'exclure, ou chiffrer le
+      disque (BitLocker To Go)
+- [ ] Même question pour l'autre sens (`sync pull` vers le Mac) et pour
+      `soteli/.soteli-ftps.env` (identifiants FTPS, `CLAUDE.md` racine)
 
 ## 🟠 P2 — `boutique_settings.email_api_key` stockée en clair, renvoyée sans filtrage (trouvé le 2026-09-10)
 

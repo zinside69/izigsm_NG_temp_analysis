@@ -1,5 +1,53 @@
 # iziGSM — Bugs connus
 
+## ⚠ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, NON corrigé)
+
+Trouvé en corrigeant les sorties muettes de l'envoi d'email (entrée suivante). Le `CHECK` de
+`email_logs.type` (migration `0020`) n'admet que `ticket_cree | ticket_termine | sav_ouvert |
+relance | autre`, alors que `EmailType` et le code emploient aussi **`ticket_livre`**
+(`sendTicketLivre()`) et **`relance_devis`** (`sendRelanceDevis()`).
+
+**Déroulé** : Resend accepte l'email → `logEmail('envoye')` viole le CHECK et lève → le `catch`
+de `sendEmail()` tente `logEmail('erreur')`, qui viole le même CHECK et lève à son tour →
+l'exception remonte au `.catch(() => {})` de l'appelant. **L'email « appareil livré » et les
+relances de devis partent donc sans trace** — confirmé en production : aucune ligne de ces
+deux types dans `email_logs`.
+
+**Contenu, pas corrigé** : depuis le 2026-09-11, `journaliserSansLever()` se replie sur
+`console.error` quand l'écriture échoue — la trace existe dans les journaux Cloudflare, plus
+en base. **Correction** : migration élargissant le CHECK — donc recréation de la table, selon
+le patron de `0040` (table de transit, jamais `PRAGMA foreign_keys=OFF`) ; `todo.md` 🟠 P2.
+
+## ⚠ Confirmations de dépôt jamais envoyées ni journalisées, 18/07 → 14/08 (trouvé le 2026-09-11, cause non départagée, sorties muettes supprimées)
+
+**Symptôme** (production, SOTELI) : 5 prises en charge (tickets 17 à 21) créées par
+`POST /api/tickets`, clients avec email, **aucune ligne** dans `email_logs` — ni `envoye`, ni
+`simule`, ni `erreur`. Resend n'avait accepté que 4 emails depuis l'ouverture du service
+(10 et 15 juillet).
+
+**Diagnostic (`/diagnosing-bugs`)** — la boucle n'a jamais pu passer au rouge :
+- en local, chaque confirmation est journalisée, sans clé (`simule`) comme avec une clé
+  invalide (`erreur`, « API key is invalid ») — 4 runs sur 4 ;
+- en production le 2026-09-11, ticket 22 créé par l'exploitant pour **le même client** que le
+  ticket 19 (fiche non modifiée depuis le 20/07) : `envoye`, reçu, lien de suivi valide ;
+- écartés : autre route (l'écran passe par `POST /api/tickets`), schéma (`email_logs`
+  identique local/prod), client sans email (sauf peut-être le ticket 17), code réparé
+  entre-temps (aucun commit sur ce chemin depuis le 15/07).
+
+**Trois sorties muettes, impossibles à départager a posteriori** : notification
+« Confirmation de dépôt » décochée pendant la période (`return` sans ligne), exception avalée
+par le `.catch(() => {})` de la route, ou Worker interrompu avant l'écriture. **Le vrai
+défaut était là : l'architecture rendait un envoi raté indiscernable d'un envoi jamais tenté.**
+
+**Corrigé le 2026-09-11 (TDD)** : notification désactivée → ligne `simule` avec le motif dans
+`erreur` ; exception de `sendTicketCree()` → ligne `erreur` ; écriture impossible →
+`console.error` (`journaliserSansLever()`). Au passage : la route `POST /api/notifications/test`
+ne transmettait pas la clé globale → « Mode simulé » permanent pour toute boutique sans clé
+propre, alors que les vrais envois partaient — corrigé.
+
+**Reste** : `sendTicketTermine()`, `sendTicketLivre()` et `sendSavOuvert()` sont appelés avec le
+même `.catch(() => {})` ; leurs exceptions *avant* `sendEmail()` restent muettes.
+
 ## ✅ Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11**)
 
 **Correctif (2026-09-11, TDD)** : dans `updateBoutiqueSettings()`, les huit colonnes

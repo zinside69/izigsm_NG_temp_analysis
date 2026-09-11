@@ -140,6 +140,10 @@ notifications.post('/notifications/test', requireRole('admin', 'manager'), async
       sujet:      `[Test] Configuration email iziGSM — ${nomB}`,
       html,
       type:       'autre',
+      // Clé Resend plateforme, comme TOUS les envois réels (tickets, SAV, facturation,
+      // relances). Sans elle, une boutique sans clé propre — le cas normal depuis le
+      // repli du 2026-07-10 — voyait « Mode simulé » en permanence (défaut du 2026-09-11).
+      apiKeyFallback: c.env.RESEND_API_KEY,
     })
 
     return c.json({

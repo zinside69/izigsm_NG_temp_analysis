@@ -144,7 +144,15 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     autre:          true,
   }
   if (!notifMap[type]) {
-    return { success: true, simulated: true }  // notif désactivée pour ce type
+    // Jamais de sortie muette (2026-09-11) : sans cette ligne, un email jamais parti était
+    // indiscernable d'un email jamais tenté — ce qui a rendu indiagnosticables les
+    // confirmations de dépôt manquantes de SOTELI (18/07 → 14/08). Statut `simule` : le
+    // CHECK de email_logs n'admet pas « desactive » ; le motif va dans `erreur`.
+    await journaliserSansLever(db, {
+      boutiqueId, destinataire: to, sujet, type, entiteType, entiteId,
+      statut: 'simule', erreur: `Notification désactivée dans les réglages (${type})`,
+    })
+    return { success: true, simulated: true }
   }
 
   // Mode simulé si pas de clé API
@@ -216,6 +224,26 @@ async function logEmail(
     p.entiteType ?? null, p.entiteId  ?? null,
     p.statut, p.erreur ?? null, p.providerId ?? null
   ])
+}
+
+/**
+ * Journalise un envoi (ou un non-envoi) sans jamais lever — pour les sorties qui étaient
+ * muettes (2026-09-11). Si l'écriture elle-même échoue, dernier recours : `console.error`,
+ * visible dans les journaux Cloudflare.
+ *
+ * Cas connu où l'écriture échoue : les types `ticket_livre` et `relance_devis`, que le
+ * CHECK de email_logs (migration 0020) n'admet pas (`bugs.md`). Lever ici casserait
+ * l'appelant — un traitement de relances en lot, par exemple.
+ *
+ * @param db Port Database
+ * @param p  Mêmes champs que `logEmail()`
+ */
+async function journaliserSansLever(db: Database, p: Parameters<typeof logEmail>[1]): Promise<void> {
+  try {
+    await logEmail(db, p)
+  } catch (e: any) {
+    console.error(`[email] journalisation impossible — boutique ${p.boutiqueId}, type ${p.type}, statut ${p.statut} : ${e?.message ?? e}`)
+  }
 }
 
 // ─── Templates email ──────────────────────────────────────────────────────────
@@ -397,6 +425,29 @@ export async function sendResetPasswordEmail(
  * @returns              void
  */
 export async function sendTicketCree(
+  db:          Database,
+  boutiqueId:  number,
+  ticket:      Parameters<typeof envoyerTicketCree>[2],
+  frontendUrl: string,
+  apiKeyFallback?: string
+): Promise<void> {
+  // Jamais de sortie muette (2026-09-11) : toute exception remontait jusqu'au
+  // `.catch(() => {})` de POST /api/tickets, sans ligne ni log — l'une des trois sorties
+  // qui ont rendu indiagnosticables les confirmations manquantes de SOTELI (18/07 → 14/08).
+  try {
+    await envoyerTicketCree(db, boutiqueId, ticket, frontendUrl, apiKeyFallback)
+  } catch (e: any) {
+    await journaliserSansLever(db, {
+      boutiqueId, destinataire: ticket.client_email,
+      sujet:      `[${ticket.numero}] Confirmation de dépôt`,
+      type:       'ticket_cree', entiteType: 'ticket', entiteId: ticket.id,
+      statut:     'erreur', erreur: e?.message ?? String(e),
+    })
+  }
+}
+
+/** Corps de `sendTicketCree()` — peut lever ; l'enveloppe exportée journalise l'échec. */
+async function envoyerTicketCree(
   db:         Database,
   boutiqueId: number,
   ticket: {

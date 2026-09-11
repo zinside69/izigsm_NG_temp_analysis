@@ -20,6 +20,7 @@ import {
   listEmailLogs,
   sendRelanceDevis,
   processRelancesDevis,
+  sendTicketCree,
   type EmailConfig,
 } from '../src/services/emailService'
 
@@ -160,7 +161,12 @@ describe('sendEmail() — notif désactivée', () => {
     })
   })
 
-  it('retourne success=true, simulated=true sans loger', async () => {
+  it('retourne success=true, simulated=true et journalise le motif', async () => {
+    // Jusqu'au 2026-09-11, ce cas sortait SANS aucune ligne dans email_logs : un email
+    // jamais parti devenait indiscernable d'un email jamais tenté (diagnostic des
+    // confirmations de dépôt manquantes chez SOTELI, 18/07 → 14/08). Il laisse désormais
+    // une trace `simule` — le CHECK de la table n'admet pas de statut « desactive » — avec
+    // le motif dans `erreur`.
     const res = await sendEmail({
       db, boutiqueId: 1,
       to: 'client@example.com',
@@ -171,10 +177,11 @@ describe('sendEmail() — notif désactivée', () => {
     })
     expect(res.success).toBe(true)
     expect(res.simulated).toBe(true)
-    // Pas de log INSERT puisque notif désactivée (retour immédiat avant logEmail)
-    const calls = db.__getCalls()
-    const logCall = calls.find(c => c.sql.includes('INSERT INTO email_logs'))
-    expect(logCall).toBeUndefined()
+
+    const logCall = db.__getCalls().find(c => c.sql.includes('INSERT INTO email_logs'))
+    expect(logCall, 'une notification désactivée doit laisser une trace').toBeDefined()
+    expect(logCall?.params[6]).toBe('simule')   // statut
+    expect(String(logCall?.params[7])).toMatch(/désactivée.*relance/i)   // erreur = motif
   })
 
   it('type "autre" est toujours actif même avec notif=0', async () => {
@@ -194,6 +201,37 @@ describe('sendEmail() — notif désactivée', () => {
     // Sans clé + type autre → simule
     expect(res.success).toBe(true)
     expect(res.simulated).toBe(true)
+  })
+})
+
+// ─── sendTicketCree — échec avant l'envoi ─────────────────────────────────────
+// Jusqu'au 2026-09-11, toute exception de sendTicketCree() remontait jusqu'au
+// `.catch(() => {})` de la route POST /api/tickets : aucune ligne, aucun log. C'est l'une
+// des trois sorties muettes qui ont rendu indiagnosticables les confirmations de dépôt
+// manquantes de SOTELI (18/07 → 14/08).
+
+describe('sendTicketCree() — échec avant l\'envoi', () => {
+  const TICKET = {
+    id: 42, numero: 'TKT-2026-00042', tracking_token: 'jeton',
+    client_email: 'client@example.com', client_prenom: 'Jeanne',
+    appareil_marque: 'Apple', appareil_modele: 'iPhone 12', description_panne: 'Ecran casse',
+  }
+
+  it('journalise une ligne erreur au lieu de lever en silence', async () => {
+    const db = createMockDatabase()
+    db.__setResponseFn('SELECT nom FROM boutiques WHERE id = ? LIMIT 1', () => {
+      throw new Error('D1 indisponible')
+    })
+
+    await expect(sendTicketCree(db, 1, TICKET, 'https://repairdesk.fr', 're_cle')).resolves.toBeUndefined()
+
+    const logCall = db.__getCalls().find(c => c.sql.includes('INSERT INTO email_logs'))
+    expect(logCall, 'une confirmation de dépôt ratée doit laisser une trace').toBeDefined()
+    expect(logCall?.params[3]).toBe('ticket_cree')      // type
+    expect(logCall?.params[4]).toBe('ticket')           // entite_type
+    expect(logCall?.params[5]).toBe(42)                 // entite_id
+    expect(logCall?.params[6]).toBe('erreur')           // statut
+    expect(String(logCall?.params[7])).toContain('D1 indisponible')
   })
 })
 
