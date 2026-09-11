@@ -1,4 +1,44 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 98 — étape 1 du P1 emails en production)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 99 — migration 0043 en production, P1 emails résolu)
+
+## Checkpoint 99 — Étape 2 : la migration du CHECK de `email_logs`, en TDD, appliquée en production (2026-09-11)
+
+**Deux décisions de l'exploitant** : élargir le CHECK de `email_logs.type` **et** poser un
+garde-fou ; ne **pas** ajouter de statut « desactive » (périmètre minimal).
+
+**TDD, deux tranches vues rouges** :
+- `tests/email-logs-types-migration.test.ts` — contre un **vrai** SQLite, `node:sqlite` (intégré
+  à Node 24, aucune dépendance ajoutée, vérifié chargeable sous vitest avant écriture). Rejoue la
+  partie `email_logs` de `0020` puis chaque migration suivante **dans une transaction**, comme
+  D1. Rouge : `CHECK constraint failed` sur `ticket_livre` et `relance_devis`.
+- `tests/email-types-check-conformite.test.ts` — garde-fou statique `EmailType` ⊆ CHECK de la
+  dernière migration créant `email_logs`. Rouge : il listait les deux types manquants.
+
+**Migration `0043`** (`6fb97c2`) : patron de `0040` — `defer_foreign_keys`, transit, `DROP`,
+recréation sous le nom final, réinsertion à colonnes explicites, 3 index. Prérequis mesurés en
+production avant écriture : `pragma_foreign_key_check` à 0, 8 lignes, aucune table ne
+référençant `email_logs`. Rouge aussi sur le **moteur D1 local** avant (`INSERT ticket_livre`
+refusé), vert après (sonde acceptée puis supprimée, 20 lignes, 3 index).
+
+**Application distante — deux faux départs, puis la bonne** :
+1. `npm run deploy` lancé à la place — sans effet (0 fichier nouveau, aucun code changé) ; le
+   `Assertion failed … UV_HANDLE_CLOSING` final est le défaut connu de Node sous Windows.
+2. `npx wrangler d1 migrations apply DB` **sans `--remote`** → `Resource location: local`,
+   « No migrations to apply » (déjà appliquée en local) — un faux succès. Détecté par la
+   lecture de `d1_migrations` distant, qui s'arrêtait à `0042`.
+3. Avec `--remote` : `0043` ✅ à 13:36:17. **Vérifié en lecture** : aucune migration en attente,
+   CHECK élargi dans `sqlite_master`, 8 lignes (ids 1 à 8), 3 index, pas de transit, 0 violation.
+
+**Effet, sans déploiement** : « appareil livré » et relances de devis laissent enfin une ligne ;
+l'anti-doublon des relances fonctionne. **Les relances de devis peuvent de nouveau être
+lancées** — premier lancement : une relance à chacun des 2 clients de SOTELI (devis de juillet),
+décision commerciale laissée à l'exploitant.
+
+**Gates** : vitest **981/983** (+7), tsc **32**. **Production alignée sur le dépôt**, aucune
+migration en attente.
+
+**Restes du P1/P2 emails** : enveloppe des autres envois (terminé, livré, SAV) · `reply_to` ·
+message de l'écran de test · 🟡 P3 JSON invalide → 500. Et : P2 secrets, ticket 03 Mobilax.
+
 
 ## Checkpoint 98 — `0c1f5d3` déployé (2026-09-11)
 

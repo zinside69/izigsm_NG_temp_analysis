@@ -546,8 +546,8 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **Le `CHECK` de `email_logs.type` doit admettre tout `EmailType` du code.**
   `ticket_livre` et `relance_devis` en manquaient : leurs emails partaient sans ligne, et
   l'anti-doublon de `processRelancesDevis()` — qui lit cette ligne — relançait le même client à
-  chaque lancement. **Migration `0043` écrite le 2026-09-11** (recréation de table, patron de
-  `0040`). **Tant qu'elle n'est pas appliquée à distance, ne pas lancer les relances de devis.**
+  chaque lancement. **Migration `0043` appliquée en production le 2026-09-11 à 13:36** (recréation
+  de table, patron de `0040`) : les deux types sont admis, l'anti-doublon fonctionne.
   Tout nouveau type : l'ajouter au CHECK **par migration** — `tests/email-types-check-conformite.test.ts`
   fait échouer la suite sinon. Une migration de ce type se teste contre un vrai SQLite
   (`node:sqlite`, `tests/email-logs-types-migration.test.ts`), jamais contre un mock, qui
@@ -678,11 +678,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**⚠ État au 2026-09-11 (soir) : migration `0043` EN ATTENTE à distance** (CHECK de
-`email_logs.type`, recréation de table). **Aucun déploiement de code ne l'accompagne** — le code
-écrit déjà ces types, c'est la base qui les refusait. Appliquer par `npx wrangler d1 migrations
-apply DB --remote`, puis vérifier le schéma et le nombre de lignes de `email_logs` (8 avant).
-Le paragraphe suivant, « aucune migration en attente », décrit l'état d'avant.
+**État au 2026-09-11 (soir) : aucune migration en attente — dépôt et production alignés.**
+`0043` (CHECK de `email_logs.type`, recréation de table) appliquée à distance à 13:36:17, sans
+déploiement de code. Vérifié en lecture : `migrations list --remote` vide, dernière ligne de
+`d1_migrations` = `0043`, CHECK élargi dans `sqlite_master`, 8 lignes intactes, 3 index, pas de
+table de transit, 0 violation. **⚠ `migrations apply DB` sans `--remote` vise la base locale** et
+répond « No migrations to apply » si elle y est déjà : faux succès vécu ce jour-là. Toujours
+faire lire `Resource location: remote`, puis relire `d1_migrations` distant.
 
 **État au 2026-09-11 : aucune migration en attente.** `0041` (clé API fournisseur chiffrée) et
 `0042` (taux de marge) ont été appliquées à distance **puis** le Worker déployé, dans cet ordre,

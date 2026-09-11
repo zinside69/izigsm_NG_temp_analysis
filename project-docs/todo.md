@@ -24,7 +24,12 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
-## 🔴 P1 — Emails : `ticket_livre` et `relance_devis` jamais journalisés, et trois sorties encore muettes (trouvé le 2026-09-11, **relevé en P1 le même jour**)
+## 🟠 P2 — Emails : `ticket_livre` et `relance_devis` jamais journalisés, et trois sorties encore muettes (trouvé le 2026-09-11, P1 le même jour, **ramené en P2 après la migration `0043`**)
+
+**✅ Le cœur du P1 est résolu en production le 2026-09-11** : migration `0043` appliquée
+(13:36:17) et vérifiée — les deux types sont journalisés, l'anti-doublon des relances de devis
+fonctionne, **les relances peuvent être lancées**. La consigne « ne pas lancer » ci-dessous est
+levée. Restent les cases non cochées, qui ne justifient plus un P1.
 
 **Pourquoi P1** : l'anti-doublon des relances de devis s'appuie sur une ligne `relance_devis`
 qui ne peut pas exister (CHECK) — chaque lancement manuel renvoie **la même relance au même
@@ -37,8 +42,8 @@ Détail : `bugs.md` § « `email_logs.type` refuse `ticket_livre` et `relance_de
 route « Envoyer test » branchée sur la clé globale ; notification désactivée et échec de
 `sendTicketCree()` désormais tracés ; `journaliserSansLever()` avec repli `console.error`.
 
-- [x] (2026-09-11 — `0043` écrite, testée sur vrai SQLite et sur D1 local, **à appliquer
-      à distance** ; garde-fou `tests/email-types-check-conformite.test.ts`)
+- [x] (2026-09-11 — `0043` écrite, testée sur vrai SQLite et sur D1 local, **appliquée en
+      production à 13:36:17 et vérifiée** ; garde-fou `tests/email-types-check-conformite.test.ts`)
       Migration élargissant le `CHECK` de `email_logs.type` à `ticket_livre` et
       `relance_devis` — recréation de table selon le patron de `0040` (table de transit ;
       `PRAGMA foreign_key_check` à 0 sur la base visée avant). Test vu rouge : un `logEmail`

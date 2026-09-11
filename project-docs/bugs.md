@@ -1,6 +1,10 @@
 # iziGSM — Bugs connus
 
-## ⚠ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, **corrigé par la migration `0043`, à appliquer en production**)
+## ✅ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, **CORRIGÉ — migration `0043` appliquée en production le 2026-09-11 à 13:36**)
+
+**Vérifié en production** : aucune migration en attente, CHECK élargi dans `sqlite_master`,
+8 lignes intactes (ids 1 à 8), 3 index, pas de table de transit, 0 violation de clé étrangère.
+Aucun déploiement de code n'a été nécessaire.
 
 **Correctif (2026-09-11, TDD)** : `migrations/0043_email_logs_types_livre_relance_devis.sql`
 recrée `email_logs` selon le patron de `0040` avec les 7 types ; statut inchangé (décision de

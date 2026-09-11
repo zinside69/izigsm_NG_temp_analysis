@@ -1,4 +1,19 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 98 — étape 1 en production, étape 2 à faire)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 99 — dépôt et production alignés, P1 emails résolu)
+
+## Ce qui a changé au checkpoint 99
+
+**Migration `0043` appliquée en production et vérifiée** — le CHECK de `email_logs.type` admet
+`ticket_livre` et `relance_devis`. Les blocs des checkpoints 97 et 98 plus bas (« étape 2 à
+faire », « ne pas lancer les relances de devis ») sont **dépassés** : les relances de devis
+peuvent être lancées. **Dépôt et production alignés, aucune migration en attente.**
+
+**Piège à connaître avant toute migration distante** : `npx wrangler d1 migrations apply DB`
+**sans `--remote`** vise la base locale et répond « No migrations to apply » si elle y est
+déjà — un faux succès. Faire vérifier `Resource location: remote` dans la sortie, puis relire
+`d1_migrations` distant (mémoire persistante).
+
+**Pistes** : ticket 03 Mobilax (session neuve) · P2 secrets de production · restes du P2
+emails (enveloppes terminé/livré/SAV, `reply_to`, message de l'écran de test) · P3 JSON → 500.
 
 ## Ce qui a changé au checkpoint 98
 
