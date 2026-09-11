@@ -1,5 +1,24 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Commande Mobilax depuis un bon de commande : le panier d'abord, la validation ensuite
+
+Question de l'exploitant : transformer un bon de commande en vraie commande chez le fournisseur.
+Aujourd'hui le bon de commande est **interne** (réception → stock + CUMP, suivi des impayés) ;
+rien ne part chez le fournisseur, et le bouton « Envoyer » ne fait que changer le statut.
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Option visée | **Deux étapes.** 1 : « Envoyer au panier Mobilax » (`/cart`), l'exploitant valide et paie sur mobilax.fr. 2, plus tard : validation et paiement depuis RepairDesk (`POST /payments/orders`) | Commande directe d'emblée : engage de l'argent dès la première version (doublons, `409 STOCK_ISSUE`, `402 INSUFFICIENT_ENCOURS`) · panier seul pour toujours : l'exploitant veut à terme valider depuis RepairDesk |
+| Paiement Mobilax réel | **Encours du mois M** (du 1er au dernier jour), réglé **le 2 du mois suivant** par virement Linxo ou CB sur mobilax.fr | — (constat, pas un choix) |
+
+**Conséquence pour l'étape 2** : le moyen `encours` de l'API (« instantané ») correspond au
+fonctionnement réel de la boutique ; `virement` et `website` concernent le **règlement mensuel**
+de l'encours, pas chaque commande. À confirmer avec la doc Mobilax au moment de l'étape 2.
+
+**Périmètre** : la spec `integration-mobilax` exclut la commande directe (« volet 3 ») — c'est un
+**chantier distinct**, qui dépend du ticket 03 (service Mobilax, authentification). À ouvrir par
+la chaîne `/mattpocock-skills:grill-with-docs` → `to-spec` → `to-tickets`, tapée par l'exploitant.
+
 ## 2026-09-10 — Taux de marge : `null` sans saisie, route dédiée, défaut des Réglages laissé ouvert (ticket 02 Mobilax)
 
 Trois arbitrages de l'exploitant, pris avant la première ligne de test.

@@ -16,6 +16,64 @@
        Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
        bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
   <link rel="stylesheet" href="/static/css/main.css">
+  <!-- Vocabulaire propre à cette page. Aucune feuille chargée ne définissait ces classes
+       (`style.css` fait 49 octets) : fenêtres de saisie rendues dans le flux, sous la barre
+       latérale, champs et badges sans style (constaté en production le 2026-09-11).
+       Précédent : sav.html définit de même ses propres `modal-backdrop`/`modal-box`. -->
+  <style>
+    /* ── Fenêtres de saisie ─────────────────────────────────────────────────
+       z-index 500 = celui de `.modal-overlay` du socle : au-dessus de la barre latérale
+       (100), sous le bandeau de la boutique consultée (900) — CLAUDE.md § ticket 03.
+       Ouverture/fermeture par `.hidden` (fournisseurs.js), d'où la règle explicite :
+       elle ne dépend pas de l'ordre d'injection de la feuille Tailwind. */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 500; padding: 20px;
+      background: rgba(0,0,0,.5);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-backdrop.hidden { display: none; }
+    .modal-box {
+      background: #fff; border-radius: 16px; box-shadow: 0 40px 80px rgba(0,0,0,.25);
+      max-height: calc(100vh - 40px); overflow-y: auto;
+    }
+
+    /* ── Champs de formulaire ───────────────────────────────────────────── */
+    .input-field {
+      border: 1px solid #d0d5dd; border-radius: 10px; padding: 8px 12px;
+      font-size: .9rem; background: #fff; color: #101828;
+    }
+    .input-field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(108,71,255,.15); }
+    .label-field { display: block; font-size: .82rem; font-weight: 600; color: #344054; margin-bottom: 4px; }
+
+    /* ── Tableaux ───────────────────────────────────────────────────────── */
+    .th-cell {
+      padding: 10px 16px; text-align: left; font-size: .75rem; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    }
+    .td-cell { padding: 12px 16px; vertical-align: middle; }
+    .table-row { border-bottom: 1px solid #f2f4f7; }
+    .table-row:hover { background: #f9fafb; }
+
+    /* ── KPI ────────────────────────────────────────────────────────────── */
+    .kpi-val { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
+    .kpi-lbl { font-size: .8rem; font-weight: 600; color: var(--muted); }
+
+    /* ── Petits boutons de ligne et badges de statut ────────────────────── */
+    .btn-xs {
+      padding: 4px 8px; border-radius: 8px; border: 1px solid #e5e7eb;
+      background: #fff; font-size: .8rem; cursor: pointer;
+    }
+    .btn-xs:hover { background: #f9fafb; }
+    .badge-gray, .badge-yellow, .badge-green, .badge-red, .badge-blue {
+      display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px;
+      font-size: .75rem; font-weight: 600; white-space: nowrap;
+    }
+    .badge-gray   { background: #f3f4f6; color: #4b5563; }
+    .badge-yellow { background: #fff8e1; color: #b45309; }
+    .badge-green  { background: #ecfdf3; color: #067647; }
+    .badge-red    { background: #fef2f2; color: #b42318; }
+    .badge-blue   { background: #e0f2fe; color: #0369a1; }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -37,14 +95,17 @@
       <p class="text-sm text-gray-500 mt-1">Gestion des fournisseurs, bons de commande et réceptions (CUMP)</p>
     </div>
     <div class="flex gap-2">
-      <button id="btn-a-commander" class="btn-secondary">
-        <i class="fas fa-shopping-cart mr-1"></i>À commander
-        <span id="badge-a-commander" class="hidden ml-1 bg-red-500 text-white text-xs rounded-full px-1.5"></span>
+      <!-- Rappel des produits sous leur seuil d'alerte : masqué à 0, libellé posé par loadKpis()
+           (« 3 produits sous le seuil ») — une puce chiffrée seule ne disait pas ce qu'elle comptait. -->
+      <button id="btn-a-commander" class="btn btn-sm btn-accent hidden" title="Voir les produits à commander">
+        <i class="fas fa-exclamation-triangle"></i><span id="badge-a-commander"></span>
       </button>
-      <button id="btn-new-bc" class="btn-primary">
+      <!-- `btn` = classe de base du socle (hauteur, rembourrage, arrondi) : sans elle,
+           `btn-primary` ne donne qu'une couleur de fond sur du texte brut. -->
+      <button id="btn-new-bc" class="btn btn-sm btn-primary">
         <i class="fas fa-file-alt mr-1"></i>Nouveau bon
       </button>
-      <button id="btn-new-fournisseur" class="btn-primary bg-green-600 hover:bg-green-700">
+      <button id="btn-new-fournisseur" class="btn btn-sm btn-primary bg-green-600 hover:bg-green-700">
         <i class="fas fa-plus mr-1"></i>Fournisseur
       </button>
     </div>
@@ -142,7 +203,7 @@
       Produits dont le stock actuel est ≤ au seuil d'alerte. Sélectionnez-les pour créer un bon de commande.
     </div>
     <div class="flex gap-2 mb-4">
-      <button id="btn-bc-depuis-selection" class="btn-primary hidden">
+      <button id="btn-bc-depuis-selection" class="btn btn-sm btn-primary hidden">
         <i class="fas fa-file-alt mr-1"></i>Créer BC depuis la sélection
       </button>
     </div>
@@ -192,8 +253,8 @@
       <div id="f-error" class="hidden text-red-600 text-sm"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" data-close="modal-fournisseur">Annuler</button>
-      <button id="btn-save-fournisseur" class="btn-primary">Enregistrer</button>
+      <button class="btn btn-sm btn-secondary" data-close="modal-fournisseur">Annuler</button>
+      <button id="btn-save-fournisseur" class="btn btn-sm btn-primary">Enregistrer</button>
     </div>
     <input type="hidden" id="f-id">
   </div>
@@ -239,8 +300,8 @@
       <div id="bc-error" class="hidden text-red-600 text-sm"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" data-close="modal-bc">Annuler</button>
-      <button id="btn-save-bc" class="btn-primary">Créer le bon</button>
+      <button class="btn btn-sm btn-secondary" data-close="modal-bc">Annuler</button>
+      <button id="btn-save-bc" class="btn btn-sm btn-primary">Créer le bon</button>
     </div>
   </div>
 </div>
@@ -261,8 +322,8 @@
       <div id="reception-error" class="hidden text-red-600 text-sm mt-2"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" data-close="modal-reception">Annuler</button>
-      <button id="btn-confirm-reception" class="btn-primary">
+      <button class="btn btn-sm btn-secondary" data-close="modal-reception">Annuler</button>
+      <button id="btn-confirm-reception" class="btn btn-sm btn-primary">
         <i class="fas fa-check mr-1"></i>Confirmer la réception
       </button>
     </div>

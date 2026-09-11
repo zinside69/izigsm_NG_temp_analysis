@@ -1,5 +1,30 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## ✅ 🟠 P2 — `/fournisseurs` : boutons sans style, fenêtre de saisie tronquée, rappel « à commander » obscur (signalé le 2026-09-11, **CORRIGÉ le 2026-09-11**)
+
+Détail et cause : `bugs.md` § du même titre. Test : `tests/e2e/fournisseurs-ecran.spec.ts`.
+
+- [x] Boutons : `btn btn-sm` partout
+- [x] Fenêtres de saisie : classes définies localement, centrées au-dessus de la barre
+- [x] Rappel du haut explicite (« N produits sous le seuil »), masqué à 0
+- [x] « Créer BC » → « Créer un bon de commande »
+- [ ] Déployer (`npm run deploy`, aucune migration) — sur confirmation de l'exploitant
+
+## 🟡 P3 — « Envoyer » un bon de commande annonce « Bon envoyé au fournisseur » sans rien envoyer (trouvé le 2026-09-11)
+
+`envoyerBC()` (`fournisseurs.js`) ne fait que passer le bon en `awaiting_delivery`. Le message
+laisse croire qu'une commande est partie. À reformuler (« Bon passé en attente de livraison »)
+en attendant que l'étape 1 de la commande Mobilax (ci-dessous) rende l'envoi réel.
+
+## 🟠 P2 — Commande Mobilax depuis un bon de commande (demandé le 2026-09-11)
+
+Décision : `decisions.md` du 2026-09-11. **Étape 1** : envoyer les lignes d'un bon au panier
+Mobilax (`/cart`), validation et paiement sur mobilax.fr. **Étape 2** : validation et paiement
+depuis RepairDesk (`POST /payments/orders`, moyen `encours`, clé d'idempotence obligatoire).
+
+- [ ] Dépend du ticket 03 `integration-mobilax` (service Mobilax, authentification)
+- [ ] Ouvrir le chantier : `/mattpocock-skills:grill-with-docs` (à taper par l'exploitant)
+
 ## ✅ 🔴 P1 — L'écran Factures n'offrait pas l'avoir sur une facture émise (trouvé en production le 2026-09-07, **CORRIGÉ le 2026-09-07**)
 
 `f.locked` est falsy au rendu de `factures.js` alors que l'API renvoie `locked: 1`. Conséquence :
@@ -112,8 +137,9 @@ correct utilisé ailleurs. La correction consiste vraisemblablement à faire con
       hashé — fait le 2026-09-11 (`47e0592`, aperçu `85b10d1e.izigsm.pages.dev`) : apex sert
       `fournisseurs.ae2528fb.js` en `application/javascript` avec la bascule `.active`, `sw.js`
       `izigsm-v2.95`, `/fournisseurs` référence ce nom hashé
-- [ ] Geste métier en production : ouvrir `/fournisseurs`, voir les bons de commande, cliquer
-      les deux autres onglets — à faire par l'exploitant (pas d'identifiants de production ici)
+- [x] Geste métier en production : ouvrir `/fournisseurs`, voir les bons de commande, cliquer
+      les deux autres onglets — fait par l'exploitant le 2026-09-11 (captures : onglets
+      « Bons de commande » et « À commander » affichés, ligne produit visible)
 
 ## 🟠 P2 — Secrets de production : les ranger, en recréer deux, vérifier ce que `sync push` copie (ajouté le 2026-09-11)
 

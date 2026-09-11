@@ -1,5 +1,29 @@
 # iziGSM — Bugs connus
 
+## ✅ `/fournisseurs` : boutons en texte brut, fenêtre de saisie tronquée sous la barre latérale (trouvé en production le 2026-09-11, **CORRIGÉ le 2026-09-11**, non déployé)
+
+Signalé par l'exploitant, captures à l'appui, juste après le correctif des onglets. Même famille
+de défaut : le vocabulaire de classes de la page n'existe dans aucune feuille chargée.
+
+**Cause, mesurée** : 15 classes employées par `fournisseurs.html`/`.js` sans aucune définition
+(`modal-backdrop`, `modal-box`, `input-field`, `label-field`, `th-cell`, `td-cell`, `table-row`,
+`kpi-val`, `kpi-lbl`, `btn-xs`, `badge-gray|yellow|green|red|blue`) — `style.css` fait 49 octets.
+Et les boutons posaient `btn-primary` sans `btn`, classe de base du socle qui porte hauteur,
+rembourrage et arrondi. Conséquences : boutons de 24 px en texte surligné, fenêtre « Nouveau bon
+de commande » rendue **dans le flux** (bas mesuré à 2 258 px pour un écran de 720), recouverte
+par la barre latérale ; champs, cellules et badges de statut sans style.
+
+**Correction** : bloc `<style>` local dans `fournisseurs.html` définissant ces classes (précédent :
+`sav.html`), `.modal-backdrop` en `fixed` à `z-index: 500` comme `.modal-overlay` du socle, avec
+une règle `.modal-backdrop.hidden` explicite pour ne pas dépendre de l'ordre d'injection de
+Tailwind ; `btn btn-sm` sur tous les boutons ; rappel du haut réécrit en « N produits sous le
+seuil », masqué à 0 ; « Créer BC » devient « Créer un bon de commande ». Non-récidive :
+`tests/e2e/fournisseurs-ecran.spec.ts`, **vu rouge** (hauteur 24 px, libellé, rappel visible à 0,
+fenêtre hors écran) — géométrie par `boundingBox()` et clics réels.
+
+**Même piège latent ailleurs, non traité** : `sav.html` place son `.modal-backdrop` à
+`z-index: 40`, **sous** la barre latérale (100). Non vérifié à l'écran.
+
 ## ✅ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, **CORRIGÉ — migration `0043` appliquée en production le 2026-09-11 à 13:36**)
 
 **Vérifié en production** : aucune migration en attente, CHECK élargi dans `sqlite_master`,

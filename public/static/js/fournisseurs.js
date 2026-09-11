@@ -117,11 +117,15 @@ async function loadKpis() {
   document.getElementById('kpi-achats-ht').textContent       = formatCurrency(d.montant_achats_ht  ?? 0)
   document.getElementById('kpi-impaye').textContent          = formatCurrency(d.montant_impaye_ttc ?? 0)
 
-  // Badge "À commander"
+  // Rappel "À commander" : libellé explicite, masqué quand aucun produit n'est sous le seuil
   const nbAC = d.nb_produits_a_commander ?? 0
-  const badge = document.getElementById('badge-a-commander')
-  if (nbAC > 0) { badge.textContent = nbAC; badge.classList.remove('hidden') }
-  else badge.classList.add('hidden')
+  const rappel = document.getElementById('btn-a-commander')
+  if (nbAC > 0) {
+    document.getElementById('badge-a-commander').textContent =
+      `${nbAC} produit${nbAC > 1 ? 's' : ''} sous le seuil`
+    rappel.classList.remove('hidden')
+  }
+  else rappel.classList.add('hidden')
 }
 
 // ─── Bons de commande ─────────────────────────────────────────────────────────
@@ -562,7 +566,7 @@ async function loadACommander() {
 function toggleBcDepuisSelection() {
   const nb = document.querySelectorAll('.check-acommander:checked').length
   const btn = document.getElementById('btn-bc-depuis-selection')
-  if (nb > 0) { btn.textContent = `Créer BC (${nb} produit${nb > 1 ? 's' : ''})`; btn.classList.remove('hidden') }
+  if (nb > 0) { btn.textContent = `Créer un bon de commande (${nb} produit${nb > 1 ? 's' : ''})`; btn.classList.remove('hidden') }
   else btn.classList.add('hidden')
 }
 
