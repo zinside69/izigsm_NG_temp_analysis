@@ -1,4 +1,35 @@
-# iziGSM — État courant (MàJ : 2026-09-10, checkpoint 93 — mode opératoire du secret de chiffrement planifié)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 94 — seconde revue du ticket 02, un faux succès de plus fermé)
+
+## Checkpoint 94 — `/code-review medium` sur le ticket 02 : un correctif, un P3 transversal (2026-09-11)
+
+Reprise de session. Dépôt en retard d'un commit (`chore: backup D1 automatique 2026-09-11`),
+rattrapé en avance rapide, arbre propre. L'exploitant a lancé `/code-review medium` : diff vide,
+donc la revue a porté sur le dernier commit de code, `6c432dc` (ticket 02). Aucun bug confirmé,
+deux remarques de gravité faible.
+
+**1. Corrigé en TDD — `d74af5c`.** Le contrôle 404 de `PUT /api/boutiques/:id/marges` ne
+regardait que `boutiques` : une boutique active **sans ligne `boutique_settings`** laissait
+l'UPDATE toucher 0 ligne et la route répondre 200 « mis à jour ». Second contrôle par
+`getBoutiqueSettings()`, `getBoutiqueById()` conservé (refus d'une boutique désactivée, déjà
+documenté). Lire le nombre de lignes modifiées était écarté : les deux mocks D1 forcent
+`changes: 1`. Test vu rouge (200 au lieu de 404). Cas rare : tous les chemins de création
+posent la ligne.
+
+**2. Noté 🟡 P3 — corps JSON invalide → 500 nu.** Transversal : aucun handler n'entoure
+`c.req.json()`, aucun `app.onError`. Le bon niveau est un gestionnaire global, pas la route
+`/marges` seule. Détail et cases dans `todo.md`, dont l'interaction avec le journal de
+plateforme.
+
+**Piège de mesure revécu** : `tsc` a de nouveau été mal compté — sortie colorée, puis ligne
+« Found N errors » absente hors terminal. Compter par `npx tsc --noEmit --pretty false | grep
+-cE "error TS[0-9]+"` (mémoire persistante ajoutée).
+
+**Gates** : vitest **966/968** (+1, 2 permanents `agendaService`), tsc **32** inchangé. E2E non
+rejoué : correctif serveur seul, sans effet sur les tenants E2E.
+
+**État** : inchangé sur le fond — tickets 01-02 faits et poussés, **non déployés**. Première
+action toujours en attente : poser `FOURNISSEUR_CRYPTO_KEY` (`todo.md` § Mobilax).
+
 
 ## Checkpoint 93 — `FOURNISSEUR_CRYPTO_KEY` : expliqué, et planifié pour la prochaine session (2026-09-10)
 

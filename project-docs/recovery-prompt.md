@@ -1,4 +1,11 @@
-# Recovery Prompt — iziGSM — 2026-09-10 (checkpoint 93 — tickets 01 et 02 Mobilax en place)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 94 — tickets 01 et 02 Mobilax en place)
+
+## Ce qui a changé au checkpoint 94
+
+Seconde revue du ticket 02 : la route `/marges` renvoie désormais 404 aussi quand la boutique
+n'a pas de ligne `boutique_settings` (`d74af5c`). Nouveau 🟡 P3 transversal dans `todo.md` : un
+corps JSON invalide produit un 500 nu sur toutes les routes — à traiter par un `app.onError`
+global, jamais route par route. **La première action ci-dessous reste à faire.**
 
 ## 🔴 Première action de cette session (cp93)
 
