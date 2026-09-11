@@ -21,7 +21,11 @@ n'a pas de ligne `boutique_settings` (`d74af5c`). Nouveau 🟡 P3 transversal da
 corps JSON invalide produit un 500 nu sur toutes les routes — à traiter par un `app.onError`
 global, jamais route par route. **La première action ci-dessous reste à faire.**
 
-## 🔴 Première action de cette session (cp93)
+## ✅ Première action de cette session (cp93) — FAITE le 2026-09-11
+
+`FOURNISSEUR_CRYPTO_KEY` est posé en production et vérifié (`wrangler pages secret list`). Ce
+qui suit est conservé pour la trace ; la prochaine étape est le **déploiement**, sur
+confirmation explicite (`todo.md` § Mobilax, « Enchaînement ensuite »).
 
 **Poser le secret `FOURNISSEUR_CRYPTO_KEY` en production** — mode opératoire pas à pas dans
 `project-docs/todo.md` § Mobilax (« À faire en début de prochaine session »). Proposer à

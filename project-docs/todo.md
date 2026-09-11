@@ -421,7 +421,14 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
 - [ ] **08** — Même widget sur Caisse — bloqué par 06
 - [ ] **09** — Widget sur Prise en charge (pré-remplit `prix_estime`) — bloqué par 06
 
-### 🔴 À faire en début de prochaine session — poser `FOURNISSEUR_CRYPTO_KEY` en production (ajouté le 2026-09-10)
+### ✅ À faire en début de prochaine session — poser `FOURNISSEUR_CRYPTO_KEY` en production (ajouté le 2026-09-10, **FAIT le 2026-09-11**)
+
+**Posé le 2026-09-11** par l'exploitant (`✨ Success! Uploaded secret FOURNISSEUR_CRYPTO_KEY`),
+vérifié par `wrangler pages secret list` : `FOURNISSEUR_CRYPTO_KEY: Value Encrypted` sur
+l'environnement production, aux côtés de `GOOGLE_CLIENT_ID`, `JWT_SECRET`, `RESEND_API_KEY`.
+Étape 2 (copie dans le gestionnaire de mots de passe) : confirmée par l'exploitant le
+2026-09-11 — gestionnaire installé à cette occasion, hors du workspace `claude-test` (que
+`sync push` copie vers le disque externe et GitHub, même pour un fichier ignoré par git).
 
 **Ce que c'est** : la clé maîtresse AES-256 qui chiffre la clé API Mobilax de chaque boutique
 (`fournisseurs.api_key_chiffree`, `src/lib/chiffrement.ts`). Secret Cloudflare, même mécanisme
@@ -432,12 +439,12 @@ production**. Préalable au déploiement des tickets 01-02. Référence : `docs/
 **Mode opératoire** — l'exploitant lance lui-même ces commandes (préfixe `!`, PowerShell, depuis
 `izigsm/webapp`), pour que la valeur ne transite **pas** par la conversation :
 
-- [ ] 1. Générer une clé propre à la production (32 octets → 64 caractères hex) :
+- [x] 1. Générer une clé propre à la production (32 octets → 64 caractères hex) :
       `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-- [ ] 2. La ranger **tout de suite** dans le gestionnaire de mots de passe
-- [ ] 3. L'enregistrer chez Cloudflare (la commande demande la valeur — coller celle de l'étape 1) :
+- [x] 2. La ranger **tout de suite** dans le gestionnaire de mots de passe
+- [x] 3. L'enregistrer chez Cloudflare (la commande demande la valeur — coller celle de l'étape 1) :
       `npx wrangler pages secret put FOURNISSEUR_CRYPTO_KEY --project-name izigsm`
-- [ ] 4. Vérifier sa présence (la liste montre le nom, jamais la valeur) :
+- [x] 4. Vérifier sa présence (la liste montre le nom, jamais la valeur) :
       `npx wrangler pages secret list --project-name izigsm`
 
 **Précautions** :
