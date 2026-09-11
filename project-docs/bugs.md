@@ -1,6 +1,18 @@
 # iziGSM — Bugs connus
 
-## ⚠ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, NON corrigé)
+## ⚠ `email_logs.type` refuse `ticket_livre` et `relance_devis` — ces emails partent sans jamais être journalisés (trouvé le 2026-09-11, **corrigé par la migration `0043`, à appliquer en production**)
+
+**Correctif (2026-09-11, TDD)** : `migrations/0043_email_logs_types_livre_relance_devis.sql`
+recrée `email_logs` selon le patron de `0040` avec les 7 types ; statut inchangé (décision de
+l'exploitant). Test vu rouge contre un **vrai** SQLite (`node:sqlite`, Node 24, sans
+dépendance) : `tests/email-logs-types-migration.test.ts` — les deux types refusés, puis admis ;
+lignes antérieures, index et refus d'un type inconnu vérifiés. Garde-fou vu rouge :
+`tests/email-types-check-conformite.test.ts` échoue si un `EmailType` du code manque au CHECK.
+Appliquée en local sur le moteur D1 : sonde `ticket_livre` acceptée, 20 lignes intactes,
+3 index. **Aucun déploiement de code n'est requis** — le code écrivait déjà ces types ; seule
+la migration distante répare l'anti-doublon des relances de devis.
+
+_Constat d'origine, conservé :_
 
 Trouvé en corrigeant les sorties muettes de l'envoi d'email (entrée suivante). Le `CHECK` de
 `email_logs.type` (migration `0020`) n'admet que `ticket_cree | ticket_termine | sav_ouvert |

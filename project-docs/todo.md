@@ -37,7 +37,9 @@ Détail : `bugs.md` § « `email_logs.type` refuse `ticket_livre` et `relance_de
 route « Envoyer test » branchée sur la clé globale ; notification désactivée et échec de
 `sendTicketCree()` désormais tracés ; `journaliserSansLever()` avec repli `console.error`.
 
-- [ ] Migration élargissant le `CHECK` de `email_logs.type` à `ticket_livre` et
+- [x] (2026-09-11 — `0043` écrite, testée sur vrai SQLite et sur D1 local, **à appliquer
+      à distance** ; garde-fou `tests/email-types-check-conformite.test.ts`)
+      Migration élargissant le `CHECK` de `email_logs.type` à `ticket_livre` et
       `relance_devis` — recréation de table selon le patron de `0040` (table de transit ;
       `PRAGMA foreign_key_check` à 0 sur la base visée avant). Test vu rouge : un `logEmail`
       de type `ticket_livre` contre une vraie base SQLite
