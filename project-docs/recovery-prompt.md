@@ -1,4 +1,18 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 94 — tickets 01 et 02 Mobilax en place)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 95 — tickets 01-02 Mobilax + P1 Réglages, non déployés)
+
+## Ce qui a changé au checkpoint 95
+
+**Le 🔴 P1 des Réglages est corrigé** (`b72693e`, non déployé) — le point 0 de la liste « ce
+qui reste ouvert » plus bas n'en est plus un, sauf sa dernière étape : vérifier en production,
+**après déploiement**, si des boutiques ont déjà perdu leur taux de TVA. Règle qui en découle,
+dans `CLAUDE.md` : toute colonne de `updateBoutiqueSettings()` sous COALESCE.
+
+**Piège à connaître avant tout E2E** : `wrangler pages dev` ne recharge pas `dist/_worker.js`
+après `npm run build` — relancer le serveur après tout changement de `src/`, sinon on teste
+l'ancien code (faux rouge vécu au cp95, mémoire persistante).
+
+**La production attend trois lots** : tickets 01, 02, ce correctif. Première action toujours :
+poser `FOURNISSEUR_CRYPTO_KEY` (ci-dessous).
 
 ## Ce qui a changé au checkpoint 94
 

@@ -1,4 +1,40 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 94 — seconde revue du ticket 02, un faux succès de plus fermé)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 95 — P1 des Réglages corrigé)
+
+## Checkpoint 95 — Le P1 des Réglages corrigé en TDD, et un faux rouge de serveur local (2026-09-11)
+
+L'exploitant a choisi de corriger le 🔴 P1 trouvé au cp92. Commit **`b72693e`**, non déployé.
+
+**Le défaut** : chaque onglet de `settings.html` envoie un corps partiel ; `updateBoutiqueSettings()`
+assignait huit colonnes sans COALESCE, avec replis `?? 20` / `?? 0` — la TVA revenait à 20 % à
+l'enregistrement de l'onglet Paiements, les paiements se décochaient à celui de Numérotation.
+
+**Le correctif** : COALESCE sur `tva_taux_defaut`, `horaires`, `notif_*`, `paiement_*`, replis
+retirés. `toInt()` distinguait déjà décoché (`0`) d'absent (`null`). `horaires` inclus par
+cohérence — sans effet visible, la vitrine lit `boutiques.horaires` (vérifié dans
+`publicService.ts`).
+
+**Seams validés avant écriture** : unitaire corps partiel (vu rouge : `[20, null, 0 ×6]`),
+unitaire décoché → `0` (garde-fou, vert d'emblée), E2E `reglages-onglets-sans-ecrasement.spec.ts`
+(vu rouge : TVA relue `20`). Un défaut du test lui-même corrigé en route : deux toasts
+identiques violaient le mode strict de Playwright → `.last()`.
+
+**Le faux rouge** : après correctif et build, l'E2E restait rouge à l'identique. `dist/_worker.js`
+contenait bien le nouveau SQL ; la mesure API a montré des paiements remis à `0`, que le nouveau
+code ne pouvait plus produire → **`wrangler pages dev` ne recharge pas `_worker.js` après un
+build**. Serveur relancé : mesure API intacte, E2E 4/4. Mémoire persistante ajoutée — c'est le
+troisième piège de mesure de ce chantier, après la charge parallèle (cp92) et le comptage tsc
+(cp94).
+
+**Règle gravée dans `CLAUDE.md`** : toute colonne de `updateBoutiqueSettings()` sous
+`COALESCE(?,colonne)`, jamais de repli chez l'appelant.
+
+**Gates** : vitest **968/970** (+2, 2 permanents `agendaService`), E2E Réglages **4/4**, tsc
+**32**, build ✓.
+
+**État** : trois lots en attente de production — tickets 01, 02 et ce correctif. Ordre inchangé :
+secret `FOURNISSEUR_CRYPTO_KEY`, migrations `0041` + `0042` à distance, `CACHE_VERSION`,
+`npm run deploy`. Après déploiement : vérifier en prod si des boutiques ont déjà perdu leur TVA.
+
 
 ## Checkpoint 94 — `/code-review medium` sur le ticket 02 : un correctif, un P3 transversal (2026-09-11)
 
