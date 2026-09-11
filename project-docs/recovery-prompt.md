@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 100 — /fournisseurs réparé, bons réglables, 0044 en production)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 101 — Mobilax 03 en production, 04 commité non déployé)
+
+## Ce qui a changé au checkpoint 101
+
+**Première action possible : déployer `ec91913` (ticket 04)** — `npm run deploy`, **aucune
+migration**. Puis relire l'apex sur le nom hashé `stock.*.js` du manifeste et `sw.js`
+`izigsm-v2.99`, et faire importer une pièce depuis `/stock` par l'exploitant (compte de
+boutique, pas le compte de supervision — refusé, voulu).
+
+**Mobilax en production** : recherche depuis `/stock` (ticket 03, `0045` appliquée), validée à
+l'écran. Invariants : `CLAUDE.md` § « Service Mobilax ». La clé de préproduction doit être
+tournée chez Mobilax avant un usage réel.
+
+**À trancher avec l'exploitant avant le prochain ticket** (`todo.md`) :
+- seuil 0 qui n'évite pas l'alerte « à commander » (règle `stock ≤ seuil`) ;
+- 🟠 quantité perdue sans message dans la fiche produit (défaut antérieur, tous produits) ;
+- ordre suivant : supervision journalisée · ticket 05 (rafraîchir un produit importé, par
+  `/products/lookup?reference=`) · 06 (module partagé devis) · chantier « pièce consommée sur
+  réparation » (à cadrer par `/mattpocock-skills:grill-with-docs`, tapé par l'exploitant).
+
+**Pièges vécus ce jour** : ne jamais laisser l'exploitant enchaîner migration et déploiement sans
+relire `d1_migrations` distant entre les deux · un `sync push` d'une autre fenêtre commite le
+travail en cours · écrire du texte à accents graves par le shell l'exécute (mémoire).
 
 ## Ce qui a changé au checkpoint 100
 

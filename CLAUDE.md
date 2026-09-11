@@ -757,6 +757,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-11 (checkpoint 101) : aucune migration en attente, mais le dépôt est EN
+AVANCE sur la production** — `ec91913` (ticket 04 Mobilax, import d'une pièce dans le stock) est
+commité et poussé, **non déployé**. Il n'ajoute aucune migration : `npm run deploy` suffit, puis
+relire l'asset hashé `stock.*.js` sur l'apex et `sw.js` `izigsm-v2.99`.
+
 **État au 2026-09-11 (soir, ticket 03 Mobilax) : aucune migration en attente — dépôt et
 production alignés.** `4356dba` déployé (`izigsm-v2.98`) et `0045` (`fournisseurs.api_plateforme`)
 appliquée — **mais le Worker est parti avant la migration** : première tentative en `7403`

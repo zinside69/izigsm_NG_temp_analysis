@@ -1,4 +1,33 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 100 — /fournisseurs réparé, bons de commande réglables, migration 0044 en production)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 101 — Mobilax : recherche en production, import dans le stock commité non déployé)
+
+## Checkpoint 101 — Mobilax : tickets 03 (en production) et 04 (commité), et un cap redessiné (2026-09-11)
+
+**Ticket 03 — recherche Mobilax depuis le Stock : en production, validé à l'écran.**
+`mobilaxService.ts` (seul lecteur d'une réponse Mobilax brute ; jeton gardé chiffré dans le KV,
+clé KV liée à une empreinte de la clé API ; 429 rendu sans nouvelle tentative ; un seul
+renouvellement sur 401), `GET /api/mobilax/produits`, migration **`0045`**
+(`fournisseurs.api_plateforme` + case « Fournisseur Mobilax »), `MOBILAX_API_BASE` en
+préproduction. Revue à deux axes (`/implement`) : 2 défauts corrigés avant commit (réponse
+malformée prise pour « aucun résultat », déchiffrement en échec). ⚠ **Déployé avant sa
+migration** (7403 puis tentative hors distante) : `/fournisseurs` en `no such column` quelques
+minutes, `0045` appliquée ensuite sur accord. Validé : « écran iPhone 12 » → 46 pièces réelles.
+⚠ Un `sync push` d'une autre fenêtre a **commité et poussé le travail en cours** (`c2b5c83`).
+
+**Ticket 04 — importer une pièce dans le stock : `ec91913`, poussé, NON déployé, sans migration.**
+`POST /api/mobilax/import { mobilax_id }`, fiche relue chez Mobilax (`/products/:id/full`), vraie
+référence Mobilax en `reference_fournisseur` (le « aucun champ référence » du ticket 03 était
+faux, corrigé partout), vente = marge résolue, stock 0, seuil 0, doublon → 409 et fiche
+existante. `createProduit()` prend `fournisseur_id` par un argument `options`, jamais par le
+corps. Revue : `texteBrut()` faisait renaître une balise d'une entité — corrigé.
+
+**Cap redessiné par l'exploitant** (`decisions.md`, amendement de la spec) : recherche permise en
+supervision **et journalisée** ; pièce **consommée sur une réparation** = chantier nouveau à
+cadrer ; caisse = **import puis vente** (le 08 dépend du 04).
+
+**Consignés, à trancher** : seuil 0 qui alerte quand même (`stock ≤ seuil`) · quantité perdue
+sans message dans la fiche produit (défaut antérieur, 🟠) · doublon d'import par double clic.
+
+**Gates** : vitest **1025/1027**, tsc **32**, 135 E2E dont l'import réel en préproduction.
 
 ## Checkpoint 100 — `/fournisseurs` utilisable de bout en bout, et les impayés deviennent justes (2026-09-11)
 
