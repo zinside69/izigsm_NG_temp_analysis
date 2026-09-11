@@ -1,5 +1,29 @@
 # iziGSM — Bugs connus
 
+## ✅ Fiche produit : « Notes » jamais enregistrées, et icônes d'actions vides (trouvé le 2026-09-11, **CORRIGÉ le 2026-09-11**, non déployé)
+
+Deux défauts **antérieurs** à l'intégration Mobilax, révélés par le retour de l'exploitant sur le
+ticket 04 (captures en production).
+
+1. **Le champ « Notes » de la fiche produit n'a jamais rien enregistré.** Aucune migration n'a
+   créé de colonne `notes` sur `produits` (relu en production : `pragma_table_info` sans `notes`).
+   `saveStock()` envoyait `notes`, que `updateProduit()`/`createProduit()` ignoraient ; la liste
+   lisait `p.notes`, toujours vide. Toute saisie était perdue, sans message. **Corrigé** (décision
+   de l'exploitant, sans migration) : le champ lit et écrit `description`, colonne existante ;
+   `updateProduit()` l'accepte sous `COALESCE` ; zone multi-lignes.
+2. **Les trois boutons d'action de la liste du stock s'affichaient vides** : `stock.html` ne
+   chargeait pas Font Awesome, alors que les boutons portent des icônes `fas fa-…`. **Corrigé** :
+   feuille chargée, même version que les 13 autres pages.
+
+Preuve : `tests/e2e/mobilax-fiche-pagination.spec.ts` — note saisie, enregistrée, relue après
+réouverture de la fiche. **Même famille, encore ouverte** : la quantité saisie dans la fiche est
+aussi perdue (`updateProduit()` ignore `stock_actuel`), `todo.md`.
+
+⚠ **Piège de test trouvé au passage** : les fenêtres `.modal-overlay` du socle se ferment par
+`opacity: 0` sans `display: none` — Playwright les juge **visibles même fermées**. Toute
+assertion `toBeVisible()`/`toBeHidden()` sur ces fenêtres est sans valeur ; assertionner
+`toHaveCSS('opacity', '1' | '0')`. Les specs Mobilax des tickets 03-04 le faisaient à tort.
+
 ## ✅ Bons de commande : détail en `alert()` brute, impayés comptant les brouillons, aucun moyen de régler (trouvé en production le 2026-09-11, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, migration `0044` appliquée, `izigsm-v2.97`)
 
 Capture de l'exploitant : un clic sur un bon ouvrait une alerte du navigateur affichant

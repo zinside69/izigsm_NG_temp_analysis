@@ -578,6 +578,13 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       servi = manifeste local, import 401 sans jeton. Reste le geste à l'écran par l'exploitant
       (compte de boutique). ⚠ Seuil 0 n'évite pas toutes les alertes : `stock ≤ seuil` rend
       0 ≤ 0 vrai — voir l'entrée suivante.
+- [x] **Retour exploitant sur le ticket 04** (2026-09-11, décisions dans `decisions.md`) —
+      SKU = EAN et « Réf. Mobilax » visible dans la fiche ; famille déduite de la branche
+      Mobilax, catégorie locale trouvée ou créée ; marque = appareil compatible, gamme en tête des
+      notes ; recherche paginée 100 par page ; « Notes » enregistrées dans `description` (défaut
+      antérieur, `bugs.md`) ; icônes d'actions du stock rétablies (Font Awesome manquant).
+      Tests vus rouges : 7 import enrichi, 4 pagination, 2 E2E réels (fiche + page 2).
+      Aucune migration. **Non déployé.**
 - [ ] 🟠 **La quantité saisie dans la fiche d'un produit est perdue sans message** (trouvé en
       revue du ticket 04, 2026-09-11, défaut ANTÉRIEUR, tous produits) — `editStock()` affiche un
       champ quantité modifiable, mais `PUT /produits/:id` → `updateProduit()` ignore `stock_actuel`

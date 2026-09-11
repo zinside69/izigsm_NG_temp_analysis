@@ -79,7 +79,10 @@ async function loadStock() {
       prix_achat_ht:   p.prix_achat_ht  ?? 0,
       marque:          p.marque         || '',
       supplier:        p.fournisseur    || '',
-      notes:           p.notes          || '',
+      // « Notes » de la fiche = colonne `description` (aucune colonne `notes` n'existe)
+      notes:           p.description    || '',
+      reference_fournisseur: p.reference_fournisseur || '',
+      fournisseur_id:  p.fournisseur_id ?? null,
       actif:           p.actif          ?? 1,
       createdAt:       p.created_at     || '',
     }));
@@ -298,6 +301,12 @@ function editStock(id) {
   document.getElementById('stock-price-buy').value          = item.prix_achat_ht ?? '';
   document.getElementById('stock-supplier').value           = item.supplier    || '';
   document.getElementById('stock-notes').value              = item.notes       || '';
+  // Pièce importée de Mobilax : sa référence chez le grossiste, en lecture seule (textContent)
+  const refMobilax = document.getElementById('stock-ref-mobilax');
+  if (refMobilax) {
+    refMobilax.textContent = item.reference_fournisseur ? `Réf. ${item.supplier || 'fournisseur'} : ${item.reference_fournisseur}` : '';
+    refMobilax.hidden = !item.reference_fournisseur;
+  }
 
   // Catégorie
   const catEl = document.getElementById('stock-category');
@@ -347,7 +356,8 @@ async function saveStock() {
     prix_vente_ht:        parseFloat(document.getElementById('stock-price').value) || 0,
     prix_achat_ht:        parseFloat(document.getElementById('stock-price-buy').value) || 0,
     fournisseur:          document.getElementById('stock-supplier').value.trim()  || undefined,
-    notes:                document.getElementById('stock-notes').value.trim()     || undefined,
+    // Colonne `description` : `notes` n'existe pas, la saisie était perdue (trouvé le 2026-09-11)
+    description:          document.getElementById('stock-notes').value.trim()     || undefined,
     boutique_id:          boutiqueId,
   };
 
@@ -593,29 +603,47 @@ function messageMobilax(texte, erreur = false) {
   el.style.color = erreur ? '#b42318' : '';
 }
 
-async function chercherMobilax() {
-  const terme  = document.getElementById('mobilax-terme').value.trim();
+// Recherche en cours : le terme reste celui de la recherche lancée, même si le champ change
+// entre deux pages. 100 pièces par page, une page = un appel au quota Mobilax (30/min).
+let rechercheMobilax = { terme: '', page: 1, pages: 1 };
+document.getElementById('btn-mobilax-precedente')?.addEventListener('click', () => chercherMobilax(rechercheMobilax.page - 1, true));
+document.getElementById('btn-mobilax-suivante')?.addEventListener('click', () => chercherMobilax(rechercheMobilax.page + 1, true));
+
+/**
+ * Lance (page 1) ou poursuit (navigation) une recherche Mobilax.
+ * @param page             Page voulue, 1 par défaut
+ * @param depuisNavigation `true` depuis Précédente/Suivante : garde le terme de la recherche lancée
+ */
+async function chercherMobilax(page = 1, depuisNavigation = false) {
+  const terme  = depuisNavigation ? rechercheMobilax.terme : document.getElementById('mobilax-terme').value.trim();
   const tbody  = document.getElementById('mobilax-resultats');
   const bouton = document.getElementById('btn-mobilax-chercher');
+  const pagination = document.getElementById('mobilax-pagination');
   if (terme.length < 2) { messageMobilax('Saisissez au moins 2 caractères.', true); return; }
 
   tbody.innerHTML = '';
+  pagination.hidden = true;
   messageMobilax('Recherche en cours chez Mobilax…');
   bouton.disabled = true;
   try {
     // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
-    const res = (await apiGet(`/api/mobilax/produits?q=${encodeURIComponent(terme)}`)).data;
+    const res = (await apiGet(`/api/mobilax/produits?q=${encodeURIComponent(terme)}&page=${page}`)).data;
     // Échec nommé par le serveur (pas de fiche, pas de clé, quota, panne) : son message tel quel
     if (!res?.success) { messageMobilax(res?.error || 'Recherche Mobilax impossible.', true); return; }
 
-    const { produits, total } = res.data;
+    const { produits, total, pages } = res.data;
+    rechercheMobilax = { terme, page: res.data.page, pages };
     if (!produits.length) {
       messageMobilax(`Aucune pièce trouvée chez Mobilax pour « ${terme} ».`);
       return;
     }
-    messageMobilax(total > produits.length
-      ? `${total} pièces trouvées — les ${produits.length} premières sont affichées, précisez la recherche.`
-      : `${total} pièce${total > 1 ? 's' : ''} trouvée${total > 1 ? 's' : ''}.`);
+    messageMobilax(`${total} pièce${total > 1 ? 's' : ''} trouvée${total > 1 ? 's' : ''}.`);
+    if (pages > 1) {
+      document.getElementById('mobilax-page').textContent = `Page ${rechercheMobilax.page} / ${pages}`;
+      document.getElementById('btn-mobilax-precedente').disabled = rechercheMobilax.page <= 1;
+      document.getElementById('btn-mobilax-suivante').disabled   = rechercheMobilax.page >= pages;
+      pagination.hidden = false;
+    }
     tbody.innerHTML = produits.map(p => `
       <tr>
         <td>${escHtml(p.nom)}</td>

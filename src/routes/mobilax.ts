@@ -55,12 +55,20 @@ mobilax.get('/mobilax/produits', async (c) => {
   if (terme.length < TERME_MIN)
     return c.json({ success: false, error: `Saisissez au moins ${TERME_MIN} caractères.` }, 400)
 
+  // Page demandée (100 résultats par page, décision du 2026-09-11) : entier ≥ 1, sinon 400 —
+  // une page fantaisiste ne doit pas brûler un appel du quota Mobilax.
+  const pageBrute = c.req.query('page')
+  const page = pageBrute === undefined ? 1 : Number(pageBrute)
+  if (!Number.isInteger(page) || page < 1)
+    return c.json({ success: false, error: 'Numéro de page invalide.' }, 400)
+
   const r = await rechercherProduitsMobilax(
     { db: c.get('db'), kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
     user.boutique_id,
     terme,
+    page,
   )
-  if (r.ok) return c.json({ success: true, data: { total: r.total, produits: r.produits } })
+  if (r.ok) return c.json({ success: true, data: { total: r.total, page: r.page, pages: r.pages, produits: r.produits } })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 

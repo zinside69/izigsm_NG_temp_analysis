@@ -90,7 +90,7 @@ test.describe('Stock — recherche Mobilax', () => {
 
     // Import : la fiche du produit s'ouvre, nom repris, prix d'achat relu chez Mobilax
     await premiere.getByRole('button', { name: 'Importer' }).click()
-    await expect(page.locator('#modal-stock')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1', { timeout: 20_000 })
     await expect(page.locator('#stock-name')).toHaveValue(nomPiece)
     expect(Number(await page.locator('#stock-price-buy').inputValue())).toBeGreaterThan(0)
     await page.locator('#modal-stock .modal-close').click()
@@ -103,7 +103,7 @@ test.describe('Stock — recherche Mobilax', () => {
     await chercherDansStock(page, 'ecran iphone 12')
     await expect(premiere).toBeVisible({ timeout: 20_000 })
     await premiere.getByRole('button', { name: 'Importer' }).click()
-    await expect(page.locator('#modal-stock')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1', { timeout: 20_000 })
     await expect(page.locator('#stock-name')).toHaveValue(nomPiece)
     const produits = await request.get('/api/produits?limit=200', { headers: { Authorization: `Bearer ${tenant.accessToken}` } })
     const lignes = (await produits.json()).data.filter((p: any) => p.nom === nomPiece)

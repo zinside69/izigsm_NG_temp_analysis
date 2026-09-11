@@ -258,7 +258,7 @@ describe('rechercherProduitsMobilax()', () => {
     const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran iphone 12')
 
     expect(r).toEqual({
-      ok: true, total: 1,
+      ok: true, total: 1, page: 1, pages: 1,
       produits: [{ mobilax_id: 10242, nom: 'Ecran Tactile Original Refurb (PIEC) Apple iPhone 12 Mini Noir', ean13: '3000000059487', prix_achat_ht: 44.25, stock: 112 }],
     })
     // La recherche part vers Mobilax avec le terme encodé et le jeton obtenu

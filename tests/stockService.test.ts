@@ -174,6 +174,7 @@ const SQL_UPDATE_PRODUIT = n(`
     stock_minimum= COALESCE(?, stock_minimum),
     fournisseur  = COALESCE(?, fournisseur),
     code_barre   = COALESCE(?, code_barre),
+    description  = COALESCE(?, description),
     updated_at   = CURRENT_TIMESTAMP
   WHERE id = ?
 `)

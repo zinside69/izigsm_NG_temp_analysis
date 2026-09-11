@@ -90,6 +90,8 @@ export interface CreateProduitOptions {
 
 export interface UpdateProduitData {
   nom?:                  string
+  /** « Notes » de la fiche produit — seule colonne texte libre de `produits` (pas de `notes`). */
+  description?:          string | null
   sku?:                  string | null
   marque?:               string | null
   categorie_id?:         number | null
@@ -329,6 +331,25 @@ export async function trouverProduitImporte(
 }
 
 /**
+ * Catégorie de la boutique portant ce nom — créée si elle n'existe pas (import Mobilax : la
+ * catégorie locale reçoit le nom de la catégorie Mobilax, décision du 2026-09-11).
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique — la catégorie trouvée ou créée lui appartient exclusivement
+ * @param nom         Nom exact de la catégorie
+ * @returns           `{ id }` de la catégorie existante ou créée
+ */
+export async function trouverOuCreerCategorie(
+  db: Database, boutiqueId: number, nom: string
+): Promise<{ id: number }> {
+  const existante = await db.get<{ id: number }>(
+    'SELECT id FROM categories WHERE boutique_id = ? AND nom = ? AND actif = 1 LIMIT 1',
+    [boutiqueId, nom]
+  )
+  return existante ?? createCategorie(db, boutiqueId, { nom })
+}
+
+/**
  * Met à jour les champs éditables d'un produit (hors stock_actuel, géré par enregistrerMouvement).
  *
  * @param db      — Instance D1Database
@@ -365,6 +386,7 @@ export async function updateProduit(
       stock_minimum= COALESCE(?, stock_minimum),
       fournisseur  = COALESCE(?, fournisseur),
       code_barre   = COALESCE(?, code_barre),
+      description  = COALESCE(?, description),
       updated_at   = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
@@ -379,6 +401,8 @@ export async function updateProduit(
     data.stock_minimum ?? null,
     data.fournisseur  ?? null,
     data.code_barre   ?? null,
+    // « Notes » de la fiche : même COALESCE que le reste (absent = conservé)
+    data.description  ?? null,
     id,
   ).run()
 

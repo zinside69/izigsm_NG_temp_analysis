@@ -68,7 +68,7 @@ describe('GET /api/mobilax/produits', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       success: true,
-      data: { total: 1, produits: [{ mobilax_id: 17, nom: 'Batterie test', ean13: '3000000000017', prix_achat_ht: 8.68, stock: 10 }] },
+      data: { total: 1, page: 1, pages: 1, produits: [{ mobilax_id: 17, nom: 'Batterie test', ean13: '3000000000017', prix_achat_ht: 8.68, stock: 10 }] },
     })
   })
 

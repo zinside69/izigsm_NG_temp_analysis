@@ -1,5 +1,23 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Pièce importée : SKU, famille, catégorie, marque, et tous les résultats
+
+Retour de l'exploitant sur le ticket 04 en production (captures) : EAN absent du champ
+« SKU / Référence », famille et catégorie non déduites, marque vide, 20 résultats affichés
+sur 46, icônes d'actions vides.
+
+| Question | Décision | Écarté |
+|---|---|---|
+| SKU | **SKU = EAN13**, et la fiche montre en lecture seule « Réf. Mobilax : … » | Réf. Mobilax seule en SKU (EAN invisible) |
+| Famille / catégorie | **Famille déduite de la branche Mobilax** (Pièces Détachées → pièce, Accessoires → accessoire, Mobile/tablette → appareil, le reste → consommable) **et catégorie locale = catégorie Mobilax**, créée dans la boutique si absente | Famille seule · rien d'automatique |
+| Marque | **Marque de l'appareil compatible** (« Apple ») **+ gamme Mobilax** (« Mobilax Repair ») dans les notes | Gamme seule |
+| Résultats | **100 par page + navigation** (« page 2 / 51 »), 1 appel de quota par page | « Afficher plus » · filtres Mobilax (plus long, à reconsidérer) |
+
+Mesures du 2026-09-11 : arbre `/catalog/categories` de 1 570 entrées (`id, id_parent, name`), sans
+quota ; `/products` accepte `limit=100` ; « iphone 12 » = 5 095 pièces (tout charger = 51 appels,
+au-delà du quota de 30/min) ; `manufacturer_brand` nul, marque d'appareil dans `models[].brand_name`.
+Icônes vides : `stock.html` ne charge pas Font Awesome — défaut antérieur, corrigé sans arbitrage.
+
 ## 2026-09-11 — Ticket 04 Mobilax : import d'une pièce dans le stock
 
 Quatre arbitrages de l'exploitant, pris avant le premier test.

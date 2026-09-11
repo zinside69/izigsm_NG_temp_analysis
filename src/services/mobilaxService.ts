@@ -16,7 +16,7 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte } from './stockService'
+import { createProduit, trouverProduitImporte, trouverOuCreerCategorie } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ export interface EchecMobilax {
 }
 
 export type ResultatRechercheMobilax =
-  | { ok: true; total: number; produits: ProduitMobilax[] }
+  | { ok: true; total: number; page: number; pages: number; produits: ProduitMobilax[] }
   | EchecMobilax
 
 export type ResultatImportMobilax =
@@ -67,8 +67,8 @@ export interface DepsMobilax {
   baseUrl:        string
 }
 
-/** Nombre de résultats demandés par recherche. */
-const LIMITE_RESULTATS = 20
+/** Résultats par page de recherche — le maximum accepté par `/products` (mesuré, décision du 2026-09-11). */
+const LIMITE_RESULTATS = 100
 
 /** Longueur maximale gardée de la description Mobilax (HTML de plusieurs ko, mesuré). */
 const DESCRIPTION_MAX = 2000
@@ -81,16 +81,17 @@ const DESCRIPTION_MAX = 2000
  * @param deps        Dépendances (base, KV, secret, adresse de l'API)
  * @param boutiqueId  Boutique appelante — c'est SA clé qui est utilisée, jamais une autre
  * @param terme       Texte cherché (nom, EAN13)
- * @returns           Produits normalisés, ou une erreur nommée avec un message pour l'opérateur
+ * @param page        Page demandée (1 par défaut), de `LIMITE_RESULTATS` pièces — une par appel
+ * @returns           Produits normalisés avec `page`/`pages`, ou une erreur nommée
  */
 export async function rechercherProduitsMobilax(
-  deps: DepsMobilax, boutiqueId: number, terme: string
+  deps: DepsMobilax, boutiqueId: number, terme: string, page = 1
 ): Promise<ResultatRechercheMobilax> {
   const cle = await resoudreCle(deps, boutiqueId)
   if (!cle.ok) return cle.echec
 
   try {
-    const url = `${deps.baseUrl}/products?search=${encodeURIComponent(terme)}&limit=${LIMITE_RESULTATS}`
+    const url = `${deps.baseUrl}/products?search=${encodeURIComponent(terme)}&page=${page}&limit=${LIMITE_RESULTATS}`
     const appel = await appelerMobilax(deps, boutiqueId, cle.apiKey, url)
     if (!appel.ok) return appel.echec
     if (!appel.rep.ok) return indisponible()
@@ -98,12 +99,23 @@ export async function rechercherProduitsMobilax(
     // `GET /products` : `{ data: { total, products } }`, sans `status` (mesuré le 2026-09-11).
     // Une autre forme n'est PAS une recherche vide : la présenter comme « aucune pièce »
     // cacherait un changement d'API derrière un résultat plausible.
-    const corps = await appel.rep.json() as { data?: { total?: unknown; products?: unknown } }
+    const corps = await appel.rep.json() as {
+      data?: { total?: unknown; currentPage?: unknown; totalPage?: unknown; products?: unknown }
+    }
     if (!Array.isArray(corps.data?.products)) return indisponible()
     const produits = corps.data.products.map(versProduitMobilax)
       .filter((p): p is ProduitMobilax => p !== null)
     const total = Number(corps.data.total)
-    return { ok: true, total: Number.isFinite(total) ? total : produits.length, produits }
+    // `totalPage` au singulier et `currentPage` en camelCase (mesuré) — à défaut, la page demandée
+    const pages = Number(corps.data.totalPage)
+    const pageRendue = Number(corps.data.currentPage)
+    return {
+      ok: true,
+      total: Number.isFinite(total) ? total : produits.length,
+      page:  Number.isInteger(pageRendue) && pageRendue > 0 ? pageRendue : page,
+      pages: Number.isInteger(pages) && pages > 0 ? pages : 1,
+      produits,
+    }
   } catch {
     return indisponible()
   }
@@ -154,13 +166,25 @@ export async function importerProduitMobilax(
   const existant = await trouverProduitImporte(deps.db, boutiqueId, cle.fiche.id, fiche.reference)
   if (existant) return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: existant.id })
 
-  const taux = resoudreTauxMarge(await getBoutiqueSettings(deps.db, boutiqueId), 'piece')
+  // Famille déduite de la branche Mobilax, puis marge résolue sur CETTE famille (un accessoire
+  // prend le taux des accessoires, pas celui des pièces) — décisions du 2026-09-11
+  const famille = await familleDepuisCategorie(deps, boutiqueId, cle.apiKey, fiche.categorie_id)
+  const taux = resoudreTauxMarge(await getBoutiqueSettings(deps.db, boutiqueId), famille)
   const prixVente = taux === null ? 0 : Math.round(fiche.prix_achat_ht * (1 + taux / 100) * 100) / 100
+
+  // Catégorie locale = catégorie Mobilax la plus fine, trouvée ou créée dans CETTE boutique
+  const categorieId = fiche.categorie_nom
+    ? (await trouverOuCreerCategorie(deps.db, boutiqueId, fiche.categorie_nom)).id
+    : null
 
   const { id } = await createProduit(deps.d1, boutiqueId, userId, {
     nom:                   fiche.nom,
+    // SKU = EAN (scannable) ; la référence Mobilax reste en `reference_fournisseur`
+    sku:                   fiche.ean13,
     description:           fiche.description,
-    famille:               'piece',
+    famille,
+    categorie_id:          categorieId,
+    marque:                fiche.marque,
     prix_achat_ht:         fiche.prix_achat_ht,
     prix_vente_ht:         prixVente,
     stock_actuel:          0,
@@ -178,8 +202,14 @@ interface FicheMobilax {
   /** Référence Mobilax (ex. `ECRTAREAPPIPHNE12MNO`) ; l'identifiant à défaut. */
   reference:     string
   ean13:         string | null
+  /** Description réduite en texte, précédée de la gamme Mobilax si elle est connue. */
   description:   string | null
   prix_achat_ht: number
+  /** Catégorie Mobilax la plus fine (`categorie`), pour la famille et la catégorie locale. */
+  categorie_id:  number | null
+  categorie_nom: string | null
+  /** Marque de l'appareil compatible (`models.brand_name`) — `manufacturer_brand` est nul (mesuré). */
+  marque:        string | null
 }
 
 /** Normalise `data` de `/products/:id/full` ; `null` si nom ou prix manquent. */
@@ -187,12 +217,55 @@ function versFicheMobilax(d: any): FicheMobilax | null {
   const prix = Number(d?.price)
   const nom = String(d?.name ?? d?.short_name ?? '').trim()
   if (!nom || !Number.isFinite(prix)) return null
+  // `models` est un objet dans les réponses mesurées, un tableau dans la doc : les deux lus
+  const modele = Array.isArray(d.models) ? d.models[0] : d.models
+  const gamme = d.mobilax_brand?.name ? `Gamme Mobilax : ${String(d.mobilax_brand.name)}` : null
+  const texte = d.description ? texteBrut(String(d.description)) || null : null
+  const categorieId = Number(d.categorie?.id)
   return {
     nom,
     reference:     String(d.reference ?? d.id),
     ean13:         d.ean13 ? String(d.ean13) : null,
-    description:   d.description ? texteBrut(String(d.description)) || null : null,
+    description:   [gamme, texte].filter(Boolean).join('\n') || null,
     prix_achat_ht: prix,
+    categorie_id:  Number.isInteger(categorieId) ? categorieId : null,
+    categorie_nom: d.categorie?.name ? String(d.categorie.name) : (d.category_name ? String(d.category_name) : null),
+    marque:        modele?.brand_name ? String(modele.brand_name) : null,
+  }
+}
+
+/**
+ * Famille iziGSM d'une pièce, déduite de la branche racine de sa catégorie Mobilax.
+ *
+ * Correspondance sur le DÉBUT du nom de la racine, pas sur son identifiant : la préproduction
+ * nomme « Accessoires test permission » ce que la production nomme « Accessoires » (mesuré).
+ * Pièces… → pièce · Accessoire… → accessoire · Mobile / Tablette… → appareil · le reste
+ * (Informatique, Équipement, E-Mobility…) → consommable. Arbre illisible → pièce, le défaut
+ * historique de l'import : une panne du référentiel ne bloque pas l'import.
+ *
+ * `/catalog/*` ne relève d'aucun quota (mesuré : aucun en-tête `ratelimit`) ; l'arbre pèse
+ * environ 280 ko, relu à chaque import plutôt que gardé — l'import est un geste rare.
+ */
+async function familleDepuisCategorie(
+  deps: DepsMobilax, boutiqueId: number, apiKey: string, categorieId: number | null
+): Promise<'piece' | 'accessoire' | 'appareil' | 'consommable'> {
+  if (categorieId === null) return 'piece'
+  try {
+    const appel = await appelerMobilax(deps, boutiqueId, apiKey, `${deps.baseUrl}/catalog/categories`)
+    if (!appel.ok || !appel.rep.ok) return 'piece'
+    const arbre = (await appel.rep.json() as { data?: unknown }).data
+    if (!Array.isArray(arbre)) return 'piece'
+    const parId = new Map(arbre.map((c: any) => [Number(c.id), c]))
+    // Remontée jusqu'à la racine, bornée : un arbre bouclé ne doit pas bloquer l'import
+    let noeud = parId.get(categorieId)
+    for (let i = 0; noeud && parId.has(Number(noeud.id_parent)) && i < 20; i++) noeud = parId.get(Number(noeud.id_parent))
+    const racine = String(noeud?.name ?? '').toLowerCase()
+    if (racine.startsWith('pièce') || racine.startsWith('piece')) return 'piece'
+    if (racine.startsWith('accessoire')) return 'accessoire'
+    if (racine.startsWith('mobile') || racine.startsWith('tablette')) return 'appareil'
+    return noeud ? 'consommable' : 'piece'
+  } catch {
+    return 'piece'
   }
 }
 

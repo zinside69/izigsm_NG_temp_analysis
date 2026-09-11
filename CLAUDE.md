@@ -15,7 +15,7 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
   (dernière : `0045_fournisseur_api_plateforme.sql`, compté le 2026-09-11)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (1025/1027 au 2026-09-11, 35 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (1036/1038 au 2026-09-11, 37 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -553,6 +553,21 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `POST /produits` passe le corps de requête tel quel, un `fournisseur_id` dans `data` pourrait
   viser la fiche d'une autre boutique. Colonnes `description`, `fournisseur_id` ajoutées **en
   fin** d'`INSERT` pour ne décaler aucun paramètre existant.
+- **Fiche d'une pièce importée** (décisions du 2026-09-11) : **SKU = EAN**, référence Mobilax en
+  `reference_fournisseur` (affichée en lecture seule « Réf. … » dans la fiche) ; **famille déduite
+  de la racine de la catégorie Mobilax**, par le **début du nom** (« Pièces… », « Accessoire… »,
+  « Mobile »/« Tablette… », sinon consommable) — jamais par l'identifiant, la préprod nomme
+  « Accessoires test permission » ce que la prod nomme « Accessoires » ; arbre illisible → pièce,
+  l'import passe ; **marge résolue sur cette famille** ; catégorie locale = catégorie Mobilax la
+  plus fine, `trouverOuCreerCategorie()` ; **marque = `models.brand_name`** (objet ou tableau),
+  gamme `mobilax_brand.name` en tête de la description.
+- **Recherche paginée : 100 résultats par page** (maximum de `/products`), `?page=` validé en
+  entier ≥ 1 par la route (400 sinon, aucun appel brûlé). Une page = un appel au quota 30/min :
+  ⊥ charger toutes les pages d'un coup (5 095 pièces pour « iphone 12 » = 51 appels).
+- **« Notes » de la fiche produit = colonne `description`** : aucune colonne `notes` n'existe sur
+  `produits`. ⊥ réintroduire `notes` côté écran sans migration — la saisie serait perdue.
+- ⚠ **E2E et fenêtres `.modal-overlay`** : fermées par `opacity: 0`, elles restent « visibles »
+  pour Playwright. Assertionner `toHaveCSS('opacity', '1' | '0')`, jamais `toBeVisible()`.
 - **L'E2E `mobilax-recherche-stock.spec.ts` appelle la vraie préproduction** (1 connexion,
   2 recherches) avec `MOBILAX_API_KEY` lue dans `.dev.vars` via `process.getBuiltinModule()` —
   ⊥ `import 'node:fs'` dans une spec : `tsconfig` n'a pas les types Node, la baseline tsc monte.
