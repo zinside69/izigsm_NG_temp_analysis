@@ -772,6 +772,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-11 (fin de journée) : aucune migration en attente — dépôt et production
+alignés.** `ad04d24` (fiche d'une pièce importée remplie, notes enregistrées, recherche paginée,
+icônes du stock) déployé par l'exploitant, sans migration. Relu : `stock.c242abce.js` servi =
+manifeste local, `sw.js` `izigsm-v3.00`, `migrations list --remote` vide.
+
 **État au 2026-09-11 (après le checkpoint 101) : aucune migration en attente — dépôt et
 production alignés.** `ec91913` (ticket 04 Mobilax, import d'une pièce dans le stock) déployé par
 l'exploitant, sans migration. Relu en production : `stock.16808b85.js` servi = manifeste local
