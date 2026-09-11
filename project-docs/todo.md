@@ -12,7 +12,22 @@ Détail et cause : `bugs.md` § du même titre. Test : `tests/e2e/fournisseurs-e
       `izigsm-v2.96`) : apex sert `fournisseurs.1630ab7c.js` avec les nouveaux libellés,
       `/fournisseurs` porte le `.modal-backdrop` fixe et 10 boutons `btn btn-sm`
 
-## 🟡 P3 — « Envoyer » un bon de commande annonce « Bon envoyé au fournisseur » sans rien envoyer (trouvé le 2026-09-11)
+## ✅ 🟠 P2 — Bons de commande : fenêtre de détail, impayés justes, règlement (demandé le 2026-09-11, **CORRIGÉ le 2026-09-11**)
+
+Détail et cause : `bugs.md` § « Bons de commande : détail en `alert()` brute… ».
+
+- [x] Fenêtre de détail avec actions par statut (remplace l'`alert()`)
+- [x] « Impayés fournisseurs » = réceptionnés non réglés
+- [x] `POST /api/bons-commande/:id/regler` + migration `0044` (`date_paiement`)
+- [x] **Déployer dans cet ordre** : `npx wrangler d1 migrations apply DB --remote` (lire
+      `Resource location: remote`, puis relire `d1_migrations` distant) **puis** `npm run deploy`.
+      L'inverse : `no such column: date_paiement` sur tout règlement — fait par l'exploitant le
+      2026-09-11. Relu en production : `d1_migrations` distant s'arrête à `0044`, colonne
+      `date_paiement` présente, apex sert `fournisseurs.61d2ef35.js` (= manifeste local) avec
+      `reglerBC`, `sw.js` `izigsm-v2.97`, `POST /regler` sans jeton → 401
+- [ ] 🟡 `updateStatutBonCommande()` accepte n'importe quelle transition (reçu → annulé)
+
+## ✅ 🟡 P3 — « Envoyer » un bon de commande annonce « Bon envoyé au fournisseur » sans rien envoyer (trouvé le 2026-09-11, **CORRIGÉ le 2026-09-11** avec la fenêtre de détail)
 
 `envoyerBC()` (`fournisseurs.js`) ne fait que passer le bon en `awaiting_delivery`. Le message
 laisse croire qu'une commande est partie. À reformuler (« Bon passé en attente de livraison »)

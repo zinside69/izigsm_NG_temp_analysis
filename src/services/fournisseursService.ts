@@ -65,6 +65,7 @@ export interface BonCommande {
   statut_paiement: string
   date_commande:   string | null
   date_reception:  string | null
+  date_paiement?:  string | null   // migration 0044 — posée par marquerBonCommandeRegle()
   montant_ht:      number
   montant_ttc:     number
   notes:           string | null
@@ -561,6 +562,49 @@ export async function updateStatutBonCommande(
 }
 
 /**
+ * Marque un bon de commande comme réglé au fournisseur.
+ *
+ * Seul chemin du dépôt qui fait passer `statut_paiement` à `paid` — avant lui, la valeur
+ * restait `pending` à vie et « Impayés fournisseurs » ne pouvait que grossir.
+ *
+ * Refus (aucune écriture) :
+ *  - `draft` : un brouillon n'a pas été passé au fournisseur, il n'y a rien à régler ;
+ *  - `cancelled` : rien à régler ;
+ *  - déjà `paid` : la date de règlement d'origine n'est pas réécrite.
+ * `awaiting_delivery` est accepté : un règlement à la commande (prépaiement) est légitime.
+ *
+ * Isolation multi-tenant : assurée par la route (`assertBoutiqueOwnership` sur le bon),
+ * même patron que `updateStatutBonCommande()`.
+ *
+ * @param db      Binding D1 Cloudflare (auditLog() reste sur D1Database)
+ * @param id      Identifiant du bon de commande
+ * @param userId  Identifiant de l'utilisateur (pour audit log)
+ * @throws        Error si bon introuvable, brouillon, annulé ou déjà réglé
+ */
+export async function marquerBonCommandeRegle(
+  db: D1Database,
+  id: number,
+  userId: number
+): Promise<void> {
+  const bc = await db.prepare(
+    `SELECT id, statut, statut_paiement FROM bons_commande WHERE id = ?`
+  ).bind(id).first<{ id: number; statut: string; statut_paiement: string }>()
+
+  if (!bc) throw new Error('Bon de commande introuvable.')
+  if (bc.statut === 'draft')     throw new Error('Un brouillon n\'engage rien auprès du fournisseur : rien à régler.')
+  if (bc.statut === 'cancelled') throw new Error('Bon de commande annulé : rien à régler.')
+  if (bc.statut_paiement === 'paid') throw new Error('Bon de commande déjà réglé.')
+
+  await db.prepare(`
+    UPDATE bons_commande
+    SET statut_paiement = 'paid', date_paiement = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).bind(id).run()
+
+  await auditLog(db, { user_id: userId, action: 'BC_REGLE', entite_type: 'bon_commande', entite_id: id })
+}
+
+/**
  * Réceptionne un bon de commande : met à jour le stock et recalcule le CUMP.
  *
  * Pour chaque ligne reçue avec un `produit_id` :
@@ -692,13 +736,15 @@ export async function getKpisFournisseurs(
   db: Database, boutiqueId: number
 ) {
   const [kpis, aCommander] = await Promise.all([
+    // montant_impaye_ttc = marchandise reçue et pas encore réglée (décision du 2026-09-11) :
+    // un brouillon ou un bon envoyé non reçu ne doit rien au fournisseur.
     db.get<any>(`
       SELECT
         COUNT(DISTINCT f.id)                                              as nb_fournisseurs,
         COUNT(bc.id)                                                      as nb_commandes_total,
         SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente,
         SUM(CASE WHEN bc.statut = 'received' THEN bc.montant_ht ELSE 0 END) as montant_achats_ht,
-        SUM(CASE WHEN bc.statut_paiement = 'pending' AND bc.statut != 'cancelled' THEN bc.montant_ttc ELSE 0 END) as montant_impaye_ttc
+        SUM(CASE WHEN bc.statut = 'received' AND bc.statut_paiement != 'paid' THEN bc.montant_ttc ELSE 0 END) as montant_impaye_ttc
       FROM fournisseurs f
       LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id
       WHERE f.boutique_id = ? AND f.actif = 1

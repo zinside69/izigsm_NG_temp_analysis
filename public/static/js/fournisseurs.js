@@ -204,19 +204,111 @@ function badgePaiementBC(statut) {
   return map[statut] ?? `<span class="badge-gray">${statut}</span>`
 }
 
-/** Voir / ouvrir un bon de commande (futur : page dédiée ou modal détail) */
+/**
+ * Ouvre la fenêtre de détail d'un bon : en-tête, lignes, totaux, et les actions permises
+ * par son statut. Remplace une alert() qui affichait le statut brut (« draft »).
+ *
+ * Actions par statut :
+ *   draft             → Annuler le bon · Passer en attente de livraison
+ *   awaiting_delivery → Annuler le bon · Réceptionner · Marquer réglé (prépaiement)
+ *   received          → Marquer réglé
+ * « Marquer réglé » disparaît dès que le bon est réglé ; le serveur refuse de toute façon
+ * brouillon, annulé et double règlement (marquerBonCommandeRegle()).
+ */
 async function voirBC(id) {
   const res = (await apiGet(`/api/bons-commande/${id}`)).data
   if (!res?.success) { showFlash('Erreur chargement bon de commande.', 'error'); return }
   const { bc, lignes } = res.data
-  alert(`Bon ${bc.numero}\nFournisseur : ${bc.fournisseur_nom}\nStatut : ${bc.statut}\n\n${lignes.length} ligne(s)\nTotal HT : ${formatCurrency(bc.montant_ht)}`)
+
+  document.getElementById('detail-bc-titre').textContent = `Bon de commande ${bc.numero}`
+
+  const regle = bc.statut_paiement === 'paid'
+  const paiement = regle
+    ? `<span class="badge-green">${bc.date_paiement ? `Réglé le ${formatDate(bc.date_paiement)}` : 'Réglé'}</span>`
+    : badgePaiementBC(bc.statut_paiement)
+
+  const lignesHtml = lignes.map(l => `
+    <tr class="table-row">
+      <td class="td-cell">${esc(l.designation)}</td>
+      <td class="td-cell text-gray-500">${esc(l.reference ?? '—')}</td>
+      <td class="td-cell text-center">${l.quantite_recue ?? 0} / ${l.quantite_commandee}</td>
+      <td class="td-cell text-right">${formatCurrency(l.prix_achat_ht)}</td>
+      <td class="td-cell text-right text-gray-500">${l.tva_taux ?? 20} %</td>
+      <td class="td-cell text-right font-medium">${formatCurrency(l.quantite_commandee * l.prix_achat_ht)}</td>
+    </tr>`).join('')
+
+  document.getElementById('detail-bc-corps').innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
+      <div><div class="label-field">Fournisseur</div>${esc(bc.fournisseur_nom ?? '—')}</div>
+      <div><div class="label-field">Statut</div>${badgeStatutBC(bc.statut)}</div>
+      <div><div class="label-field">Paiement</div>${paiement}</div>
+      <div><div class="label-field">Commandé le</div>${formatDate(bc.date_commande)}</div>
+      <div><div class="label-field">Livraison prévue</div>${formatDate(bc.date_livraison_prevue)}</div>
+      <div><div class="label-field">Réceptionné le</div>${formatDate(bc.date_reception)}</div>
+    </div>
+    ${bc.notes ? `<p class="text-sm text-gray-600 mb-4"><span class="label-field">Notes</span>${esc(bc.notes)}</p>` : ''}
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b">
+        <tr>
+          <th class="th-cell">Désignation</th><th class="th-cell">Réf.</th>
+          <th class="th-cell text-center">Reçu / commandé</th><th class="th-cell text-right">PU HT</th>
+          <th class="th-cell text-right">TVA</th><th class="th-cell text-right">Total HT</th>
+        </tr>
+      </thead>
+      <tbody>${lignesHtml}</tbody>
+    </table>
+    <div class="flex justify-end gap-6 mt-4 text-sm">
+      <span>Total HT : <strong>${formatCurrency(bc.montant_ht)}</strong></span>
+      <span>Total TTC : <strong class="text-indigo-600">${formatCurrency(bc.montant_ttc)}</strong></span>
+    </div>`
+
+  const actions = []
+  if (bc.statut === 'draft' || bc.statut === 'awaiting_delivery')
+    actions.push(`<button class="btn btn-sm btn-secondary text-red-600" onclick="annulerBC(${bc.id})"><i class="fas fa-ban"></i>Annuler le bon</button>`)
+  if (bc.statut === 'draft')
+    actions.push(`<button class="btn btn-sm btn-primary" onclick="envoyerBC(${bc.id})"><i class="fas fa-paper-plane"></i>Passer en attente de livraison</button>`)
+  if (bc.statut === 'awaiting_delivery')
+    actions.push(`<button class="btn btn-sm btn-primary" onclick="closeModal('modal-detail-bc'); ouvrirReception(${bc.id})"><i class="fas fa-box-open"></i>Réceptionner</button>`)
+  if ((bc.statut === 'awaiting_delivery' || bc.statut === 'received') && !regle)
+    actions.push(`<button class="btn btn-sm btn-primary bg-green-600 hover:bg-green-700" onclick="reglerBC(${bc.id})"><i class="fas fa-check"></i>Marquer réglé</button>`)
+  actions.push(`<button class="btn btn-sm btn-secondary" onclick="closeModal('modal-detail-bc')">Fermer</button>`)
+  document.getElementById('detail-bc-actions').innerHTML = actions.join('')
+
+  openModal('modal-detail-bc')
+}
+
+/** Marque un bon réglé au fournisseur (POST /regler), puis rafraîchit liste et KPI. */
+async function reglerBC(id) {
+  if (!confirm('Marquer ce bon comme réglé au fournisseur ?')) return
+  const res = (await apiPost(`/api/bons-commande/${id}/regler`, {})).data
+  if (res?.success) {
+    closeModal('modal-detail-bc')
+    showFlash('Bon de commande marqué réglé.', 'success'); loadBons(); loadKpis()
+  }
+  else showFlash(res?.error ?? 'Erreur.', 'error')
+}
+
+/** Annule un bon (brouillon ou en attente de livraison). */
+async function annulerBC(id) {
+  if (!confirm('Annuler ce bon de commande ?')) return
+  const res = (await apiPatch(`/api/bons-commande/${id}/statut`, { statut: 'cancelled' })).data
+  if (res?.success) {
+    closeModal('modal-detail-bc')
+    showFlash('Bon de commande annulé.', 'success'); loadBons(); loadKpis()
+  }
+  else showFlash(res?.error ?? 'Erreur.', 'error')
 }
 
 /** Passer un bon de draft → awaiting_delivery */
 async function envoyerBC(id) {
   if (!confirm('Passer ce bon en statut "En attente de livraison" ?')) return
   const res = (await apiPatch(`/api/bons-commande/${id}/statut`, { statut: 'awaiting_delivery' })).data
-  if (res?.success) { showFlash('Bon envoyé au fournisseur.', 'success'); loadBons(); loadKpis() }
+  // Rien ne part chez le fournisseur : seul le statut change. L'ancien message « Bon envoyé
+  // au fournisseur » laissait croire le contraire (todo.md, P3 du 2026-09-11).
+  if (res?.success) {
+    closeModal('modal-detail-bc')
+    showFlash('Bon passé en attente de livraison.', 'success'); loadBons(); loadKpis()
+  }
   else showFlash(res?.error ?? 'Erreur.', 'error')
 }
 

@@ -37,6 +37,7 @@ import {
   getBonCommande,
   createBonCommande,
   updateStatutBonCommande,
+  marquerBonCommandeRegle,
   receptionnerBonCommande,
   getKpisFournisseurs,
   getProduitsACommander,
@@ -147,7 +148,7 @@ const SQL_INSERT_MOUVEMENT_STOCK = `INSERT INTO mouvements_stock (produit_id, bo
 
 const SQL_UPDATE_BC_RECEIVED = `UPDATE bons_commande SET statut = 'received', date_reception = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
 
-const SQL_KPI_FOURNISSEURS = `SELECT COUNT(DISTINCT f.id) as nb_fournisseurs, COUNT(bc.id) as nb_commandes_total, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente, SUM(CASE WHEN bc.statut = 'received' THEN bc.montant_ht ELSE 0 END) as montant_achats_ht, SUM(CASE WHEN bc.statut_paiement = 'pending' AND bc.statut != 'cancelled' THEN bc.montant_ttc ELSE 0 END) as montant_impaye_ttc FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1`
+const SQL_KPI_FOURNISSEURS = `SELECT COUNT(DISTINCT f.id) as nb_fournisseurs, COUNT(bc.id) as nb_commandes_total, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente, SUM(CASE WHEN bc.statut = 'received' THEN bc.montant_ht ELSE 0 END) as montant_achats_ht, SUM(CASE WHEN bc.statut = 'received' AND bc.statut_paiement != 'paid' THEN bc.montant_ttc ELSE 0 END) as montant_impaye_ttc FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1`
 
 const SQL_KPI_A_COMMANDER = 'SELECT COUNT(*) as nb_produits_a_commander FROM produits WHERE boutique_id = ? AND actif = 1 AND stock_actuel <= stock_minimum'
 
@@ -675,6 +676,58 @@ describe('updateStatutBonCommande()', () => {
     const auditCall = calls.find(c => c.sql.startsWith('INSERT INTO audit_log'))
     expect(auditCall).toBeDefined()
     expect(auditCall?.params).toContain('BC_STATUT_RECEIVED')
+  })
+})
+
+// ─── marquerBonCommandeRegle ──────────────────────────────────────────────────
+// Seul chemin qui fait passer un bon à « Réglé » : avant lui, `statut_paiement` restait
+// `pending` à vie et le KPI « Impayés fournisseurs » ne pouvait que grossir.
+
+const SQL_GET_BC_POUR_REGLEMENT = 'SELECT id, statut, statut_paiement FROM bons_commande WHERE id = ?'
+const SQL_REGLER_BC = `UPDATE bons_commande SET statut_paiement = 'paid', date_paiement = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+
+describe('marquerBonCommandeRegle()', () => {
+  let db: ReturnType<typeof createMockD1>
+
+  beforeEach(() => {
+    db = createMockD1()
+  })
+
+  it.each(['awaiting_delivery', 'received'])(
+    'bon "%s" non réglé — passe à paid avec la date du jour, et journalise',
+    async (statut) => {
+      db.__setResponse(SQL_GET_BC_POUR_REGLEMENT, { id: 10, statut, statut_paiement: 'pending' })
+
+      await marquerBonCommandeRegle(db, 10, 5)
+
+      const calls = db.__getCalls()
+      const update = calls.find(c => c.sql === SQL_REGLER_BC.replace(/\s+/g, ' ').trim())
+      expect(update, 'UPDATE de règlement attendu').toBeDefined()
+      expect(update?.params).toEqual([10])
+      const audit = calls.find(c => c.sql.startsWith('INSERT INTO audit_log'))
+      expect(audit?.params).toContain('BC_REGLE')
+    }
+  )
+
+  it('bon introuvable — lève Error, aucune écriture', async () => {
+    db.__setNotFound(SQL_GET_BC_POUR_REGLEMENT)
+    await expect(marquerBonCommandeRegle(db, 999, 5)).rejects.toThrow('Bon de commande introuvable.')
+    expect(db.__getCalls().some(c => c.sql.startsWith('UPDATE'))).toBe(false)
+  })
+
+  it.each([
+    ['draft',     'Un brouillon n\'engage rien auprès du fournisseur : rien à régler.'],
+    ['cancelled', 'Bon de commande annulé : rien à régler.'],
+  ])('bon "%s" — refusé, aucune écriture', async (statut, message) => {
+    db.__setResponse(SQL_GET_BC_POUR_REGLEMENT, { id: 10, statut, statut_paiement: 'pending' })
+    await expect(marquerBonCommandeRegle(db, 10, 5)).rejects.toThrow(message)
+    expect(db.__getCalls().some(c => c.sql.startsWith('UPDATE'))).toBe(false)
+  })
+
+  it('bon déjà réglé — refusé : la date de règlement d\'origine n\'est pas réécrite', async () => {
+    db.__setResponse(SQL_GET_BC_POUR_REGLEMENT, { id: 10, statut: 'received', statut_paiement: 'paid' })
+    await expect(marquerBonCommandeRegle(db, 10, 5)).rejects.toThrow('Bon de commande déjà réglé.')
+    expect(db.__getCalls().some(c => c.sql.startsWith('UPDATE'))).toBe(false)
   })
 })
 

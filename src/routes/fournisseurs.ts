@@ -16,6 +16,7 @@
  *   GET    /api/bons-commande/:id               — détail + lignes
  *   PATCH  /api/bons-commande/:id/statut        — changer statut
  *   POST   /api/bons-commande/:id/receptionner  — réceptionner + MAJ stock + CUMP
+ *   POST   /api/bons-commande/:id/regler        — marquer réglé au fournisseur (date posée)
  */
 
 import { Hono } from 'hono'
@@ -25,7 +26,7 @@ import type { Database } from '../ports/database'
 import {
   listFournisseurs, getFournisseur, createFournisseur, updateFournisseur, deleteFournisseur,
   listBonsCommande, getBonCommande, createBonCommande, updateStatutBonCommande,
-  receptionnerBonCommande, getKpisFournisseurs, getProduitsACommander, getBonCommandeBoutiqueId
+  receptionnerBonCommande, marquerBonCommandeRegle, getKpisFournisseurs, getProduitsACommander, getBonCommandeBoutiqueId
 } from '../services/fournisseursService'
 
 // FOURNISSEUR_CRYPTO_KEY : secret de plateforme, clé de chiffrement AES-256 (hex, 64
@@ -231,6 +232,25 @@ fournisseurs.post('/bons-commande/:id/receptionner', requireRole('admin', 'manag
       ...result,
       message: `Réception enregistrée. ${result.nb_produits_mis_a_jour} produit(s) mis à jour (stock + CUMP).`
     })
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+})
+
+// ── POST /api/bons-commande/:id/regler ────────────────────────────────────────
+/** Marquer un bon comme réglé au fournisseur — refus métier (brouillon, annulé, déjà réglé) en 422 */
+fournisseurs.post('/bons-commande/:id/regler', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : la garde précède l'écriture (même patron que /receptionner).
+  const bon = await getBonCommandeBoutiqueId(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, bon, 'Bon de commande')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+  try {
+    await marquerBonCommandeRegle(c.env.DB, id, user.sub)
+    return c.json({ success: true, message: 'Bon de commande marqué réglé.' })
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 422)
   }

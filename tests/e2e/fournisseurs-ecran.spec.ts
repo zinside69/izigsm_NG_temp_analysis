@@ -12,8 +12,8 @@
  * du pointeur est bien l'élément visé — un bouton recouvert par la barre échouerait.
  * Les deux endpoints de comptage sont simulés : le sujet est le rendu, pas le stock local.
  */
-import { test, expect, type Page } from '@playwright/test'
-import { MANAGER, seConnecter } from './fixtures/comptes'
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
+import { MANAGER, obtenirToken, seConnecter } from './fixtures/comptes'
 
 const PRODUIT_SOUS_SEUIL = {
   id: 999_001, nom: 'Connecteur de charge test', marque: 'Apple', fournisseur_nom: null,
@@ -90,5 +90,79 @@ test.describe('Fournisseurs — écran lisible et utilisable', () => {
     // Clic réel sur « Annuler » : échouerait si la barre latérale recouvrait le bouton
     await page.click('#modal-bc [data-close="modal-bc"].btn-secondary, #modal-bc .modal-footer [data-close="modal-bc"]')
     await expect(page.locator('#modal-bc')).toBeHidden()
+  })
+})
+
+// ─── Fenêtre de détail d'un bon (remplace une alert() brute, statut « draft ») ──────────
+
+/**
+ * Crée par l'API un bon chez un fournisseur au nom unique, amené jusqu'au statut voulu.
+ * Le nom unique sert de filtre dans la liste : la boutique de démo porte des centaines de bons.
+ */
+async function creerBon(request: APIRequestContext, statut: 'draft' | 'received') {
+  const token = await obtenirToken(request, MANAGER)
+  const headers = { Authorization: `Bearer ${token}` }
+  const nomFournisseur = `Détail BC ${Date.now()}`
+  const f = await request.post('/api/fournisseurs', { headers, data: { nom: nomFournisseur } })
+  const cree = await request.post('/api/bons-commande', {
+    headers,
+    data: { fournisseur_id: (await f.json()).id, lignes: [{ designation: 'Écran détail test', reference: 'REF-DET', quantite_commandee: 2, prix_achat_ht: 10, tva_taux: 20 }] },
+  })
+  const id = (await cree.json()).id
+  if (statut === 'received') {
+    await request.patch(`/api/bons-commande/${id}/statut`, { headers, data: { statut: 'awaiting_delivery' } })
+    const ligneId = (await (await request.get(`/api/bons-commande/${id}`, { headers })).json()).data.lignes[0].id
+    await request.post(`/api/bons-commande/${id}/receptionner`, { headers, data: { lignes_recues: [{ ligne_id: ligneId, quantite_recue: 2 }] } })
+  }
+  return { id, nomFournisseur, headers }
+}
+
+/** Ouvre la page, filtre sur le fournisseur, et clique la ligne du bon. */
+async function ouvrirDetail(page: Page, nomFournisseur: string) {
+  await seConnecter(page, MANAGER)
+  await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  await page.goto('/fournisseurs')
+  await page.fill('#search-bc', nomFournisseur)
+  await page.locator('#table-bons tr', { hasText: nomFournisseur }).first().click()
+}
+
+test.describe('Fournisseurs — fenêtre de détail d\'un bon', () => {
+  test('brouillon : statut en clair, lignes, totaux, actions du brouillon — aucune alerte native', async ({ page, request }) => {
+    const { nomFournisseur } = await creerBon(request, 'draft')
+    let alerteNative = ''
+    page.on('dialog', d => { alerteNative = d.message(); d.dismiss() })
+
+    await ouvrirDetail(page, nomFournisseur)
+    const fenetre = page.locator('#modal-detail-bc')
+    await expect(fenetre).toBeVisible()
+    expect(alerteNative, 'plus aucune alert() à l\'ouverture').toBe('')
+
+    await expect(fenetre).toContainText('Brouillon')
+    await expect(fenetre).not.toContainText('draft')
+    await expect(fenetre).toContainText('Écran détail test')
+    await expect(fenetre).toContainText('REF-DET')
+    await expect(fenetre).toContainText('20,00')   // total HT : 2 × 10 €
+    await expect(fenetre).toContainText('24,00')   // total TTC
+    await expect(fenetre.getByRole('button', { name: /Passer en attente de livraison/ })).toBeVisible()
+    await expect(fenetre.getByRole('button', { name: /Marquer réglé/ })).toHaveCount(0)
+  })
+
+  test('réceptionné : « Marquer réglé » règle le bon et l\'affiche réglé', async ({ page, request }) => {
+    const { id, nomFournisseur, headers } = await creerBon(request, 'received')
+    page.on('dialog', d => d.accept())
+
+    await ouvrirDetail(page, nomFournisseur)
+    const fenetre = page.locator('#modal-detail-bc')
+    await expect(fenetre).toContainText('Réceptionné')
+    await fenetre.getByRole('button', { name: /Marquer réglé/ }).click()
+    await expect(fenetre).toBeHidden()
+
+    const bc = (await (await request.get(`/api/bons-commande/${id}`, { headers })).json()).data.bc
+    expect(bc.statut_paiement).toBe('paid')
+
+    // Réouverture : réglé, avec sa date, et plus de bouton de règlement
+    await page.locator('#table-bons tr', { hasText: nomFournisseur }).first().click()
+    await expect(fenetre).toContainText('Réglé le')
+    await expect(fenetre.getByRole('button', { name: /Marquer réglé/ })).toHaveCount(0)
   })
 })

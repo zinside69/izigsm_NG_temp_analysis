@@ -1,5 +1,35 @@
 # iziGSM — Bugs connus
 
+## ✅ Bons de commande : détail en `alert()` brute, impayés comptant les brouillons, aucun moyen de régler (trouvé en production le 2026-09-11, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, migration `0044` appliquée, `izigsm-v2.97`)
+
+Capture de l'exploitant : un clic sur un bon ouvrait une alerte du navigateur affichant
+« Statut : draft », et le KPI « Impayés fournisseurs » valait 57,60 € pour un seul bon,
+**brouillon jamais envoyé**. En creusant, un troisième défaut, plus grave :
+
+1. **`voirBC()` était un bouche-trou** (« futur : page dédiée ou modal détail ») : `alert()`,
+   statut en valeur d'énumération, ni lignes ni actions.
+2. **Le KPI comptait tout bon non annulé** (`statut_paiement = 'pending' AND statut !=
+   'cancelled'`) : un brouillon « devait » de l'argent au fournisseur.
+3. **Aucun chemin n'écrivait `statut_paiement = 'paid'`** : la valeur restait `pending` à vie
+   depuis la migration `0014`. Le KPI des impayés ne pouvait donc **que grossir** — un
+   règlement réel n'avait aucun moyen d'apparaître.
+
+**Correction** (décisions exploitant, `decisions.md` du 2026-09-11) : impayé = `received` et
+non `paid` ; `marquerBonCommandeRegle()` + `POST /api/bons-commande/:id/regler` (refus brouillon,
+annulé, déjà réglé ; garde d'isolation) ; migration `0044` (`date_paiement`) ; fenêtre de détail
+avec actions par statut. Au passage, le message de « Envoyer » (« Bon envoyé au fournisseur »,
+faux : rien ne part) devient « Bon passé en attente de livraison ».
+
+**Preuves vues rouges** : `tests/e2e/bon-commande-reglement.spec.ts` contre la vraie D1 locale
+(brouillon : +12 € d'impayés au lieu de 0), `tests/fournisseursService.test.ts`
+§ `marquerBonCommandeRegle()` (6 cas), `tests/e2e/fournisseurs-ecran.spec.ts` § fenêtre de
+détail (fenêtre absente). Les mocks D1 ne pouvaient pas prouver la règle du KPI — ils renvoient
+ce qu'on leur donne quelle que soit la requête — d'où l'E2E sur base réelle.
+
+**Non traité, repéré en lisant** : `updateStatutBonCommande()` ne contrôle aucune transition
+(un bon `received` peut être passé à `cancelled` par l'API, sans retour du stock). L'écran ne le
+propose plus, le serveur l'accepterait encore.
+
 ## ✅ `/fournisseurs` : boutons en texte brut, fenêtre de saisie tronquée sous la barre latérale (trouvé en production le 2026-09-11, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, `izigsm-v2.96`)
 
 Signalé par l'exploitant, captures à l'appui, juste après le correctif des onglets. Même famille

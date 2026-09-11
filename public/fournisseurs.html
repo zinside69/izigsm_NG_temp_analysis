@@ -331,6 +331,20 @@
   </div>
 </div>
 
+<!-- ══ MODAL Détail d'un bon ─────────────────────────────────────────────── -->
+<!-- Remplit par voirBC() (fournisseurs.js) : corps et actions dépendent du statut du bon.
+     Remplace une alert() du navigateur qui affichait le statut brut (« draft »). -->
+<div id="modal-detail-bc" class="modal-backdrop hidden">
+  <div class="modal-box w-full max-w-3xl">
+    <div class="modal-header">
+      <h2 class="text-lg font-semibold" id="detail-bc-titre">Bon de commande</h2>
+      <button class="modal-close" data-close="modal-detail-bc"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" id="detail-bc-corps"></div>
+    <div class="modal-footer" id="detail-bc-actions"></div>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 <script src="/static/js/fournisseurs.js"></script>
   <script src="/static/js/pwa.js"></script>

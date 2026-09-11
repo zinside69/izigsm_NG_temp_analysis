@@ -1,5 +1,16 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Bons de commande : ce qui est dû, et comment on le règle
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Détail d'un bon | **Fenêtre de détail + actions selon le statut** | Lecture seule : obligerait à revenir au tableau pour agir · simple traduction de l'`alert()` : ne montre toujours pas les lignes |
+| Ce que compte « Impayés fournisseurs » | **Bons réceptionnés et non réglés** — cohérent avec « Achats reçus HT » | Envoyés + réceptionnés : colle à un encours débité à la commande, mais compte une marchandise non reçue |
+| Comment régler | **Bouton « Marquer réglé »**, date posée (`date_paiement`, migration `0044`) | Paiements partiels : colonnes ou table en plus pour un besoin non exprimé · règlement groupé du mois : utile pour l'encours Mobilax, à cadrer comme chantier |
+
+Le règlement reste permis sur un bon **en attente de livraison** (prépaiement), refusé sur
+brouillon, annulé et bon déjà réglé — la date d'origine n'est jamais réécrite.
+
 ## 2026-09-11 — Commande Mobilax depuis un bon de commande : le panier d'abord, la validation ensuite
 
 Question de l'exploitant : transformer un bon de commande en vraie commande chez le fournisseur.
