@@ -41,6 +41,8 @@ export interface Fournisseur {
   site_web:    string | null
   notes:       string | null
   actif:       number
+  /** Plateforme d'API branchée (migration 0045) : 'mobilax' ou null. */
+  api_plateforme: string | null
 }
 
 /**
@@ -53,7 +55,8 @@ export interface Fournisseur {
  */
 function versFournisseurPublic(ligne: any): Fournisseur {
   const { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif } = ligne
-  return { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif }
+  return { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif,
+           api_plateforme: ligne.api_plateforme ?? null }
 }
 
 export interface BonCommande {
@@ -122,7 +125,7 @@ export async function listFournisseurs(
   // remonter par accident dans une réponse API (ticket 01, bugs.md § email_api_key).
   const rows = await db.all<any>(`
     SELECT f.id, f.boutique_id, f.nom, f.contact, f.email, f.telephone, f.adresse,
-           f.site_web, f.notes, f.actif,
+           f.site_web, f.notes, f.actif, f.api_plateforme,
            COUNT(bc.id)  as nb_commandes,
            SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente
     FROM   fournisseurs f
@@ -158,7 +161,7 @@ export async function getFournisseur(
   // ⚠ Colonnes explicites, jamais `SELECT *` : `api_key_chiffree` ne doit jamais pouvoir
   // remonter par accident dans une réponse API (ticket 01, bugs.md § email_api_key).
   const row = await db.get<any>(
-    `SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif
+    `SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif, api_plateforme
      FROM fournisseurs WHERE id = ? AND actif = 1`,
     [id]
   )
@@ -193,6 +196,30 @@ export async function getApiKeyDechiffree(
 }
 
 /**
+ * Trouve la fiche fournisseur d'une boutique marquée pour une plateforme d'API (migration
+ * 0045, ex. 'mobilax'), et dit si elle porte une clé — sans jamais la lire.
+ *
+ * Renvoie au plus 2 lignes : l'appelant distingue ainsi « aucune fiche », « une fiche » et
+ * « plusieurs fiches » (ambigu, à signaler plutôt qu'à trancher au hasard).
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique appelante — filtre d'isolation porté par la requête elle-même
+ * @param plateforme  Valeur de `api_plateforme` recherchée
+ * @returns           `[{ id, a_cle }]`, `a_cle` à 1 si une clé chiffrée est enregistrée
+ */
+export async function trouverFournisseurApi(
+  db: Database, boutiqueId: number, plateforme: string
+): Promise<Array<{ id: number; a_cle: number }>> {
+  return db.all<{ id: number; a_cle: number }>(
+    `SELECT id, (api_key_chiffree IS NOT NULL) AS a_cle
+     FROM fournisseurs
+     WHERE boutique_id = ? AND api_plateforme = ? AND actif = 1
+     ORDER BY id LIMIT 2`,
+    [boutiqueId, plateforme]
+  )
+}
+
+/**
  * Crée un nouveau fournisseur et trace dans l'audit log.
  *
  * @param db      Binding D1 Cloudflare
@@ -207,6 +234,8 @@ export async function createFournisseur(
     telephone?: string; adresse?: string; site_web?: string; notes?: string
     /** Clé API en clair (ex. Mobilax) — chiffrée avant stockage, jamais persistée telle quelle. */
     api_key?: string
+    /** Plateforme d'API (migration 0045) — 'mobilax' ou null, validée par `validateFournisseur()`. */
+    api_plateforme?: string | null
   },
   userId: number,
   /** Clé de chiffrement (secret de plateforme). Requise seulement si `data.api_key` est fourni. */
@@ -219,8 +248,8 @@ export async function createFournisseur(
     : null
 
   const result = await db.prepare(`
-    INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree, api_plateforme)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     data.boutique_id,
@@ -231,7 +260,8 @@ export async function createFournisseur(
     data.adresse   ?? null,
     data.site_web  ?? null,
     data.notes     ?? null,
-    apiKeyChiffree
+    apiKeyChiffree,
+    data.api_plateforme ?? null
   ).first<{ id: number }>()
 
   await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_FOURNISSEUR', entite_type: 'fournisseur', entite_id: result?.id })
@@ -256,6 +286,11 @@ export async function updateFournisseur(
     site_web?: string; notes?: string
     /** Nouvelle clé API en clair — chiffrée avant persistance. Absente = clé inchangée. */
     api_key?: string
+    /**
+     * Plateforme d'API (migration 0045). Trois états, que COALESCE ne sait pas tenir (il ne
+     * peut pas remettre NULL) : absent = inchangé · null = marquage retiré · 'mobilax' = posé.
+     */
+    api_plateforme?: string | null
   },
   userId: number,
   /** Clé de chiffrement (secret de plateforme). Requise seulement si `data.api_key` est fourni. */
@@ -266,6 +301,7 @@ export async function updateFournisseur(
   const apiKeyChiffree = data.api_key
     ? await chiffrer(data.api_key, cleChiffrement!)
     : null
+  const plateformeFournie = data.api_plateforme !== undefined ? 1 : 0
 
   await db.prepare(`
     UPDATE fournisseurs SET
@@ -277,6 +313,7 @@ export async function updateFournisseur(
       site_web  = COALESCE(?, site_web),
       notes     = COALESCE(?, notes),
       api_key_chiffree = COALESCE(?, api_key_chiffree),
+      api_plateforme = CASE WHEN ? = 1 THEN ? ELSE api_plateforme END,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND actif = 1
   `).bind(
@@ -288,6 +325,8 @@ export async function updateFournisseur(
     data.site_web    ?? null,
     data.notes       ?? null,
     apiKeyChiffree,
+    plateformeFournie,
+    data.api_plateforme ?? null,
     id
   ).run()
   await auditLog(db, { user_id: userId, action: 'UPDATE_FOURNISSEUR', entite_type: 'fournisseur', entite_id: id })

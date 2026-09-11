@@ -29,8 +29,13 @@
   // FRONTEND_URL absente jusqu'ici → tous les liens dans les emails (suivi,
   // devis...) retombaient sur le fallback 'http://localhost:3000' en prod
   // (bug découvert le 2026-07-10, lien "Suivre ma réparation" cassé pour le client).
+  // MOBILAX_API_BASE : adresse de l'API Mobilax (ticket 03, chantier integration-mobilax).
+  // PRÉPRODUCTION pour l'instant — seule une clé de préproduction existe (décision du
+  // 2026-09-11). Passage en production : `https://apiv2.mobilax.fr/v1.0/external`, en même
+  // temps que la saisie d'une clé de production dans la fiche du fournisseur Mobilax.
   "vars": {
-    "FRONTEND_URL": "https://repairdesk.fr"
+    "FRONTEND_URL": "https://repairdesk.fr",
+    "MOBILAX_API_BASE": "https://apiv2.mobilax.pro/v1.0/external"
   }
 
   // ── Secrets ──────────────────────────────────────────────────────────────

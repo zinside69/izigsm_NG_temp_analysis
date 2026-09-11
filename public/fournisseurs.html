@@ -249,6 +249,12 @@
       <input id="f-adresse"   type="text"  placeholder="Adresse" class="input-field w-full">
       <input id="f-site-web"  type="url"   placeholder="Site web (https://…)" class="input-field w-full">
       <input id="f-api-key"   type="password" autocomplete="new-password" placeholder="Clé API (ex. Mobilax) — laisser vide pour ne pas la modifier" class="input-field w-full">
+      <!-- Marquage « Mobilax » (migration 0045) : c'est lui qui désigne la fiche dont la clé sert
+           à la recherche de pièces depuis le Stock. Sans marquage, la recherche dit qu'il manque. -->
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input id="f-api-mobilax" type="checkbox">
+        Fournisseur Mobilax — utiliser sa clé API pour chercher des pièces
+      </label>
       <textarea id="f-notes"  placeholder="Notes internes" class="input-field w-full h-16 resize-none"></textarea>
       <div id="f-error" class="hidden text-red-600 text-sm"></div>
     </div>

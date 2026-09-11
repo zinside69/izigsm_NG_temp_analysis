@@ -556,6 +556,7 @@ function openModalFournisseur(id = null) {
   ;['f-nom','f-contact','f-email','f-telephone','f-adresse','f-site-web','f-api-key','f-notes'].forEach(i => {
     document.getElementById(i).value = ''
   })
+  document.getElementById('f-api-mobilax').checked = false
 
   if (id) {
     // Pré-remplir depuis le cache
@@ -568,6 +569,7 @@ function openModalFournisseur(id = null) {
       document.getElementById('f-adresse').value   = f.adresse   ?? ''
       document.getElementById('f-site-web').value  = f.site_web  ?? ''
       document.getElementById('f-notes').value     = f.notes     ?? ''
+      document.getElementById('f-api-mobilax').checked = f.api_plateforme === 'mobilax'
     }
   }
 
@@ -589,6 +591,8 @@ async function saveFournisseur() {
     adresse:   document.getElementById('f-adresse').value.trim()   || null,
     site_web:  document.getElementById('f-site-web').value.trim()  || null,
     notes:     document.getElementById('f-notes').value.trim()     || null,
+    // Toujours envoyé : décoché = null = marquage retiré (updateFournisseur(), trois états)
+    api_plateforme: document.getElementById('f-api-mobilax').checked ? 'mobilax' : null,
     // Champ laissé vide → absent du corps, le serveur conserve la clé existante (COALESCE).
     ...(document.getElementById('f-api-key').value.trim()
       ? { api_key: document.getElementById('f-api-key').value.trim() } : {}),

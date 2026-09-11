@@ -62,8 +62,15 @@ export function validateFournisseur(body: any): string | null {
     return 'Nom du fournisseur obligatoire.'
   if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email))
     return 'Email invalide.'
+  // Plateforme d'API (migration 0045) : liste blanche — seul Mobilax est branché. `null`
+  // retire le marquage ; un champ absent le laisse inchangé (updateFournisseur()).
+  if (body.api_plateforme != null && !API_PLATEFORMES.includes(body.api_plateforme))
+    return `Plateforme d'API inconnue : ${String(body.api_plateforme)}.`
   return null
 }
+
+/** Plateformes d'API fournisseur branchées (colonne `fournisseurs.api_plateforme`). */
+export const API_PLATEFORMES: readonly string[] = ['mobilax']
 
 /**
  * Valide le corps d'une requête bon de commande.

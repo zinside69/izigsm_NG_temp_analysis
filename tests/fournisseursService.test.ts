@@ -60,6 +60,7 @@ const FOURNISSEUR_ROW: Fournisseur = {
   site_web: 'https://apple-dist.fr',
   notes: null,
   actif: 1,
+  api_plateforme: null,
 }
 
 const BC_ROW: BonCommande = {
@@ -93,13 +94,13 @@ const LIGNE_ROW: LigneBonCommande = {
 
 const SQL_COUNT_FOURNISSEURS = 'SELECT COUNT(*) as cnt FROM fournisseurs f WHERE f.boutique_id = ? AND f.actif = 1'
 
-const SQL_LIST_FOURNISSEURS = `SELECT f.id, f.boutique_id, f.nom, f.contact, f.email, f.telephone, f.adresse, f.site_web, f.notes, f.actif, COUNT(bc.id) as nb_commandes, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1 GROUP BY f.id ORDER BY f.nom ASC LIMIT ? OFFSET ?`
+const SQL_LIST_FOURNISSEURS = `SELECT f.id, f.boutique_id, f.nom, f.contact, f.email, f.telephone, f.adresse, f.site_web, f.notes, f.actif, f.api_plateforme, COUNT(bc.id) as nb_commandes, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1 GROUP BY f.id ORDER BY f.nom ASC LIMIT ? OFFSET ?`
 
 // ⚠ Colonnes explicites, JAMAIS `SELECT *` : api_key_chiffree ne doit jamais pouvoir
 // remonter par accident dans l'objet Fournisseur public (ticket 01, bugs.md § email_api_key).
-const SQL_GET_FOURNISSEUR = 'SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif FROM fournisseurs WHERE id = ? AND actif = 1'
+const SQL_GET_FOURNISSEUR = 'SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif, api_plateforme FROM fournisseurs WHERE id = ? AND actif = 1'
 
-const SQL_INSERT_FOURNISSEUR = 'INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+const SQL_INSERT_FOURNISSEUR = 'INSERT INTO fournisseurs (boutique_id, nom, contact, email, telephone, adresse, site_web, notes, api_key_chiffree, api_plateforme) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
 // boutique_id dans le WHERE, pas seulement id : la fonction doit vérifier elle-même
 // l'appartenance, sans compter sur un futur appelant pour ne pas s'y tromper
 // (CLAUDE.md § isolation multi-tenant — leçon déjà payée plusieurs fois sur ce dépôt).
@@ -1107,7 +1108,7 @@ describe('api_key_chiffree — jamais renvoyée en clair (ticket 01)', () => {
 
     const calls = db.__getCalls()
     const insertCall = calls.find(c => c.sql.startsWith('INSERT INTO fournisseurs'))
-    const valeurStockee = insertCall?.params[insertCall.params.length - 1] as string
+    const valeurStockee = insertCall?.params[8] as string // api_key_chiffree, 9e colonne de l'INSERT
 
     expect(valeurStockee).not.toContain('sk_live_reconnaissable')
   })
@@ -1138,7 +1139,7 @@ describe('api_key_chiffree — jamais renvoyée en clair (ticket 01)', () => {
 
     const calls = db.__getCalls()
     const updateCall = calls.find(c => c.sql.startsWith('UPDATE fournisseurs'))
-    const valeurStockee = updateCall?.params[updateCall.params.length - 2] as string // avant l'id du WHERE
+    const valeurStockee = updateCall?.params[7] as string // api_key_chiffree, après nom…notes
 
     expect(updateCall?.sql).toContain('api_key_chiffree')
     expect(valeurStockee).not.toContain('sk_live_modifiee')
