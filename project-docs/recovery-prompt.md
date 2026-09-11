@@ -1,4 +1,13 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 97 — emails prouvés en production, P1 emails ouvert)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 98 — étape 1 en production, étape 2 à faire)
+
+## Ce qui a changé au checkpoint 98
+
+`0c1f5d3` (étape 1 du P1 emails) est **en production** — le bloc du checkpoint 97 ci-dessous qui
+le dit « non déployé » est dépassé. **La prochaine action est l'étape 2** : la migration du
+`CHECK(type …)` de `email_logs`. Présenter le plan à l'exploitant avant d'écrire : contrôle
+`PRAGMA foreign_key_check` à 0 en lecture, recréation selon le patron de `0040`, test vu rouge
+sur un vrai SQLite (INSERT `ticket_livre`), migration locale puis distante **avant** tout
+déploiement. **Ne pas lancer les relances de devis** d'ici là.
 
 ## Ce qui a changé au checkpoint 97
 

@@ -1,4 +1,23 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 97 — emails prouvés en production, étape 1 du P1 faite)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 98 — étape 1 du P1 emails en production)
+
+## Checkpoint 98 — `0c1f5d3` déployé (2026-09-11)
+
+L'exploitant a déployé l'étape 1 du 🔴 P1 emails (`npm run deploy`, aucune migration). Contrôles
+en lecture sur `repairdesk.fr` : health 200, `sw.js` `izigsm-v2.94` (inchangé, aucun écran
+touché), `app.d39189aa.js` servi en JavaScript, `POST /api/notifications/relances-devis` sans
+jeton → 401.
+
+**Ce qui n'est pas prouvé, et pourquoi** : aucune réponse HTTP ne distingue l'ancien code du
+nouveau. La preuve viendra d'un vrai email « appareil livré » : le client le reçoit, toujours
+**sans** ligne en base, mais l'échec sort désormais dans les journaux du Worker
+(`[email] journalisation impossible — … type ticket_livre`). Rien n'est déclenché exprès en
+production — un vrai client recevrait l'email, et les relances de devis partent encore en
+double.
+
+**État** : en production — tickets 01-02 Mobilax, Réglages, `24f0bf5`, `0c1f5d3`. **Toujours
+🔴 P1** : l'anti-doublon des relances de devis, cassé jusqu'à la migration du `CHECK(type …)`
+de `email_logs` (étape 2). **Ne pas lancer les relances de devis.**
+
 
 ## Checkpoint 97 — Bouton de test prouvé en production, et une affirmation fausse corrigée (2026-09-11)
 
