@@ -522,11 +522,13 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   aux produits importés, **jamais** aux prestations de réparation (table `services`).
 - **Les taux s'écrivent par `PUT /api/boutiques/:id/marges` seule** (`updateTauxMarge()`,
   remplacement complet des cinq colonnes). ⊥ les ajouter à `PUT /:id/settings`.
-- **⚠ `PUT /:id/settings` écrase ce qu'on ne lui envoie pas** : `updateBoutiqueSettings()`
-  assigne `tva_taux_defaut`, `paiement_*`, `notif_*` sans COALESCE, alors que chaque onglet de
-  `settings.html` n'envoie que ses champs (`bugs.md`, 🔴 P1 non corrigé). Tant qu'il n'est pas
-  corrigé, **tout nouveau réglage prend sa propre route** — sinon il sera remis à zéro par
-  l'enregistrement de n'importe quel autre onglet.
+- **`PUT /:id/settings` reçoit toujours un corps partiel** : chaque onglet de `settings.html`
+  n'envoie que ses champs. **Toute colonne de `updateBoutiqueSettings()` doit donc être sous
+  `COALESCE(?,colonne)`, sans repli `?? valeur`** chez l'appelant — un repli transforme
+  l'absence en valeur et écrase l'onglet d'à côté. C'est ce qui remettait la TVA à 20 % et
+  décochait les paiements, corrigé le 2026-09-11 (`bugs.md`). Un booléen passe par `toInt()`,
+  qui distingue décoché (`0`, écrit) d'absent (`null`, conservé).
+  `tests/e2e/reglages-onglets-sans-ecrasement.spec.ts` le vérifie à l'écran.
 
 ## Docs obsolètes — ne pas suivre comme référence technique
 

@@ -416,10 +416,17 @@ export async function updateBoutiqueSettings(
   const toInt = (v: boolean | null | undefined): number | null =>
     v != null ? (v ? 1 : 0) : null
 
+  // Chaque onglet de settings.html n'envoie que SES champs : TOUTE colonne est sous
+  // COALESCE, un champ absent (null) conserve sa valeur. Ces huit-là étaient assignées
+  // directement, avec replis `?? 20` / `?? 0` — enregistrer l'onglet Paiements remettait la
+  // TVA à 20 %, enregistrer Numérotation décochait tous les paiements (🔴 P1, bugs.md,
+  // 2026-09-10). `toInt()` distingue déjà décoché (0, écrit) d'absent (null, conservé).
   await db.run(`
     UPDATE boutique_settings SET
-      tva_taux_defaut=?, horaires=?, notif_email_actif=?, notif_sms_actif=?,
-      paiement_especes=?, paiement_cb=?, paiement_cheque=?, paiement_virement=?,
+      tva_taux_defaut=COALESCE(?,tva_taux_defaut), horaires=COALESCE(?,horaires),
+      notif_email_actif=COALESCE(?,notif_email_actif), notif_sms_actif=COALESCE(?,notif_sms_actif),
+      paiement_especes=COALESCE(?,paiement_especes), paiement_cb=COALESCE(?,paiement_cb),
+      paiement_cheque=COALESCE(?,paiement_cheque),   paiement_virement=COALESCE(?,paiement_virement),
       prefix_ticket=COALESCE(?,prefix_ticket), prefix_facture=COALESCE(?,prefix_facture),
       prefix_devis=COALESCE(?,prefix_devis),   prefix_avoir=COALESCE(?,prefix_avoir),
       prefix_rachat=COALESCE(?,prefix_rachat),
@@ -438,14 +445,14 @@ export async function updateBoutiqueSettings(
       updated_at=CURRENT_TIMESTAMP
     WHERE boutique_id=?
   `, [
-    data.tva_taux_defaut ?? 20,
+    data.tva_taux_defaut ?? null,
     data.horaires ? JSON.stringify(data.horaires) : null,
-    toInt(data.notif_email_actif) ?? 0,
-    toInt(data.notif_sms_actif)   ?? 0,
-    toInt(data.paiement_especes)  ?? 0,
-    toInt(data.paiement_cb)       ?? 0,
-    toInt(data.paiement_cheque)   ?? 0,
-    toInt(data.paiement_virement) ?? 0,
+    toInt(data.notif_email_actif),
+    toInt(data.notif_sms_actif),
+    toInt(data.paiement_especes),
+    toInt(data.paiement_cb),
+    toInt(data.paiement_cheque),
+    toInt(data.paiement_virement),
     data.prefix_ticket   ?? null, data.prefix_facture ?? null,
     data.prefix_devis    ?? null, data.prefix_avoir   ?? null,
     data.prefix_rachat   ?? null,

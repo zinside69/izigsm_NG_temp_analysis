@@ -24,7 +24,11 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
-## 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10)
+## ✅ 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11, non déployé**)
+
+**Corrigé en TDD le 2026-09-11** — COALESCE sur les huit colonnes, replis `?? 20` / `?? 0`
+retirés (`bugs.md` § du même titre). Les deux premières cases ci-dessous sont faites ; la
+troisième attend le déploiement du correctif.
 
 Trouvé en implémentant le ticket 02 du chantier Mobilax — sans rapport avec Mobilax. Mesure et
 cause : `bugs.md` § du même titre.
@@ -34,10 +38,12 @@ Enregistrer l'onglet **Paiements** remet la TVA par défaut à 20 % ; enregistre
 Réponse 200 à chaque fois, aucun signal. Une boutique en franchise de TVA perd donc sa mention
 « art. 293 B » sans le savoir.
 
-- [ ] COALESCE sur `tva_taux_defaut`, `paiement_*`, `notif_*` dans `updateBoutiqueSettings()` —
-      retirer les replis `?? 20` / `?? 0` qui transforment l'absence en valeur
-- [ ] Test vu rouge : enregistrer un onglet, recharger, relire les autres (E2E, sur le modèle de
-      `tests/e2e/reglages-taux-marge.spec.ts`)
+- [x] COALESCE sur `tva_taux_defaut`, `paiement_*`, `notif_*` dans `updateBoutiqueSettings()` —
+      retirer les replis `?? 20` / `?? 0` qui transforment l'absence en valeur (2026-09-11,
+      `horaires` inclus)
+- [x] Test vu rouge : enregistrer un onglet, recharger, relire les autres (E2E, sur le modèle de
+      `tests/e2e/reglages-taux-marge.spec.ts`) — `tests/e2e/reglages-onglets-sans-ecrasement.spec.ts`,
+      + 2 tests unitaires dans `tests/boutiqueService.test.ts`
 - [ ] Vérifier en production si des boutiques ont déjà perdu leur taux de TVA (aucun historique
       des réglages : seule la comparaison avec les factures émises peut le dire)
 

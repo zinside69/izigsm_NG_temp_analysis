@@ -454,6 +454,49 @@ describe('updateBoutiqueSettings', () => {
     expect(jsonParam).toBe('{"lun":"9h-19h","mar":"9h-19h"}')
   })
 
+  // ─── P1 du 2026-09-10 : chaque onglet des Réglages envoie un corps PARTIEL ──────
+  // Un champ absent doit être conservé, jamais remplacé par 20 % ou « décoché ».
+
+  /** Corps de l'onglet Numérotation : ni TVA, ni paiements, ni notifications, ni horaires. */
+  const CORPS_NUMEROTATION: UpdateSettingsInput = {
+    ...BASE_INPUT,
+    tva_taux_defaut: null, horaires: null,
+    notif_email_actif: null, notif_sms_actif: null,
+    paiement_especes: null, paiement_cb: null, paiement_cheque: null, paiement_virement: null,
+    prefix_ticket: 'TK', format_numero: 'annee', padding_numero: 5,
+  }
+
+  /** Colonnes que la requête commune écrasait faute de COALESCE. */
+  const COLONNES_A_CONSERVER = [
+    'tva_taux_defaut', 'horaires', 'notif_email_actif', 'notif_sms_actif',
+    'paiement_especes', 'paiement_cb', 'paiement_cheque', 'paiement_virement',
+  ]
+
+  it('conserve TVA, paiements, notifications et horaires absents du corps', async () => {
+    const db = createMockDatabase()
+
+    await updateBoutiqueSettings(db, 1, CORPS_NUMEROTATION)
+
+    const { sql, params } = db.__getCalls()[0]
+    // Les 8 premiers paramètres sont ces colonnes, dans cet ordre : absents → null…
+    expect(params.slice(0, 8), 'un champ absent ne doit pas devenir 20 % ni 0').toEqual(Array(8).fill(null))
+    // … et le SQL doit conserver la valeur en place quand il reçoit null.
+    for (const colonne of COLONNES_A_CONSERVER) {
+      expect(sql, `${colonne} doit être sous COALESCE`).toContain(`${colonne}=COALESCE(?,${colonne})`)
+    }
+  })
+
+  it('écrit 0 pour un moyen de paiement explicitement décoché', async () => {
+    // Garde-fou du correctif : conserver l'absent ne doit pas rendre le décochage impossible.
+    const db = createMockDatabase()
+
+    await updateBoutiqueSettings(db, 1, { ...CORPS_NUMEROTATION, paiement_cheque: false, paiement_cb: true })
+
+    const params = db.__getCalls()[0].params
+    expect(params[5], 'paiement_cb coché').toBe(1)
+    expect(params[6], 'paiement_cheque décoché').toBe(0)
+  })
+
   it('ne retourne rien (void)', async () => {
     const db = createMockDatabase()
 

@@ -1,6 +1,22 @@
 # iziGSM — Bugs connus
 
-## ⚠ Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, NON corrigé)
+## ✅ Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11**)
+
+**Correctif (2026-09-11, TDD)** : dans `updateBoutiqueSettings()`, les huit colonnes
+`tva_taux_defaut`, `horaires`, `notif_*`, `paiement_*` passent sous COALESCE, et les replis
+`?? 20` / `?? 0` sont retirés — un champ absent part en `null` et conserve sa valeur ; un
+paiement décoché part en `0` et s'écrit. `horaires` inclus par cohérence : il était remis à
+`NULL` à chaque enregistrement, mais sans effet visible, la vitrine lisant `boutiques.horaires`.
+
+**Preuve** : tests unitaires vus rouges (`[20, null, 0, 0, 0, 0, 0, 0]` au lieu de 8 × `null`),
+E2E `tests/e2e/reglages-onglets-sans-ecrasement.spec.ts` vu rouge (TVA relue `20`) puis vert,
+et la mesure API ci-dessous rejouée : TVA 5,5 et paiements intacts après Paiements **et** après
+Numérotation. Garde-fou : un moyen de paiement décoché reste décoché (unitaire + E2E).
+
+**Reste ouvert** : vérifier en production si des boutiques ont déjà perdu leur taux (`todo.md`),
+une fois le correctif déployé.
+
+_Constat d'origine, conservé :_
 
 Trouvé en implémentant le ticket 02 du chantier Mobilax (taux de marge) — sans rapport avec
 Mobilax. **Mesuré en local sur un tenant neuf**, avec les corps exacts envoyés par
