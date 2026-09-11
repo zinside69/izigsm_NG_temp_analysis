@@ -573,6 +573,61 @@ function exportStock() {
   showFlash('Export CSV téléchargé.', 'success');
 }
 
+// ─── Recherche Mobilax (ticket 03, chantier integration-mobilax) ─────────────
+// Recherche seule : l'import d'une pièce trouvée viendra au ticket 04. Toute donnée Mobilax
+// est tierce — échappée comme une saisie utilisateur (escHtml), le message en textContent.
+
+function ouvrirRechercheMobilax() {
+  document.getElementById('mobilax-terme').value = '';
+  document.getElementById('mobilax-resultats').innerHTML = '';
+  messageMobilax('Saisissez le nom d\'une pièce ou son code EAN.');
+  openModal('modal-mobilax');
+  document.getElementById('mobilax-terme').focus();
+}
+
+/** Message sous le champ de recherche — `erreur` le passe en rouge. */
+function messageMobilax(texte, erreur = false) {
+  const el = document.getElementById('mobilax-message');
+  el.textContent = texte;
+  el.style.color = erreur ? '#b42318' : '';
+}
+
+async function chercherMobilax() {
+  const terme  = document.getElementById('mobilax-terme').value.trim();
+  const tbody  = document.getElementById('mobilax-resultats');
+  const bouton = document.getElementById('btn-mobilax-chercher');
+  if (terme.length < 2) { messageMobilax('Saisissez au moins 2 caractères.', true); return; }
+
+  tbody.innerHTML = '';
+  messageMobilax('Recherche en cours chez Mobilax…');
+  bouton.disabled = true;
+  try {
+    // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+    const res = (await apiGet(`/api/mobilax/produits?q=${encodeURIComponent(terme)}`)).data;
+    // Échec nommé par le serveur (pas de fiche, pas de clé, quota, panne) : son message tel quel
+    if (!res?.success) { messageMobilax(res?.error || 'Recherche Mobilax impossible.', true); return; }
+
+    const { produits, total } = res.data;
+    if (!produits.length) {
+      messageMobilax(`Aucune pièce trouvée chez Mobilax pour « ${terme} ».`);
+      return;
+    }
+    messageMobilax(total > produits.length
+      ? `${total} pièces trouvées — les ${produits.length} premières sont affichées, précisez la recherche.`
+      : `${total} pièce${total > 1 ? 's' : ''} trouvée${total > 1 ? 's' : ''}.`);
+    tbody.innerHTML = produits.map(p => `
+      <tr>
+        <td>${escHtml(p.nom)}</td>
+        <td style="font-family:monospace;font-size:.82rem">${escHtml(p.ean13 ?? '—')}</td>
+        <td style="text-align:right">${p.prix_achat_ht != null
+          ? Number(p.prix_achat_ht).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+        <td style="text-align:right">${Number(p.stock) || 0}</td>
+      </tr>`).join('');
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function setEl(id, val) {
   const el = document.getElementById(id);
@@ -600,3 +655,5 @@ window.applyFilters        = applyFilters;
 window.filterFamille       = filterFamille;
 window.openImportCsv       = openImportCsv;
 window.confirmImportCsv    = confirmImportCsv;
+window.ouvrirRechercheMobilax = ouvrirRechercheMobilax;
+window.chercherMobilax        = chercherMobilax;

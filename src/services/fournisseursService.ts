@@ -54,9 +54,10 @@ export interface Fournisseur {
  * reproduire ailleurs dans ce dépôt.
  */
 function versFournisseurPublic(ligne: any): Fournisseur {
-  const { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif } = ligne
+  const { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif,
+          api_plateforme = null } = ligne
   return { id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif,
-           api_plateforme: ligne.api_plateforme ?? null }
+           api_plateforme }
 }
 
 export interface BonCommande {

@@ -540,7 +540,20 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       migration `0042` (5 colonnes nullables sur `boutique_settings`), `resoudreTauxMarge()`
       renvoie **`null`** sans taux (le ticket 06 doit le gérer), route dédiée
       `PUT /api/boutiques/:id/marges`, onglet Marges de `/settings`. **Déployé le 2026-09-11** (`izigsm-v2.94`).
-- [ ] **03** — Recherche Mobilax dans Stock (sans import) — bloqué par 01
+- [x] **03** — Recherche Mobilax dans Stock (sans import) (2026-09-11) — `mobilaxService.ts`
+      (seul point qui lit une réponse Mobilax brute ; jeton gardé chiffré dans le KV, clé KV
+      liée à une empreinte de la clé API ; 429 rendu avec délai, jamais retenté ; un seul
+      renouvellement sur 401 d'un jeton gardé), route `GET /api/mobilax/produits?q=` (boutique
+      du jeton seule, admin plateforme refusé), fenêtre « Chercher chez Mobilax » sur `/stock`.
+      Migration **`0045`** : `fournisseurs.api_plateforme` + case « Fournisseur Mobilax » dans
+      la fiche. `MOBILAX_API_BASE` en **préproduction** (`wrangler.jsonc`). Tests vus rouges :
+      21 unitaires, 4 E2E dont une **vraie recherche en préproduction**.
+      ⚠ **Non déployé.** Ordre obligatoire : `npx wrangler d1 migrations apply DB --remote`
+      (lire `Resource location: remote`) **puis** `npm run deploy` — sinon `no such column:
+      api_plateforme` sur **toute** lecture de fournisseur (liste et fiche), pas seulement la
+      recherche. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
+      skillspector… »), embarqué par un `sync push` pendant la session — voir `CLAUDE.md`
+      § Dépôt git.
 - [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02

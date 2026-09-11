@@ -1,5 +1,28 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Ticket 03 Mobilax : quel fournisseur, où garder le jeton, quelle adresse
+
+Quatre arbitrages de l'exploitant, pris avant le premier test.
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Seams de test | **Service** (`fetch` et base simulés), **route** (`app.request`), **écran** (Playwright, vraie préproduction) | Service + écran seuls : l'isolation (boutique du jeton, admin plateforme refusé) ne serait couverte qu'indirectement |
+| Quel fournisseur est « Mobilax » | **Colonne explicite `fournisseurs.api_plateforme`** (migration `0045`), case dans la fiche | Par le nom : un renommage casse la recherche · « le seul avec clé » : casse au 2e grossiste |
+| Jeton entre deux recherches | **KV du dépôt, chiffré**, durée lue dans `expireIn` moins 60 s, clé KV liée à une empreinte de la clé API | Sans cache : 10 recherches/min au plus pour toute la boutique (quota `/auth`) · KV en clair : secret lisible en base |
+| Adresse de l'API | **`MOBILAX_API_BASE` en préproduction** (`wrangler.jsonc`) — seule une clé de préprod existe | Production directe : rien ne marcherait sans clé de production |
+
+**Constat de mesure qui change le vocabulaire** : Mobilax n'expose **aucun champ `reference`**.
+La « référence » cherchable est l'EAN13 ; le lien stable est l'identifiant Mobilax.
+
+**Renouvellement du jeton** : un 401 sur un jeton **gardé** déclenche une seule reconnexion ;
+un jeton tout neuf refusé met la clé en cause et s'arrête là. La doc Mobilax prescrit de
+renouveler sur un 401 via `POST /auth/refresh-token` ; **écart assumé** : nouvelle connexion
+`POST /auth` avec la clé — aucun jeton de renouvellement à garder en plus, et les deux routes
+relèvent du même quota `/auth`. (Formulation corrigée après revue : la version initiale disait
+cette reconnexion « prescrite par la doc », ce qui était inexact.)
+Aucune autre nouvelle tentative — un 429 est rendu à l'opérateur avec le délai de
+`ratelimit-reset`.
+
 ## 2026-09-11 — Bons de commande : ce qui est dû, et comment on le règle
 
 | Question | Décision | Écarté, et pourquoi |

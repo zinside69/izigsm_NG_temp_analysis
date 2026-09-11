@@ -7,8 +7,8 @@
  *   GET /api/mobilax/produits?q=  — recherche par nom ou EAN13, avec la clé de la boutique
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
- * ignoré, y compris pour un admin de boutique (dont `getBoutiqueId()` honorerait le
- * paramètre). L'admin plateforme est refusé : il ne doit jamais utiliser la clé Mobilax
+ * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
+ * `getBoutiqueId()` honorerait le paramètre). L'admin plateforme est refusé : il ne doit jamais utiliser la clé Mobilax
  * d'une boutique cliente (spec, story 3).
  */
 
@@ -33,6 +33,7 @@ const STATUT_PAR_ERREUR: Record<ErreurMobilax, 422 | 429 | 502> = {
   sans_fournisseur:       422,
   plusieurs_fournisseurs: 422,
   sans_cle:               422,
+  cle_illisible:          422,
   cle_refusee:            422,
   quota:                  429,
   indisponible:           502,
@@ -41,6 +42,9 @@ const STATUT_PAR_ERREUR: Record<ErreurMobilax, 422 | 429 | 502> = {
 // ── GET /api/mobilax/produits?q= ──────────────────────────────────────────────
 mobilax.get('/mobilax/produits', async (c) => {
   const user = c.get('user')
+  // Deux cas visés, nommés comme l'exige CLAUDE.md (§ « !boutique_id ne signifie pas compte
+  // incomplet ») : l'admin plateforme (refus voulu, story 3), et tout autre compte sans
+  // boutique (onboarding inachevé, données corrompues) — qui n'a aucune clé à utiliser.
   if (isAdminPlateforme(user) || !user.boutique_id)
     return c.json({ success: false, error: 'La recherche Mobilax utilise la clé d\'une boutique : réservée à ses utilisateurs.' }, 403)
 

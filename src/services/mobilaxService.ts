@@ -37,7 +37,7 @@ export type ResultatRechercheMobilax =
   | { ok: false; erreur: ErreurMobilax; message: string; reessayer_dans_s?: number }
 
 export type ErreurMobilax =
-  | 'sans_fournisseur' | 'plusieurs_fournisseurs' | 'sans_cle'
+  | 'sans_fournisseur' | 'plusieurs_fournisseurs' | 'sans_cle' | 'cle_illisible'
   | 'cle_refusee' | 'quota' | 'indisponible'
 
 /** Dépendances injectées — tout ce que le service touche hors de lui-même. */
@@ -72,12 +72,18 @@ export async function rechercherProduitsMobilax(
     'Aucun fournisseur n\'est marqué « Mobilax ». Cochez la case dans sa fiche (Fournisseurs).')
   if (fiches.length > 1) return echec('plusieurs_fournisseurs',
     'Plusieurs fournisseurs sont marqués « Mobilax ». N\'en gardez qu\'un seul coché.')
-  if (!fiches[0].a_cle) return echec('sans_cle',
-    'Le fournisseur Mobilax n\'a pas de clé API. Renseignez-la dans sa fiche (Fournisseurs).')
+  if (!fiches[0].a_cle) return sansCle()
 
-  const apiKey = await getApiKeyDechiffree(deps.db, fiches[0].id, boutiqueId, deps.cleChiffrement)
-  if (!apiKey) return echec('sans_cle',
-    'Le fournisseur Mobilax n\'a pas de clé API. Renseignez-la dans sa fiche (Fournisseurs).')
+  // Une clé chiffrée avec un autre secret (FOURNISSEUR_CRYPTO_KEY tourné) ne se déchiffre
+  // plus : message sur la clé, jamais un 500 brut remonté à l'écran.
+  let apiKey: string | null
+  try {
+    apiKey = await getApiKeyDechiffree(deps.db, fiches[0].id, boutiqueId, deps.cleChiffrement)
+  } catch {
+    return echec('cle_illisible',
+      'La clé API Mobilax enregistrée est illisible. Ressaisissez-la dans la fiche du fournisseur Mobilax.')
+  }
+  if (!apiKey) return sansCle()
 
   // ── Appels Mobilax : toute sortie est un résultat nommé, jamais une exception ──
   // Aucune nouvelle tentative à l'aveugle : un quota atteint est rendu tel quel à l'opérateur,
@@ -86,9 +92,11 @@ export async function rechercherProduitsMobilax(
     const cleKv = `mobilax:jeton:${boutiqueId}:${await empreinte(apiKey)}`
     const url = `${deps.baseUrl}/products?search=${encodeURIComponent(terme)}&limit=${LIMITE_RESULTATS}`
 
-    // Au plus deux passages : la doc prescrit de renouveler le jeton sur un 401. On ne le fait
-    // qu'une fois, et seulement si le jeton refusé venait du KV — un jeton tout neuf refusé
-    // met la clé en cause, le redemander ne ferait que brûler le quota /auth.
+    // Au plus deux passages : la doc dit de renouveler le jeton sur un 401. Renouvellement fait
+    // par une nouvelle connexion (`POST /auth`) plutôt que par `/auth/refresh-token` : aucun
+    // jeton de renouvellement à garder en plus, et les deux routes relèvent du même quota
+    // `/auth`. Une seule fois, et seulement si le jeton refusé venait du KV — un jeton tout
+    // neuf refusé met la clé en cause, le redemander ne ferait que brûler ce quota.
     for (let passage = 1; passage <= 2; passage++) {
       const jeton = await obtenirJeton(deps, cleKv, apiKey)
       if (!jeton.ok) return jeton.resultat
@@ -96,24 +104,32 @@ export async function rechercherProduitsMobilax(
       const rep = await fetch(url, { headers: { Authorization: `Bearer ${jeton.token}` } })
       if (rep.status === 401) {
         await deps.kv.delete(cleKv)
-        if (jeton.garde && passage === 1) continue
+        if (jeton.depuisKv && passage === 1) continue
         return cleRefusee()
       }
       if (rep.status === 429) return quotaAtteint(rep)
       if (!rep.ok) return indisponible()
 
-      // `GET /products` : `{ data: { total, products } }`, sans `status` (mesuré le 2026-09-11)
-      const corps = await rep.json() as { data?: { total?: number; products?: any[] } }
-      return {
-        ok: true,
-        total: corps.data?.total ?? 0,
-        produits: (corps.data?.products ?? []).map(versProduitMobilax),
-      }
+      // `GET /products` : `{ data: { total, products } }`, sans `status` (mesuré le 2026-09-11).
+      // Une autre forme n'est PAS une recherche vide : la présenter comme « aucune pièce »
+      // cacherait un changement d'API derrière un résultat plausible.
+      const corps = await rep.json() as { data?: { total?: unknown; products?: unknown } }
+      if (!Array.isArray(corps.data?.products)) return indisponible()
+      const produits = corps.data.products.map(versProduitMobilax)
+        .filter((p): p is ProduitMobilax => p !== null)
+      const total = Number(corps.data.total)
+      return { ok: true, total: Number.isFinite(total) ? total : produits.length, produits }
     }
     return cleRefusee()
   } catch {
     return indisponible()
   }
+}
+
+/** La fiche Mobilax ne porte pas de clé API. */
+function sansCle(): ResultatRechercheMobilax {
+  return echec('sans_cle',
+    'Le fournisseur Mobilax n\'a pas de clé API. Renseignez-la dans sa fiche (Fournisseurs).')
 }
 
 /** Mobilax refuse la clé (ou un jeton tout juste obtenu avec elle). */
@@ -146,8 +162,8 @@ function indisponible(): ResultatRechercheMobilax {
 /** Marge retirée de la durée annoncée, pour ne jamais présenter un jeton sur le point d'expirer. */
 const MARGE_JETON_S = 60
 
-/** `garde` : le jeton vient du KV (il a pu expirer chez Mobilax avant sa date annoncée). */
-type Jeton = { ok: true; token: string; garde: boolean } | { ok: false; resultat: ResultatRechercheMobilax }
+/** `depuisKv` : le jeton vient du KV (il a pu expirer chez Mobilax avant sa date annoncée). */
+type Jeton = { ok: true; token: string; depuisKv: boolean } | { ok: false; resultat: ResultatRechercheMobilax }
 
 /**
  * Renvoie un jeton : celui gardé s'il existe, sinon une nouvelle connexion.
@@ -155,7 +171,15 @@ type Jeton = { ok: true; token: string; garde: boolean } | { ok: false; resultat
  */
 async function obtenirJeton(deps: DepsMobilax, cleKv: string, apiKey: string): Promise<Jeton> {
   const garde = await deps.kv.get(cleKv)
-  if (garde) return { ok: true, token: await dechiffrer(garde, deps.cleChiffrement), garde: true }
+  if (garde) {
+    // Indéchiffrable (secret tourné) : oublié et remplacé par une connexion — sinon la
+    // recherche resterait en panne jusqu'à l'expiration de l'entrée, jusqu'à une heure.
+    try {
+      return { ok: true, token: await dechiffrer(garde, deps.cleChiffrement), depuisKv: true }
+    } catch {
+      await deps.kv.delete(cleKv)
+    }
+  }
 
   const auth = await fetch(`${deps.baseUrl}/auth`, {
     method: 'POST',
@@ -176,7 +200,7 @@ async function obtenirJeton(deps: DepsMobilax, cleKv: string, apiKey: string): P
   const duree = dureeEnSecondes(expireIn)
   if (duree !== null && duree > MARGE_JETON_S)
     await deps.kv.put(cleKv, await chiffrer(token, deps.cleChiffrement), { expirationTtl: duree - MARGE_JETON_S })
-  return { ok: true, token, garde: false }
+  return { ok: true, token, depuisKv: false }
 }
 
 /**
@@ -204,11 +228,17 @@ function echec(erreur: ErreurMobilax, message: string, reessayer_dans_s?: number
     : { ok: false, erreur, message, reessayer_dans_s }
 }
 
-/** Normalise un produit brut de `GET /products` — le seul endroit qui lit ses champs. */
-function versProduitMobilax(p: any): ProduitMobilax {
+/**
+ * Normalise un produit brut de `GET /products` — le seul endroit qui lit ses champs.
+ * @returns `null` si l'identifiant n'est pas un entier : c'est le lien stable vers la pièce
+ *          (futur `reference_fournisseur`, ticket 04), un `NaN` ne doit jamais en sortir
+ */
+function versProduitMobilax(p: any): ProduitMobilax | null {
+  const id = Number(p?.id)
+  if (!Number.isInteger(id)) return null
   const prix = Number(p.price)
   return {
-    mobilax_id:    Number(p.id),
+    mobilax_id:    id,
     nom:           String(p.name ?? p.short_name ?? ''),
     ean13:         p.ean13 ? String(p.ean13) : null,
     prix_achat_ht: Number.isFinite(prix) ? prix : null,

@@ -11,11 +11,11 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 44 migrations dans `migrations/`
-  (dernière : `0044_bon_commande_date_paiement.sql`, compté le 2026-09-11)
+- Base de données : Cloudflare D1 (SQLite edge) — 45 migrations dans `migrations/`
+  (dernière : `0045_fournisseur_api_plateforme.sql`, compté le 2026-09-11)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (987/989 au 2026-09-11, 33 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (1008/1010 au 2026-09-11, 35 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -511,6 +511,39 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   2026-09-10 en cherchant précisément un pattern à réutiliser pour Mobilax — il n'y en avait
   pas). Non corrigé, hors périmètre du ticket qui l'a trouvé.
 
+## Service Mobilax — recherche de pièces (depuis 2026-09-11, ticket 03 chantier Mobilax)
+
+- **`src/services/mobilaxService.ts` est le seul point du dépôt qui lit une réponse Mobilax
+  brute.** L'API n'a pas d'enveloppe uniforme (`POST /auth` à plat, `GET /products` sous
+  `data` sans `status`) : tout sort normalisé (`ProduitMobilax` : `mobilax_id`, `nom`, `ean13`,
+  `prix_achat_ht`, `stock`). ⊥ lire un champ Mobilax ailleurs, ni côté serveur ni à l'écran.
+- **Aucun champ `reference` n'existe chez Mobilax** (mesuré). Référence cherchable = EAN13 ;
+  lien stable vers une pièce = identifiant Mobilax.
+- **Quel fournisseur est Mobilax : `fournisseurs.api_plateforme = 'mobilax'`** (migration
+  `0045`, liste blanche `API_PLATEFORMES` dans `validators.ts`). Mise à jour à **trois états**
+  — absent = inchangé, `null` = retiré, `'mobilax'` = posé — que `COALESCE` ne sait pas tenir :
+  indicateur « champ fourni » dans `updateFournisseur()`. Toute lecture de fournisseur sélectionne
+  désormais cette colonne : **`0045` doit être appliquée avant tout déploiement**, sinon liste et
+  fiche fournisseur tombent en `no such column`.
+- **Le jeton Mobilax vit dans le KV, chiffré** (`FOURNISSEUR_CRYPTO_KEY`), clé
+  `mobilax:jeton:<boutique>:<empreinte SHA-256 de la clé API>` : une clé changée ne réutilise
+  jamais le jeton de l'ancienne. Durée = `expireIn` (chaîne, `"1h"` en préprod) moins 60 s ;
+  illisible → rien de gardé. ⊥ coder une durée en dur.
+- **Aucune nouvelle tentative à l'aveugle.** Un 429 remonte à l'opérateur avec le délai de
+  `ratelimit-reset` ; un 401 sur un jeton **gardé** déclenche **une** reconnexion, un jeton neuf
+  refusé s'arrête sur « clé refusée ». Quotas mesurés : `/auth` 10/min, `/products*` 30/min,
+  partagés par toute la boutique.
+- **`GET /api/mobilax/produits` n'utilise que la boutique du jeton de connexion** — un
+  `?boutique_id=` est ignoré, même pour un admin de boutique. L'admin plateforme est refusé
+  (403) : il ne doit jamais utiliser la clé d'une boutique cliente.
+- **`MOBILAX_API_BASE` (`wrangler.jsonc`) pointe la PRÉPRODUCTION.** Passer en production =
+  changer cette ligne **et** saisir une clé de production dans la fiche ; la clé de préprod a
+  circulé en clair et doit être tournée avant (`todo.md`).
+- **L'E2E `mobilax-recherche-stock.spec.ts` appelle la vraie préproduction** (1 connexion,
+  2 recherches) avec `MOBILAX_API_KEY` lue dans `.dev.vars` via `process.getBuiltinModule()` —
+  ⊥ `import 'node:fs'` dans une spec : `tsconfig` n'a pas les types Node, la baseline tsc monte.
+  Sans clé, le test est sauté, jamais faussement vert.
+
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
 - **`resoudreTauxMarge(settings, famille)`** (`boutiqueService.ts`, pure) est le seul point de
@@ -660,6 +693,12 @@ annoncé « non poussé », trouvé sur `origin` quelques minutes plus tard. Deu
 découlent :
 
 - ⊥ traiter « je ne pousse pas » comme un garde-fou. Ce qui est commité peut devenir public.
+- **Et ce qui n'est pas commité aussi** (vécu le 2026-09-11, 18:19) : un `sync push` lancé
+  depuis une autre fenêtre a **commité puis poussé le travail en cours** du ticket 03 Mobilax
+  (14 fichiers, tests compris) sous le message `sync: skillspector, archify…` (`c2b5c83`). Tout
+  fichier du dépôt peut donc partir à tout instant : ⊥ y écrire un secret, même
+  temporairement, même « juste pour un test ». Après coup, `git status` ne montre plus ces
+  fichiers — un `git log` juste avant de commiter évite de croire son travail perdu.
 - ⊥ **amender** un commit izigsm sans un `git fetch origin` **juste avant** : l'amend d'un
   commit déjà parti produit un rejet non-fast-forward (vécu le 2026-09-04). Réparer par
   `git reset --soft origin/main` puis un nouveau commit — **jamais** par un `push --force`.

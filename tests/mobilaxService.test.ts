@@ -197,6 +197,46 @@ describe('rechercherProduitsMobilax() — Mobilax refuse ou tombe', () => {
     expect(r).toMatchObject({ ok: false, erreur: 'indisponible' })
   })
 
+  it('réponse 200 sans liste de produits : indisponible, jamais présentée comme « aucun résultat »', async () => {
+    await fournisseurMobilaxAvecCle()
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ status: 'OK', items: [] }))   // enveloppe inattendue : ni data, ni products
+    const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')
+    expect(r).toMatchObject({ ok: false, erreur: 'indisponible' })
+  })
+
+  it('produit sans identifiant exploitable : écarté plutôt que renvoyé avec un id NaN', async () => {
+    await fournisseurMobilaxAvecCle()
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ data: { total: '2', products: [PRODUIT_BRUT, { ...PRODUIT_BRUT, id: 'abc' }] } }))
+    const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')
+    expect(r).toMatchObject({ ok: true, total: 2 })
+    expect((r as any).produits.map((p: any) => p.mobilax_id)).toEqual([10242])
+  })
+
+  it('clé API enregistrée indéchiffrable (secret tourné) : message sur la clé, jamais une exception', async () => {
+    db.__setListResponse(SQL_FOURNISSEUR_API, [{ id: 3, a_cle: 1 }])
+    db.__setResponse(SQL_CLE_API, { api_key_chiffree: '00:pas-du-chiffre' })
+    const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')
+    expect(r).toMatchObject({ ok: false, erreur: 'cle_illisible' })
+    expect((r as any).message).toMatch(/clé/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('jeton gardé indéchiffrable : oublié, une reconnexion, et le résultat — pas une heure de panne', async () => {
+    await fournisseurMobilaxAvecCle()
+    mobilaxRepondNormalement('1h')
+    await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')     // garde un jeton
+    for (const k of kv.__contenu.keys()) kv.__contenu.set(k, '00:illisible')
+    fetchMock.mockClear()
+    mobilaxRepondNormalement('1h')
+    const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')
+    expect(r).toMatchObject({ ok: true, total: 1 })
+    expect(fetchMock.mock.calls.filter(([u]) => u === `${BASE}/auth`)).toHaveLength(1)
+  })
+
   it('réseau coupé (fetch lève) : indisponible, jamais une exception qui remonte', async () => {
     await fournisseurMobilaxAvecCle()
     fetchMock.mockRejectedValue(new TypeError('fetch failed'))

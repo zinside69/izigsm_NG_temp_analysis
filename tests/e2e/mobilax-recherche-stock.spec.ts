@@ -12,15 +12,19 @@
  * peut porter une fiche marquée par un autre test, ce qui rendrait la recherche ambiguë.
  */
 import { test, expect, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { createTenantAdmin } from './fixtures/tenant'
 import { MANAGER, seConnecter } from './fixtures/comptes'
 
-/** Clé de préproduction lue dans `.dev.vars` — `null` si absente (test sauté). */
+/**
+ * Clé de préproduction lue dans `.dev.vars` — `null` si absente (test sauté).
+ * Ni `import 'node:fs'` ni `process` typé : `tsconfig` n'inclut pas les types Node et la
+ * baseline tsc ne doit pas monter (même parti pris que `(globalThis as any)` ailleurs dans
+ * les specs). `process.getBuiltinModule()` (Node ≥ 22.3) charge `fs` sans import.
+ */
 function cleMobilaxPreprod(): string | null {
   try {
-    const vars = readFileSync(join(process.cwd(), '.dev.vars'), 'utf8')
+    const proc = (globalThis as any).process
+    const vars: string = proc.getBuiltinModule('node:fs').readFileSync(`${proc.cwd()}/.dev.vars`, 'utf8')
     return /^\s*MOBILAX_API_KEY\s*=\s*"?([^"\r\n]+)"?/m.exec(vars)?.[1] ?? null
   } catch { return null }
 }

@@ -47,6 +47,7 @@
         <div class="page-header">
           <div><h1>Stock</h1><p>Gérez votre inventaire de produits et pièces détachées</p></div>
           <div class="page-header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-mobilax" onclick="ouvrirRechercheMobilax()">🔎 Chercher chez Mobilax</button>
             <button class="btn btn-secondary btn-sm" onclick="openImportCsv()">📥 Importer CSV</button>
             <button class="btn btn-primary" onclick="openNewStock()">+ Nouveau produit</button>
           </div>
@@ -244,6 +245,37 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-import-csv')">Annuler</button>
         <button class="btn btn-primary" id="btn-confirm-import" onclick="confirmImportCsv()">Importer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Recherche Mobilax (ticket 03, chantier integration-mobilax) — recherche seule :
+       l'import d'une pièce dans le stock viendra au ticket 04. Rempli par chercherMobilax(). -->
+  <div class="modal-overlay" id="modal-mobilax">
+    <div class="modal" style="max-width:780px;">
+      <div class="modal-header">
+        <h2>Chercher une pièce chez Mobilax</h2>
+        <button class="modal-close" onclick="closeModal('modal-mobilax')">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="event.preventDefault(); chercherMobilax()" style="display:flex;gap:10px;margin-bottom:12px;">
+          <input type="search" id="mobilax-terme" placeholder="Nom ou EAN — ex. écran iPhone 12"
+                 style="flex:1;padding:10px 12px;border:1px solid #d0d5dd;border-radius:10px;">
+          <button type="submit" class="btn btn-primary btn-sm" id="btn-mobilax-chercher">Rechercher</button>
+        </form>
+        <p id="mobilax-message" style="font-size:.87rem;color:var(--text-muted);margin:0 0 10px;"></p>
+        <div style="max-height:50vh;overflow-y:auto;">
+          <table>
+            <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Stock Mobilax</th></tr></thead>
+            <tbody id="mobilax-resultats"></tbody>
+          </table>
+        </div>
+        <p style="font-size:.78rem;color:var(--text-muted);margin:10px 0 0;">
+          Prix et stock fournis par Mobilax pour votre compte, à titre indicatif.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('modal-mobilax')">Fermer</button>
       </div>
     </div>
   </div>
