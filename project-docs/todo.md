@@ -645,6 +645,29 @@ garde à ne pas transformer le middleware en carte des routes : c'est exactement
 
 > Volontairement **sans case à cocher** : à cadrer, pas à prendre tel quel par la loop.
 
+## 🟡 P3 — Un corps JSON invalide produit un 500 nu sur toutes les routes (relevé en revue le 2026-09-11)
+
+Relevé par `/code-review medium` sur la route `PUT /api/boutiques/:id/marges` (ticket 02
+Mobilax), mais **transversal** : aucun handler du dépôt n'entoure `await c.req.json()` d'un
+`try/catch`, et `src/index.tsx` ne déclare aucun `app.onError`. Un corps vide ou mal formé lève
+donc une exception → **500 sans corps d'erreur**, là où les routes documentent un 422 pour une
+saisie invalide.
+
+**Portée réelle faible** : l'interface envoie toujours du JSON valide ; seul un appel API direct
+(ou un client bogué) le déclenche. Aucune donnée écrite, aucune fuite.
+
+**Pourquoi pas route par route** : corriger la seule route `/marges` laisserait les ~80 autres en
+l'état et créerait une convention de plus. Le bon niveau est **un `app.onError` global** qui
+reconnaît l'erreur de parsing de Hono et répond `400`/`422` au format `{ success: false, error }`.
+
+- [ ] Vérifier comment Hono signale un JSON invalide (type/nom d'erreur) avant d'écrire le filtre
+- [ ] `app.onError` dans `src/index.tsx` : JSON invalide → 400 enveloppé ; autre erreur → 500
+      enveloppé, **sans** détail interne dans la réponse
+- [ ] ⚠ Vérifier l'interaction avec `journalPlateformeMiddleware` (journalisation en `finally`,
+      statut 500 déduit quand le handler a levé — `CLAUDE.md` § ticket 04) : le statut journalisé
+      doit rester celui réellement renvoyé
+- [ ] Test vu rouge : `PUT` avec corps `{` → 400, pas 500
+
 ## 🟡 P3 — `/reset-password` tient dans un seul bloc de script inline (constaté 2026-08-01)
 
 Toute la logique de la page — détection du token, bascule d'étape, envoi du nouveau mot de passe —

@@ -23,19 +23,23 @@ const MARGES_VALIDES = {
 
 /** SQL de `getBoutiqueById()` — répliqué car le mock matche sur la requête exacte. */
 const SQL_BOUTIQUE_ACTIVE = 'SELECT * FROM boutiques WHERE id = ? AND actif = 1'
+/** SQL de `getBoutiqueSettings()` — idem. */
+const SQL_REGLAGES = 'SELECT * FROM boutique_settings WHERE boutique_id = ?'
 
 /**
  * Requête authentifiée contre l'application réelle ; renvoie aussi la base simulée.
- * Par défaut, la boutique visée existe (`boutiqueExiste: false` pour simuler l'inverse).
+ * Par défaut, la boutique visée existe et porte sa ligne `boutique_settings`
+ * (`boutiqueExiste: false` / `reglagesExistent: false` pour simuler l'inverse).
  */
 async function appeler(
   compte: { role: string; boutique_id: number | null },
   chemin: string,
   corps: unknown,
-  { boutiqueExiste = true }: { boutiqueExiste?: boolean } = {},
+  { boutiqueExiste = true, reglagesExistent = true }: { boutiqueExiste?: boolean; reglagesExistent?: boolean } = {},
 ) {
   const d1 = createMockD1()
   if (boutiqueExiste) d1.__setResponseFn(SQL_BOUTIQUE_ACTIVE, (params) => ({ id: params[0], actif: 1 }))
+  if (boutiqueExiste && reglagesExistent) d1.__setResponseFn(SQL_REGLAGES, (params) => ({ boutique_id: params[0] }))
   const { accessToken } = await generateTokenPair(
     { id: 7, email: 'gerant@boutique.fr', prenom: 'Gerant', nom: 'Test', ...compte } as any,
     SECRET,
@@ -110,6 +114,18 @@ describe('PUT /api/boutiques/:id/marges', () => {
       const { res, d1 } = await appeler(
         { role: 'admin', boutique_id: null }, '/api/boutiques/999/marges', MARGES_VALIDES,
         { boutiqueExiste: false },
+      )
+
+      expect(res.status).toBe(404)
+      expect(ecrituresMarge(d1)).toHaveLength(0)
+    })
+
+    it('répond 404 quand la boutique existe mais sans ligne de réglages, sans rien écrire', async () => {
+      // Relevé en revue le 2026-09-11 : le contrôle de la seule table `boutiques` laissait
+      // l'UPDATE toucher 0 ligne de `boutique_settings` et la route annoncer « mis à jour ».
+      const { res, d1 } = await appeler(
+        { role: 'manager', boutique_id: 1 }, '/api/boutiques/1/marges', MARGES_VALIDES,
+        { reglagesExistent: false },
       )
 
       expect(res.status).toBe(404)

@@ -32,7 +32,8 @@ défaut. Indépendant de Mobilax — sert de base à l'application de la marge d
   (défaut mesuré en local, consigné dans `bugs.md`, non corrigé ici). Remplacement complet des
   cinq taux ; 422 sur une valeur ni `null` ni nombre ≥ 0 ; 404 sur une boutique absente ou
   inactive (ajouté après revue : sans ce contrôle, l'UPDATE ne touchait rien et la route
-  annonçait « mis à jour »).
+  annonçait « mis à jour »). Complété le 2026-09-11 après une seconde revue : 404 aussi quand
+  la boutique existe sans ligne `boutique_settings` (même faux succès, cas rare).
 - Garde plus stricte que `/settings` : un compte rattaché à une boutique n'écrit que chez lui,
   rôle `admin` compris ; seul l'admin plateforme vise ailleurs.
 - Écran : onglet **Marges** de `/settings`.

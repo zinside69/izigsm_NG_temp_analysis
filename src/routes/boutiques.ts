@@ -329,7 +329,7 @@ const CHAMPS_MARGE: (keyof TauxMarge)[] = [
  * @body      Les cinq `marge_taux_*` : nombre ≥ 0 ou `null`
  * @returns 200 `{ success: true, message }`
  * @returns 403 si le compte vise une autre boutique que la sienne
- * @returns 404 si la boutique n'existe pas ou n'est plus active
+ * @returns 404 si la boutique n'existe pas, n'est plus active, ou n'a pas de ligne de réglages
  * @returns 422 si un taux n'est ni `null` ni un nombre positif ou nul
  */
 boutiques.put('/:id/marges', requireRole('admin', 'manager'), async (c) => {
@@ -348,10 +348,14 @@ boutiques.put('/:id/marges', requireRole('admin', 'manager'), async (c) => {
     marges[champ] = valeur
   }
 
-  // Sans ce contrôle, un UPDATE sur une boutique absente ne touche aucune ligne et la
-  // route annoncerait « mis à jour » (admin plateforme, identifiant erroné).
+  // Sans ces deux contrôles, l'UPDATE ne toucherait aucune ligne et la route annoncerait
+  // « mis à jour » : boutique absente ou désactivée (admin plateforme, identifiant erroné),
+  // ou boutique sans ligne `boutique_settings` (relevé en revue le 2026-09-11 — rare, les
+  // chemins de création la posent, mais `getBoutiqueSettings()` prévoit son absence).
   if (!(await getBoutiqueById(c.get('db'), id)))
     return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
+  if (!(await getBoutiqueSettings(c.get('db'), id)))
+    return c.json({ success: false, error: 'Paramètres de la boutique introuvables.' }, 404)
 
   await updateTauxMarge(c.get('db'), id, marges)
   return c.json({ success: true, message: 'Taux de marge mis à jour.' })
