@@ -126,7 +126,7 @@ envoyé par l'onglet Facturation, n'est lu par aucune route — le choix est per
 c'est le repli `?? 0` / `?? 20` appliqué ensuite qui transforme l'absence en valeur. Test de rendu : enregistrer un onglet,
 recharger, relire les autres.
 
-## ✅ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11**, non déployé)
+## ✅ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, `izigsm-v2.95`)
 
 Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec ce ticket.
 L'écran s'affichait sans erreur, mais aucun des trois onglets (« Bons de commande »,
