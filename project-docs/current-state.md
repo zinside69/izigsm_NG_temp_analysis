@@ -1,4 +1,67 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 95 — P1 des Réglages corrigé)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 96 — trois lots en production, emails diagnostiqués)
+
+## Checkpoint 96 — Déploiement vérifié, et un diagnostic d'emails qui trouve l'architecture fautive (2026-09-11)
+
+### Le secret, puis le déploiement — chaque étape mesurée
+
+- **`FOURNISSEUR_CRYPTO_KEY`** posé par l'exploitant (`wrangler pages secret put`), vérifié par
+  `secret list` ; copie rangée dans un gestionnaire de mots de passe **installé pour l'occasion,
+  hors de `claude-test`** (que `sync push` copie vers disque et GitHub).
+- **Migrations `0041` + `0042`** appliquées à distance par l'exploitant ; `migrations list
+  --remote` → « No migrations to apply ».
+- **`CACHE_VERSION` `izigsm-v2.94`** (`d179487`), puis **`npm run deploy`** par l'exploitant.
+- **Vérifié sur `repairdesk.fr`** : health 200, `sw.js` v2.94, `app.d39189aa.js` servi en
+  `application/javascript`, onglet Marges présent, `PUT /marges` sans jeton → 401, 5 colonnes
+  de marge + `api_key_chiffree` en base. L'URL d'aperçu n'a pas pu être lue :
+  `wrangler pages deployment list` tombe sous la règle de refus `pages deploy*`.
+
+### La 3e case du P1 des Réglages — ce qu'avaient perdu les boutiques
+
+- **TVA** : aucune perte détectable. Les 4 factures figées (boutiques 1 et 2) portent 20 %,
+  comme les réglages. Limite : la boutique 3 n'a rien émis, et il n'existe aucun historique.
+- **Paiements** : SOTELI (boutique 2, active, 8 tickets) avait tout à `0` depuis le 15/07 —
+  signature du défaut. **Rétablis par l'exploitant** depuis la console (journalisé 08:30:59).
+- **Preuve du correctif en production** : TVA passée à 5,5 via l'onglet Facturation, paiements
+  **restés à 1** — l'ancien code les aurait remis à 0. (L'exploitant est ensuite revenu à 20 %.)
+
+### Les emails — un diagnostic sans boucle rouge, et c'était la réponse
+
+Parti d'une capture : « Envoyer test » affichait « Mode simulé ». Deux défauts s'y cachaient :
+
+1. **La route de test ne transmettait pas la clé globale** — seule de toutes les routes
+   d'envoi. D'où « simulé » en permanence pour toute boutique sans clé propre (toutes, par
+   conception depuis le 2026-07-10).
+2. **Les confirmations de dépôt de SOTELI, 18/07 → 14/08, ni envoyées ni journalisées** (tickets
+   17 à 21). `/diagnosing-bugs` : boucle locale **toujours verte** (sans clé → `simule`, clé
+   invalide → `erreur`), essai réel en production **vert et reçu** pour le même client que le
+   ticket 19. Rien n'a changé dans le code depuis le 15/07. Restent trois sorties **muettes**
+   impossibles à départager : notification décochée, exception avalée par `.catch(() => {})`,
+   Worker interrompu. **Le défaut était l'architecture qui rendait l'échec indiscernable.**
+
+**Corrigé en TDD — `24f0bf5`** : route de test branchée sur la clé globale ; notification
+désactivée → ligne `simule` + motif ; exception de `sendTicketCree()` → ligne `erreur` ;
+`journaliserSansLever()` avec repli `console.error`. Chaque test vu rouge.
+
+**Trouvé en chemin, non corrigé** : le `CHECK` de `email_logs.type` refuse `ticket_livre` et
+`relance_devis` — ces emails **partent sans jamais être journalisés** (confirmé : 0 ligne en
+production). Correction = recréer la table (🟠 P2).
+
+**Constats annexes** : aucun `reply_to` (les réponses clients partent vers `noreply@`) ; DKIM et
+SPF de `mail.repairdesk.fr` en place ; ne **pas** saisir de clé Resend par boutique tant que
+`email_api_key` est stockée en clair.
+
+### Backlog ajouté
+
+🟠 P2 secrets de production (ranger les accès de `.dev.vars`, recréer Resend et JWT, vérifier
+ce que `sync push` copie — côté GitHub vérifié sain) · 🟠 P2 emails (CHECK, enveloppes des
+autres envois, `reply_to`, message de l'écran de test) · 🟡 P3 corps JSON invalide → 500.
+
+### Gates et état
+
+vitest **971/973** (+3), tsc **32**. **En production** : tickets 01-02 Mobilax + P1 Réglages
+(`izigsm-v2.94`). **Non déployé** : `24f0bf5` (emails) — ni migration ni écran, `npm run deploy`
+suffira.
+
 
 ## Checkpoint 95 — Le P1 des Réglages corrigé en TDD, et un faux rouge de serveur local (2026-09-11)
 

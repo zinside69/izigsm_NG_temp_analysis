@@ -1,4 +1,24 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 95 — tickets 01-02 Mobilax + P1 Réglages, non déployés)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 96 — trois lots en production, emails diagnostiqués)
+
+## Ce qui a changé au checkpoint 96
+
+**En production depuis le 2026-09-11 (`izigsm-v2.94`), vérifié** : tickets 01-02 Mobilax, P1 des
+Réglages. Secret `FOURNISSEUR_CRYPTO_KEY` posé, migrations `0041`/`0042` appliquées. Les blocs
+« première action » et « non déployé » plus bas sont donc **dépassés**.
+
+**Commité, pas encore déployé** : `24f0bf5` — l'envoi d'email ne sort plus sans trace, le bouton
+« Envoyer test » utilise la clé globale. Ni migration ni écran : `npm run deploy` suffit.
+
+**À savoir avant de toucher aux emails** :
+- une boutique sans clé propre envoie par la clé plateforme (`RESEND_API_KEY`, expéditeur
+  `… via iziGSM <noreply@mail.repairdesk.fr>`) — c'est voulu ; ⊥ saisir une clé par boutique
+  tant que `email_api_key` est en clair ;
+- **`ticket_livre` et `relance_devis` ne sont jamais journalisés** (CHECK de `email_logs.type`,
+  🟠 P2) — ne pas conclure qu'un tel email n'est pas parti sur la foi de `email_logs` ;
+- toute nouvelle sortie de l'envoi doit écrire une ligne (`journaliserSansLever()`), `CLAUDE.md`.
+
+**Prochaines pistes** : déployer `24f0bf5`, puis ticket 03 Mobilax (session neuve), ou le P2
+emails, ou le P2 secrets.
 
 ## Ce qui a changé au checkpoint 95
 

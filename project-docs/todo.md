@@ -43,7 +43,12 @@ route « Envoyer test » branchée sur la clé globale ; notification désactiv�
 - [ ] L'écran « Envoyer test » dit « aucune clé API configurée » pour tout envoi simulé —
       dire plutôt « ni clé propre, ni clé plateforme »
 
-## ✅ 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11, non déployé**)
+## ✅ 🔴 P1 — Enregistrer un onglet des Réglages écrase la TVA et les moyens de paiement (trouvé le 2026-09-10, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, `izigsm-v2.94`)
+
+**Vérifié en production le 2026-09-11** : TVA de SOTELI passée à 5,5 via l'onglet Facturation,
+paiements restés à 1 (l'ancien code les aurait remis à 0). Perte passée : aucune TVA perdue
+détectable (4 factures figées à 20 %, comme les réglages) ; **SOTELI avait perdu ses moyens de
+paiement** (tous à 0 depuis le 15/07) — rétablis par l'exploitant depuis la console.
 
 **Corrigé en TDD le 2026-09-11** — COALESCE sur les huit colonnes, replis `?? 20` / `?? 0`
 retirés (`bugs.md` § du même titre). Les deux premières cases ci-dessous sont faites ; la
@@ -63,7 +68,8 @@ Réponse 200 à chaque fois, aucun signal. Une boutique en franchise de TVA perd
 - [x] Test vu rouge : enregistrer un onglet, recharger, relire les autres (E2E, sur le modèle de
       `tests/e2e/reglages-taux-marge.spec.ts`) — `tests/e2e/reglages-onglets-sans-ecrasement.spec.ts`,
       + 2 tests unitaires dans `tests/boutiqueService.test.ts`
-- [ ] Vérifier en production si des boutiques ont déjà perdu leur taux de TVA (aucun historique
+- [x] (2026-09-11 — aucune TVA perdue détectable ; SOTELI avait perdu ses paiements, rétablis)
+      Vérifier en production si des boutiques ont déjà perdu leur taux de TVA (aucun historique
       des réglages : seule la comparaison avec les factures émises peut le dire)
 
 ## 🔴 P1 — `/fournisseurs` n'affiche jamais son contenu, aucun onglet, aucun rôle (trouvé le 2026-09-10)
@@ -466,11 +472,11 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       (AES-GCM, premier chiffrement réversible du dépôt), colonne `api_key_chiffree` sur
       `fournisseurs`, jamais renvoyée en clair. `getApiKeyDechiffree()` vérifie elle-même
       `boutique_id`, non exposée par aucune route. Secret `FOURNISSEUR_CRYPTO_KEY` documenté.
-      **Non déployé.**
+      **Déployé le 2026-09-11** (`izigsm-v2.94`).
 - [x] **02** — Taux de marge configurables (défaut boutique + par famille) (2026-09-10) —
       migration `0042` (5 colonnes nullables sur `boutique_settings`), `resoudreTauxMarge()`
       renvoie **`null`** sans taux (le ticket 06 doit le gérer), route dédiée
-      `PUT /api/boutiques/:id/marges`, onglet Marges de `/settings`. **Non déployé.**
+      `PUT /api/boutiques/:id/marges`, onglet Marges de `/settings`. **Déployé le 2026-09-11** (`izigsm-v2.94`).
 - [ ] **03** — Recherche Mobilax dans Stock (sans import) — bloqué par 01
 - [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04

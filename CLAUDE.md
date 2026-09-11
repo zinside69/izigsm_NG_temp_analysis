@@ -530,6 +530,23 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   qui distingue décoché (`0`, écrit) d'absent (`null`, conservé).
   `tests/e2e/reglages-onglets-sans-ecrasement.spec.ts` le vérifie à l'écran.
 
+## Envoi d'email — aucune sortie muette (depuis 2026-09-11)
+
+- **Clé** : une boutique sans `email_api_key` envoie par la clé plateforme (`RESEND_API_KEY`,
+  expéditeur forcé `<nom> via iziGSM <noreply@mail.repairdesk.fr>`, domaine vérifié). **Toute
+  route qui appelle `sendEmail()` passe `apiKeyFallback: c.env.RESEND_API_KEY`** — la route de
+  test l'oubliait et affichait « Mode simulé » à tort (corrigé le 2026-09-11).
+- **Toute sortie de l'envoi écrit une ligne dans `email_logs`** — envoyé, erreur, simulé,
+  *y compris* notification désactivée (`simule`, motif dans `erreur`). Un `return` ou un
+  `.catch(() => {})` sans ligne rend un envoi raté indiscernable d'un envoi jamais tenté :
+  c'est ce qui a rendu indiagnosticables les confirmations manquantes de SOTELI (`bugs.md`).
+- **Journaliser une sortie « en marge » passe par `journaliserSansLever()`**, jamais
+  `logEmail()` nu : l'écriture peut elle-même échouer, et lever casserait l'appelant (relances
+  en lot). Repli `console.error`.
+- **⚠ Le `CHECK` de `email_logs.type` n'admet pas `ticket_livre` ni `relance_devis`** : ces
+  emails partent sans ligne (🟠 P2, recréation de table). Tout nouveau `EmailType` doit être
+  ajouté au CHECK **par migration**, sinon il rejoint cette classe.
+
 ## Docs obsolètes — ne pas suivre comme référence technique
 
 - `docs/ARCHITECTURAL_PRINCIPLES.md` (depuis 2026-07-12) : mandate PHP (BFF) +
@@ -653,6 +670,15 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-11 : aucune migration en attente.** `0041` (clé API fournisseur chiffrée) et
+`0042` (taux de marge) ont été appliquées à distance **puis** le Worker déployé, dans cet ordre,
+après la pose du secret `FOURNISSEUR_CRYPTO_KEY` — tickets 01-02 Mobilax et correctif des
+Réglages en production. Vérifié : `migrations list --remote` → « No migrations to apply »,
+`sw.js` `izigsm-v2.94`, asset hashé servi en JavaScript, onglet Marges présent, `PUT /marges`
+sans jeton → 401. Commité après ce déploiement, **pas encore en production** : `24f0bf5`
+(emails, sans migration ni écran). `wrangler pages deployment list` est refusé par la règle
+`pages deploy*` : l'URL d'aperçu se lit dans la sortie de `npm run deploy`.
 
 **État au 2026-08-02 : aucune migration en attente.** `0040` (numéro de facture nullable) a
 été appliquée à distance **puis** le Worker déployé, dans cet ordre — l'inverse aurait produit
