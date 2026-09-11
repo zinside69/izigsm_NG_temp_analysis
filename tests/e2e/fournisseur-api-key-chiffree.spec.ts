@@ -7,13 +7,10 @@
  * chiffrée en base (via l'API), et le modal d'édition ne la pré-remplit jamais — le
  * serveur ne la renvoie jamais.
  *
- * ⚠ Ne vérifie PAS la ligne dans le tableau de `/fournisseurs` : un bug préexistant, sans
- * rapport avec ce ticket, rend le contenu des 3 onglets de cette page invisible pour tout
- * le monde (`.tab-content` exige la classe `.active` en CSS — `main.css` — que
- * `fournisseurs.js` ne pose jamais ; il ne touche que `.hidden` et `.tab-active`, qui ne
- * correspond à aucune règle). Consigné dans `bugs.md`/`todo.md`, hors périmètre ici.
- * Le modal de création/édition, lui, n'est pas dans `.tab-content` — il fonctionne, et
- * c'est par lui (et par l'API) que ce test observe le comportement réel.
+ * Ne vérifie pas la ligne dans le tableau de `/fournisseurs` : écrit quand un bug d'affichage
+ * rendait les 3 onglets invisibles (`.active` jamais posé). Ce bug est corrigé depuis le
+ * 2026-09-11 et couvert par `fournisseurs-onglets.spec.ts` ; ce test garde son chemin par
+ * l'API et par `openModalFournisseur()`, qui reste valable pour ce qu'il vérifie.
  */
 import { test, expect } from '@playwright/test'
 import { MANAGER, obtenirToken, seConnecter } from './fixtures/comptes'
@@ -34,8 +31,7 @@ test.describe('Fournisseur — clé API chiffrée, jamais renvoyée en clair (ti
     await page.click('#btn-save-fournisseur')
     await expect(page.locator('#modal-fournisseur')).toBeHidden({ timeout: 15_000 })
 
-    // Le tableau étant invisible (bug préexistant, voir en-tête), on retrouve l'identifiant
-    // du fournisseur créé par l'API directement — chemin non affecté par ce bug d'affichage.
+    // On retrouve l'identifiant du fournisseur créé par l'API directement (voir en-tête).
     // `limit` est plafonné à 100 côté serveur (parsePagination) — avec 500+ fournisseurs
     // triés par nom, filtrer par recherche plutôt que supposer une page.
     const token = await obtenirToken(request, MANAGER)
@@ -50,8 +46,7 @@ test.describe('Fournisseur — clé API chiffrée, jamais renvoyée en clair (ti
     expect(cree).not.toHaveProperty('api_key_chiffree')
     expect(JSON.stringify(cree)).not.toContain('sk_live_e2e_reconnaissable')
 
-    // Réouverture du modal d'édition, appelée directement (le bouton de la ligne du
-    // tableau est inatteignable — bug d'affichage ci-dessus) : le champ clé API doit
+    // Réouverture du modal d'édition, appelée directement (voir en-tête) : le champ clé API doit
     // être VIDE, jamais pré-rempli, puisque le serveur ne la renvoie jamais.
     // (globalThis as any) : tsconfig n'inclut pas la lib DOM, `window` casse tsc ici
     // (même piège que `document` dans un page.evaluate() — CLAUDE.md § ticket 03).

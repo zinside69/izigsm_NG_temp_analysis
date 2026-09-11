@@ -61,7 +61,7 @@
 
   <!-- Onglets -->
   <nav class="flex gap-1 mb-4 border-b border-gray-200">
-    <button data-tab="bons" class="tab-btn tab-active">
+    <button data-tab="bons" class="tab-btn active">
       <i class="fas fa-file-alt mr-1"></i>Bons de commande
     </button>
     <button data-tab="fournisseurs" class="tab-btn">
@@ -73,7 +73,7 @@
   </nav>
 
   <!-- ── TAB : Bons de commande ────────────────────────────────────────────── -->
-  <section id="tab-bons" class="tab-content">
+  <section id="tab-bons" class="tab-content active">
     <!-- Filtres -->
     <div class="flex flex-wrap gap-3 mb-4">
       <input id="search-bc" type="text" placeholder="Rechercher numéro, fournisseur…" class="input-field w-64">
@@ -110,7 +110,7 @@
   </section>
 
   <!-- ── TAB : Fournisseurs ────────────────────────────────────────────────── -->
-  <section id="tab-fournisseurs" class="tab-content hidden">
+  <section id="tab-fournisseurs" class="tab-content">
     <div class="flex gap-3 mb-4">
       <input id="search-f" type="text" placeholder="Rechercher nom, email…" class="input-field w-64">
     </div>
@@ -136,7 +136,7 @@
   </section>
 
   <!-- ── TAB : À commander ─────────────────────────────────────────────────── -->
-  <section id="tab-a-commander" class="tab-content hidden">
+  <section id="tab-a-commander" class="tab-content">
     <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
       <i class="fas fa-info-circle mr-1"></i>
       Produits dont le stock actuel est ≤ au seuil d'alerte. Sélectionnez-les pour créer un bon de commande.

@@ -45,10 +45,13 @@ function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.tab
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'))
-      document.querySelectorAll('.tab-content').forEach(s => s.classList.add('hidden'))
-      btn.classList.add('tab-active')
-      document.getElementById(`tab-${tab}`).classList.remove('hidden')
+      // Même vocabulaire que switchTab() (app.js) : `main.css` n'affiche un `.tab-content`
+      // que s'il porte `.active`. L'ancien couple `.hidden`/`tab-active` laissait les trois
+      // onglets vides pour tout le monde (bugs.md, 2026-09-10).
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+      document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'))
+      btn.classList.add('active')
+      document.getElementById(`tab-${tab}`).classList.add('active')
       currentTab = tab
       if (tab === 'bons')        loadBons()
       if (tab === 'fournisseurs') loadFournisseurs()

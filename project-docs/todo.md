@@ -85,7 +85,7 @@ Réponse 200 à chaque fois, aucun signal. Une boutique en franchise de TVA perd
       Vérifier en production si des boutiques ont déjà perdu leur taux de TVA (aucun historique
       des réglages : seule la comparaison avec les factures émises peut le dire)
 
-## 🔴 P1 — `/fournisseurs` n'affiche jamais son contenu, aucun onglet, aucun rôle (trouvé le 2026-09-10)
+## ✅ 🔴 P1 — `/fournisseurs` n'affiche jamais son contenu, aucun onglet, aucun rôle (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11**, non déployé)
 
 Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec Mobilax.
 Détail et cause exacte : `bugs.md` § du même titre.
@@ -103,10 +103,13 @@ vocabulaire de classes différent (`.hidden`/`tab-active`) au lieu de reprendre 
 correct utilisé ailleurs. La correction consiste vraisemblablement à faire converger
 `fournisseurs.js` sur ce même mécanisme, pas à inventer une troisième variante.
 
-- [ ] Faire poser `.active` par `fournisseurs.js` (aligné sur `app.js`/`tickets.js`), au lieu
+- [x] Faire poser `.active` par `fournisseurs.js` (aligné sur `app.js`/`tickets.js`), au lieu
       de `.hidden`/`tab-active` — vérifier qu'aucun autre code ne lit `tab-active` avant de le
-      retirer
-- [ ] Test de rendu (pas seulement un test qui contourne le bug comme celui du ticket 01)
+      retirer (seul `reconditionnement` l'emploie, pour ses propres boutons : non touché)
+- [x] Test de rendu (pas seulement un test qui contourne le bug comme celui du ticket 01) —
+      `tests/e2e/fournisseurs-onglets.spec.ts`, vu rouge avant le correctif
+- [ ] Déployer (`npm run deploy`, aucune migration) puis vérifier en production sur l'asset
+      hashé — sur confirmation de l'exploitant
 
 ## 🟠 P2 — Secrets de production : les ranger, en recréer deux, vérifier ce que `sync push` copie (ajouté le 2026-09-11)
 

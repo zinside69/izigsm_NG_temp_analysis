@@ -126,7 +126,7 @@ envoyé par l'onglet Facturation, n'est lu par aucune route — le choix est per
 c'est le repli `?? 0` / `?? 20` appliqué ensuite qui transforme l'absence en valeur. Test de rendu : enregistrer un onglet,
 recharger, relire les autres.
 
-## ⚠ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, NON corrigé)
+## ✅ Le contenu de `/fournisseurs` est invisible pour tout le monde — classe CSS jamais posée (trouvé le 2026-09-10, **CORRIGÉ le 2026-09-11**, non déployé)
 
 Trouvé en écrivant le test E2E du ticket 01 (chantier Mobilax) — sans rapport avec ce ticket.
 L'écran s'affichait sans erreur, mais aucun des trois onglets (« Bons de commande »,
@@ -155,6 +155,16 @@ classes différent, au lieu de reprendre le helper déjà correct.
 **Non corrigé** : sans rapport avec le chantier Mobilax qui l'a trouvé. Contournement employé
 dans `tests/e2e/fournisseur-api-key-chiffree.spec.ts` : lire via l'API et appeler
 `openModalFournisseur()` directement plutôt que de passer par le tableau invisible.
+
+**Corrigé le 2026-09-11** : `initTabs()` bascule désormais `.active` sur `.tab-btn` et
+`.tab-content` (vocabulaire de `switchTab()`, `app.js`) ; `fournisseurs.html` pose `.active` sur
+l'onglet et la section par défaut, et retire les `hidden` des deux autres sections. `switchTab()`
+n'est pas appelée telle quelle : elle lit l'`event` global implicite. `reconditionnement` garde
+son `tab-active` sans règle CSS — bouton seulement, ses panneaux (`panel-*` + attribut `hidden`)
+ne passent pas par `.tab-content` : aucun contenu masqué, hors périmètre. Non-récidive :
+`tests/e2e/fournisseurs-onglets.spec.ts`, **vu rouge avant** (`#tab-bons` masqué au chargement,
+`#search-f` inatteignable) — visibilité réelle des trois sections et d'une ligne du tableau.
+`CACHE_VERSION` `izigsm-v2.95`.
 
 ## ⚠ `boutique_settings.email_api_key` stockée en clair et renvoyée sans filtrage (trouvé le 2026-09-10, NON corrigé)
 
