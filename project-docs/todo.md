@@ -562,11 +562,19 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       amélioration d'écran proposée, non faite. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
       skillspector… »), embarqué par un `sync push` pendant la session — voir `CLAUDE.md`
       § Dépôt git.
-- [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
+- [ ] **Supervision** (ajouté le 2026-09-11) — recherche Mobilax permise à l'admin plateforme
+      sur la boutique consultée, **journalisée** (le journal ne trace que les écritures) ; import
+      et vente restent fermés. Aujourd'hui : 403 voulu (story 3 d'origine, amendée)
+- [ ] **Pièce consommée sur une réparation** (ajouté le 2026-09-11) — ligne de pièce sur le
+      ticket, sortie de stock, coût et prix. **Aucun support dans le schéma** : chantier à
+      cadrer (`/mattpocock-skills:grill-with-docs`), dépend du 04
+- [ ] **04** — Import d'une pièce dans l'inventaire — débloqué (03 fait) — **prochain**
+      (décision du 2026-09-11) ; lien source = identifiant Mobilax (aucun champ référence)
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06
-- [ ] **08** — Même widget sur Caisse — bloqué par 06
+- [ ] **08** — Même widget sur Caisse — bloqué par 06 **et 04** : modifié le 2026-09-11, la
+      pièce est importée en stock puis vendue comme tout produit (plus de ligne libre)
 - [ ] **09** — Widget sur Prise en charge (pré-remplit `prix_estime`) — bloqué par 06
 
 ### ✅ À faire en début de prochaine session — poser `FOURNISSEUR_CRYPTO_KEY` en production (ajouté le 2026-09-10, **FAIT le 2026-09-11**)

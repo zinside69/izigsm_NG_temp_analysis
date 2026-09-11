@@ -232,3 +232,19 @@ tests de `phoneCatalogService.test.ts`.
 - Le vocabulaire neuf introduit par ce chantier (produit importé, marge automatique, famille
   comme niveau de marge) n'est pas encore fixé au glossaire (`CONTEXT.md`) — relève de la
   discipline `domain-modeling` au moment de l'implémentation, pas de ce spec.
+
+## Amendement du 2026-09-11 (après la mise en production du ticket 03)
+
+Décisions de l'exploitant, `project-docs/decisions.md` § « Mobilax après le ticket 03 ». Le texte
+ci-dessus n'est pas réécrit ; il est amendé ainsi :
+
+- **Story 3 amendée.** L'admin plateforme en supervision peut **utiliser** la clé Mobilax de la
+  boutique consultée pour **chercher** — il ne la **lit** toujours jamais. Chaque recherche faite
+  en supervision est **inscrite au journal de plateforme** (qui ne trace aujourd'hui que les
+  écritures). Import et vente restent fermés à la plateforme (décision du 2026-09-08).
+- **Ticket 08 (caisse) modifié.** Vendre une pièce Mobilax = l'**importer en stock** (ticket 04)
+  puis la vendre comme tout produit — plus de « ligne libre au prix marginé ». Le 08 dépend du 04.
+- **Nouveau besoin, hors des 9 tickets : la pièce consommée sur une réparation** (ligne de pièce
+  sur le ticket, sortie de stock, coût et prix). Aucun support dans le schéma actuel : chantier à
+  cadrer par grilling. Le ticket 09 (prix estimé pré-rempli) reste utile en amont.
+- **Ordre** : 04 d'abord.

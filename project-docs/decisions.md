@@ -1,5 +1,22 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Mobilax après le ticket 03 : supervision, réparation, caisse, ordre
+
+Posé par l'exploitant après la validation du ticket 03 en production : *« à quoi sert le super
+admin s'il ne peut rien faire »* et *« on ne peut affecter un produit à une réparation ou le
+mettre en caisse »*.
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Admin plateforme et Mobilax | **Recherche permise en supervision, avec la clé de la boutique consultée (jamais affichée), et JOURNALISÉE** — le journal de plateforme ne trace aujourd'hui que les écritures, une recherche (GET) n'y laisserait rien. Import et vente restent fermés | Tout hériter, écritures comprises : rouvre « la plateforme ne vend pas » (2026-09-08) — caisse et registre NF525 porteraient des actes du support · garder le refus : la supervision ne pourrait pas déboguer la recherche d'un client |
+| « Affecter une pièce à une réparation » | **Les deux** : prix estimé pré-rempli à l'accueil (ticket 09) **et** pièce consommée sur le ticket (sortie de stock, coût, prix) | — Le second volet n'existe pas dans le schéma (aucune ligne de pièces par ticket) : **chantier nouveau, à cadrer** |
+| Vendre en caisse une pièce Mobilax | **Import en stock puis vente comme tout produit** (stock, coût d'achat, marge justes) | Ligne libre au prix marginé (ticket 08 initial) : la pièce vendue n'existerait nulle part dans l'inventaire |
+| Ordre | **Ticket 04 (import en stock) d'abord** — préalable à la vente depuis le stock et à la pièce consommée | Devis (06) d'abord, ordre du plan initial : ne débloque ni la caisse ni la réparation telles que décidées |
+
+**Conséquences sur la spec** : la story 3 est amendée (l'admin plateforme *utilise* la clé pour
+chercher, il ne la *lit* toujours jamais) ; le ticket 08 passe de « ligne libre » à « import puis
+vente » et dépend désormais du 04. Amendement porté en fin de `.scratch/integration-mobilax/spec.md`.
+
 ## 2026-09-11 — Ticket 03 Mobilax : quel fournisseur, où garder le jeton, quelle adresse
 
 Quatre arbitrages de l'exploitant, pris avant le premier test.
