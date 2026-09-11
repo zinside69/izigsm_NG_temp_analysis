@@ -1,4 +1,25 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 101 — Mobilax 03 en production, 04 commité non déployé)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 102 — Mobilax 03-04 en production, import en masse cadré)
+
+## Ce qui a changé au checkpoint 102
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.00`). Le bloc du
+checkpoint 101 ci-dessous qui dit le ticket 04 « non déployé » est **dépassé** : 04 et son
+enrichissement (SKU = EAN, famille/catégorie/marque déduites, notes, pagination 100/page) sont en
+production, relus. Reste le geste à l'écran de l'exploitant sur la dernière version.
+
+**Première question à poser à l'exploitant : quel chantier ?** Candidats, tous dans `todo.md` :
+- **import en masse par modèle** (cadré le 2026-09-11 : famille de séries entière, tous types,
+  en stock) — à ouvrir par `/mattpocock-skills:grill-with-docs`, tapé par l'exploitant ;
+- **catalogue fournisseur consultable hors stock** (tâche de nuit, révise la décision du 09-09) ;
+- les trois défauts consignés : seuil 0 qui alerte, 🟠 quantité perdue dans la fiche produit,
+  doublon d'import par double clic ;
+- supervision Mobilax journalisée · ticket 05 (rafraîchir un produit, par `/products/lookup`) ·
+  06 (module partagé devis) · pièce consommée sur réparation (à cadrer).
+
+**Pièges du jour, à relire avant de tester l'écran Stock** : fenêtres `.modal-overlay` = opacité,
+jamais `toBeVisible()` · « Notes » = colonne `description` · la référence Mobilax n'est que sur
+`/:id/full` (mémoire « absence d'un champ d'API ») · écrire du texte à accents graves par le shell
+l'exécute (mémoire).
 
 ## Ce qui a changé au checkpoint 101
 

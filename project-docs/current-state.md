@@ -1,4 +1,35 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 101 — Mobilax : recherche en production, import dans le stock commité non déployé)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 102 — Mobilax : recherche, import et fiche enrichie en production ; import en masse cadré)
+
+## Checkpoint 102 — Import Mobilax complété en production, deux défauts anciens du Stock réparés (2026-09-11)
+
+**Dépôt et production alignés, aucune migration en attente.** Déployés dans la journée après le
+checkpoint 101 : `ec91913` (ticket 04, import d'une pièce, `izigsm-v2.99`) puis `ad04d24`
+(`izigsm-v3.00`), chacun relu en production (asset hashé = manifeste local).
+
+**`ad04d24` — retour de l'exploitant sur le ticket 04** (5 captures, décisions dans
+`decisions.md`) : SKU = EAN et « Réf. Mobilax » en lecture seule ; famille déduite de la racine
+de la catégorie Mobilax (par le début du nom, la préprod les nommant autrement) et marge résolue
+sur cette famille ; catégorie locale trouvée ou créée ; marque = appareil compatible, gamme en
+tête des notes ; recherche **100 par page** avec navigation.
+
+**Deux défauts antérieurs réparés au passage** (`bugs.md`) : le champ « Notes » de la fiche
+produit **n'a jamais rien enregistré** (aucune colonne `notes` — branché sur `description`), et
+les icônes d'actions du stock étaient vides (Font Awesome non chargé sur `stock.html`).
+
+**Piège de test trouvé** : les fenêtres `.modal-overlay` se ferment par opacité 0 — Playwright
+les voit visibles même fermées ; les `toBeVisible()` des specs Mobilax ne prouvaient rien,
+remplacés par `toHaveCSS('opacity', …)` (`CLAUDE.md`).
+
+**Cadré, non commencé** (`todo.md`, `decisions.md`) : **import en masse par modèle** (famille de
+séries entière, tous types, en stock — 1 appel `/:id/full` par produit, à étaler) et **catalogue
+fournisseur consultable hors stock** (tâche de nuit, 184 716 produits Mobilax, révise la décision
+du 2026-09-09). Mobilax d'abord, généraliser au 2e grossiste.
+
+**Toujours à trancher** : seuil 0 qui alerte quand même · 🟠 quantité perdue dans la fiche
+produit · doublon d'import par double clic · supervision Mobilax journalisée · ticket 05/06 ·
+pièce consommée sur réparation.
+
+**Gates** : vitest **1036/1038**, tsc **32**, E2E Mobilax 6/6 dont la page 2 réelle, balayage du menu.
 
 ## Checkpoint 101 — Mobilax : tickets 03 (en production) et 04 (commité), et un cap redessiné (2026-09-11)
 
