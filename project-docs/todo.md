@@ -8,7 +8,9 @@ Détail et cause : `bugs.md` § du même titre. Test : `tests/e2e/fournisseurs-e
 - [x] Fenêtres de saisie : classes définies localement, centrées au-dessus de la barre
 - [x] Rappel du haut explicite (« N produits sous le seuil »), masqué à 0
 - [x] « Créer BC » → « Créer un bon de commande »
-- [ ] Déployer (`npm run deploy`, aucune migration) — sur confirmation de l'exploitant
+- [x] Déployer (`npm run deploy`, aucune migration) — fait le 2026-09-11 (`25144c1`,
+      `izigsm-v2.96`) : apex sert `fournisseurs.1630ab7c.js` avec les nouveaux libellés,
+      `/fournisseurs` porte le `.modal-backdrop` fixe et 10 boutons `btn btn-sm`
 
 ## 🟡 P3 — « Envoyer » un bon de commande annonce « Bon envoyé au fournisseur » sans rien envoyer (trouvé le 2026-09-11)
 

@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## ✅ `/fournisseurs` : boutons en texte brut, fenêtre de saisie tronquée sous la barre latérale (trouvé en production le 2026-09-11, **CORRIGÉ le 2026-09-11**, non déployé)
+## ✅ `/fournisseurs` : boutons en texte brut, fenêtre de saisie tronquée sous la barre latérale (trouvé en production le 2026-09-11, **CORRIGÉ et DÉPLOYÉ le 2026-09-11**, `izigsm-v2.96`)
 
 Signalé par l'exploitant, captures à l'appui, juste après le correctif des onglets. Même famille
 de défaut : le vocabulaire de classes de la page n'existe dans aucune feuille chargée.
