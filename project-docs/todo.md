@@ -555,7 +555,11 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       lecture/écriture de fournisseur et la recherche Mobilax tombaient en `no such column`.
       `0045` appliquée ensuite à distance : dernière migration `0045`, colonne présente,
       1 fournisseur intact, 0 violation FK, `migrations list --remote` vide. Leçon : relire
-      `d1_migrations` distant **avant** `npm run deploy`, jamais après. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
+      `d1_migrations` distant **avant** `npm run deploy`, jamais après.
+      ✅ **Validé à l'écran en production par l'exploitant** (2026-09-11, compte de boutique) :
+      « écran iPhone 12 » → 46 pièces, 20 affichées, EAN, prix d'achat HT et stock réels. En
+      admin plateforme, le refus attendu s'affiche (story 3) — message jugé peu parlant,
+      amélioration d'écran proposée, non faite. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
       skillspector… »), embarqué par un `sync push` pendant la session — voir `CLAUDE.md`
       § Dépôt git.
 - [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
