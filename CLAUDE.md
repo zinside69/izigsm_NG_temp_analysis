@@ -743,6 +743,16 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-11 (soir, ticket 03 Mobilax) : aucune migration en attente — dépôt et
+production alignés.** `4356dba` déployé (`izigsm-v2.98`) et `0045` (`fournisseurs.api_plateforme`)
+appliquée — **mais le Worker est parti avant la migration** : première tentative en `7403`
+(jeton `CLOUDFLARE_API_TOKEN` de `.dev.vars` resté dans le shell, § ci-dessous), seconde qui
+n'a pas atteint la base distante, puis `npm run deploy`. La relecture a trouvé `d1_migrations`
+distant arrêté à `0044` : `/fournisseurs` et la recherche Mobilax en `no such column` quelques
+minutes, jusqu'à l'application de `0045`. Vérifié ensuite : dernière migration `0045`, colonne
+présente, 0 violation FK, asset hashé servi = manifeste local. **Relire `d1_migrations` distant
+entre les deux commandes, pas après** — c'est le seul contrôle qui aurait arrêté le déploiement.
+
 **État au 2026-09-11 (checkpoint 100) : aucune migration en attente — dépôt et production
 alignés.** `0044` (`bons_commande.date_paiement`) appliquée à distance **puis** le Worker déployé,
 par l'exploitant. Relu en production : `d1_migrations` distant s'arrête à `0044`, colonne

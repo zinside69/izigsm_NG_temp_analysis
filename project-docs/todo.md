@@ -548,10 +548,14 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       Migration **`0045`** : `fournisseurs.api_plateforme` + case « Fournisseur Mobilax » dans
       la fiche. `MOBILAX_API_BASE` en **préproduction** (`wrangler.jsonc`). Tests vus rouges :
       21 unitaires, 4 E2E dont une **vraie recherche en préproduction**.
-      ⚠ **Non déployé.** Ordre obligatoire : `npx wrangler d1 migrations apply DB --remote`
-      (lire `Resource location: remote`) **puis** `npm run deploy` — sinon `no such column:
-      api_plateforme` sur **toute** lecture de fournisseur (liste et fiche), pas seulement la
-      recherche. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
+      ✅ **Déployé le 2026-09-11** (`4356dba`, `izigsm-v2.98`) — **mais dans le mauvais ordre** :
+      le Worker est parti alors que `0045` n'était pas appliquée à distance (1re tentative en
+      `7403`, la 2e n'a pas atteint la base distante). Constaté à la relecture : `d1_migrations`
+      distant arrêté à `0044`, colonne absente ; pendant cette fenêtre (quelques minutes), toute
+      lecture/écriture de fournisseur et la recherche Mobilax tombaient en `no such column`.
+      `0045` appliquée ensuite à distance : dernière migration `0045`, colonne présente,
+      1 fournisseur intact, 0 violation FK, `migrations list --remote` vide. Leçon : relire
+      `d1_migrations` distant **avant** `npm run deploy`, jamais après. ⚠ Le travail en cours est parti sur GitHub dans `c2b5c83` (« sync:
       skillspector… »), embarqué par un `sync push` pendant la session — voir `CLAUDE.md`
       § Dépôt git.
 - [ ] **04** — Import d'une pièce dans l'inventaire — bloqué par 03
