@@ -17,14 +17,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockDatabase } from './helpers/mockDatabase'
 import { chiffrer } from '../src/lib/chiffrement'
-import { rechercherProduitsMobilax } from '../src/services/mobilaxService'
+import { rechercherProduitsMobilax, importerProduitMobilax } from '../src/services/mobilaxService'
+import { createMockD1 } from './helpers/mockD1'
 
 const CLE_CHIFFREMENT = 'a'.repeat(64)
 const BASE = 'https://mobilax.test/v1.0/external'
 const BOUTIQUE = 1
 
 /** SQL répliqués : le mock matche sur la requête exacte. */
-const SQL_FOURNISSEUR_API = `SELECT id, (api_key_chiffree IS NOT NULL) AS a_cle FROM fournisseurs WHERE boutique_id = ? AND api_plateforme = ? AND actif = 1 ORDER BY id LIMIT 2`
+const SQL_FOURNISSEUR_API = `SELECT id, nom, (api_key_chiffree IS NOT NULL) AS a_cle FROM fournisseurs WHERE boutique_id = ? AND api_plateforme = ? AND actif = 1 ORDER BY id LIMIT 2`
 const SQL_CLE_API = 'SELECT api_key_chiffree FROM fournisseurs WHERE id = ? AND boutique_id = ? AND actif = 1'
 
 /** KV en mémoire, même surface que D1KVNamespace. */
@@ -289,6 +290,133 @@ describe('rechercherProduitsMobilax()', () => {
     db.__setListResponse(SQL_FOURNISSEUR_API, [{ id: 3, a_cle: 1 }, { id: 8, a_cle: 1 }])
     const r = await rechercherProduitsMobilax(deps(), BOUTIQUE, 'ecran')
     expect(r).toMatchObject({ ok: false, erreur: 'plusieurs_fournisseurs' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════════
+// importerProduitMobilax() — ticket 04 : une pièce trouvée devient un produit du stock
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// Formes reprises des mesures réelles du 2026-09-11 : `GET /products/:id/full` répond
+// `{ status: 'OK', data: { id, reference, ean13, name, description (HTML), price, quantity, … } }`,
+// une pièce inexistante `404 { status: 'NOT_FOUND' }`. La référence n'existe que là.
+
+const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+const SQL_REGLAGES = 'SELECT * FROM boutique_settings WHERE boutique_id = ?'
+const SQL_DOUBLON = 'SELECT id FROM produits WHERE boutique_id = ? AND fournisseur_id = ? AND reference_fournisseur = ? AND actif = 1 LIMIT 1'
+
+const FICHE_COMPLETE = {
+  id: 10242, reference: 'ECRTAREAPPIPHNE12MNO', ean13: '3000000059487',
+  name: 'Ecran Tactile Original Refurb (PIEC) Apple iPhone 12 Mini Noir',
+  description: '<h2><strong>Écran Tactile&nbsp;iPhone 12 Mini</strong></h2><p>Qualit&eacute; origine &amp; test&eacute;.</p>',
+  price: 44.25, quantity: 112,
+}
+
+/** Colonnes → valeurs de l'INSERT produit, lues dans le SQL : indépendant de l'ordre. */
+function insertProduit(d1: ReturnType<typeof createMockD1>): Record<string, unknown> | undefined {
+  const appel = d1.__getCalls().find(c => c.sql.startsWith('INSERT INTO produits'))
+  if (!appel) return undefined
+  const colonnes = /\(([^)]*)\)\s*VALUES/.exec(appel.sql)![1].split(',').map(s => s.trim())
+  return Object.fromEntries(colonnes.map((col, i) => [col, appel.params[i]]))
+}
+
+describe('importerProduitMobilax()', () => {
+  let d1: ReturnType<typeof createMockD1>
+  const depsImport = () => ({ ...deps(), d1 })
+
+  beforeEach(async () => {
+    d1 = createMockD1()
+    d1.__setResponse(SQL_INSERT_PRODUIT, { id: 77 })
+    db.__setListResponse(SQL_FOURNISSEUR_API, [{ id: 3, nom: 'MOBILAX', a_cle: 1 }])
+    db.__setResponse(SQL_CLE_API, { api_key_chiffree: await chiffrer('cle-mobilax-test', CLE_CHIFFREMENT) })
+    db.__setNotFound(SQL_DOUBLON)
+    db.__setResponse(SQL_REGLAGES, { boutique_id: 1, marge_taux_defaut: 30, marge_taux_piece: null })
+  })
+
+  function mobilaxRenvoieLaFiche(fiche: object = FICHE_COMPLETE) {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE}/auth`) return json({ token: 'jwt-1', expireIn: '1h' })
+      if (url === `${BASE}/products/10242/full`) return json({ status: 'OK', data: fiche })
+      return json({ status: 'NOT_FOUND', message: 'Produit non trouvé' }, 404)
+    })
+  }
+
+  it('crée le produit à partir de la fiche relue chez Mobilax, lié à sa source', async () => {
+    mobilaxRenvoieLaFiche()
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+    expect(r).toEqual({ ok: true, produit_id: 77 })
+    expect(insertProduit(d1)).toMatchObject({
+      boutique_id:           BOUTIQUE,
+      nom:                   'Ecran Tactile Original Refurb (PIEC) Apple iPhone 12 Mini Noir',
+      description:           'Écran Tactile iPhone 12 Mini\nQualité origine & testé.',
+      famille:               'piece',
+      prix_achat_ht:         44.25,
+      prix_vente_ht:         57.53,          // 44,25 × 1,30 (marge par défaut de la boutique)
+      stock_actuel:          0,
+      stock_minimum:         0,              // aucune alerte « sous le seuil » dès l'import
+      fournisseur:           'MOBILAX',
+      fournisseur_id:        3,
+      reference_fournisseur: 'ECRTAREAPPIPHNE12MNO',
+      code_barre:            '3000000059487',
+    })
+  })
+  it('boutique sans aucun taux de marge : prix de vente 0, jamais une marge inventée', async () => {
+    db.__setResponse(SQL_REGLAGES, { boutique_id: 1, marge_taux_defaut: null, marge_taux_piece: null })
+    mobilaxRenvoieLaFiche()
+    await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(insertProduit(d1)).toMatchObject({ prix_achat_ht: 44.25, prix_vente_ht: 0 })
+  })
+
+  it('taux propre à la famille « pièce » : il l\'emporte sur le défaut de la boutique', async () => {
+    db.__setResponse(SQL_REGLAGES, { boutique_id: 1, marge_taux_defaut: 30, marge_taux_piece: 100 })
+    mobilaxRenvoieLaFiche()
+    await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(insertProduit(d1)).toMatchObject({ prix_vente_ht: 88.5 })
+  })
+
+  it('pièce déjà importée : refusée avec le produit existant, aucun second produit', async () => {
+    db.__setResponse(SQL_DOUBLON, { id: 41 })
+    mobilaxRenvoieLaFiche()
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
+    expect(insertProduit(d1)).toBeUndefined()
+    // Le doublon se cherche sur la boutique, la fiche Mobilax et la VRAIE référence
+    const recherche = db.__getCalls().find(c => c.sql.startsWith('SELECT id FROM produits'))!
+    expect(recherche.params).toEqual([BOUTIQUE, 3, 'ECRTAREAPPIPHNE12MNO'])
+  })
+
+  it('pièce inconnue chez Mobilax (404) : introuvable, aucun produit', async () => {
+    mobilaxRenvoieLaFiche()
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 999999)
+    expect(r).toMatchObject({ ok: false, erreur: 'introuvable' })
+    expect(insertProduit(d1)).toBeUndefined()
+  })
+
+  it('quota Mobilax atteint : même signal que la recherche, aucun produit', async () => {
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ status: 'RATE_LIMITED' }, 429, { 'ratelimit-reset': '12' }))
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(r).toMatchObject({ ok: false, erreur: 'quota', reessayer_dans_s: 12 })
+    expect(insertProduit(d1)).toBeUndefined()
+  })
+
+  it('description piégée : aucune balise ne renaît du décodage des entités, hexadécimales comprises', async () => {
+    mobilaxRenvoieLaFiche({ ...FICHE_COMPLETE,
+      description: '<p>Écran &lt;img src=x onerror=alert(1)&gt; &#x3C;script&#x3E;x&#x3C;/script&#x3E; fin</p>' })
+    await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    const description = String(insertProduit(d1)!.description)
+    expect(description).not.toMatch(/[<>]/)
+    expect(description).toContain('Écran')
+    expect(description).toContain('fin')
+  })
+
+  it('aucune fiche Mobilax : message explicite, Mobilax jamais appelé', async () => {
+    db.__setListResponse(SQL_FOURNISSEUR_API, [])
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(r).toMatchObject({ ok: false, erreur: 'sans_fournisseur' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

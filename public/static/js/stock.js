@@ -573,9 +573,10 @@ function exportStock() {
   showFlash('Export CSV téléchargé.', 'success');
 }
 
-// ─── Recherche Mobilax (ticket 03, chantier integration-mobilax) ─────────────
-// Recherche seule : l'import d'une pièce trouvée viendra au ticket 04. Toute donnée Mobilax
-// est tierce — échappée comme une saisie utilisateur (escHtml), le message en textContent.
+// ─── Recherche et import Mobilax (tickets 03-04, chantier integration-mobilax) ─
+// Toute donnée Mobilax est tierce — échappée comme une saisie utilisateur (escHtml), le
+// message en textContent. L'import n'envoie que l'identifiant : nom et prix sont relus
+// chez Mobilax côté serveur, jamais pris dans ce que l'écran affiche.
 
 function ouvrirRechercheMobilax() {
   document.getElementById('mobilax-terme').value = '';
@@ -622,11 +623,48 @@ async function chercherMobilax() {
         <td style="text-align:right">${p.prix_achat_ht != null
           ? Number(p.prix_achat_ht).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
         <td style="text-align:right">${Number(p.stock) || 0}</td>
+        <td style="text-align:right">
+          <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}">Importer</button>
+        </td>
       </tr>`).join('');
   } finally {
     bouton.disabled = false;
   }
 }
+
+/**
+ * Importe une pièce dans le stock, puis ouvre sa fiche pour ajuster le prix de vente.
+ * Pièce déjà importée (409 `deja_importe`) : aucun doublon, la fiche existante s'ouvre.
+ * La quantité ne se règle pas dans la fiche (`updateProduit()` ignore le stock) : elle passe
+ * par « Ajuster le stock », qui trace le mouvement — d'où le message.
+ */
+async function importerMobilax(mobilaxId, bouton) {
+  bouton.disabled = true;
+  bouton.textContent = 'Import…';
+  // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+  const res = (await apiPost('/api/mobilax/import', { mobilax_id: mobilaxId })).data;
+  const dejaImporte = res?.code === 'deja_importe';
+  const produitId = (res?.success || dejaImporte) ? res.data?.produit_id : null;
+  if (!produitId) {
+    messageMobilax(res?.error || 'Import Mobilax impossible.', true);
+    bouton.disabled = false;
+    bouton.textContent = 'Importer';
+    return;
+  }
+  showFlash(dejaImporte
+    ? 'Cette pièce est déjà dans votre stock — voici sa fiche.'
+    : 'Pièce importée — ajustez le prix de vente ici, la quantité par « Ajuster le stock ».',
+    dejaImporte ? 'info' : 'success');
+  await loadStock();
+  closeModal('modal-mobilax');
+  editStock(produitId);
+}
+
+// Un seul écouteur pour tous les boutons « Importer » : aucune donnée Mobilax dans un onclick
+document.getElementById('mobilax-resultats')?.addEventListener('click', e => {
+  const bouton = e.target.closest('button[data-mobilax-id]');
+  if (bouton) importerMobilax(Number(bouton.dataset.mobilaxId), bouton);
+});
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function setEl(id, val) {

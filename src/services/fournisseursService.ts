@@ -206,13 +206,13 @@ export async function getApiKeyDechiffree(
  * @param db          Port Database
  * @param boutiqueId  Boutique appelante — filtre d'isolation porté par la requête elle-même
  * @param plateforme  Valeur de `api_plateforme` recherchée
- * @returns           `[{ id, a_cle }]`, `a_cle` à 1 si une clé chiffrée est enregistrée
+ * @returns           `[{ id, nom, a_cle }]`, `a_cle` à 1 si une clé chiffrée est enregistrée
  */
 export async function trouverFournisseurApi(
   db: Database, boutiqueId: number, plateforme: string
-): Promise<Array<{ id: number; a_cle: number }>> {
-  return db.all<{ id: number; a_cle: number }>(
-    `SELECT id, (api_key_chiffree IS NOT NULL) AS a_cle
+): Promise<Array<{ id: number; nom: string; a_cle: number }>> {
+  return db.all<{ id: number; nom: string; a_cle: number }>(
+    `SELECT id, nom, (api_key_chiffree IS NOT NULL) AS a_cle
      FROM fournisseurs
      WHERE boutique_id = ? AND api_plateforme = ? AND actif = 1
      ORDER BY id LIMIT 2`,

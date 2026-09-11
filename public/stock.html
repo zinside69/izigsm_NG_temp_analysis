@@ -249,8 +249,8 @@
     </div>
   </div>
 
-  <!-- Modal Recherche Mobilax (ticket 03, chantier integration-mobilax) — recherche seule :
-       l'import d'une pièce dans le stock viendra au ticket 04. Rempli par chercherMobilax(). -->
+  <!-- Modal Recherche Mobilax (tickets 03-04, chantier integration-mobilax) — recherche, puis
+       « Importer » par résultat (importerMobilax()). Rempli par chercherMobilax(). -->
   <div class="modal-overlay" id="modal-mobilax">
     <div class="modal" style="max-width:780px;">
       <div class="modal-header">
@@ -266,7 +266,7 @@
         <p id="mobilax-message" style="font-size:.87rem;color:var(--text-muted);margin:0 0 10px;"></p>
         <div style="max-height:50vh;overflow-y:auto;">
           <table>
-            <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Stock Mobilax</th></tr></thead>
+            <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Stock Mobilax</th><th></th></tr></thead>
             <tbody id="mobilax-resultats"></tbody>
           </table>
         </div>

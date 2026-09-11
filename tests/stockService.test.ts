@@ -148,8 +148,8 @@ const SQL_CHECK_PRODUIT_STOCK = n(`SELECT id, stock_actuel, boutique_id FROM pro
 const SQL_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
-     stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 

@@ -66,6 +66,50 @@ test.describe('Stock — recherche Mobilax', () => {
     await expect(lignes).toHaveCount(0)
   })
 
+  test('import réel (ticket 04) : la pièce devient un produit du stock, un second import rouvre l\'existant', async ({ page, request }) => {
+    const cle = cleMobilaxPreprod()
+    test.skip(!cle, 'MOBILAX_API_KEY absente de .dev.vars — import réel impossible')
+
+    const tenant = await createTenantAdmin(request)
+    await seConnecter(page, { email: tenant.email, password: tenant.password })
+    await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+    await page.goto('/fournisseurs')
+    await page.click('#btn-new-fournisseur')
+    await page.fill('#f-nom', 'Mobilax')
+    await page.fill('#f-api-key', cle!)
+    await page.check('#f-api-mobilax')
+    await page.click('#btn-save-fournisseur')
+    await expect(page.locator('#modal-fournisseur')).toBeHidden({ timeout: 15_000 })
+
+    await page.goto('/stock')
+    await page.click('#btn-mobilax')
+    await chercherDansStock(page, 'ecran iphone 12')
+    const premiere = page.locator('#mobilax-resultats tr').first()
+    await expect(premiere).toBeVisible({ timeout: 20_000 })
+    const nomPiece = (await premiere.locator('td').first().innerText()).trim()
+
+    // Import : la fiche du produit s'ouvre, nom repris, prix d'achat relu chez Mobilax
+    await premiere.getByRole('button', { name: 'Importer' }).click()
+    await expect(page.locator('#modal-stock')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('#stock-name')).toHaveValue(nomPiece)
+    expect(Number(await page.locator('#stock-price-buy').inputValue())).toBeGreaterThan(0)
+    await page.locator('#modal-stock .modal-close').click()
+
+    // Le produit est dans la liste du stock
+    await expect(page.locator('#stock-tbody').getByText(nomPiece).first()).toBeVisible({ timeout: 15_000 })
+
+    // Second import de la même pièce : pas de doublon, la fiche existante se rouvre
+    await page.click('#btn-mobilax')
+    await chercherDansStock(page, 'ecran iphone 12')
+    await expect(premiere).toBeVisible({ timeout: 20_000 })
+    await premiere.getByRole('button', { name: 'Importer' }).click()
+    await expect(page.locator('#modal-stock')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('#stock-name')).toHaveValue(nomPiece)
+    const produits = await request.get('/api/produits?limit=200', { headers: { Authorization: `Bearer ${tenant.accessToken}` } })
+    const lignes = (await produits.json()).data.filter((p: any) => p.nom === nomPiece)
+    expect(lignes).toHaveLength(1)
+  })
+
   test('boutique sans fiche Mobilax : message qui dit quoi faire, pas une erreur muette', async ({ page, request }) => {
     const tenant = await createTenantAdmin(request)
     await seConnecter(page, { email: tenant.email, password: tenant.password })

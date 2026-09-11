@@ -1,5 +1,25 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Ticket 04 Mobilax : import d'une pièce dans le stock
+
+Quatre arbitrages de l'exploitant, pris avant le premier test.
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Seams | **Service, route, E2E en vraie préproduction** | Service + écran seuls : l'isolation et le refus de l'admin plateforme ne seraient couverts qu'indirectement |
+| Source du nom et du prix | **Relus chez Mobilax côté serveur** (`GET /products/:id/full`) — 1 appel de quota | Pris dans ce qu'affiche l'écran : le coût d'achat enregistré dépendrait du client |
+| Défauts du produit importé | **Vente = prix d'achat × marge résolue (famille « pièce », sinon défaut boutique) ; 0 € sans aucun taux** ; stock 0 ; seuil 0 ; fiche ouverte après import | Vente 0 et seuil 5 : alerte dès l'import · tout saisir à l'import : une étape de plus pour chaque pièce |
+| Doublon | **Refusé, la fiche existante s'ouvre** (409) — un produit par pièce | Second produit : stock et coût éclatés |
+
+**0 € de vente sans taux** n'est pas un taux de repli : `resoudreTauxMarge()` rend `null`, et
+l'import n'invente aucune marge (décision du 2026-09-10) ; le prix reste à fixer par l'opérateur,
+fiche ouverte. Risque noté en revue : un tel produit est vendable à 0 € en caisse — rien ne le
+signale encore.
+
+**Seuil 0 : promesse non tenue**, trouvée à la relecture puis confirmée en revue — le dépôt compare
+`stock_actuel <= stock_minimum`, un produit à 0 en stock et seuil 0 reste « à commander ». Décision
+à prendre (`todo.md`).
+
 ## 2026-09-11 — Mobilax après le ticket 03 : supervision, réparation, caisse, ordre
 
 Posé par l'exploitant après la validation du ticket 03 en production : *« à quoi sert le super
@@ -29,6 +49,8 @@ Quatre arbitrages de l'exploitant, pris avant le premier test.
 | Adresse de l'API | **`MOBILAX_API_BASE` en préproduction** (`wrangler.jsonc`) — seule une clé de préprod existe | Production directe : rien ne marcherait sans clé de production |
 
 **Constat de mesure qui change le vocabulaire** : Mobilax n'expose **aucun champ `reference`**.
+⚠ **Faux, corrigé au ticket 04** : `reference` existe sur `GET /products/:id/full` (absent de la liste et du
+détail léger seulement). La recherche texte ne le trouve pas ; `/products/lookup?reference=` le résout.
 La « référence » cherchable est l'EAN13 ; le lien stable est l'identifiant Mobilax.
 
 **Renouvellement du jeton** : un 401 sur un jeton **gardé** déclenche une seule reconnexion ;

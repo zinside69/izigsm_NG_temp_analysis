@@ -15,7 +15,7 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
   (dernière : `0045_fournisseur_api_plateforme.sql`, compté le 2026-09-11)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (1008/1010 au 2026-09-11, 35 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (1025/1027 au 2026-09-11, 35 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -517,8 +517,11 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   brute.** L'API n'a pas d'enveloppe uniforme (`POST /auth` à plat, `GET /products` sous
   `data` sans `status`) : tout sort normalisé (`ProduitMobilax` : `mobilax_id`, `nom`, `ean13`,
   `prix_achat_ht`, `stock`). ⊥ lire un champ Mobilax ailleurs, ni côté serveur ni à l'écran.
-- **Aucun champ `reference` n'existe chez Mobilax** (mesuré). Référence cherchable = EAN13 ;
-  lien stable vers une pièce = identifiant Mobilax.
+- **La référence Mobilax n'est que sur la fiche complète** (`GET /products/:id/full`, ex.
+  `ECRTAREAPPIPHNE12MNO`) — absente de la liste et du détail léger. La recherche texte trouve par
+  **nom ou EAN13, pas par référence** (mesuré : 0 résultat) ; une référence se résout par
+  `GET /products/lookup?reference=`. ⚠ Le ticket 03 affirmait « aucun champ `reference`
+  n'existe » : c'était faux, conclu sur deux endpoints seulement (corrigé au ticket 04).
 - **Quel fournisseur est Mobilax : `fournisseurs.api_plateforme = 'mobilax'`** (migration
   `0045`, liste blanche `API_PLATEFORMES` dans `validators.ts`). Mise à jour à **trois états**
   — absent = inchangé, `null` = retiré, `'mobilax'` = posé — que `COALESCE` ne sait pas tenir :
@@ -539,6 +542,17 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **`MOBILAX_API_BASE` (`wrangler.jsonc`) pointe la PRÉPRODUCTION.** Passer en production =
   changer cette ligne **et** saisir une clé de production dans la fiche ; la clé de préprod a
   circulé en clair et doit être tournée avant (`todo.md`).
+- **Import d'une pièce (ticket 04) : `POST /api/mobilax/import { mobilax_id }`** — identifiant
+  dans le **corps**, pas l'URL (ce n'est pas une ressource locale). Nom, référence, EAN et prix
+  d'achat sont **relus chez Mobilax** (`/:id/full`), jamais pris dans ce qu'envoie l'écran ; la
+  description HTML Mobilax est réduite en **texte brut** (`texteBrut()`) avant stockage. Lien
+  source = `fournisseur_id` (fiche Mobilax) + `reference_fournisseur` (vraie référence Mobilax) ;
+  une même pièce ne s'importe qu'**une fois** par boutique (`deja_importe`, 409 avec l'id
+  existant). Import fermé à l'admin plateforme, même quand la recherche lui sera ouverte.
+- **`createProduit()` accepte `fournisseur_id` par un 5e argument `options`, jamais par `data`** :
+  `POST /produits` passe le corps de requête tel quel, un `fournisseur_id` dans `data` pourrait
+  viser la fiche d'une autre boutique. Colonnes `description`, `fournisseur_id` ajoutées **en
+  fin** d'`INSERT` pour ne décaler aucun paramètre existant.
 - **L'E2E `mobilax-recherche-stock.spec.ts` appelle la vraie préproduction** (1 connexion,
   2 recherches) avec `MOBILAX_API_KEY` lue dans `.dev.vars` via `process.getBuiltinModule()` —
   ⊥ `import 'node:fs'` dans une spec : `tsconfig` n'a pas les types Node, la baseline tsc monte.

@@ -40,3 +40,9 @@ dépend directement ou via le module partagé construit au ticket 06.
   fiche sans clé et plusieurs fiches donnent chacun un message distinct, sans appel à Mobilax.
 - **Le module frontend partagé reste au ticket 06** : la fenêtre de recherche vit dans
   `stock.js` (`chercherMobilax()`), à extraire alors sans la réécrire.
+
+⚠ **Correction du 2026-09-11 (ticket 04)** : la première note ci-dessus est **fausse**. Le champ
+`reference` existe — sur la fiche complète `GET /products/:id/full` seulement (ex.
+`ECRTAREAPPIPHNE12MNO`), absent de la liste et du détail léger, les deux seuls endpoints mesurés
+alors. La recherche texte ne le trouve pas (0 résultat, mesuré) ; `GET /products/lookup?reference=`
+le résout. Le produit importé porte donc la vraie référence Mobilax en `reference_fournisseur`.

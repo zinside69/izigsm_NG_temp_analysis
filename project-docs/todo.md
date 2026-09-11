@@ -568,8 +568,29 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
 - [ ] **Pièce consommée sur une réparation** (ajouté le 2026-09-11) — ligne de pièce sur le
       ticket, sortie de stock, coût et prix. **Aucun support dans le schéma** : chantier à
       cadrer (`/mattpocock-skills:grill-with-docs`), dépend du 04
-- [ ] **04** — Import d'une pièce dans l'inventaire — débloqué (03 fait) — **prochain**
-      (décision du 2026-09-11) ; lien source = identifiant Mobilax (aucun champ référence)
+- [x] **04** — Import d'une pièce dans l'inventaire (2026-09-11) — bouton « Importer » par
+      résultat, `POST /api/mobilax/import`, fiche relue chez Mobilax (`/:id/full`), prix de vente
+      = marge résolue, stock 0, seuil 0, fiche ouverte après import, doublon refusé (409 → fiche
+      existante). Lien source = vraie **référence Mobilax** (elle existe sur `/full` : le « aucun
+      champ référence » du ticket 03 était faux). Aucune migration. Tests vus rouges : 7 service
+      (dont 3 vérifiés par mutation, codés avant leur test), 5 route, 1 E2E en vraie préprod.
+      **Non déployé.** ⚠ Seuil 0 n'évite pas toutes les alertes : `stock ≤ seuil` rend 0 ≤ 0
+      vrai — voir l'entrée suivante.
+- [ ] 🟠 **La quantité saisie dans la fiche d'un produit est perdue sans message** (trouvé en
+      revue du ticket 04, 2026-09-11, défaut ANTÉRIEUR, tous produits) — `editStock()` affiche un
+      champ quantité modifiable, mais `PUT /produits/:id` → `updateProduit()` ignore `stock_actuel`
+      (le stock ne bouge que par mouvement tracé). L'opérateur croit avoir corrigé son stock.
+      Contournement posé : le message après import renvoie vers « Ajuster le stock ». À trancher :
+      champ en lecture seule dans la fiche, ou saisie convertie en mouvement
+- [ ] 🟡 **Doublon d'import possible par deux clics simultanés** (revue du ticket 04) — la
+      vérification `deja_importe` puis `createProduit()` n'est pas atomique, aucune contrainte
+      `UNIQUE(boutique_id, fournisseur_id, reference_fournisseur)`. Bouton désactivé pendant
+      l'import : fenêtre étroite. Parade complète = index unique partiel (migration)
+- [ ] 🟡 **Produit importé à 0 en stock : alerte « à commander » quand même** (trouvé le
+      2026-09-11) — `getProduitsACommander()`/KPI et la liste « Alertes seuil bas » de
+      `stock.js` comparent `stock_actuel <= stock_minimum` : avec seuil 0, 0 ≤ 0 est vrai. La
+      promesse « pas d'alerte dès l'import » n'est tenue que par le KPI stock bas. Décision à
+      prendre : règle globale (`<` quand seuil = 0 ?) ou rupture assumée comme « à commander »
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06

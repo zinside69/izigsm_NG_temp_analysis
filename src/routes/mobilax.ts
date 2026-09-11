@@ -4,7 +4,8 @@
  * `integration-mobilax`). Controller seul : 0 SQL, tout passe par `mobilaxService`.
  *
  * Routes :
- *   GET /api/mobilax/produits?q=  — recherche par nom ou EAN13, avec la clé de la boutique
+ *   GET  /api/mobilax/produits?q=  — recherche par nom ou EAN13, avec la clé de la boutique
+ *   POST /api/mobilax/import       — importe une pièce dans le stock (`{ mobilax_id }`, ticket 04)
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
  * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
@@ -13,10 +14,10 @@
  */
 
 import { Hono } from 'hono'
-import { authMiddleware, isAdminPlateforme } from '../lib/middleware'
+import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middleware'
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
-import { rechercherProduitsMobilax, type ErreurMobilax } from '../services/mobilaxService'
+import { rechercherProduitsMobilax, importerProduitMobilax, type ErreurMobilax } from '../services/mobilaxService'
 
 // MOBILAX_API_BASE : préproduction ou production (`wrangler.jsonc` › vars), jamais en dur.
 type Bindings  = { DB: D1Database; KV: D1KVNamespace; JWT_SECRET: string; FOURNISSEUR_CRYPTO_KEY: string; MOBILAX_API_BASE: string }
@@ -29,7 +30,9 @@ mobilax.use('*', authMiddleware)
 const TERME_MIN = 2
 
 /** Statut HTTP de chaque issue du service — le code, lui, part dans le corps. */
-const STATUT_PAR_ERREUR: Record<ErreurMobilax, 422 | 429 | 502> = {
+const STATUT_PAR_ERREUR: Record<ErreurMobilax, 404 | 409 | 422 | 429 | 502> = {
+  introuvable:            404,
+  deja_importe:           409,
   sans_fournisseur:       422,
   plusieurs_fournisseurs: 422,
   sans_cle:               422,
@@ -59,6 +62,35 @@ mobilax.get('/mobilax/produits', async (c) => {
   )
   if (r.ok) return c.json({ success: true, data: { total: r.total, produits: r.produits } })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
+})
+
+// ── POST /api/mobilax/import ─────────────────────────────────────────────────
+// Ticket 04 : une pièce trouvée devient un produit du stock. L'identifiant Mobilax voyage dans
+// le corps, pas dans l'URL — ce n'est pas une ressource locale. Rôles de `POST /produits`
+// (manager et admin de boutique). Import fermé à l'admin plateforme : la plateforme ne fait pas de commerce
+// (décision du 2026-09-11), même quand la recherche lui sera ouverte en supervision.
+mobilax.post('/mobilax/import', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  // Même lecture que la recherche : admin plateforme refusé, et tout compte sans boutique
+  // (onboarding inachevé, données corrompues) n'a ni clé ni stock où importer.
+  if (isAdminPlateforme(user) || !user.boutique_id)
+    return c.json({ success: false, error: 'L\'import dans le stock est réservé aux utilisateurs de la boutique.' }, 403)
+
+  const body = await c.req.json().catch(() => ({})) as { mobilax_id?: unknown }
+  const mobilaxId = body.mobilax_id
+  if (typeof mobilaxId !== 'number' || !Number.isInteger(mobilaxId) || mobilaxId <= 0)
+    return c.json({ success: false, error: 'Identifiant de pièce Mobilax manquant ou invalide.' }, 400)
+
+  const r = await importerProduitMobilax(
+    { db: c.get('db'), d1: c.env.DB, kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
+    user.boutique_id, user.sub, mobilaxId,
+  )
+  if (r.ok) return c.json({ success: true, data: { produit_id: r.produit_id } }, 201)
+  // 409 `deja_importe` : le produit existant sous `data`, comme en succès — enveloppe du dépôt
+  return c.json({
+    success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s,
+    ...(r.produit_id === undefined ? {} : { data: { produit_id: r.produit_id } }),
+  }, STATUT_PAR_ERREUR[r.erreur])
 })
 
 export default mobilax

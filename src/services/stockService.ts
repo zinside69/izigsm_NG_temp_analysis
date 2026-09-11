@@ -76,6 +76,16 @@ export interface CreateProduitData {
   fournisseur?:          string | null
   reference_fournisseur?: string | null
   code_barre?:           string | null
+  description?:          string | null
+}
+
+/**
+ * Lien vers une fiche `fournisseurs` — hors de `CreateProduitData` à dessein : `POST /produits`
+ * passe le corps de requête tel quel, et un `fournisseur_id` pris dans ce corps pourrait viser
+ * la fiche d'une autre boutique. Seul un appelant serveur (import Mobilax) le fournit.
+ */
+export interface CreateProduitOptions {
+  fournisseur_id?: number | null
 }
 
 export interface UpdateProduitData {
@@ -242,16 +252,19 @@ export async function createProduit(
   db: D1Database,
   boutiqueId: number,
   userId: number,
-  data: CreateProduitData
+  data: CreateProduitData,
+  options: CreateProduitOptions = {}
 ): Promise<{ id: number }> {
   const famille = FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille! : 'piece'
 
+  // `description` et `fournisseur_id` en fin de liste : ajoutés au ticket 04 (import Mobilax),
+  // ils ne décalent aucune colonne existante.
   const result = await db.prepare(`
     INSERT INTO produits
       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
-       stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -268,6 +281,8 @@ export async function createProduit(
     data.fournisseur           ?? null,
     data.reference_fournisseur ?? null,
     data.code_barre            ?? null,
+    data.description           ?? null,
+    options.fournisseur_id     ?? null,
   ).first<{ id: number }>()
 
   const produitId = result!.id
@@ -290,6 +305,27 @@ export async function createProduit(
   })
 
   return { id: produitId }
+}
+
+/**
+ * Retrouve un produit déjà importé depuis une pièce fournisseur (ticket 04, import Mobilax) :
+ * même boutique, même fiche fournisseur, même référence. Sert à refuser un second import,
+ * qui éclaterait le stock et le coût d'une même pièce sur deux fiches.
+ *
+ * @param db             Port Database
+ * @param boutiqueId     Boutique — filtre d'isolation porté par la requête elle-même
+ * @param fournisseurId  Fiche fournisseur source
+ * @param reference      Référence de la pièce chez le fournisseur
+ * @returns              `{ id }` du produit existant, ou `null`
+ */
+export async function trouverProduitImporte(
+  db: Database, boutiqueId: number, fournisseurId: number, reference: string
+): Promise<{ id: number } | null> {
+  return db.get<{ id: number }>(
+    `SELECT id FROM produits
+     WHERE boutique_id = ? AND fournisseur_id = ? AND reference_fournisseur = ? AND actif = 1 LIMIT 1`,
+    [boutiqueId, fournisseurId, reference]
+  )
 }
 
 /**
