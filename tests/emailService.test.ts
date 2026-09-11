@@ -514,3 +514,78 @@ describe('processRelancesDevis()', () => {
     expect(eligibleCall?.params).toContain('-7')
   })
 })
+
+// ─── Journal inaccessible après un envoi accepté (2026-09-11) ─────────────────
+// Le CHECK de email_logs.type refuse `ticket_livre` et `relance_devis`. Sur le chemin
+// « envoyé », logEmail() levait, le catch rappelait logEmail() qui levait encore : l'email
+// était PARTI mais sendEmail() levait, sans ligne ni console.error. Pour les relances de
+// devis, l'exception arrêtait tout le lot (processRelancesDevis sans try/catch).
+
+describe('sendEmail() — journal inaccessible après un envoi accepté', () => {
+  let db: ReturnType<typeof createMockDatabase>
+  let consoleErreur: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    db = createMockDatabase()
+    db.__setNotFound(SQL_DEDUP)
+    db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)   // clé propre → vrai appel Resend
+    db.__setResponseFn(SQL_LOG_INSERT, () => { throw new Error('CHECK constraint failed: type') })
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ id: 're_msg_test' }), { status: 200 })))
+    consoleErreur = vi.spyOn(console, 'error').mockImplementation(() => {})
+    return () => { vi.unstubAllGlobals(); consoleErreur.mockRestore() }
+  })
+
+  const RELANCE = {
+    boutiqueId: 1, to: 'client@example.com', sujet: 'Relance', html: '<p>Relance</p>',
+    type: 'relance_devis' as const, entiteType: 'devis', entiteId: 5,
+  }
+
+  it('ne lève pas et rend le succès de l\'envoi', async () => {
+    const res = await sendEmail({ db, ...RELANCE })
+    expect(res, 'l\'email est parti : l\'échec du journal ne doit pas le transformer en exception')
+      .toEqual({ success: true, simulated: false })
+  })
+
+  it('signale l\'échec d\'écriture par console.error, avec le type', async () => {
+    await sendEmail({ db, ...RELANCE }).catch(() => {})
+    expect(consoleErreur, 'sans ligne en base, il faut au moins une trace Cloudflare').toHaveBeenCalled()
+    expect(String(consoleErreur.mock.calls[0]?.[0])).toContain('relance_devis')
+  })
+})
+
+describe('processRelancesDevis() — un devis en échec n\'arrête pas le lot', () => {
+  it('relance les devis suivants quand le premier lève', async () => {
+    const db = createMockDatabase()
+    const SQL_SETTINGS_RELANCE = `SELECT delai_relance_jours FROM boutique_settings WHERE boutique_id = ?`
+    const SQL_DEVIS_ELIGIBLES  = `SELECT d.id, d.numero, d.total_ttc AS montant_ttc, d.date_validite, d.public_token, c.email AS client_email, c.prenom AS client_prenom FROM devis d JOIN clients c ON c.id = d.client_id WHERE d.boutique_id = ? AND d.statut = 'envoye' AND d.envoye_le < datetime('now', ? || ' days') AND (d.date_validite IS NULL OR d.date_validite > datetime('now')) AND c.email IS NOT NULL AND d.id NOT IN ( SELECT entite_id FROM email_logs WHERE boutique_id = ? AND type = 'relance_devis' AND entite_type = 'devis' AND created_at > datetime('now', ? || ' days') ) LIMIT 30`
+    const DEVIS = {
+      id: 5, numero: 'DEV-2026-00005', montant_ttc: 250, date_validite: null,
+      public_token: 'tok5', client_email: 'a@example.com', client_prenom: 'Marie',
+    }
+    db.__setResponse(SQL_SETTINGS_RELANCE, { delai_relance_jours: 3 })
+    db.__setListResponse(SQL_DEVIS_ELIGIBLES, [DEVIS, { ...DEVIS, id: 6, numero: 'DEV-2026-00006' }])
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    db.__setNotFound(SQL_DEDUP)
+
+    // La lecture de la boutique échoue pour le PREMIER devis seulement.
+    let appels = 0
+    db.__setResponseFn('SELECT nom, telephone FROM boutiques WHERE id = ? LIMIT 1', () => {
+      appels++
+      if (appels === 1) throw new Error('D1 indisponible')
+      return { nom: 'iziGSM', telephone: null }
+    })
+    const consoleErreur = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const count = await processRelancesDevis(db, 1, 'http://localhost:3000')
+
+      expect(count, 'seul le second devis a été relancé').toBe(1)
+      const relanceDevis6 = db.__getCalls().find(c =>
+        c.sql.includes('INSERT INTO email_logs') && c.params[5] === 6 && c.params[6] === 'simule')
+      expect(relanceDevis6, 'le devis 6 doit être relancé malgré l\'échec du devis 5').toBeDefined()
+    } finally {
+      consoleErreur.mockRestore()
+    }
+  })
+})

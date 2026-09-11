@@ -24,7 +24,13 @@ depuis `hash_nf525`). **Confirmé à l'écran le 2026-09-08** en session admin p
 iziGSM Paris 11 : `FAC-2026-00004` et `00005` portent 🔒 et offrent « Créer un avoir (NF525) » ;
 « Émettre » a disparu des factures émises ; le cache local porte `locked` sur 4/4. Le P1 est clos.
 
-## 🟠 P2 — Emails : `ticket_livre` et `relance_devis` jamais journalisés, et trois sorties encore muettes (trouvé le 2026-09-11)
+## 🔴 P1 — Emails : `ticket_livre` et `relance_devis` jamais journalisés, et trois sorties encore muettes (trouvé le 2026-09-11, **relevé en P1 le même jour**)
+
+**Pourquoi P1** : l'anti-doublon des relances de devis s'appuie sur une ligne `relance_devis`
+qui ne peut pas exister (CHECK) — chaque lancement manuel renvoie **la même relance au même
+client**. **⚠ Ne pas lancer les relances de devis tant que la migration n'est pas faite.**
+Contenu le 2026-09-11 (étape 1, TDD) : plus d'exception ni d'arrêt du lot, échec visible en
+`console.error` ; l'anti-doublon, lui, reste cassé.
 
 Détail : `bugs.md` § « `email_logs.type` refuse `ticket_livre` et `relance_devis` » et
 § « Confirmations de dépôt jamais envoyées ni journalisées ». Déjà fait le 2026-09-11 (TDD) :

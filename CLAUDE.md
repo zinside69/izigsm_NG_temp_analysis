@@ -544,7 +544,10 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `logEmail()` nu : l'écriture peut elle-même échouer, et lever casserait l'appelant (relances
   en lot). Repli `console.error`.
 - **⚠ Le `CHECK` de `email_logs.type` n'admet pas `ticket_livre` ni `relance_devis`** : ces
-  emails partent sans ligne (🟠 P2, recréation de table). Tout nouveau `EmailType` doit être
+  emails partent sans ligne, l'échec ne sort qu'en `console.error` (🔴 P1, recréation de
+  table). **L'anti-doublon de `processRelancesDevis()` lit cette ligne impossible** : chaque
+  lancement renvoie la même relance au même client — **ne pas lancer les relances de devis**
+  avant la migration. Tout nouveau `EmailType` doit être
   ajouté au CHECK **par migration**, sinon il rejoint cette classe.
 
 ## Docs obsolètes — ne pas suivre comme référence technique

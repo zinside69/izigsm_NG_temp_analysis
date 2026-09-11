@@ -157,7 +157,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
 
   // Mode simulé si pas de clé API
   if (!config.api_key) {
-    await logEmail(db, { boutiqueId, destinataire: to, sujet, type, entiteType, entiteId, statut: 'simule' })
+    await journaliserSansLever(db, { boutiqueId, destinataire: to, sujet, type, entiteType, entiteId, statut: 'simule' })
     return { success: true, simulated: true }
   }
 
@@ -180,20 +180,20 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     const body = await resp.json() as any
 
     if (resp.ok) {
-      await logEmail(db, {
+      await journaliserSansLever(db, {
         boutiqueId, destinataire: to, sujet, type, entiteType, entiteId,
         statut: 'envoye', providerId: body.id,
       })
       return { success: true, simulated: false }
     } else {
-      await logEmail(db, {
+      await journaliserSansLever(db, {
         boutiqueId, destinataire: to, sujet, type, entiteType, entiteId,
         statut: 'erreur', erreur: body.message ?? JSON.stringify(body),
       })
       return { success: false, simulated: false }
     }
   } catch (e: any) {
-    await logEmail(db, {
+    await journaliserSansLever(db, {
       boutiqueId, destinataire: to, sujet, type, entiteType, entiteId,
       statut: 'erreur', erreur: e.message,
     })
@@ -941,8 +941,19 @@ export async function processRelancesDevis(
 
   let count = 0
   for (const devis of rows) {
-    await sendRelanceDevis(db, boutiqueId, devis, frontendUrl, apiKeyFallback)
-    count++
+    // Un devis en échec n'arrête pas le lot (2026-09-11) : sans ce try/catch, la première
+    // exception interrompait la boucle — les devis suivants n'étaient jamais relancés.
+    try {
+      await sendRelanceDevis(db, boutiqueId, devis, frontendUrl, apiKeyFallback)
+      count++
+    } catch (e: any) {
+      await journaliserSansLever(db, {
+        boutiqueId, destinataire: devis.client_email,
+        sujet:      `[${devis.numero}] Rappel — Votre devis est en attente de réponse`,
+        type:       'relance_devis', entiteType: 'devis', entiteId: devis.id,
+        statut:     'erreur', erreur: e?.message ?? String(e),
+      })
+    }
   }
   return count
 }

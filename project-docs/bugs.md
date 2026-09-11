@@ -13,9 +13,23 @@ l'exception remonte au `.catch(() => {})` de l'appelant. **L'email « appareil l
 relances de devis partent donc sans trace** — confirmé en production : aucune ligne de ces
 deux types dans `email_logs`.
 
-**Contenu, pas corrigé** : depuis le 2026-09-11, `journaliserSansLever()` se replie sur
-`console.error` quand l'écriture échoue — la trace existe dans les journaux Cloudflare, plus
-en base. **Correction** : migration élargissant le CHECK — donc recréation de la table, selon
+**⚠ Correction d'une affirmation fausse du même jour** : il avait d'abord été écrit ici que
+la trace survivait dans les journaux Cloudflare grâce à `journaliserSansLever()`. **C'était
+faux** : celle-ci ne couvrait que la notification désactivée et `sendTicketCree()` ; le
+chemin « envoyé » de `sendEmail()` appelait `logEmail()` nu. Il n'y avait donc **aucune**
+trace, ni en base ni dans Cloudflare.
+
+**Aggravation constatée en revérifiant** : l'anti-doublon de `processRelancesDevis()` cherche
+une ligne `relance_devis` dans `email_logs` — qui ne peut pas exister. Et la boucle n'avait
+pas de `try/catch` : la première relance acceptée par Resend levait et arrêtait le lot. D'où,
+à chaque lancement manuel (aucun cron), **la même relance au même premier client**, jamais aux
+suivants. Exposition mesurée : 2 devis relançables en production (SOTELI), aucun lancement
+tracé au journal de plateforme.
+
+**Contenu depuis le 2026-09-11 (étape 1, TDD)** : toutes les écritures de `sendEmail()`
+passent par `journaliserSansLever()` — l'email accepté rend un succès et l'échec d'écriture
+sort en `console.error` ; `processRelancesDevis()` traite chaque devis dans un `try/catch`.
+**Reste cassé jusqu'à la migration : l'anti-doublon.** Ne pas lancer les relances de devis. **Correction** : migration élargissant le CHECK — donc recréation de la table, selon
 le patron de `0040` (table de transit, jamais `PRAGMA foreign_keys=OFF`) ; `todo.md` 🟠 P2.
 
 ## ⚠ Confirmations de dépôt jamais envoyées ni journalisées, 18/07 → 14/08 (trouvé le 2026-09-11, cause non départagée, sorties muettes supprimées)
