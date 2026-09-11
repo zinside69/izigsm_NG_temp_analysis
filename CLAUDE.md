@@ -679,8 +679,9 @@ npm run deploy
 après la pose du secret `FOURNISSEUR_CRYPTO_KEY` — tickets 01-02 Mobilax et correctif des
 Réglages en production. Vérifié : `migrations list --remote` → « No migrations to apply »,
 `sw.js` `izigsm-v2.94`, asset hashé servi en JavaScript, onglet Marges présent, `PUT /marges`
-sans jeton → 401. Commité après ce déploiement, **pas encore en production** : `24f0bf5`
-(emails, sans migration ni écran). `wrangler pages deployment list` est refusé par la règle
+sans jeton → 401. Puis `24f0bf5` (emails, sans migration ni écran) déployé le même jour et **prouvé** :
+« Envoyer test » → ligne `envoye` avec identifiant Resend, email reçu. **Pas encore en
+production** : `0c1f5d3` (étape 1 du P1 emails, sans migration ni écran). `wrangler pages deployment list` est refusé par la règle
 `pages deploy*` : l'URL d'aperçu se lit dans la sortie de `npm run deploy`.
 
 **État au 2026-08-02 : aucune migration en attente.** `0040` (numéro de facture nullable) a

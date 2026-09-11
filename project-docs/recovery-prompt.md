@@ -1,4 +1,21 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 96 — trois lots en production, emails diagnostiqués)
+# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 97 — emails prouvés en production, P1 emails ouvert)
+
+## Ce qui a changé au checkpoint 97
+
+- **`24f0bf5` est en production et prouvé** (bouton « Envoyer test » → ligne `envoye` avec
+  identifiant Resend). Le bloc du checkpoint 96 ci-dessous qui le dit « non déployé » est dépassé.
+- **Nouveau 🔴 P1 emails** (`todo.md`, `bugs.md`) : `ticket_livre` et `relance_devis` ne peuvent
+  pas être journalisés (CHECK), et **l'anti-doublon des relances de devis est donc cassé** —
+  chaque lancement renvoie la même relance au même client. **⚠ Ne pas lancer les relances de
+  devis.** Étape 1 faite (`0c1f5d3`, non déployé) : plus d'exception, plus d'arrêt du lot,
+  échec en `console.error`. **Étape 2 à faire : la migration** du `CHECK(type …)` de
+  `email_logs`, par recréation de table selon le patron de `0040` — `PRAGMA foreign_key_check`
+  à 0 sur la base visée d'abord, table de transit, jamais `PRAGMA foreign_keys=OFF`.
+- ⚠ `bugs.md` porte la trace d'une affirmation fausse corrigée (« visible dans Cloudflare ») :
+  relire le chemin de code avant d'affirmer qu'un repli couvre un cas.
+
+**Pistes, par ordre de coût d'erreur** : étape 2 (migration, P1) · déployer `0c1f5d3` · ticket
+03 Mobilax (session neuve) · P2 secrets · reste du P2 emails (`reply_to`, autres enveloppes).
 
 ## Ce qui a changé au checkpoint 96
 

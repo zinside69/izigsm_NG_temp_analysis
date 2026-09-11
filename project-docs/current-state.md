@@ -1,4 +1,35 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 96 — trois lots en production, emails diagnostiqués)
+# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 97 — emails prouvés en production, étape 1 du P1 faite)
+
+## Checkpoint 97 — Bouton de test prouvé en production, et une affirmation fausse corrigée (2026-09-11)
+
+**`24f0bf5` déployé par l'exploitant et prouvé** : clé propre vide, « Envoyer test » vers sa
+propre adresse → écran « ✅ Email envoyé avec succès ! », email reçu, et en base la ligne 8
+`envoye` / `autre` **avec** identifiant Resend (contre `simule` aux lignes 5 et 6 du matin).
+`sw.js` resté `izigsm-v2.94` (aucun écran touché), asset hashé servi en JavaScript.
+
+**Une affirmation fausse, trouvée en faisant le statut demandé** : il avait été écrit (commit
+`24f0bf5`, `bugs.md`, message à l'exploitant) que l'échec de `ticket_livre`/`relance_devis`
+restait visible dans Cloudflare grâce à `journaliserSansLever()`. En relisant le code : faux —
+le chemin « envoyé » de `sendEmail()` appelait `logEmail()` nu. **Aucune** trace. Et c'était
+pire : `processRelancesDevis()` sans `try/catch` s'arrêtait à la première relance acceptée, et
+son anti-doublon cherche une ligne `relance_devis` qui ne peut pas exister → **la même relance
+au même premier client à chaque lancement**. Exposition : lancement manuel seulement (aucun
+cron), 2 devis relançables (SOTELI), aucun lancement tracé. **Relevé en 🔴 P1.**
+
+**Étape 1, sans migration, en TDD — `0c1f5d3`** : toutes les écritures de `sendEmail()` passent
+par `journaliserSansLever()` (un email accepté rend un succès, l'échec sort en `console.error`) ;
+`processRelancesDevis()` traite chaque devis dans un `try/catch`. Trois tests vus rouges.
+**Reste cassé jusqu'à la migration du CHECK : l'anti-doublon. Ne pas lancer les relances de
+devis.**
+
+**Leçon** : une affirmation sur la *couverture* d'un repli (« l'échec reste visible ») est une
+affirmation sur un chemin de code — elle se vérifie en le relisant, comme un résultat se mesure.
+C'est le piège n°1 de `modop-tests.md`, rejoué sur une phrase plutôt que sur un test.
+
+**Gates** : vitest **974/976** (+3), tsc **32**. **En production** : tickets 01-02, Réglages,
+`24f0bf5`. **Non déployé** : `0c1f5d3` (ni migration ni écran). **Prochaine étape naturelle** :
+étape 2, migration élargissant `CHECK(type …)` selon le patron de `0040`.
+
 
 ## Checkpoint 96 — Déploiement vérifié, et un diagnostic d'emails qui trouve l'architecture fautive (2026-09-11)
 
