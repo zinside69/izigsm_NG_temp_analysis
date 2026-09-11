@@ -609,6 +609,25 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
 - [ ] **08** — Même widget sur Caisse — bloqué par 06 **et 04** : modifié le 2026-09-11, la
       pièce est importée en stock puis vendue comme tout produit (plus de ligne libre)
 - [ ] **09** — Widget sur Prise en charge (pré-remplit `prix_estime`) — bloqué par 06
+- [ ] 🟠 **Import en masse par modèle** (demandé le 2026-09-11, décisions dans `decisions.md`) —
+      l'opérateur saisit un modèle (« iPhone 17 ») : **toute la famille de séries** Mobilax
+      correspondante est retenue d'un coup (17, 17 Air, 17 Pro, 17 Pro Max), et **tous** les
+      produits compatibles sont importés en stock (pièces, accessoires, appareils,
+      consommables), avec les règles de l'import unitaire (fiche relue, SKU = EAN, famille et
+      catégorie déduites, marque, doublon ignoré). Moyens mesurés : `/catalog/series` (2 316
+      séries, sans quota) puis `/products/search?seriesId=` (17 produits pour le seul iPhone 17,
+      1 appel). ⚠ Chaque produit importé coûte **1 appel `/:id/full`** (quota 30/min partagé) :
+      un modèle à 60 produits = 2 min de quota — prévoir l'étalement et l'avancement à l'écran.
+      Dépend du 04 (fait). À cadrer par `/mattpocock-skills:grill-with-docs` (tapé par l'exploitant)
+- [ ] 🟠 **Catalogue fournisseur consultable, hors stock** (demandé le 2026-09-11) — une tâche de
+      fond planifiée (la nuit) remplit une table « catalogue fournisseur » **séparée du stock**,
+      rafraîchie ensuite par `updatedSince` ; recherche locale sans quota, et on n'importe en stock
+      que ce qu'on choisit. **Révise la décision du 2026-09-09** (« rien stocker du catalogue »).
+      Ordres de grandeur : Mobilax = **184 716 produits**, 1 848 appels à 100 par page, ≥ 62 min au
+      quota de 30/min — donc étalé, jamais pendant les heures d'ouverture, et le cache de **prix**
+      est propre à chaque compte Mobilax (tarifs négociés) : cloisonné par boutique, les libellés
+      et catégories pouvant être partagés. Mobilax d'abord, en isolant ce qui est propre à son API
+      (décision : généraliser au 2e grossiste réel). À cadrer par grilling, chantier distinct
 
 ### ✅ À faire en début de prochaine session — poser `FOURNISSEUR_CRYPTO_KEY` en production (ajouté le 2026-09-10, **FAIT le 2026-09-11**)
 

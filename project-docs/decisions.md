@@ -1,5 +1,26 @@
 # iziGSM — Décisions
 
+## 2026-09-11 — Import en masse : par modèle en stock, catalogue entier hors stock
+
+Demande de l'exploitant : importer tous les produits liés à un modèle (« iPhone 17 »), ou le
+catalogue entier d'un fournisseur, Mobilax en particulier. Cadrée par mesure avant les questions.
+
+| Question | Décision | Écarté |
+|---|---|---|
+| Périmètre d'un modèle | **Toute la famille de séries d'un coup** (« iPhone 17 » → 17, 17 Air, 17 Pro, 17 Pro Max) | Séries à cocher · une série exacte |
+| Types de produits | **Tout ce qui est compatible** (pièces, accessoires, appareils, consommables) | Familles à cocher · pièces seules |
+| Catalogue entier | **Catalogue consultable, hors stock** : table séparée remplie la nuit, rafraîchie par `updatedSince`, recherche locale sans quota, import en stock à la demande | Écarté (décision du 2026-09-09) · tout dans le stock (184 716 fiches, écran Stock inutilisable) |
+| Autres fournisseurs | **Mobilax d'abord**, en isolant ce qui est propre à son API ; généraliser au 2e grossiste réel | Générique dès le départ (abstraction sans second cas pour la valider) · Mobilax seul |
+
+**Révise la décision du 2026-09-09** (« on ne stocke rien en local au niveau du catalogue pour le
+moment ») : le catalogue sera stocké — mais **hors du stock**, et le cache de prix cloisonné par
+compte Mobilax (tarifs négociés, `recherche-api-mobilax-2026-09-09.md` § 5).
+
+Mesures du 2026-09-11 : `/catalog/series` 2 316 séries (sans quota) ; `/products/search?seriesId=2358`
+(iPhone 17) → 17 produits, 1 page ; catalogue entier 184 716 produits = 1 848 appels à 100 par
+page, ≥ 62 min au quota de 30/min. Chaque import unitaire relit la fiche (`/:id/full`, 1 appel) :
+l'import d'un modèle doit s'étaler et afficher son avancement.
+
 ## 2026-09-11 — Pièce importée : SKU, famille, catégorie, marque, et tous les résultats
 
 Retour de l'exploitant sur le ticket 04 en production (captures) : EAN absent du champ
