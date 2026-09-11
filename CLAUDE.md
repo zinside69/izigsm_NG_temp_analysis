@@ -757,6 +757,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-11 (après le checkpoint 101) : aucune migration en attente — dépôt et
+production alignés.** `ec91913` (ticket 04 Mobilax, import d'une pièce dans le stock) déployé par
+l'exploitant, sans migration. Relu en production : `stock.16808b85.js` servi = manifeste local
+(contient `importerMobilax`), `sw.js` `izigsm-v2.99`, `POST /api/mobilax/import` sans jeton →
+401, `migrations list --remote` vide.
+
 **État au 2026-09-11 (checkpoint 101) : aucune migration en attente, mais le dépôt est EN
 AVANCE sur la production** — `ec91913` (ticket 04 Mobilax, import d'une pièce dans le stock) est
 commité et poussé, **non déployé**. Il n'ajoute aucune migration : `npm run deploy` suffit, puis

@@ -574,8 +574,10 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       existante). Lien source = vraie **référence Mobilax** (elle existe sur `/full` : le « aucun
       champ référence » du ticket 03 était faux). Aucune migration. Tests vus rouges : 7 service
       (dont 3 vérifiés par mutation, codés avant leur test), 5 route, 1 E2E en vraie préprod.
-      **Non déployé.** ⚠ Seuil 0 n'évite pas toutes les alertes : `stock ≤ seuil` rend 0 ≤ 0
-      vrai — voir l'entrée suivante.
+      ✅ **Déployé le 2026-09-11** (`ec91913`, `izigsm-v2.99`, sans migration) — asset hashé
+      servi = manifeste local, import 401 sans jeton. Reste le geste à l'écran par l'exploitant
+      (compte de boutique). ⚠ Seuil 0 n'évite pas toutes les alertes : `stock ≤ seuil` rend
+      0 ≤ 0 vrai — voir l'entrée suivante.
 - [ ] 🟠 **La quantité saisie dans la fiche d'un produit est perdue sans message** (trouvé en
       revue du ticket 04, 2026-09-11, défaut ANTÉRIEUR, tous produits) — `editStock()` affiche un
       champ quantité modifiable, mais `PUT /produits/:id` → `updateProduit()` ignore `stock_actuel`
