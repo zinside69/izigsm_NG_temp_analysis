@@ -1,4 +1,21 @@
-# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 103 — trois défauts du stock corrigés, migration 0046 en attente)
+# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 104 — ticket 01 réglages de stock ; 0047 en attente)
+
+## Checkpoint 104 — Ticket 01 réglages de stock : onglet Réglages › Stock (2026-09-12)
+
+**Dépôt en avance, `0047` EN ATTENTE, non déployé — volontairement** : le chantier
+`reglages-stock-boutique` part en un bloc (rappel livré avec le changement de seuil par défaut).
+
+Livré : migration `0047` (`stock_seuil_defaut`, `stock_initial_defaut`, nullables, `NULL` = jamais
+réglé), `resoudreDefautsStock()` (pure, `NULL` → 0), `updateDefautsStock()`,
+`PUT /api/boutiques/:id/stock` (droits et gardes des marges, entier ≥ 0, `""` → `NULL`), onglet
+« Stock » des Réglages. Aucun produit encore concerné (tickets 03-05).
+
+Journée : cadrages `grill-with-docs` des **réglages de stock** (21 questions) et de l'**import par
+génération** (14 questions, 7 mesures API), specs et tickets publiés (5 + 4) ; glossaire du stock
+dans `CONTEXT.md` ; checkpoint 103 **déployé** (`0046` + `izigsm-v3.01`, relu).
+
+**Gates** : vitest 1049/1051 (baseline), tsc 32, E2E réglages 6/6 + balayage du menu 17/17 ;
+revue à deux axes, défauts corrigés avant commit (voir le ticket 01).
 
 ## Checkpoint 103 — Stock : seuil 0, quantité de la fiche, doublon d'import (2026-09-12)
 

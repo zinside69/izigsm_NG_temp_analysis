@@ -11,8 +11,8 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 46 migrations dans `migrations/`
-  (dernière : `0046_produits_source_fournisseur_unique.sql`, compté le 2026-09-12)
+- Base de données : Cloudflare D1 (SQLite edge) — 47 migrations dans `migrations/`
+  (dernière : `0047_boutique_settings_defauts_stock.sql`, compté le 2026-09-12)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
 - Tests unitaires : Vitest (1036/1038 au 2026-09-11, 37 suites) — `tests/`, mocks D1 dans
@@ -595,6 +595,12 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `trouverProduitImporte()`). Un futur import (masse, autre grossiste) doit rattraper la
   violation comme `importerProduitMobilax()` : `deja_importe` avec le produit existant, toute
   autre erreur relevée telle quelle.
+- **Valeurs par défaut de stock par boutique** (ticket 01 `reglages-stock-boutique`) :
+  `stock_seuil_defaut`/`stock_initial_defaut` sur `boutique_settings` (migration `0047`),
+  **`NULL` = jamais réglé**, distinct de 0 (le rappel de la page Stock en dépend). Écrites par
+  `PUT /api/boutiques/:id/stock` seule (`updateDefautsStock()`, remplacement complet, `""` →
+  `NULL`, entier ≥ 0 sinon 422), jamais par `/settings`. Lues par **`resoudreDefautsStock()`**
+  seule (`NULL` → 0) : ⊥ un repli codé chez un chemin de création.
 
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
@@ -794,6 +800,14 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-12 (ticket 01 réglages de stock) : migration `0047` EN ATTENTE — dépôt en
+avance sur la production.** Valeurs par défaut de stock par boutique (onglet Réglages › Stock).
+Le chantier `reglages-stock-boutique` se déploie **en un bloc** (rappel de la page Stock livré
+avec le changement de seuil par défaut, tickets 03-04) : ne pas déployer ce ticket seul sans
+raison. Le moment venu : `0047` en `--remote`, relire `d1_migrations` distant, **puis**
+`npm run deploy` — sans elle, `PUT /stock` tombe en `no such column` (les lectures, en
+`SELECT *`, passent).
 
 **État au 2026-09-12 (après le checkpoint 103) : aucune migration en attente — dépôt et
 production alignés.** `0046` appliquée à distance **puis** Worker déployé, par l'exploitant, dans

@@ -45,8 +45,10 @@ import {
   updateBoutique,
   updateBoutiqueSettings,
   updateTauxMarge,
+  updateDefautsStock,
   getStatsBoutique,
   type TauxMarge,
+  type DefautsStock,
   type CreateBoutiqueInput,
   type UpdateBoutiqueInput,
   type UpdateSettingsInput,
@@ -359,6 +361,56 @@ boutiques.put('/:id/marges', requireRole('admin', 'manager'), async (c) => {
 
   await updateTauxMarge(c.get('db'), id, marges)
   return c.json({ success: true, message: 'Taux de marge mis à jour.' })
+})
+
+/** Les deux valeurs par défaut de stock, noms des colonnes de `boutique_settings`. */
+const CHAMPS_DEFAUTS_STOCK: (keyof DefautsStock)[] = ['stock_seuil_defaut', 'stock_initial_defaut']
+
+/**
+ * PUT /api/boutiques/:id/stock
+ * Enregistre les valeurs par défaut de stock d'une boutique (ticket 01, chantier
+ * `reglages-stock-boutique`) : seuil d'alerte et stock initial posés à la création d'un
+ * produit.
+ *
+ * Calquée sur `PUT /:id/marges` : route dédiée (jamais `/:id/settings`, qui reçoit des corps
+ * partiels), remplacement complet (un champ absent vaut `null`, « jamais réglé »), mêmes
+ * droits — un compte rattaché à une boutique n'écrit que chez lui, l'admin plateforme écrit
+ * sur la boutique qu'il consulte (journal de plateforme).
+ *
+ * @param id  Identifiant numérique de la boutique
+ * @body      `stock_seuil_defaut`, `stock_initial_defaut` : entier ≥ 0 ou `null`
+ * @returns 200 `{ success: true, message }`
+ * @returns 403 si le compte vise une autre boutique que la sienne
+ * @returns 404 si la boutique n'existe pas, n'est plus active, ou n'a pas de ligne de réglages
+ * @returns 422 si une valeur n'est ni `null` ni un entier positif ou nul
+ */
+boutiques.put('/:id/stock', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+  if (user.boutique_id != null && user.boutique_id !== id)
+    return c.json({ success: false, error: 'Accès interdit.' }, 403)
+
+  const body    = await c.req.json()
+  const defauts = {} as DefautsStock
+  for (const champ of CHAMPS_DEFAUTS_STOCK) {
+    // Absent, null ou vide ("") = « jamais réglé » (spec : « un champ absent ou vide valant NULL »)
+    const brute  = body?.[champ]
+    const valeur = brute === '' || brute == null ? null : brute
+    // Une quantité : entier seulement — une chaîne (même numérique) ou un décimal est refusé.
+    if (valeur !== null && (!Number.isInteger(valeur) || valeur < 0))
+      return c.json({ success: false, error: `${champ} doit être un entier positif ou nul, ou vide.` }, 422)
+    defauts[champ] = valeur
+  }
+
+  // Mêmes contrôles que /marges : sans eux, l'UPDATE ne toucherait aucune ligne et la route
+  // annoncerait « mis à jour ».
+  if (!(await getBoutiqueById(c.get('db'), id)))
+    return c.json({ success: false, error: 'Boutique introuvable.' }, 404)
+  if (!(await getBoutiqueSettings(c.get('db'), id)))
+    return c.json({ success: false, error: 'Paramètres de la boutique introuvables.' }, 404)
+
+  await updateDefautsStock(c.get('db'), id, defauts)
+  return c.json({ success: true, message: 'Réglages de stock mis à jour.' })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════

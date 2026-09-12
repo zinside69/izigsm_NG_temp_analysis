@@ -26,6 +26,8 @@ import { sqlSousSeuil } from '../lib/stockSeuil'
  *   - `updateBoutiqueSettings()` → UPDATE COALESCE paramètres boutique
  *   - `updateTauxMarge()`       → UPDATE des 5 taux de marge, sans COALESCE ni autre champ
  *   - `resoudreTauxMarge()`     → taux de marge applicable à une famille (pure, sans SQL)
+ *   - `updateDefautsStock()`    → UPDATE des 2 valeurs par défaut de stock, sans COALESCE
+ *   - `resoudreDefautsStock()`  → seuil d'alerte et stock initial effectifs (pure, null → 0)
  *   - `getStatsBoutique()`      → 4 KPIs en parallèle (Promise.all)
  *
  * Conventions SQL :
@@ -92,9 +94,31 @@ export interface TauxMarge {
 }
 
 /**
+ * Valeurs par défaut de stock d'une boutique, appliquées à la création d'un produit
+ * (chantier `reglages-stock-boutique`, décisions du 2026-09-12).
+ *
+ * `null` = « jamais réglé », distinct d'un 0 enregistré : la page Stock affiche un rappel
+ * tant que le seuil n'a jamais été enregistré. À l'application, `null` vaut 0 — aucune
+ * surveillance ni aucun stock imposé (`resoudreDefautsStock()`).
+ */
+export interface DefautsStock {
+  stock_seuil_defaut:   number | null
+  stock_initial_defaut: number | null
+}
+
+/**
+ * Valeurs par défaut de stock effectives, telles qu'un chemin de création les applique
+ * (`resoudreDefautsStock()`) : jamais `null`, entiers ≥ 0.
+ */
+export interface DefautsStockEffectifs {
+  seuil_alerte:  number
+  stock_initial: number
+}
+
+/**
  * Paramètres opérationnels d'une boutique (`boutique_settings`).
  */
-export interface BoutiqueSettings extends TauxMarge {
+export interface BoutiqueSettings extends TauxMarge, DefautsStock {
   boutique_id:                number
   tva_taux_defaut:            number
   paiement_especes:           number
@@ -307,6 +331,26 @@ export function resoudreTauxMarge(
   return settings[`marge_taux_${famille}`] ?? settings.marge_taux_defaut ?? null
 }
 
+// ─── resoudreDefautsStock ─────────────────────────────────────────────────────
+
+/**
+ * Résout les valeurs par défaut de stock applicables à la création d'un produit.
+ *
+ * Seul point de résolution : un appelant ne code jamais son propre repli. Un réglage
+ * `null` (jamais enregistré) vaut 0 ; un 0 enregistré est un choix et reste 0 — `??`.
+ * Le seuil 0 signifie « produit non surveillé » dans toutes les boutiques
+ * (`lib/stockSeuil.ts`) : ce réglage ne change que la valeur posée à la création.
+ *
+ * @param settings Réglages de la boutique, ou `null` si ses paramètres n'existent pas
+ * @returns        `{ seuil_alerte, stock_initial }`, entiers ≥ 0
+ */
+export function resoudreDefautsStock(settings: DefautsStock | null): DefautsStockEffectifs {
+  return {
+    seuil_alerte:  settings?.stock_seuil_defaut   ?? 0,
+    stock_initial: settings?.stock_initial_defaut ?? 0,
+  }
+}
+
 // ─── createBoutique ───────────────────────────────────────────────────────────
 
 /**
@@ -510,6 +554,34 @@ export async function updateTauxMarge(
     marges.marge_taux_consommable,
     boutiqueId
   ])
+}
+
+// ─── updateDefautsStock ───────────────────────────────────────────────────────
+
+/**
+ * Enregistre les valeurs par défaut de stock d'une boutique (ticket 01, chantier
+ * `reglages-stock-boutique`).
+ *
+ * Même parti pris qu'`updateTauxMarge()` : **remplacement complet, sans COALESCE** (un `null`
+ * explicite revient à « jamais réglé ») et **aucun autre paramètre touché** — chaque onglet
+ * des réglages envoie un corps partiel.
+ *
+ * @param db         Port Database
+ * @param boutiqueId Boutique dont on écrit les réglages — seule ligne visée par le WHERE
+ * @param defauts    Seuil d'alerte et stock initial par défaut, `null` pour « non réglé »
+ * @returns          Promesse résolue après l'UPDATE (pas de valeur de retour)
+ */
+export async function updateDefautsStock(
+  db: Database,
+  boutiqueId: number,
+  defauts: DefautsStock
+): Promise<void> {
+  await db.run(`
+    UPDATE boutique_settings SET
+      stock_seuil_defaut = ?, stock_initial_defaut = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE boutique_id = ?
+  `, [defauts.stock_seuil_defaut, defauts.stock_initial_defaut, boutiqueId])
 }
 
 // ─── getStatsBoutique ─────────────────────────────────────────────────────────

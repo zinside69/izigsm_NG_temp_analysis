@@ -67,6 +67,9 @@
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="marges" onclick="Settings.switchTab('marges')">
         <i class="fas fa-percent mr-1"></i>Marges
       </button>
+      <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="stock" onclick="Settings.switchTab('stock')">
+        <i class="fas fa-boxes mr-1"></i>Stock
+      </button>
       <button class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 transition-colors" data-tab="paiements" onclick="Settings.switchTab('paiements')">
         <i class="fas fa-credit-card mr-1"></i>Paiements
       </button>
@@ -323,6 +326,36 @@
       </form>
     </div>
 
+    <!-- TAB: Stock (ticket 01 chantier reglages-stock-boutique — route dédiée PUT /:id/stock) -->
+    <div id="tab-stock" class="tab-content">
+      <form id="form-stock" onsubmit="Settings.saveStock(event)" class="space-y-6">
+        <div class="card">
+          <h3 class="text-base font-bold text-gray-800 mb-2"><i class="fas fa-boxes text-blue-600 mr-2"></i>Valeurs par défaut des nouveaux produits</h3>
+          <p class="text-sm text-gray-500 mb-4">
+            Le seuil d'alerte par défaut s'applique à chaque produit créé ensuite — saisi à la main, importé d'un fichier ou d'un fournisseur.
+            Un seuil de 0 signifie « non surveillé » ; 1 vous alerte à la rupture.
+            Le stock initial par défaut pré-remplit la quantité déjà en rayon quand vous importez un article d'un fournisseur.
+            Laissez un champ vide pour revenir au réglage d'usine (0). Rien n'est modifié sur vos produits existants.
+          </p>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-group">
+              <label>Seuil d'alerte par défaut</label>
+              <input type="number" id="stock_seuil_defaut" min="0" step="1" placeholder="Non surveillé">
+            </div>
+            <div class="form-group">
+              <label>Stock initial par défaut (import fournisseur)</label>
+              <input type="number" id="stock_initial_defaut" min="0" step="1" placeholder="0">
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors">
+            <i class="fas fa-save mr-2"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+
     <!-- TAB: Paiements -->
     <div id="tab-paiements" class="tab-content">
       <form id="form-paiements" onsubmit="Settings.savePaiements(event)" class="space-y-6">
@@ -534,6 +567,12 @@ const Settings = (() => {
         if (el) el.value = _settings[f] ?? '';
       });
 
+      // Onglet stock — une valeur jamais réglée (null) reste un champ vide, jamais « 0 »
+      CHAMPS_STOCK.forEach(f => {
+        const el = document.getElementById(f);
+        if (el) el.value = _settings[f] ?? '';
+      });
+
       // Onglet paiements
       ['paiement_especes','paiement_cb','paiement_cheque','paiement_virement',
        'notif_email_actif','notif_sms_actif'].forEach(f => {
@@ -652,6 +691,27 @@ const Settings = (() => {
     try {
       const r = await apiPut(`/api/boutiques/${_boutiqueId}/marges`, body);
       r.data?.success ? showToast('✅ Taux de marge mis à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
+    } catch (e) { showToast('❌ Erreur réseau', 'error'); }
+  }
+
+  /** Les deux valeurs par défaut de stock, identifiants des champs = noms des colonnes. */
+  const CHAMPS_STOCK = ['stock_seuil_defaut', 'stock_initial_defaut'];
+
+  /**
+   * Enregistre les valeurs par défaut de stock par la route dédiée — jamais par `/settings`
+   * (corps partiels). Envoie toujours les deux champs : un champ vide part en `null`
+   * (« jamais réglé »), un 0 saisi reste 0.
+   */
+  async function saveStock(e) {
+    e.preventDefault();
+    const body = {};
+    CHAMPS_STOCK.forEach(f => {
+      const v = document.getElementById(f)?.value?.trim() ?? '';
+      body[f] = v === '' ? null : Number(v);
+    });
+    try {
+      const r = await apiPut(`/api/boutiques/${_boutiqueId}/stock`, body);
+      r.data?.success ? showToast('✅ Réglages de stock mis à jour') : showToast('❌ ' + (r.error || r.data?.error), 'error');
     } catch (e) { showToast('❌ Erreur réseau', 'error'); }
   }
 
@@ -799,7 +859,7 @@ const Settings = (() => {
   }
 
   return {
-    init, switchTab, saveGeneral, saveNumerotation, saveFacturation, saveMarges, savePaiements, saveEmail, sendTestEmail,
+    init, switchTab, saveGeneral, saveNumerotation, saveFacturation, saveMarges, saveStock, savePaiements, saveEmail, sendTestEmail,
     addPlage, saveHoraires,
   };
 })();

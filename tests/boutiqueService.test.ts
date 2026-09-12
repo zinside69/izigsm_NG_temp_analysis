@@ -26,6 +26,7 @@ import {
   updateBoutiqueSettings,
   getStatsBoutique,
   resoudreTauxMarge,
+  resoudreDefautsStock,
   updateTauxMarge,
   type Boutique,
   type BoutiqueAvecComptes,
@@ -65,6 +66,7 @@ const SETTINGS_1: BoutiqueSettings = {
   email_provider: null, email_from: null,
   marge_taux_defaut: null, marge_taux_piece: null, marge_taux_accessoire: null,
   marge_taux_appareil: null, marge_taux_consommable: null,
+  stock_seuil_defaut: null, stock_initial_defaut: null,
 }
 
 // ─── listAllBoutiques ─────────────────────────────────────────────────────────
@@ -205,6 +207,32 @@ describe('getBoutiqueSettings', () => {
     const result = await getBoutiqueSettings(db, 99)
 
     expect(result).toBeNull()
+  })
+})
+
+// ─── resoudreDefautsStock ─────────────────────────────────────────────────────
+// Ticket 01 chantier reglages-stock-boutique : valeurs par défaut appliquées à la création
+// d'un produit. Non réglé (null) = 0 — aucune surveillance ni aucun stock imposé
+// (décision du 2026-09-12, même principe que les marges).
+
+describe('resoudreDefautsStock', () => {
+  it('rend 0 et 0 quand la boutique n\'a rien réglé', () => {
+    expect(resoudreDefautsStock({ stock_seuil_defaut: null, stock_initial_defaut: null }))
+      .toEqual({ seuil_alerte: 0, stock_initial: 0 })
+  })
+
+  it('rend les valeurs réglées par la boutique', () => {
+    expect(resoudreDefautsStock({ stock_seuil_defaut: 3, stock_initial_defaut: 2 }))
+      .toEqual({ seuil_alerte: 3, stock_initial: 2 })
+  })
+
+  it('respecte un 0 enregistré (choix de ne pas surveiller) au même titre qu\'une valeur', () => {
+    expect(resoudreDefautsStock({ stock_seuil_defaut: 0, stock_initial_defaut: 5 }))
+      .toEqual({ seuil_alerte: 0, stock_initial: 5 })
+  })
+
+  it('rend 0 et 0 quand la boutique n\'a pas de paramètres', () => {
+    expect(resoudreDefautsStock(null)).toEqual({ seuil_alerte: 0, stock_initial: 0 })
   })
 })
 
