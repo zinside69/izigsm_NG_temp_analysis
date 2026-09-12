@@ -645,8 +645,11 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       (`/grill-with-docs`, 14 questions, `decisions.md` même date) : boucle pilotée par le
       navigateur à 20/min, génération = séries au nom commençant par le texte tapé (confirmées),
       déjà-importés repérés par la `reference` de la liste sans appel de fiche, pause sur quota,
-      reprise par relance. Dépend du ticket 05 des réglages de stock. Prochaine étape :
-      `/mattpocock-skills:to-spec` (tapé par l'exploitant)
+      reprise par relance. Dépend du ticket 05 des réglages de stock. **Spec + 4 tickets
+      publiés le 2026-09-12** (`.scratch/import-par-generation/`), chaîne linéaire : 01 séries
+      d'une génération → 02 aperçu chiffré (+ E2E réel, aperçu seul) → 03 boucle, progression,
+      bilan → 04 quota, panne, reprise. Un ticket = une session neuve par
+      `/mattpocock-skills:implement`
 - [ ] 🟠 **Catalogue fournisseur consultable, hors stock** (demandé le 2026-09-11) — une tâche de
       fond planifiée (la nuit) remplit une table « catalogue fournisseur » **séparée du stock**,
       rafraîchie ensuite par `updatedSince` ; recherche locale sans quota, et on n'importe en stock
