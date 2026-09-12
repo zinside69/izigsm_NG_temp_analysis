@@ -15,6 +15,9 @@ let currentFamilleFilter = '';
 // qu'il n'est pas lu : le champ reste alors vide, et un seuil vide n'est pas envoyé — c'est le
 // serveur qui applique le réglage, jamais un 0 pris par défaut côté page.
 let seuilAlerteDefaut = null;
+// Stock initial par défaut effectif (ticket 05) : pré-remplit « Qté en rayon » de la recherche
+// fournisseur. `null` tant qu'il n'est pas lu — champ vide, non envoyé, le serveur applique le réglage.
+let stockInitialDefaut = null;
 
 // Palette couleur par famille
 const FAMILLE_CONFIG = {
@@ -52,6 +55,7 @@ async function chargerDefautsStock() {
     if (!res?.success) return;
     const seuil = res.data?.settings?.stock_seuil_defaut ?? null;
     seuilAlerteDefaut = seuil ?? 0;
+    stockInitialDefaut = res.data?.settings?.stock_initial_defaut ?? 0;
     const peutRegler = ['admin', 'manager'].includes(sessionCourante()?.role);
     document.getElementById('rappel-seuil-defaut').hidden = !(seuil === null && peutRegler);
   } catch (err) {
@@ -714,7 +718,9 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
         <td style="text-align:right">${p.prix_achat_ht != null
           ? Number(p.prix_achat_ht).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
         <td style="text-align:right">${Number(p.stock) || 0}</td>
-        <td style="text-align:right">
+        <td style="text-align:right;white-space:nowrap">
+          <input type="number" min="0" step="1" class="mobilax-qte" aria-label="Qté en rayon"
+                 value="${stockInitialDefaut === null ? '' : Number(stockInitialDefaut)}" style="width:64px;margin-right:6px">
           <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}">Importer</button>
         </td>
       </tr>`).join('');
@@ -724,16 +730,22 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
 }
 
 /**
- * Importe une pièce dans le stock, puis ouvre sa fiche pour ajuster le prix de vente.
- * Pièce déjà importée (409 `deja_importe`) : aucun doublon, la fiche existante s'ouvre.
- * La quantité ne se règle pas dans la fiche (`updateProduit()` ignore le stock) : elle passe
- * par « Ajuster le stock », qui trace le mouvement — d'où le message.
+ * Importe une pièce dans le stock avec la « Qté en rayon » de sa ligne (ticket 05), puis ouvre
+ * sa fiche pour ajuster le prix de vente. Pièce déjà importée (409 `deja_importe`) : aucun
+ * doublon, la fiche existante s'ouvre, et la quantité saisie n'est PAS ajoutée — le message le
+ * dit. Après l'import, la quantité ne se règle plus dans la fiche (`updateProduit()` ignore le
+ * stock) : elle passe par « Ajuster le stock », qui trace le mouvement.
  */
 async function importerMobilax(mobilaxId, bouton) {
   bouton.disabled = true;
   bouton.textContent = 'Import…';
+  // « Qté en rayon » de la ligne (ticket 05) : vide = non envoyée, le serveur applique le stock
+  // initial par défaut ; une saisie invalide est refusée par le serveur, message affiché
+  const corps = { mobilax_id: mobilaxId };
+  const saisie = bouton.closest('tr')?.querySelector('input.mobilax-qte')?.value.trim() ?? '';
+  if (saisie !== '') corps.quantite_en_rayon = Number(saisie);
   // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
-  const res = (await apiPost('/api/mobilax/import', { mobilax_id: mobilaxId })).data;
+  const res = (await apiPost('/api/mobilax/import', corps)).data;
   const dejaImporte = res?.code === 'deja_importe';
   const produitId = (res?.success || dejaImporte) ? res.data?.produit_id : null;
   if (!produitId) {
@@ -742,9 +754,15 @@ async function importerMobilax(mobilaxId, bouton) {
     bouton.textContent = 'Importer';
     return;
   }
+  // Le message dit ce qui est réellement arrivé à la quantité saisie : entrée en stock, ou —
+  // pièce déjà importée — ignorée (le doublon ne touche jamais au stock existant)
+  const quantite = corps.quantite_en_rayon ?? 0;
   showFlash(dejaImporte
     ? 'Cette pièce est déjà dans votre stock — voici sa fiche.'
-    : 'Pièce importée — ajustez le prix de vente ici, la quantité par « Ajuster le stock ».',
+      + (quantite > 0 ? ` La quantité saisie (${quantite}) n'a pas été ajoutée : passez par « Ajuster le stock ».` : '')
+    : quantite > 0
+      ? `Pièce importée avec ${quantite} en stock — ajustez le prix de vente ici.`
+      : 'Pièce importée — ajustez le prix de vente ici, la quantité par « Ajuster le stock ».',
     dejaImporte ? 'info' : 'success');
   await loadStock();
   closeModal('modal-mobilax');

@@ -5,7 +5,8 @@
  *
  * Routes :
  *   GET  /api/mobilax/produits?q=  — recherche par nom ou EAN13, avec la clé de la boutique
- *   POST /api/mobilax/import       — importe une pièce dans le stock (`{ mobilax_id }`, ticket 04)
+ *   POST /api/mobilax/import       — importe une pièce dans le stock (`{ mobilax_id }`, ticket 04 ;
+ *                                    `quantite_en_rayon?` facultative, ticket 05 réglages de stock)
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
  * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
@@ -30,7 +31,8 @@ mobilax.use('*', authMiddleware)
 const TERME_MIN = 2
 
 /** Statut HTTP de chaque issue du service — le code, lui, part dans le corps. */
-const STATUT_PAR_ERREUR: Record<ErreurMobilax, 404 | 409 | 422 | 429 | 502> = {
+const STATUT_PAR_ERREUR: Record<ErreurMobilax, 400 | 404 | 409 | 422 | 429 | 502> = {
+  quantite_invalide:      400,
   introuvable:            404,
   deja_importe:           409,
   sans_fournisseur:       422,
@@ -84,14 +86,16 @@ mobilax.post('/mobilax/import', requireRole('admin', 'manager'), async (c) => {
   if (isAdminPlateforme(user) || !user.boutique_id)
     return c.json({ success: false, error: 'L\'import dans le stock est réservé aux utilisateurs de la boutique.' }, 403)
 
-  const body = await c.req.json().catch(() => ({})) as { mobilax_id?: unknown }
+  const body = await c.req.json().catch(() => ({})) as { mobilax_id?: unknown; quantite_en_rayon?: unknown }
   const mobilaxId = body.mobilax_id
   if (typeof mobilaxId !== 'number' || !Number.isInteger(mobilaxId) || mobilaxId <= 0)
     return c.json({ success: false, error: 'Identifiant de pièce Mobilax manquant ou invalide.' }, 400)
 
+  // « Qté en rayon » (ticket 05) : validée par le service AVANT tout appel à Mobilax — 400
+  // `quantite_invalide` sans quota brûlé ; absente → stock initial par défaut de la boutique
   const r = await importerProduitMobilax(
     { db: c.get('db'), d1: c.env.DB, kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
-    user.boutique_id, user.sub, mobilaxId,
+    user.boutique_id, user.sub, mobilaxId, body.quantite_en_rayon,
   )
   if (r.ok) return c.json({ success: true, data: { produit_id: r.produit_id } }, 201)
   // 409 `deja_importe` : le produit existant sous `data`, comme en succès — enveloppe du dépôt

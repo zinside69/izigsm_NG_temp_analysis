@@ -438,4 +438,47 @@ describe('importerProduitMobilax()', () => {
     expect(r).toMatchObject({ ok: false, erreur: 'sans_fournisseur' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  // ─── « Qté en rayon » et réglages de stock (ticket 05 reglages-stock-boutique) ───
+  describe('quantité en rayon et réglages de stock', () => {
+    const REGLAGES_STOCK = { boutique_id: 1, marge_taux_defaut: 30, marge_taux_piece: null,
+                             stock_seuil_defaut: 4, stock_initial_defaut: 2 }
+    const mouvementInitial = () => d1.__getCalls().find(c => c.sql.startsWith('INSERT INTO mouvements_stock'))
+
+    it('quantité absente → stock initial par défaut de la boutique, seuil par défaut, entrée valorisée', async () => {
+      db.__setResponse(SQL_REGLAGES, REGLAGES_STOCK)
+      mobilaxRenvoieLaFiche()
+      await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+      expect(insertProduit(d1)).toMatchObject({ stock_actuel: 2, stock_minimum: 4, prix_achat_cump: 44.25 })
+      // L'entrée est tracée ; son motif « Stock initial » se lit dans l'historique, par l'E2E réelle
+      expect(mouvementInitial()).toBeDefined()
+    })
+
+    it('quantité fournie → elle l\'emporte sur le réglage, valorisée au prix relu chez Mobilax', async () => {
+      db.__setResponse(SQL_REGLAGES, REGLAGES_STOCK)
+      mobilaxRenvoieLaFiche()
+      await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242, 5)
+
+      expect(insertProduit(d1)).toMatchObject({ stock_actuel: 5, stock_minimum: 4, prix_achat_cump: 44.25 })
+    })
+
+    it('quantité 0 → produit sans stock, aucun mouvement, coût moyen à 0', async () => {
+      db.__setResponse(SQL_REGLAGES, REGLAGES_STOCK)
+      mobilaxRenvoieLaFiche()
+      await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242, 0)
+
+      expect(insertProduit(d1)).toMatchObject({ stock_actuel: 0, prix_achat_cump: 0 })
+      expect(mouvementInitial()).toBeUndefined()
+    })
+
+    it.each([-1, 1.5, 'abc'])('quantité invalide (%s) → refusée, Mobilax jamais appelé, aucun produit', async (quantite) => {
+      mobilaxRenvoieLaFiche()
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242, quantite as any)
+
+      expect(r).toMatchObject({ ok: false, erreur: 'quantite_invalide' })
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(insertProduit(d1)).toBeUndefined()
+    })
+  })
 })

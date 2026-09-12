@@ -16,8 +16,8 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte, trouverOuCreerCategorie } from './stockService'
-import { getBoutiqueSettings, resoudreTauxMarge } from './boutiqueService'
+import { createProduit, trouverProduitImporte, trouverOuCreerCategorie, estEntierPositifOuNul } from './stockService'
+import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ export interface ProduitMobilax {
 export type ErreurMobilax =
   | 'sans_fournisseur' | 'plusieurs_fournisseurs' | 'sans_cle' | 'cle_illisible'
   | 'cle_refusee' | 'quota' | 'indisponible'
-  | 'introuvable' | 'deja_importe'
+  | 'introuvable' | 'deja_importe' | 'quantite_invalide'
 
 /** Échec nommé, avec le message destiné à l'opérateur. */
 export interface EchecMobilax {
@@ -130,22 +130,34 @@ export async function rechercherProduitsMobilax(
  * moment de l'import — jamais pris dans ce qu'envoie le navigateur (décision du 2026-09-11) :
  * le coût enregistré est celui du fournisseur. Défauts, tous modifiables ensuite : prix de
  * vente = prix d'achat × marge résolue (famille « pièce », sinon défaut boutique ; 0 sans
- * taux — `null` n'est jamais remplacé par un taux inventé, décision du 2026-09-10), stock 0,
- * seuil d'alerte 0 — produit non surveillé, jamais « à commander » (`lib/stockSeuil.ts`,
- * décision du 2026-09-12).
+ * taux — `null` n'est jamais remplacé par un taux inventé, décision du 2026-09-10).
+ *
+ * Réglages de stock (ticket 05 `reglages-stock-boutique`) : seuil d'alerte = seuil par défaut
+ * de la boutique (0 = non surveillé si jamais réglé) ; quantité = « Qté en rayon » saisie, sinon
+ * stock initial par défaut. Une quantité > 0 entre par un mouvement « Stock initial », valorisée
+ * au prix d'achat relu chez Mobilax (`createProduit()`). Une quantité invalide est refusée
+ * **avant** tout appel au fournisseur — aucun quota brûlé.
  *
  * Un produit par pièce : une pièce déjà importée (même fiche fournisseur, même référence) est
  * refusée en `deja_importe`, avec l'identifiant du produit existant.
  *
- * @param deps        Dépendances, plus le binding D1 brut (`createProduit()` et son auditLog)
- * @param boutiqueId  Boutique appelante — propriétaire exclusive du produit créé
- * @param userId      Utilisateur qui importe (mouvement, audit)
- * @param mobilaxId   Identifiant Mobilax de la pièce (issu d'un résultat de recherche)
- * @returns           `{ ok, produit_id }`, ou une erreur nommée
+ * @param deps              Dépendances, plus le binding D1 brut (`createProduit()` et son auditLog)
+ * @param boutiqueId        Boutique appelante — propriétaire exclusive du produit créé
+ * @param userId            Utilisateur qui importe (mouvement, audit)
+ * @param mobilaxId         Identifiant Mobilax de la pièce (issu d'un résultat de recherche)
+ * @param quantiteEnRayon   Pièces déjà en rayon, entier ≥ 0 ; absente → stock initial par défaut
+ * @returns                 `{ ok, produit_id }`, ou une erreur nommée
  */
 export async function importerProduitMobilax(
-  deps: DepsMobilax & { d1: D1Database }, boutiqueId: number, userId: number, mobilaxId: number
+  deps: DepsMobilax & { d1: D1Database }, boutiqueId: number, userId: number, mobilaxId: number,
+  quantiteEnRayon?: unknown
 ): Promise<ResultatImportMobilax> {
+  // Validation avant tout appel au fournisseur : une saisie fausse ne coûte aucun quota
+  const quantiteFournie = quantiteEnRayon != null
+  // Un nombre JSON exigé (comme `mobilax_id`), puis la règle commune des quantités de départ
+  if (quantiteFournie && !(typeof quantiteEnRayon === 'number' && estEntierPositifOuNul(quantiteEnRayon)))
+    return echec('quantite_invalide', 'La quantité en rayon doit être un entier positif ou nul.')
+
   const cle = await resoudreCle(deps, boutiqueId)
   if (!cle.ok) return cle.echec
 
@@ -169,7 +181,11 @@ export async function importerProduitMobilax(
   // Famille déduite de la branche Mobilax, puis marge résolue sur CETTE famille (un accessoire
   // prend le taux des accessoires, pas celui des pièces) — décisions du 2026-09-11
   const famille = await familleDepuisCategorie(deps, boutiqueId, cle.apiKey, fiche.categorie_id)
-  const taux = resoudreTauxMarge(await getBoutiqueSettings(deps.db, boutiqueId), famille)
+  // Réglages lus une fois : marge, seuil d'alerte et stock initial par défaut
+  const reglages = await getBoutiqueSettings(deps.db, boutiqueId)
+  const taux = resoudreTauxMarge(reglages, famille)
+  const defauts = resoudreDefautsStock(reglages)
+  const quantite = quantiteFournie ? quantiteEnRayon as number : defauts.stock_initial
   const prixVente = taux === null ? 0 : Math.round(fiche.prix_achat_ht * (1 + taux / 100) * 100) / 100
 
   // Catégorie locale = catégorie Mobilax la plus fine, trouvée ou créée dans CETTE boutique
@@ -189,8 +205,8 @@ export async function importerProduitMobilax(
       marque:                fiche.marque,
       prix_achat_ht:         fiche.prix_achat_ht,
       prix_vente_ht:         prixVente,
-      stock_actuel:          0,
-      stock_minimum:         0,
+      stock_actuel:          quantite,
+      stock_minimum:         defauts.seuil_alerte,
       fournisseur:           cle.fiche.nom,
       reference_fournisseur: fiche.reference,
       code_barre:            fiche.ean13,

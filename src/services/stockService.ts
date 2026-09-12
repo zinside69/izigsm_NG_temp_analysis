@@ -256,6 +256,18 @@ export const ERREUR_PRIX_ACHAT_NEGATIF = 'Le prix d\'achat ne peut pas être né
 export const ERREUR_QUANTITE_DEPART_INVALIDE = 'La quantité de départ doit être un entier positif ou nul.'
 
 /**
+ * Règle commune d'une quantité de départ : entier ≥ 0. Partagée par la création manuelle et par
+ * l'import depuis un fournisseur connecté (`mobilaxService`) — l'import CSV lit ses cellules
+ * texte par `entierCsv()`, même règle.
+ *
+ * @param n  Quantité déjà convertie en nombre (`NaN` pour une saisie illisible)
+ * @returns  `true` si c'est un entier positif ou nul
+ */
+export function estEntierPositifOuNul(n: number): boolean {
+  return Number.isInteger(n) && n >= 0
+}
+
+/**
  * Règle unique : un prix d'achat ne peut pas être négatif (décision de l'exploitant, 2026-09-12).
  * Depuis le ticket 02 `reglages-stock-boutique`, le prix d'achat valorise le stock initial au
  * coût moyen — un prix négatif ferait baisser la valeur du stock.
@@ -343,8 +355,7 @@ export async function createProduit(
   // Toute validation précède l'écriture : rien n'est inséré pour un prix ou une quantité refusés
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
   // Entier ≥ 0 exigé : un « abc » donnait NaN, que `NaN < 0` laissait passer ; 1.5 aussi
-  const quantiteDepart = Number(data.stock_actuel)
-  if (data.stock_actuel != null && !(Number.isInteger(quantiteDepart) && quantiteDepart >= 0))
+  if (data.stock_actuel != null && !estEntierPositifOuNul(Number(data.stock_actuel)))
     throw new Error(ERREUR_QUANTITE_DEPART_INVALIDE)
 
   // Seuil absent du corps → seuil d'alerte par défaut de la boutique (0 si jamais réglé), lu

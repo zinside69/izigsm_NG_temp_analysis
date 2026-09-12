@@ -88,6 +88,9 @@ test.describe('Stock — recherche Mobilax', () => {
     await expect(premiere).toBeVisible({ timeout: 20_000 })
     const nomPiece = (await premiere.locator('td').first().innerText()).trim()
 
+    // Import avec 2 pièces déjà en rayon (ticket 05 réglages de stock) : même appel qu'avant,
+    // aucun quota brûlé en plus
+    await premiere.locator('input.mobilax-qte').fill('2')
     // Import : la fiche du produit s'ouvre, nom repris, prix d'achat relu chez Mobilax
     await premiere.getByRole('button', { name: 'Importer' }).click()
     await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1', { timeout: 20_000 })
@@ -108,6 +111,81 @@ test.describe('Stock — recherche Mobilax', () => {
     const produits = await request.get('/api/produits?limit=200', { headers: { Authorization: `Bearer ${tenant.accessToken}` } })
     const lignes = (await produits.json()).data.filter((p: any) => p.nom === nomPiece)
     expect(lignes).toHaveLength(1)
+    // Les 2 pièces déclarées : en stock, valorisées au prix d'achat relu chez Mobilax, et
+    // entrées dans l'historique sous le motif commun « Stock initial » (aucun appel Mobilax)
+    expect(lignes[0].stock_actuel).toBe(2)
+    expect(lignes[0].prix_achat_cump).toBe(lignes[0].prix_achat_ht)
+    const fiche = await request.get(`/api/produits/${lignes[0].id}`, { headers: { Authorization: `Bearer ${tenant.accessToken}` } })
+    expect((await fiche.json()).data.mouvements.map((m: any) => [m.type_mouvement, m.quantite, m.motif]))
+      .toEqual([['entree', 2, 'Stock initial']])
+  })
+
+  test('« Qté en rayon » : pré-remplie par le stock initial par défaut, transmise à l\'import (API simulée)', async ({ page, request }) => {
+    const tenant  = await createTenantAdmin(request)
+    const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+    const reglage = await request.put(`/api/boutiques/${tenant.boutiqueId}/stock`, { headers, data: { stock_initial_defaut: 3 } })
+    expect(reglage.status(), await reglage.text()).toBe(200)
+
+    // Fournisseur simulé : aucun quota brûlé ; l'import est intercepté pour lire ce que l'écran envoie
+    await page.route('**/api/mobilax/produits*', route => route.fulfill({
+      json: { success: true, data: { total: 1, page: 1, pages: 1, produits: [{
+        mobilax_id: 42, nom: 'Écran simulé', ean13: '123', prix_achat_ht: 10, stock: 5,
+      }] } },
+    }))
+    let corpsImport: unknown = null
+    await page.route('**/api/mobilax/import*', route => {
+      corpsImport = route.request().postDataJSON()
+      return route.fulfill({ status: 502, json: { success: false, error: 'Mobilax simulé.', code: 'indisponible' } })
+    })
+
+    await seConnecter(page, { email: tenant.email, password: tenant.password })
+    await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+    // La valeur pré-remplie vient des réglages, lus au chargement de la page
+    const reglagesLus = page.waitForResponse(r =>
+      new RegExp(`/api/boutiques/${tenant.boutiqueId}(\\?|$)`).test(r.url()) && r.request().method() === 'GET')
+    await page.goto('/stock')
+    await reglagesLus
+    await page.click('#btn-mobilax')
+    await chercherDansStock(page, 'ecran')
+
+    const champ = page.locator('#mobilax-resultats tr').first().locator('input.mobilax-qte')
+    await expect(champ).toHaveValue('3')
+    await champ.fill('4')
+    await page.locator('#mobilax-resultats tr').first().getByRole('button', { name: 'Importer' }).click()
+    await expect.poll(() => corpsImport).toEqual({ mobilax_id: 42, quantite_en_rayon: 4 })
+  })
+
+  /** Recherche simulée d'un seul article, import simulé avec la réponse donnée (aucun quota). */
+  async function rechercheEtImportSimules(page: Page, request: any, reponseImport: { status: number; json: object }) {
+    const tenant = await createTenantAdmin(request)
+    await page.route('**/api/mobilax/produits*', route => route.fulfill({
+      json: { success: true, data: { total: 1, page: 1, pages: 1, produits: [{
+        mobilax_id: 42, nom: 'Écran simulé', ean13: '123', prix_achat_ht: 10, stock: 5,
+      }] } },
+    }))
+    await page.route('**/api/mobilax/import*', route => route.fulfill(reponseImport))
+    await seConnecter(page, { email: tenant.email, password: tenant.password })
+    await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+    await page.goto('/stock')
+    await page.click('#btn-mobilax')
+    await chercherDansStock(page, 'ecran')
+    const ligne = page.locator('#mobilax-resultats tr').first()
+    await ligne.locator('input.mobilax-qte').fill('3')
+    await ligne.getByRole('button', { name: 'Importer' }).click()
+  }
+
+  test('import avec une quantité saisie : le message dit combien de pièces sont entrées (API simulée)', async ({ page, request }) => {
+    await rechercheEtImportSimules(page, request, { status: 201, json: { success: true, data: { produit_id: 999999 } } })
+    await expect(page.locator('.flash').last()).toContainText('3 en stock')
+  })
+
+  test('pièce déjà importée avec une quantité saisie : l\'écran dit qu\'elle n\'a pas été ajoutée (API simulée)', async ({ page, request }) => {
+    await rechercheEtImportSimules(page, request, { status: 409, json: {
+      success: false, error: 'Cette pièce est déjà dans votre stock.', code: 'deja_importe', data: { produit_id: 999999 },
+    } })
+    // Vocabulaire du glossaire : la quantité du fournisseur est une disponibilité, pas un stock
+    await expect(page.locator('#modal-mobilax')).toContainText('Dispo. fournisseur')
+    await expect(page.locator('.flash').last()).toContainText('n\'a pas été ajoutée')
   })
 
   test('boutique sans fiche Mobilax : message qui dit quoi faire, pas une erreur muette', async ({ page, request }) => {
