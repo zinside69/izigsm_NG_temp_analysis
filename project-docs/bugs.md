@@ -1,5 +1,15 @@
 # iziGSM — Bugs connus
 
+## 🟡 Reconditionnement : un produit naît avec 1 en stock sans mouvement de stock (trouvé le 2026-09-12, NON corrigé)
+
+Trouvé en cadrant les réglages de stock par boutique. `reconditionnementService.ts:528-531` crée
+le produit revendable par un INSERT direct (pas `createProduit()`), `stock_actuel = 1`,
+`stock_minimum = 0`, **sans écrire de ligne `mouvements_stock`**. Viole la règle du glossaire
+(`CONTEXT.md` § Mouvement de stock) : la quantité d'un produit ne varie que par un mouvement.
+Effet : l'historique du produit ne dit pas d'où vient la pièce, et le coût moyen
+(`prix_achat_cump`) reste à 0. Hors du chantier « réglages de stock » (décision du 2026-09-12),
+à traiter à part.
+
 ## ✅ Fiche produit : « Notes » jamais enregistrées, et icônes d'actions vides (trouvé le 2026-09-11, **CORRIGÉ le 2026-09-11**, non déployé)
 
 Deux défauts **antérieurs** à l'intégration Mobilax, révélés par le retour de l'exploitant sur le

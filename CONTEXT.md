@@ -89,8 +89,40 @@ la continuité légale. Table `sequences`.
 
 **Produit** — article vendable ou pièce détachée, rangé en `categories`.
 
-**Mouvement de stock** — entrée ou sortie, source unique de vérité de la quantité.
-⚠ À confirmer : le stock est-il recalculé depuis les mouvements ou dénormalisé ?
+**Mouvement de stock** — entrée ou sortie de quantité. Toute variation de la quantité d'un
+produit en passe par un ; la quantité courante est tenue à jour sur le produit à chaque
+mouvement (tranché le 2026-09-12 d'après le code).
+
+**Stock initial** — quantité déjà en rayon déclarée à la création d'un produit, entrée par un
+mouvement de stock et valorisée au prix d'achat connu.
+
+**Seuil d'alerte** — quantité à partir de laquelle un produit est à commander. **0 = produit
+non surveillé** ; pour n'être alerté qu'à la rupture, seuil 1.
+_À éviter_ : stock minimum.
+
+**À commander** — état d'un produit surveillé dont la quantité est inférieure ou égale à son
+seuil d'alerte.
+_À éviter_ : stock bas, alerte stock.
+
+**Rupture** — quantité nulle, que le produit soit surveillé ou non. Un état, pas une alerte.
+
+**Fournisseur** — chez qui une boutique achète. Chaque fiche fournisseur appartient à une
+boutique.
+_À éviter_ : plateforme (réservé à l'exploitant du SaaS), grossiste.
+
+**Fournisseur connecté** — fournisseur dont le catalogue est interrogé en direct, avec la clé
+propre de la boutique (qui porte son tarif négocié).
+
+**Article fournisseur** — entrée du catalogue d'un fournisseur connecté. N'est pas un produit
+de la boutique.
+_À éviter_ : pièce Mobilax.
+
+**Produit importé** — produit créé depuis un article fournisseur, dont il garde le lien. Il se
+gère ensuite comme tout produit.
+
+**Disponibilité fournisseur** — quantité qu'un fournisseur connecté annonce pouvoir livrer, lue
+à la demande, jamais conservée. Distincte du stock de la boutique.
+_À éviter_ : stock fournisseur.
 
 **Service** — prestation facturable sans stock (main d'œuvre, diagnostic).
 `categories_services` + `services`.

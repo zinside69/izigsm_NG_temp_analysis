@@ -1,5 +1,39 @@
 # iziGSM — Décisions
 
+## 2026-09-12 — Réglages de stock par boutique (grilling, 21 questions)
+
+Né de la consigne de l'exploitant (« chaque tenant gère son stock comme il l'entend »). Cadré par
+`/grill-with-docs` ; vocabulaire fixé dans `CONTEXT.md` § Stock & achats (stock initial, seuil
+d'alerte, à commander, rupture, fournisseur, fournisseur connecté, article fournisseur, produit
+importé, disponibilité fournisseur).
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Réglages | **Deux : seuil d'alerte par défaut, stock initial par défaut** — 0 tant que rien n'est réglé | Seuil par famille (plus tard, le seuil se règle déjà par produit) |
+| Sens du seuil 0 | **Toujours « non surveillé »**, aucun réglage ; alerte à la rupture = seuil 1. `sqlSousSeuil()` inchangé | Réglage « seuil 0 = alerter à la rupture » : un même mot, deux sens selon la boutique |
+| Portée du seuil par défaut | **Toute création** : formulaire manuel pré-rempli, CSV si colonne vide, import fournisseur. Fin des défauts 2 / 5 / 5 / 0 | Imports seuls · fournisseur connecté seul |
+| Stock initial | **Import fournisseur : champ « Qté en rayon » par ligne de résultat**, pré-rempli par le réglage · formulaire manuel : 0, saisi si on a les pièces · CSV : sa colonne, sinon 0 · import en masse (futur) : le réglage, sans saisie | Mini-fenêtre de confirmation (un clic par pièce) · pré-remplir le formulaire manuel (fait enregistrer des pièces absentes) |
+| Coût du stock initial | **Mouvement « Stock initial » + coût moyen = prix d'achat connu**, sur tous les chemins ; défaut antérieur corrigé au passage (`prix_achat_cump` jamais posé à la création) | 0 € jusqu'à la 1re réception (fausse la valeur du stock) |
+| Produits déjà valorisés à 0 € | **Rien réécrit** | Migration de rattrapage : une supposition invisible remplace une erreur visible |
+| Rétroactivité | **Aucune** : un réglage ne vaut que pour les créations suivantes ; pas de bouton « appliquer à tous » dans ce chantier | Geste de masse, à cadrer à part |
+| Droits | **Comme les marges** : admin et manager de la boutique, admin plateforme pour une boutique cliente (journalisé, ADR 0001) | Boutique seule : incohérent avec les marges |
+| Écran | **Onglet « Stock » dans Réglages, route d'écriture dédiée** (remplacement des deux valeurs) + **rappel discret sur la page Stock** tant qu'aucun seuil par défaut n'est enregistré | Dans l'onglet Marges · via `PUT /settings` (corps partiels, piège déjà payé) |
+
+**Hors chantier** : le reconditionnement crée un produit sans mouvement (`bugs.md` 🟡). Aucune ADR :
+choix réversibles (deux colonnes, un réglage).
+
+## 2026-09-12 — Ticket 05 Mobilax : rafraîchir un produit importé
+
+| Question | Décision | Écarté |
+|---|---|---|
+| Stock Mobilax | **Affiché sur la fiche, jamais enregistré** (« Chez Mobilax : 12 en stock, vérifié à 10:42 ») | Mémorisé (colonne + migration) · ignoré |
+| Prix | **Prix d'achat mis à jour, prix de vente gardé**, nouvelle marge affichée — la boutique décide seule de son prix | Vente recalculée par la marge (écrase une saisie) · proposer sans écrire |
+| Coutures de test | **Service, route, E2E en préproduction réelle** | — |
+
+Mesure : `/products/lookup?reference=` rend prix **et** disponibilité en un appel (détail dans
+le ticket 05). Le ticket disait « met à jour le produit local » pour le stock aussi : contredit
+l'invariant du jour (stock = mouvements tracés), tranché ci-dessus.
+
 ## 2026-09-12 — Stock : seuil 0, quantité de la fiche, doublon d'import, étanchéité par boutique
 
 Trois défauts consignés au checkpoint 102, arbitrés par l'exploitant puis corrigés le même jour ;

@@ -580,8 +580,11 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   ⊥ réécrire `stock_actuel <= stock_minimum` à la main : `tests/stock-sous-seuil.test.ts` fait
   échouer la suite (scan statique de `src/`, commentaires retirés). La rupture (stock 0) reste
   un état affiché à part (`nb_ruptures`, badge), ce fragment ne dit que « à commander ».
-  Règle **commune pour l'instant** : un réglage par boutique est demandé (`todo.md`), il devra
-  être lu par ce fragment, jamais par un second.
+  Règle **commune à toutes les boutiques, par décision** (grilling du 2026-09-12, Q8) : le seuil 0
+  garde un seul sens, **aucun réglage de boutique ne le redéfinit** — qui veut être alerté à la
+  rupture met un seuil de 1. ⊥ faire lire un réglage à ce fragment. Les réglages de stock par
+  boutique (chantier cadré, `decisions.md`) ne portent que sur les **valeurs par défaut à la
+  création** (seuil d'alerte, stock initial).
 - **Le stock d'un produit existant ne bouge que par un mouvement tracé.** `PUT /produits/:id`
   ignore `stock_actuel` ; la fiche l'affiche en `readOnly` avec « Ajuster le stock »
   (`#btn-stock-ajuster`). ⊥ rendre ce champ saisissable en modification sans convertir la

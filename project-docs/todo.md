@@ -613,13 +613,15 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       `sqlSousSeuil()` (`src/lib/stockSeuil.ts`) sur les 7 sites SQL + `stock.js` ; la rupture
       reste un état affiché. Garde-fou `tests/stock-sous-seuil.test.ts` (vrai SQLite + scan
       statique) et `tests/e2e/stock-seuil-zero.spec.ts`, tous deux vus rouges
-- [ ] 🟠 **Réglages de stock propres à chaque boutique** (demandé le 2026-09-12, `decisions.md`) —
-      chaque boutique gère son stock comme elle l'entend : **seuil par défaut à l'import**,
-      **« une rupture à seuil 0 est-elle à commander ? »** (défaut = non, règle du 2026-09-12),
-      **stock initial à l'import**. Aujourd'hui codés en dur (0/0, `importerProduitMobilax()`) ou
-      communs (`sqlSousSeuil()`). Colonnes `boutique_settings` (migration) + onglet Réglages ;
-      `sqlSousSeuil()` devra alors lire le réglage de la boutique. Valable pour tout fournisseur,
-      pas seulement Mobilax. À cadrer par `/mattpocock-skills:grill-with-docs`
+- [ ] 🟠 **Réglages de stock propres à chaque boutique** (demandé le 2026-09-12) — **CADRÉ le
+      2026-09-12** par `/grill-with-docs` (21 questions, `decisions.md` même date, glossaire
+      `CONTEXT.md`) : **seuil d'alerte par défaut** et **stock initial par défaut** (0 si rien
+      réglé), seuil par défaut sur toute création (formulaire, CSV, import fournisseur), champ
+      « Qté en rayon » à l'import, mouvement « Stock initial » + coût moyen = prix d'achat,
+      onglet Réglages › Stock avec route dédiée, rappel sur la page Stock. **Le seuil 0 garde
+      un seul sens (non surveillé) : `sqlSousSeuil()` ne lit AUCUN réglage** — l'hypothèse
+      inverse notée ici le matin est abandonnée. Prochaine étape : `/mattpocock-skills:to-spec`
+      (tapé par l'exploitant), puis `/to-tickets`
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06
