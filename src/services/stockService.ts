@@ -24,7 +24,7 @@ import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
 // Seul point de résolution des valeurs par défaut de stock (`CLAUDE.md` § Stock). Pas de cycle :
 // boutiqueService n'importe de ce fichier qu'un type.
-import { resoudreDefautsStock, type DefautsStock } from './boutiqueService'
+import { resoudreDefautsStock, type DefautsStock, type DefautsStockEffectifs } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -260,6 +260,59 @@ export function prixAchatNegatif(prix: unknown): boolean {
 }
 
 /**
+ * Coût moyen d'un produit à sa création (règle « sur tous les chemins », `decisions.md`) : des
+ * pièces déjà en rayon valent leur prix d'achat ; sans pièce, 0 (`DEFAULT` de la colonne).
+ *
+ * @param quantite   Quantité de départ
+ * @param prixAchat  Prix d'achat HT connu à la création
+ * @returns          Valeur à écrire dans `prix_achat_cump`
+ */
+function coutMoyenInitial(quantite: number, prixAchat: number): number {
+  return quantite > 0 ? prixAchat : 0
+}
+
+/**
+ * Nombre d'une cellule CSV, virgule décimale admise (export tableur français : « 12,50 »).
+ * `parseFloat` seul lisait 12 — le coût moyen du stock initial en héritait.
+ *
+ * @param brut  Contenu de la cellule, absent permis
+ * @returns     Le nombre, ou `NaN` si la cellule est vide ou illisible
+ */
+function nombreCsv(brut: string | undefined): number {
+  return parseFloat((brut ?? '').trim().replace(',', '.'))
+}
+
+/**
+ * Entier ≥ 0 d'une cellule CSV, strict : « 3 » oui ; « -3 », « 2.5 », « abc », « 0x10 » non.
+ *
+ * @param brut    Contenu de la cellule, absent permis
+ * @param defaut  Valeur d'une cellule vide ou absente
+ * @returns       L'entier, `defaut` si vide, `null` si invalide (la ligne doit être ignorée)
+ */
+function entierCsv(brut: string | undefined, defaut: number): number | null {
+  const texte = (brut ?? '').trim()
+  if (texte === '') return defaut
+  return /^\d+$/.test(texte) ? Number(texte) : null
+}
+
+/**
+ * Valeurs par défaut de stock de la boutique, telles que les chemins de création de ce fichier
+ * les appliquent (`createProduit()`, `importCatalogueCsv()`). Seul lecteur de ces réglages sur
+ * D1 brut — ces deux fonctions y restent pour `auditLog()` ; la résolution `NULL` → 0 est celle
+ * de `resoudreDefautsStock()`, jamais un repli local.
+ *
+ * @param db          Instance D1Database
+ * @param boutiqueId  Boutique dont on lit les réglages
+ * @returns           `{ seuil_alerte, stock_initial }`, entiers ≥ 0 (0 si jamais réglé)
+ */
+async function lireDefautsStock(db: D1Database, boutiqueId: number): Promise<DefautsStockEffectifs> {
+  return resoudreDefautsStock(
+    await db.prepare('SELECT stock_seuil_defaut, stock_initial_defaut FROM boutique_settings WHERE boutique_id = ?')
+      .bind(boutiqueId).first<DefautsStock>()
+  )
+}
+
+/**
  * Crée un nouveau produit.
  * Si stock_actuel > 0, enregistre automatiquement un mouvement 'entree' (stock initial) et pose
  * le coût moyen (`prix_achat_cump`) au prix d'achat HT saisi ; sinon le coût moyen vaut 0.
@@ -285,10 +338,7 @@ export async function createProduit(
   // Seuil absent du corps → seuil d'alerte par défaut de la boutique (0 si jamais réglé), lu
   // seulement dans ce cas ; plus de repli 5 codé en dur (ticket 03 `reglages-stock-boutique`).
   // Un seuil explicite, même 0, l'emporte.
-  const seuilAlerte = data.stock_minimum ?? resoudreDefautsStock(
-    await db.prepare('SELECT stock_seuil_defaut, stock_initial_defaut FROM boutique_settings WHERE boutique_id = ?')
-      .bind(boutiqueId).first<DefautsStock>()
-  ).seuil_alerte
+  const seuilAlerte = data.stock_minimum ?? (await lireDefautsStock(db, boutiqueId)).seuil_alerte
 
   const famille = FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille! : 'piece'
@@ -324,7 +374,7 @@ export async function createProduit(
     data.code_barre            ?? null,
     data.description           ?? null,
     options.fournisseur_id     ?? null,
-    stockInitial > 0 ? (data.prix_achat_ht ?? 0) : 0,
+    coutMoyenInitial(stockInitial, data.prix_achat_ht ?? 0),
   ).first<{ id: number }>()
 
   const produitId = result!.id
@@ -605,11 +655,18 @@ export async function createCategorie(
  * Parse et importe un catalogue produits depuis un CSV fournisseur.
  *
  * Format CSV (1ère ligne = en-têtes, séparateur , ou ;) :
- *   sku, nom, prix_achat_ht, prix_vente_ht, stock_actuel, famille, tva_taux, marque, fournisseur
+ *   sku, nom, prix_achat_ht, prix_vente_ht, stock_actuel, stock_minimum, famille, tva_taux, marque,
+ *   fournisseur
  *
  * Règles métier :
  *   - SKU connu → UPDATE (nom, prix, famille, fournisseur) + ajustement stock si différent
- *   - SKU absent/inconnu → INSERT nouveau produit
+ *   - SKU absent/inconnu → INSERT nouveau produit (ticket 04 `reglages-stock-boutique`) :
+ *       · `stock_minimum` vide → seuil d'alerte par défaut de la boutique ; rempli → sa valeur,
+ *         même 0 ; rempli mais pas un entier ≥ 0 → ligne ignorée
+ *       · `stock_actuel` vide → 0, aucun mouvement ; > 0 → mouvement d'entrée et coût moyen
+ *         (`prix_achat_cump`) au prix d'achat de la ligne ; rempli mais pas un entier ≥ 0 →
+ *         ligne ignorée (jamais de stock fictif)
+ *   - Prix et TVA : virgule décimale admise (« 12,50 »), pour tous les chemins
  *   - Colonne obligatoire : nom
  *   - Famille validée contre FAMILLES, défaut 'piece' si invalide
  *   - Limite 500 lignes par import (anti-abus)
@@ -655,8 +712,12 @@ export async function importCatalogueCsv(
   const iTva     = idx('tva_taux')
   const iMarque  = idx('marque')
   const iFourn   = idx('fournisseur')
+  const iSeuil   = idx('stock_minimum')
 
   if (iNom === -1) throw new Error('Colonne "nom" obligatoire introuvable dans le CSV.')
+
+  // Réglages lus une fois pour tout le fichier : une ligne sans seuil prend le seuil par défaut
+  const defauts = await lireDefautsStock(db, boutiqueId)
 
   const dataLines = lines.slice(1).filter(l => l.trim() !== '').slice(0, 500)
 
@@ -672,11 +733,11 @@ export async function importCatalogueCsv(
       if (!nom) { skipped++; errors.push(`Ligne ${num} : nom manquant — ignorée.`); continue }
 
       const sku     = iSku    >= 0 && row[iSku]?.trim()   ? row[iSku].trim()  : null
-      const paHt    = iPaHt   >= 0 ? parseFloat(row[iPaHt]  ?? '0') || 0  : 0
+      const paHt    = iPaHt   >= 0 ? nombreCsv(row[iPaHt]) || 0  : 0
       if (prixAchatNegatif(paHt)) { skipped++; errors.push(`Ligne ${num} : prix d'achat négatif — ignorée.`); continue }
-      const pvHt    = iPvHt   >= 0 ? parseFloat(row[iPvHt]  ?? '0') || 0  : 0
+      const pvHt    = iPvHt   >= 0 ? nombreCsv(row[iPvHt]) || 0  : 0
       const stock   = iStock  >= 0 ? parseInt(row[iStock]   ?? '0', 10) || 0 : 0
-      const tva     = iTva    >= 0 ? parseFloat(row[iTva]   ?? '20') || 20 : 20
+      const tva     = iTva    >= 0 ? nombreCsv(row[iTva]) || 20 : 20
       const marque  = iMarque >= 0 ? row[iMarque]?.trim() || null : null
       const fourn   = iFourn  >= 0 ? row[iFourn]?.trim()  || null : null
       const famRaw  = iFamille >= 0 ? row[iFamille]?.trim().toLowerCase() : ''
@@ -718,22 +779,34 @@ export async function importCatalogueCsv(
         }
       }
 
-      // INSERT nouveau produit
+      // Seuil d'alerte du nouveau produit — lu ici, après la mise à jour d'un produit existant,
+      // qui n'est pas concernée (ticket 04). Colonne vide → réglage ; remplie → sa valeur.
+      const seuil = entierCsv(iSeuil >= 0 ? row[iSeuil] : undefined, defauts.seuil_alerte)
+      if (seuil === null) { skipped++; errors.push(`Ligne ${num} : seuil d'alerte invalide — ignorée.`); continue }
+
+      // Quantité du nouveau produit : vide → 0 ; remplie → entier ≥ 0, sinon ligne ignorée — un
+      // « -3 » insérait un stock négatif sans mouvement, un « abc » devenait 0 en silence (story 20)
+      const qte = entierCsv(iStock >= 0 ? row[iStock] : undefined, 0)
+      if (qte === null) { skipped++; errors.push(`Ligne ${num} : quantité invalide — ignorée.`); continue }
+
+      // INSERT nouveau produit — coût moyen au prix d'achat de la ligne si des pièces sont
+      // déclarées (valeur du stock juste dès l'import), 0 sinon (`DEFAULT` de la colonne)
       const res = await db.prepare(`
         INSERT INTO produits
           (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-           tva_taux, stock_actuel, stock_minimum, fournisseur)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 5, ?)
+           tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id
-      `).bind(boutiqueId, sku, nom, marque, famille, paHt, pvHt, tva, stock, fourn)
+      `).bind(boutiqueId, sku, nom, marque, famille, paHt, pvHt, tva, qte, seuil, fourn,
+              coutMoyenInitial(qte, paHt))
         .first<{ id: number }>()
 
-      if (res && stock > 0) {
+      if (res && qte > 0) {
         await db.prepare(`
           INSERT INTO mouvements_stock
             (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
           VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
-        `).bind(res.id, boutiqueId, stock, stock, userId).run()
+        `).bind(res.id, boutiqueId, qte, qte, userId).run()
       }
 
       imported++

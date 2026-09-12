@@ -248,11 +248,13 @@ const SQL_IMPORT_UPDATE_PRODUIT = n(`
   WHERE id = ?
 `)
 
+// Params : boutique(0), sku(1), nom(2), marque(3), famille(4), prix_achat_ht(5), prix_vente_ht(6),
+// tva(7), stock_actuel(8), stock_minimum(9), fournisseur(10), prix_achat_cump(11)
 const SQL_IMPORT_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-     tva_taux, stock_actuel, stock_minimum, fournisseur)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 5, ?)
+     tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -994,6 +996,71 @@ describe('stockService', () => {
 
       expect(result).toMatchObject({ imported: 0, updated: 0, skipped: 1 })
       expect(result.errors).toEqual(['Ligne 2 : prix d\'achat négatif — ignorée.'])
+      expect(db.__getCalls().some(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)).toBe(false)
+    })
+
+    // ─── Réglages de stock (ticket 04) ────────────────────────────────────────
+    const CSV_REGLAGES = 'nom,prix_achat_ht,stock_actuel,stock_minimum'
+
+    it('quantité remplie mais pas un entier ≥ 0 → ligne ignorée, rien d\'écrit, et le dit', async () => {
+      const csv = `${CSV_REGLAGES}\nNégative,10,-3,\nTexte,10,abc,\nDécimale,10,2.5,`
+      const result = await importCatalogueCsv(db as any, 1, 1, csv)
+
+      expect(result).toMatchObject({ imported: 0, skipped: 3 })
+      expect(result.errors).toEqual([2, 3, 4].map(n => `Ligne ${n} : quantité invalide — ignorée.`))
+      expect(db.__getCalls().some(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)).toBe(false)
+    })
+
+    it('décimales à virgule (export « ; ») : prix d\'achat et coût moyen exacts', async () => {
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 63 })
+
+      await importCatalogueCsv(db as any, 1, 1, 'nom;prix_achat_ht;prix_vente_ht;stock_actuel\nDécimal;12,50;19,90;2')
+
+      const insert = db.__getCalls().find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)!
+      expect([insert.params[5], insert.params[6], insert.params[11]]).toEqual([12.5, 19.9, 12.5])
+    })
+
+    it('colonne seuil vide → seuil d\'alerte par défaut de la boutique ; quantité vide → 0 sans mouvement', async () => {
+      db.__setResponse(SQL_DEFAUTS_STOCK, { stock_seuil_defaut: 3, stock_initial_defaut: null })
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 60 })
+
+      await importCatalogueCsv(db as any, 1, 1, `${CSV_REGLAGES}\nSans seuil,10,,`)
+
+      const calls  = db.__getCalls()
+      const insert = calls.find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)!
+      expect(insert.params[9]).toBe(3)   // seuil
+      expect(insert.params[8]).toBe(0)   // stock
+      expect(insert.params[11]).toBe(0)  // coût moyen
+      expect(calls.some(c => c.sql === SQL_IMPORT_MOUVEMENT_ENTREE)).toBe(false)
+    })
+
+    it('colonne seuil remplie → sa valeur l\'emporte sur le réglage, même 0', async () => {
+      db.__setResponse(SQL_DEFAUTS_STOCK, { stock_seuil_defaut: 3, stock_initial_defaut: null })
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 61 })
+
+      await importCatalogueCsv(db as any, 1, 1, `${CSV_REGLAGES}\nSeuil zéro,10,,0`)
+
+      expect(db.__getCalls().find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)!.params[9]).toBe(0)
+    })
+
+    it('quantité > 0 → mouvement d\'entrée et coût moyen au prix d\'achat de la ligne', async () => {
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 62 })
+
+      await importCatalogueCsv(db as any, 1, 1, `${CSV_REGLAGES}\nAvec stock,10,2,`)
+
+      const calls = db.__getCalls()
+      expect(calls.find(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)!.params[11]).toBe(10)
+      expect(calls.find(c => c.sql === SQL_IMPORT_MOUVEMENT_ENTREE)!.params).toEqual([62, 1, 2, 2, 1])
+    })
+
+    it('seuil rempli mais invalide → ligne ignorée, rien d\'écrit, et le dit', async () => {
+      const result = await importCatalogueCsv(db as any, 1, 1, `${CSV_REGLAGES}\nSeuil texte,10,,abc\nSeuil négatif,10,,-1`)
+
+      expect(result).toMatchObject({ imported: 0, skipped: 2 })
+      expect(result.errors).toEqual([
+        'Ligne 2 : seuil d\'alerte invalide — ignorée.',
+        'Ligne 3 : seuil d\'alerte invalide — ignorée.',
+      ])
       expect(db.__getCalls().some(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)).toBe(false)
     })
 
