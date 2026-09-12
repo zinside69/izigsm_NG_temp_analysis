@@ -620,8 +620,12 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       « Qté en rayon » à l'import, mouvement « Stock initial » + coût moyen = prix d'achat,
       onglet Réglages › Stock avec route dédiée, rappel sur la page Stock. **Le seuil 0 garde
       un seul sens (non surveillé) : `sqlSousSeuil()` ne lit AUCUN réglage** — l'hypothèse
-      inverse notée ici le matin est abandonnée. Prochaine étape : `/mattpocock-skills:to-spec`
-      (tapé par l'exploitant), puis `/to-tickets`
+      inverse notée ici le matin est abandonnée. **Spec + 5 tickets publiés le 2026-09-12**
+      (`.scratch/reglages-stock-boutique/`) : 01 onglet Réglages › Stock · 02 stock initial
+      valorisé (01 et 02 sans bloqueur) · 03 seuil par défaut manuel + rappel (← 01) · 04 import
+      CSV (← 01, 03) · 05 import fournisseur « Qté en rayon » (← 01, 02). Un ticket = une session
+      neuve par `/mattpocock-skills:implement`. Déployer le chantier en un bloc (rappel livré
+      avec le changement de comportement)
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06
