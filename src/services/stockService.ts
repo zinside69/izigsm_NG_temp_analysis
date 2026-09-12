@@ -22,6 +22,9 @@
 import { parsePagination, auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
+// Seul point de résolution des valeurs par défaut de stock (`CLAUDE.md` § Stock). Pas de cycle :
+// boutiqueService n'importe de ce fichier qu'un type.
+import { resoudreDefautsStock, type DefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -260,6 +263,8 @@ export function prixAchatNegatif(prix: unknown): boolean {
  * Crée un nouveau produit.
  * Si stock_actuel > 0, enregistre automatiquement un mouvement 'entree' (stock initial) et pose
  * le coût moyen (`prix_achat_cump`) au prix d'achat HT saisi ; sinon le coût moyen vaut 0.
+ * Un seuil d'alerte absent prend le seuil par défaut de la boutique (`resoudreDefautsStock()`,
+ * 0 = non surveillé si jamais réglé) ; un seuil explicite, même 0, l'emporte.
  *
  * @param db          — Instance D1Database
  * @param boutiqueId  — ID boutique
@@ -276,6 +281,14 @@ export async function createProduit(
 ): Promise<{ id: number }> {
   // Toute validation précède l'écriture : rien n'est inséré pour un prix refusé
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+
+  // Seuil absent du corps → seuil d'alerte par défaut de la boutique (0 si jamais réglé), lu
+  // seulement dans ce cas ; plus de repli 5 codé en dur (ticket 03 `reglages-stock-boutique`).
+  // Un seuil explicite, même 0, l'emporte.
+  const seuilAlerte = data.stock_minimum ?? resoudreDefautsStock(
+    await db.prepare('SELECT stock_seuil_defaut, stock_initial_defaut FROM boutique_settings WHERE boutique_id = ?')
+      .bind(boutiqueId).first<DefautsStock>()
+  ).seuil_alerte
 
   const famille = FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille! : 'piece'
@@ -305,7 +318,7 @@ export async function createProduit(
     data.prix_vente_ht         ?? 0,
     data.tva_taux              ?? 20,
     data.stock_actuel          ?? 0,
-    data.stock_minimum         ?? 5,
+    seuilAlerte,
     data.fournisseur           ?? null,
     data.reference_fournisseur ?? null,
     data.code_barre            ?? null,

@@ -155,6 +155,9 @@ const SQL_INSERT_PRODUIT = n(`
   RETURNING id
 `)
 
+// SQL lecture du seuil d'alerte par défaut (création sans seuil, ticket 03 réglages de stock)
+const SQL_DEFAUTS_STOCK = n(`SELECT stock_seuil_defaut, stock_initial_defaut FROM boutique_settings WHERE boutique_id = ?`)
+
 // SQL mouvement initial
 const SQL_INSERT_MOUVEMENT_INITIAL = n(`
   INSERT INTO mouvements_stock
@@ -532,7 +535,7 @@ describe('stockService', () => {
       expect(auditCall!.params).toContain(42)
     })
 
-    it('utilise les valeurs par défaut : tva=20, stock_min=5', async () => {
+    it('utilise les valeurs par défaut : tva=20, seuil 0 si la boutique n\'a rien réglé (plus de repli 5)', async () => {
       dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 45 })
 
       await createProduit(dbD1 as any, 1, 10, { nom: 'Produit défauts' })
@@ -542,7 +545,27 @@ describe('stockService', () => {
       expect(insertCall).toBeDefined()
       // famille(5), prix_achat_ht(6), prix_vente_ht(7), tva_taux(8), stock_actuel(9), stock_minimum(10)
       expect(insertCall!.params[8]).toBe(20)
-      expect(insertCall!.params[10]).toBe(5)
+      expect(insertCall!.params[10]).toBe(0)
+    })
+
+    it('sans seuil dans la requête, prend le seuil d\'alerte par défaut de la boutique', async () => {
+      dbD1.__setResponse(SQL_DEFAUTS_STOCK, { stock_seuil_defaut: 3, stock_initial_defaut: null })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 46 })
+
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit réglé' })
+
+      const insertCall = dbD1.__getCalls().find(c => c.sql === SQL_INSERT_PRODUIT)
+      expect(insertCall!.params[10]).toBe(3)
+    })
+
+    // Garde-fou de non-régression (ne pouvait pas être rouge : l'ancien `?? 5` gardait déjà 0)
+    it('un seuil explicite l\'emporte sur le réglage, même 0', async () => {
+      dbD1.__setResponse(SQL_DEFAUTS_STOCK, { stock_seuil_defaut: 3, stock_initial_defaut: null })
+      dbD1.__setResponse(SQL_INSERT_PRODUIT, { id: 47 })
+
+      await createProduit(dbD1 as any, 1, 10, { nom: 'Produit explicite', stock_minimum: 0 })
+
+      expect(dbD1.__getCalls().find(c => c.sql === SQL_INSERT_PRODUIT)!.params[10]).toBe(0)
     })
 
     it('refuse un prix d\'achat négatif, sans rien écrire', async () => {

@@ -57,6 +57,14 @@
           </div>
         </div>
 
+        <!-- Rappel tant que la boutique n'a jamais enregistré de seuil d'alerte par défaut
+             (ticket 03 réglages de stock) — affiché par chargerDefautsStock(), stock.js -->
+        <div id="rappel-seuil-defaut" hidden
+             style="margin-bottom:16px;padding:10px 14px;border-radius:8px;background:var(--bg-muted,#f3f4f6);color:var(--text-muted,#4b5563);font-size:.9rem;">
+          ℹ Aucun seuil d'alerte par défaut n'est réglé : vos nouveaux produits ne sont pas surveillés.
+          <a href="/settings#stock" style="font-weight:600;">Régler dans Réglages › Stock</a>
+        </div>
+
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;">
           <div class="kpi-card">
             <div class="kpi-label">Références</div>
@@ -173,7 +181,7 @@
           </div>
           <div class="form-field">
             <label>Seuil d'alerte</label>
-            <input type="number" id="stock-min-qty" min="0" value="2">
+            <input type="number" id="stock-min-qty" min="0" value="0">
           </div>
           <div class="form-field">
             <label>Prix d'achat HT (€)</label>

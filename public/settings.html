@@ -529,6 +529,10 @@ const Settings = (() => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', updatePreview);
       });
+    // Lien direct vers un onglet (`/settings#stock`, rappel de la page Stock) : seul un onglet
+    // existant est ouvert, tout autre fragment est ignoré
+    const onglet = location.hash.slice(1);
+    if (onglet && document.querySelector(`[data-tab="${CSS.escape(onglet)}"]`)) switchTab(onglet);
   }
 
   async function loadSettings() {

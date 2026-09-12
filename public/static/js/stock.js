@@ -10,6 +10,11 @@ let allStockCache    = [];
 let stockUseApi      = true;
 let adjustingStockId = null;
 let currentFamilleFilter = '';
+// Seuil d'alerte par défaut effectif de la boutique (0 = non surveillé tant que rien n'est
+// réglé), chargé par chargerDefautsStock() — pré-remplit le formulaire de création. `null` tant
+// qu'il n'est pas lu : le champ reste alors vide, et un seuil vide n'est pas envoyé — c'est le
+// serveur qui applique le réglage, jamais un 0 pris par défaut côté page.
+let seuilAlerteDefaut = null;
 
 // Palette couleur par famille
 const FAMILLE_CONFIG = {
@@ -26,9 +31,33 @@ document.addEventListener('DOMContentLoaded', () => {
   initSeedData();
   loadCategories();
   loadStock();
+  chargerDefautsStock();
   bindSearch();
   bindFilters();
 });
+
+// ─── Seuil d'alerte par défaut de la boutique (ticket 03 réglages de stock) ──
+/**
+ * Lit le seuil d'alerte par défaut dans les réglages de la boutique consultée : il pré-remplit
+ * le formulaire de création. Tant qu'il n'a jamais été enregistré (`null`, distinct d'un 0
+ * choisi), affiche le rappel menant à Réglages › Stock — pour les seuls rôles qui peuvent le
+ * régler. Lecture en échec : seuil 0 et aucun rappel, plutôt qu'un rappel peut-être faux.
+ */
+async function chargerDefautsStock() {
+  try {
+    const boutiqueId = getBoutiqueId();
+    if (!boutiqueId) return;
+    // Enveloppe apiGet : le corps JSON est dans `.data` (CLAUDE.md § Enveloppe des réponses API)
+    const res = (await apiGet('/api/boutiques/' + boutiqueId)).data;
+    if (!res?.success) return;
+    const seuil = res.data?.settings?.stock_seuil_defaut ?? null;
+    seuilAlerteDefaut = seuil ?? 0;
+    const peutRegler = ['admin', 'manager'].includes(sessionCourante()?.role);
+    document.getElementById('rappel-seuil-defaut').hidden = !(seuil === null && peutRegler);
+  } catch (err) {
+    console.warn('[stock] seuil d\'alerte par défaut illisible — formulaire à 0, aucun rappel', err);
+  }
+}
 
 // ─── Chargement catégories (pour les <select>) ─────────────────────────────
 async function loadCategories() {
@@ -332,7 +361,8 @@ function resetStockForm() {
   });
   ['stock-qty','stock-min-qty','stock-price','stock-price-buy'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = id.includes('min') ? '2' : '0';
+    // Seuil : réglage de la boutique ; quantité et prix : 0 (jamais de pièces par mégarde)
+    if (el) el.value = id.includes('min') ? (seuilAlerteDefaut === null ? '' : String(seuilAlerteDefaut)) : '0';
   });
   const familleEl = document.getElementById('stock-famille');
   if (familleEl) familleEl.value = 'piece';
@@ -361,6 +391,9 @@ async function saveStock() {
   const famille    = document.getElementById('stock-famille').value || 'piece';
   const catEl      = document.getElementById('stock-category');
   const categorieId = catEl && catEl.value ? parseInt(catEl.value, 10) : undefined;
+  // Seuil vide = pas de choix : non envoyé (JSON omet `undefined`). À la création, le serveur
+  // applique le seuil par défaut de la boutique ; en modification, le seuil existant est gardé.
+  const seuilSaisi = document.getElementById('stock-min-qty').value.trim();
 
   const data = {
     nom:                  name,
@@ -369,7 +402,7 @@ async function saveStock() {
     marque:               document.getElementById('stock-marque').value.trim()   || undefined,
     categorie_id:         categorieId,
     stock_actuel:         parseInt(document.getElementById('stock-qty').value)     || 0,
-    stock_minimum:        parseInt(document.getElementById('stock-min-qty').value) || 0,
+    stock_minimum:        seuilSaisi === '' ? undefined : (parseInt(seuilSaisi, 10) || 0),
     prix_vente_ht:        parseFloat(document.getElementById('stock-price').value) || 0,
     prix_achat_ht:        parseFloat(document.getElementById('stock-price-buy').value) || 0,
     fournisseur:          document.getElementById('stock-supplier').value.trim()  || undefined,
