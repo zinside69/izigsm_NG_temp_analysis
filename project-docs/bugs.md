@@ -44,6 +44,8 @@ natif dès l'affichage) + `method="post"` (seconde défense) sur `#login-form`, 
 fonction) — ticket `cache-service-worker/01`. **Même classe, non corrigée, à vérifier** :
 `register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`), formulaires avec mot de
 passe sans `method`.
+→ **Correctif déployé et relu le 2026-09-12** (`izigsm-v3.03`) : aperçu `555be4a6` puis apex,
+`#login-form` en `method="post" onsubmit="return false"`.
 
 ## ✅ Stock : un prix d'achat négatif était accepté, et valorisait le stock (trouvé le 2026-09-12, **CORRIGÉ le 2026-09-12**, non déployé)
 

@@ -833,6 +833,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-12 (après le checkpoint 106) : aucune migration en attente — dépôt et
+production alignés.** `062b7b8` (fuite des identifiants à la connexion) déployé par l'exploitant,
+sans migration. Relu sur l'aperçu `555be4a6` **puis** l'apex : `#login-form` porte
+`method="post" onsubmit="return false"`, `sw.js` `izigsm-v3.03`, `/api/health` 200.
+
 **État au 2026-09-12 (checkpoint 106) : aucune migration en attente, mais le dépôt est EN AVANCE
 sur la production** — correctif de la fuite des identifiants à la connexion (`login.html`,
 `CACHE_VERSION` `izigsm-v3.03`) commité, **non déployé**. `npm run deploy` suffit, puis relire

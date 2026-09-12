@@ -2,6 +2,10 @@
 
 ## Ce qui a changé au checkpoint 106
 
+**✅ Mise à jour après le checkpoint : correctif de connexion DÉPLOYÉ et relu le 2026-09-12**
+(`izigsm-v3.03`, dépôt et production alignés, aucune migration en attente). La « première
+action » ci-dessous est faite.
+
 **Réglages de stock : en production** (`0047` + `izigsm-v3.02`, relus). Le « 0047 en attente » du
 bloc 105 ci-dessous est dépassé.
 

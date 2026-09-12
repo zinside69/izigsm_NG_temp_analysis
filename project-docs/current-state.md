@@ -2,6 +2,10 @@
 
 ## Checkpoint 106 — Incident de connexion en production, fuite des identifiants corrigée (2026-09-12)
 
+**✅ Déployé le 2026-09-12 après ce checkpoint** — `npm run deploy` par l'exploitant, sans
+migration ; relu sur l'aperçu puis l'apex (`#login-form` en `method="post" onsubmit="return
+false"`, `sw.js` `izigsm-v3.03`, `/api/health` 200). Dépôt et production alignés. Texte d'origine :
+
 **Réglages de stock en production** (checkpoint 105 déployé et relu : `0047` + `izigsm-v3.02`).
 
 **Incident, juste après ce déploiement** : l'exploitant bloqué sur la connexion (« landingPageFor
