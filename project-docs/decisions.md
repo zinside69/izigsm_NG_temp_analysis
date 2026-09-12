@@ -1,5 +1,35 @@
 # iziGSM — Décisions
 
+## 2026-09-12 — Import par génération (grilling, 14 questions)
+
+Précise la décision du 2026-09-11 (« import en masse par modèle »). Vocabulaire fixé dans
+`CONTEXT.md` : **série**, **génération**, **import par génération** (⊥ « famille de séries »,
+« gamme », « import en masse »).
+
+| Question | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Point d'entrée | **Mode « Par génération » dans la fenêtre de recherche fournisseur** de la page Stock | Page dédiée : même geste tout fournisseur, clé et droits déjà résolus là |
+| Reconnaître une génération | **Séries dont le nom EST le texte tapé ou COMMENCE par lui suivi d'un espace**, toutes cochées, décochables ; la génération = ce que l'opérateur confirme | Règle par marque (fragile, libellés changeants) · gamme Mobilax (mesurée : regroupe plusieurs générations ou une ligne entière) |
+| Aperçu | **Total par série, déjà en stock (par la référence de la liste), à importer, durée** ; décocher des séries, pas les articles ; confirmation renforcée > 200 articles, pas de plafond | Aperçu par article · familles dans l'aperçu (inconnues avant la fiche) · plafond dur |
+| Déjà importés | **Ignorés et comptés, sans appel de fiche** | Rafraîchis au passage : c'est le ticket 05 |
+| Exécution | **Boucle pilotée par le navigateur** (précédent `startSync()` du catalogue de services), route d'import existante article par article, progression + journal | Worker séparé + Queue/Cron : aucune infrastructure serveur de travail long aujourd'hui — pertinent pour le catalogue hors stock, pas ici |
+| Rythme | **20 imports/min** : 10/min laissés à la recherche du comptoir (quota 30/min partagé par la boutique) | Plein régime : « quota atteint » au comptoir |
+| Quota atteint | **Pause avec compte à rebours `ratelimit-reset`, puis reprise** ; fournisseur indisponible → arrêt + bilan | Arrêt systématique |
+| Interruption | **Reprise par relance** (anti-doublon `0046`) | Tout ou rien |
+| Stock et seuil des produits | **Stock initial par défaut et seuil par défaut de la boutique**, sans saisie par ligne | — |
+| Droits | **Admin et manager de la boutique ; admin plateforme refusé** (ADR 0002) | — |
+| Bilan | **À l'écran** : importés, déjà en stock, échecs nommés, répartition par famille, lien vers le stock | Email |
+
+**Mesures du 2026-09-12** (préproduction, `recherche-api-mobilax-2026-09-09.md` § 2026-09-12) :
+aucune génération chez Mobilax — une série porte `id`, `id_range`, `name` ; les gammes
+(`/catalog/ranges`, 201) regroupent plusieurs générations (« Séries 17/16/15 ») ou une ligne entière
+(« Galaxy S », 55 séries) ; `/products/search?seriesId=` rend `reference` et `ean13` mais **ni
+catégorie ni série** — la famille exige la fiche complète.
+
+**Dépendance** : le ticket 05 des réglages de stock (stock initial par défaut à l'import) précède
+ce chantier ou est livré avec. **Hors chantier** : catalogue fournisseur hors stock, autres
+fournisseurs que Mobilax.
+
 ## 2026-09-12 — Réglages de stock par boutique (grilling, 21 questions)
 
 Né de la consigne de l'exploitant (« chaque tenant gère son stock comme il l'entend »). Cadré par

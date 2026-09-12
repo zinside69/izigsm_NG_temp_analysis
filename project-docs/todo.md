@@ -641,7 +641,12 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       séries, sans quota) puis `/products/search?seriesId=` (17 produits pour le seul iPhone 17,
       1 appel). ⚠ Chaque produit importé coûte **1 appel `/:id/full`** (quota 30/min partagé) :
       un modèle à 60 produits = 2 min de quota — prévoir l'étalement et l'avancement à l'écran.
-      Dépend du 04 (fait). À cadrer par `/mattpocock-skills:grill-with-docs` (tapé par l'exploitant)
+      Dépend du 04 (fait). **CADRÉ le 2026-09-12** sous le nom **« import par génération »**
+      (`/grill-with-docs`, 14 questions, `decisions.md` même date) : boucle pilotée par le
+      navigateur à 20/min, génération = séries au nom commençant par le texte tapé (confirmées),
+      déjà-importés repérés par la `reference` de la liste sans appel de fiche, pause sur quota,
+      reprise par relance. Dépend du ticket 05 des réglages de stock. Prochaine étape :
+      `/mattpocock-skills:to-spec` (tapé par l'exploitant)
 - [ ] 🟠 **Catalogue fournisseur consultable, hors stock** (demandé le 2026-09-11) — une tâche de
       fond planifiée (la nuit) remplit une table « catalogue fournisseur » **séparée du stock**,
       rafraîchie ensuite par `updatedSince` ; recherche locale sans quota, et on n'importe en stock

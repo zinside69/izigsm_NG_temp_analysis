@@ -124,6 +124,18 @@ gère ensuite comme tout produit.
 à la demande, jamais conservée. Distincte du stock de la boutique.
 _À éviter_ : stock fournisseur.
 
+**Série** — un modèle d'appareil tel qu'un fournisseur connecté le catalogue (« iPhone 17 Pro »).
+
+**Génération** — ensemble des séries dont le nom commence par un même nom de base (« iPhone 17 »
+→ 17, 17 Air, 17 Pro, 17 Pro Max), telles que l'opérateur les confirme. Ne se lit que dans le nom
+des séries : aucun fournisseur ne la porte.
+_À éviter_ : famille de séries (« famille » est la famille d'un produit), gamme (regroupement
+propre au fournisseur, sans rapport fiable avec une génération), modèle.
+
+**Import par génération** — import en une fois, dans le stock, de tous les articles fournisseur
+compatibles avec une génération.
+_À éviter_ : import en masse, import par modèle.
+
 **Service** — prestation facturable sans stock (main d'œuvre, diagnostic).
 `categories_services` + `services`.
 

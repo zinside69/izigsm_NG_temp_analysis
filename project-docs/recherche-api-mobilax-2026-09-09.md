@@ -676,3 +676,42 @@ n'est pas un multiplicateur fixe (+2,5 % ici, contre ×2,5 dans l'exemple de la 
 `customer_price`/`mbx_price` à `"0.00"` sur les deux produits réels observés : hypothèse
 renforcée qu'ils ne sont pas activés pour ce compte. `price` retenu comme candidat le plus
 solide pour le prix d'achat de base._
+
+## Mesures réelles du 2026-09-12 — `lookup`, séries, gammes, recherche par série
+
+Faites en préproduction pour cadrer le ticket 05 (rafraîchissement) et l'import par génération.
+7 appels au total (3 `/auth`, 2 `/catalog/*`, 1 `/products/lookup`, 1 `/products/search`) ; clé
+jamais imprimée.
+
+**`GET /products/lookup?reference=ECRTAREAPPIPHNE12MNO`** → 200,
+`{ status, data: { id, reference, ean13, gs1_ean13, name, short_name, quantity, price } }` —
+`data` est un **objet**. Un seul appel donne prix (`44.25`, = import) et disponibilité
+(`quantity: 112`) : suffit au rafraîchissement, sans `/:id/full`.
+
+**`GET /catalog/series`** → 200, `{ status: "OK", data: [...] }`, **2 316 séries**, 268 ko, sans
+en-tête de quota. Champs : `id`, `id_range`, `name`, `short_name`, `abbreviation`, `position`
+— **aucun** champ marque, appareil ni génération.
+
+**`GET /catalog/ranges`** → 200, même enveloppe, **201 gammes**, 19 ko. Champs : `id`, `id_brand`,
+`id_device`, `name`, `short_name`, `position`. Anomalies : 40 séries pointent un `id_range`
+absent, 28 gammes vides, noms en double (`Pad Series` ×3…), noms trompeurs (« Series 4/4S » ne
+contient que le 3GS ; « Serie 18 » existe déjà, vide).
+
+**Une gamme n'est pas une génération** : Apple regroupe plusieurs générations (« Séries 17/16/15 »
+= 13 séries, « Series 12/11/X » = 11) ; Samsung et Xiaomi une ligne entière (« Galaxy S » =
+55 séries du S3 au S25, « Galaxy A » = 99, « Redmi Note Series » = 45). `position` n'est pas
+chronologique. Une génération ne se lit que dans le **nom** des séries — et une recherche par
+simple préfixe déborde (« Galaxy S2 » capte S20–S25 ; « iPhone 1 » capte 11 à 17) : il faut un
+préfixe suivi d'un espace ou la fin du nom.
+
+**`GET /products/search?seriesId=2358&limit=100`** (iPhone 17) → 200,
+`{ data: { currentPage, limit, total, totalPage, products: [...] } }` — la liste est sous
+**`data.products`**, pas sous `data` comme `GET /products`. 17 produits, **9 champs** : `id`,
+`reference`, `ean13`, `name`, `short_name`, `quantity`, `price`, `main_image`. **`reference` et
+`ean13` présents** (17/17, aucun doublon ; EAN en `3000000…`, apparemment internes à Mobilax).
+**Ni catégorie, ni série, ni modèle** : la famille d'un article exige `/:id/full`. En
+préproduction, les 17 articles de l'iPhone 17 sont tous des accessoires (aucune pièce).
+
+_Version 1.5 — 2026-09-12 — mesures `lookup`, `/catalog/series`, `/catalog/ranges`,
+`/products/search?seriesId=`. Une gamme Mobilax ≠ une génération ; la liste par série porte la
+référence (anti-doublon sans fiche) mais pas la catégorie._
