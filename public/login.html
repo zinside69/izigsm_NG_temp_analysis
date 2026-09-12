@@ -34,7 +34,12 @@
 
             <div class="flash-stack" id="flash-area" style="display:none;padding:0;margin-bottom:16px;"></div>
 
-            <form id="login-form" novalidate>
+            <!-- Jamais de soumission native (fuite vécue le 2026-09-12 et le 2026-07-18, bugs.md) :
+                 le script qui envoie la connexion en fetch() n'est attaché qu'après le
+                 téléchargement d'app.js — valider avant lui partait en GET, identifiants dans
+                 l'URL. `onsubmit="return false"` bloque l'envoi dès l'affichage ; `method="post"`
+                 est la seconde défense : au pire le corps de la requête, jamais l'adresse. -->
+            <form id="login-form" method="post" onsubmit="return false" novalidate>
               <div class="field" style="margin-bottom:16px;">
                 <label for="login-email">Email professionnel *</label>
                 <input type="email" id="login-email" name="email" placeholder="votre@email.fr" required autocomplete="email">
