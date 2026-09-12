@@ -1,4 +1,27 @@
-# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 105 — chantier réglages de stock terminé ; 0047 en attente)
+# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 106 — fuite des identifiants à la connexion corrigée ; à déployer)
+
+## Checkpoint 106 — Incident de connexion en production, fuite des identifiants corrigée (2026-09-12)
+
+**Réglages de stock en production** (checkpoint 105 déployé et relu : `0047` + `izigsm-v3.02`).
+
+**Incident, juste après ce déploiement** : l'exploitant bloqué sur la connexion (« landingPageFor
+is not defined »), puis **son mot de passe dans l'adresse** (`/login?email=…&password=…`).
+Contournement : Ctrl + Maj + R. Production mesurée saine (navigateur neuf, en-têtes, assets) ;
+deux hypothèses de cache écartées par mesure (`bugs.md`).
+
+**Fuite des identifiants : cause prouvée et corrigée, commité, NON déployé, sans migration** —
+course au chargement : le script qui intercepte l'envoi est attaché après le téléchargement
+bloquant d'app.js ; valider avant → soumission native en GET. `onsubmit="return false"` +
+`method="post"` sur `#login-form`, `CACHE_VERSION` `izigsm-v3.03`. Test
+`connexion-formulaire-post.spec.ts` vu rouge avec l'URL exacte de production. **À déployer** :
+`npm run deploy` seul, puis relire l'apex.
+
+Reste ouvert : origine de « landingPageFor is not defined » (ticket `.scratch/cache-service-worker/01`,
+`needs-triage`, diagnostic d'abord) ; `register.html` et `reset-password.html`, même classe de
+défaut. Mot de passe de `telnet@bbox.fr` à changer par l'exploitant. Import en masse : **B puis
+A, prochaine session** (`todo.md`).
+
+**Gates** : vitest 1069/1071 (baseline), E2E connexion + auth + atterrissage + balayage du menu 21/21.
 
 ## Checkpoint 105 — Chantier réglages de stock terminé (tickets 02-05) + quatre décisions de l'exploitant (2026-09-12)
 

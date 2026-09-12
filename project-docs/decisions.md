@@ -1,5 +1,20 @@
 # iziGSM — Décisions
 
+## 2026-09-12 — Import en masse : import par génération d'abord, cases à cocher ensuite
+
+Demande de l'exploitant (import pièce par pièce jugé chronophage, 2 662 résultats pour
+« samsung S24 »). **Ordre : B puis A, dans une prochaine session.** B = import par génération
+(déjà cadré, 4 tickets prêts) : remplit le stock d'un modèle entier, pièces compatibles seulement.
+A = cases à cocher dans les résultats de recherche : choisir quelques articles précis, à cadrer
+après B pour réutiliser sa boucle d'import. Écarté : le catalogue entier (184 716 articles,
+~100 h au quota de 30/min, stock rempli de pièces non vendues).
+
+## 2026-09-12 — Connexion : aucun formulaire avec mot de passe ne se soumet nativement
+
+Correctif du formulaire de connexion validé et demandé « de suite » par l'exploitant après la
+fuite de son mot de passe dans l'adresse. `onsubmit="return false"` + `method="post"` sur
+`#login-form` (`bugs.md`). `register.html` et `reset-password.html` : même classe, à vérifier.
+
 ## 2026-09-12 — Stock : quatre règles tranchées par l'exploitant pendant le chantier réglages de stock
 
 | Sujet | Décision | Écarté, et pourquoi |

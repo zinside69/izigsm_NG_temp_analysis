@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 105 — chantier réglages de stock terminé ; 0047 en attente)
+# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 106 — fuite des identifiants à la connexion corrigée ; à déployer)
+
+## Ce qui a changé au checkpoint 106
+
+**Réglages de stock : en production** (`0047` + `izigsm-v3.02`, relus). Le « 0047 en attente » du
+bloc 105 ci-dessous est dépassé.
+
+**Première action : vérifier que le correctif de connexion est déployé** — sinon le faire déployer
+par l'exploitant (`npm run deploy`, aucune migration), puis relire l'apex (`sw.js`
+`izigsm-v3.03`, `/login` porte `method="post"` et `onsubmit="return false"`). La fuite : une course
+au chargement dans `login.html` (`bugs.md`, `CLAUDE.md` § Formulaires avec mot de passe).
+
+**Prochaine session, décidé par l'exploitant** : **import en masse, B puis A** (`todo.md`) — B =
+import par génération, 4 tickets prêts (`.scratch/import-par-generation/`, un ticket = une
+session) ; A = cases à cocher, à cadrer après B.
+
+**Ouverts** : origine de « landingPageFor is not defined » (ticket `cache-service-worker/01`,
+`needs-triage`, `/diagnosing-bugs`) ; `register.html`/`reset-password.html` même classe de défaut ;
+🟠 sortie de stock des produits défectueux (à cadrer).
+
+**Leçons de la soirée** : une hypothèse de cause s'écrit **après** mesure, jamais avant (deux
+hypothèses énoncées puis réfutées) ; un test rouge pour une mauvaise raison ne prouve rien
+(couper app.js ne reproduisait pas la fuite).
 
 ## Ce qui a changé au checkpoint 105
 

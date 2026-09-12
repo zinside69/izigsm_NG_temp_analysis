@@ -1,5 +1,21 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 P2 — Import en masse depuis la recherche fournisseur (demandé le 2026-09-12, **prochaine session**)
+
+Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, importées une par une
+(chronophage). La recherche texte ratisse large (pièces S23, S25). Ordre décidé le 2026-09-12 :
+**B puis A, dans une prochaine session** — pas le soir même (`decisions.md`).
+
+- [ ] **B — Import par génération** : spec + 4 tickets `ready-for-agent`
+      (`.scratch/import-par-generation/`), débloqués par le ticket 05 des réglages de stock. On tape
+      « Galaxy S24 » → séries S24, S24+, S24 Ultra et **seulement** leurs pièces ; aperçu chiffré
+      (articles, déjà en stock, durée), 20 imports/min, stock initial par défaut. Un ticket = une
+      session, `/mattpocock-skills:implement`
+- [ ] **A — Cases à cocher dans les résultats de recherche** : une case par article, « Tout
+      cocher » (page de 100), « Importer la sélection » avec progression ; quantité = stock initial
+      par défaut. **À cadrer après B** (`/mattpocock-skills:grill-with-docs`) pour réutiliser sa
+      boucle d'import, son rythme et sa gestion du quota
+
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 
 Demande de l'exploitant, en même temps que le refus d'une quantité de départ négative

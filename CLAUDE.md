@@ -321,6 +321,21 @@ même chose, aucune unification tentée.
   la page est sûre.
 - Restent bruts à dessein : statuts d'énumération, libellés de colonne, montants, emojis.
 
+## Formulaires avec mot de passe — jamais de soumission native (depuis 2026-09-12)
+
+- **Tout `<form>` qui porte un mot de passe déclare `method="post"` et `onsubmit="return false"`**
+  dans son HTML, et laisse son script faire l'envoi en `fetch()`. Sans cela, valider **avant**
+  que le script soit attaché déclenche la soumission native du navigateur — en GET par défaut,
+  identifiants dans l'URL (historique, journaux). Vécu en production le 2026-09-12 (et le
+  2026-07-18) : dans `login.html`, le script d'envoi est placé derrière le téléchargement
+  bloquant d'`app.js` ; un app.js lent suffisait (`bugs.md`).
+- **La preuve se fait en retenant le script, pas en le coupant** : `page.route()` qui diffère
+  `app*.js`, envoi pendant le chargement, puis lecture des requêtes de navigation
+  (`tests/e2e/connexion-formulaire-post.spec.ts`). Couper app.js ne reproduit pas : le script de
+  la page s'attache sans lui.
+- `register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`) : même classe, **pas
+  encore corrigés** — à vérifier avant toute modification de ces pages.
+
 ## Mémoire projet (context-guardian)
 
 Lire avant toute modification non triviale :
@@ -817,6 +832,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-12 (checkpoint 106) : aucune migration en attente, mais le dépôt est EN AVANCE
+sur la production** — correctif de la fuite des identifiants à la connexion (`login.html`,
+`CACHE_VERSION` `izigsm-v3.03`) commité, **non déployé**. `npm run deploy` suffit, puis relire
+l'apex : `sw.js` `izigsm-v3.03`, `/login` porte `method="post"` et `onsubmit="return false"`.
 
 **État au 2026-09-12 (après le checkpoint 105) : aucune migration en attente — dépôt et
 production alignés.** `0047` appliquée à distance **puis** Worker déployé, par l'exploitant, dans

@@ -1,5 +1,50 @@
 # iziGSM — Bugs connus
 
+## 🟠 Connexion bloquée juste après un déploiement : « landingPageFor is not defined », identifiants dans l'URL (vécu en production le 2026-09-12, NON corrigé, cause NON établie)
+
+**Symptôme** (exploitant, quelques minutes après le déploiement `izigsm-v3.02`) : la page de
+connexion affiche « ❌ landingPageFor is not defined » ; l'adresse contient ensuite
+`/login?email=…&password=…` — **mot de passe en clair dans l'URL** (historique du navigateur,
+journaux possibles). **Contournement** : Ctrl + Maj + R — vérifié, la connexion refonctionne.
+**Deuxième occurrence** du même symptôme : `sw.js` (commentaire de `NETWORK_ONLY_PATHS`) décrit
+un incident identique le 2026-07-18, attribué alors au cache de `/login`, jamais prouvé.
+
+**Mesuré le 2026-09-12 (lecture seule)** :
+- production saine : `/login` charge `app.d39189aa.js` (200, JavaScript), qui définit
+  `landingPageFor` ; navigateur neuf (Playwright) : fonction présente, console vide, SW `v3.02` ;
+- `/login` : `max-age=0, must-revalidate`, `DYNAMIC`, et `NETWORK_ONLY_PATHS` dans `sw.js` →
+  ni le SW ni le cache HTTP ne servent une vieille page de connexion ;
+- `app.d39189aa.js` : `age` 468 096 s (5,4 jours) — ce nom existait avant le déploiement, aucun
+  asset disparu ;
+- le message vient **après** une connexion réussie (seule la redirection échoue) : un `app.js`
+  était chargé, mais **sans** `landingPageFor` (présente depuis le 2026-08-01).
+
+**Hypothèses écartées** : vieille page `/login` en cache (SW ou HTTP) ; `app.*.js` d'un déploiement
+précédent en 404. **Piste restante, non prouvée** : un très ancien `app.js` servi par un cache du
+navigateur (clé de l'App Shell du service worker, stratégie Cache First des assets locaux —
+`sw.js` § 3). **Défaut certain, indépendant de la cause** : `<form id="login-form" novalidate>`
+n'a **ni `method="post"` ni `action`** — dès que le script ne gère pas l'envoi, le navigateur
+soumet en GET et met les identifiants dans l'adresse.
+
+Ticket : `.scratch/cache-service-worker/issues/01-connexion-bloquee-apres-deploiement.md`
+(diagnostic d'abord, `/diagnosing-bugs`). Correctif du formulaire : en attente de l'accord de
+l'exploitant (proposé le 2026-09-12).
+→ **Fuite des identifiants dans l'URL : cause TROUVÉE et CORRIGÉE le 2026-09-12** (accord de
+l'exploitant), non déployé à l'écriture de cette note. C'est une **course au chargement** : dans
+`login.html`, le script qui envoie la connexion en `fetch()` est placé **après**
+`<script src="app.js">`, qui bloque l'analyse de la page tant qu'il n'est pas téléchargé ; le
+formulaire, déjà affiché, est utilisable pendant ce temps — valider déclenche la soumission native
+du navigateur, en GET faute de `method`. Il suffit qu'app.js soit lent (service worker qui
+s'installe juste après un déploiement). Couper app.js ne reproduit **pas** (le script de la page
+s'attache sans lui) — première tentative de test fausse, écartée. Reproduit par
+`tests/e2e/connexion-formulaire-post.spec.ts` (app.js retenu, envoi pendant le chargement), **vu
+rouge avec exactement l'URL de production**. Correctif : `onsubmit="return false"` (aucun envoi
+natif dès l'affichage) + `method="post"` (seconde défense) sur `#login-form`, `izigsm-v3.03`.
+**Reste non établi** : l'origine de « landingPageFor is not defined » (un `app.js` sans cette
+fonction) — ticket `cache-service-worker/01`. **Même classe, non corrigée, à vérifier** :
+`register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`), formulaires avec mot de
+passe sans `method`.
+
 ## ✅ Stock : un prix d'achat négatif était accepté, et valorisait le stock (trouvé le 2026-09-12, **CORRIGÉ le 2026-09-12**, non déployé)
 
 Relevé par la revue du ticket 02 `reglages-stock-boutique`. `POST /produits` et
