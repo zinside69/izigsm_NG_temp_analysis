@@ -23,6 +23,7 @@ import {
   getKpisStock,
   importCatalogueCsv,
   ERREUR_PRIX_ACHAT_NEGATIF,
+  ERREUR_QUANTITE_DEPART_INVALIDE,
   type MouvementData,
   type FamilleProduit,
 } from '../services/stockService'
@@ -125,12 +126,14 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  // Refus de validation du service (prix d'achat négatif) → 422, jamais un 500 nu
+  // Refus de validation du service (prix d'achat négatif, quantité de départ invalide) → 422,
+  // jamais un 500 nu ; toute autre erreur remonte telle quelle
   try {
     const created = await createProduit(db, boutiqueId, user.sub, body)
     return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
   } catch (err: any) {
-    if (err.message === ERREUR_PRIX_ACHAT_NEGATIF) return c.json({ success: false, error: err.message }, 422)
+    if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
+      return c.json({ success: false, error: err.message }, 422)
     throw err
   }
 })

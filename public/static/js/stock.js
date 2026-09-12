@@ -1,6 +1,6 @@
 /**
  * iziGSM — Gestion Stock
- * CRUD complet : produits, familles, alertes stock bas, valorisation, import CSV
+ * CRUD complet : produits, familles, produits à commander, valorisation, import CSV
  * Sprint 2.34 — MOD-04 : familles produits + import catalogue fournisseur CSV
  */
 
@@ -135,16 +135,25 @@ function renderKPIs() {
   const items = allStockCache.length ? allStockCache : getDB('stock');
 
   const total    = items.length;
-  const lowStock = items.filter(i => parseInt(i.qty) > 0 && parseInt(i.qty) <= parseInt(i.minQty)).length;
-  const rupture  = items.filter(i => parseInt(i.qty) === 0).length;
+  // « À commander » (CONTEXT.md) : produits surveillés sous leur seuil, rupture comprise — même
+  // règle que le serveur (sqlSousSeuil). Ne compte plus les ruptures des produits non surveillés.
+  const aCommander = items.filter(estACommander).length;
   const valeur   = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 0), 0);
 
   setEl('kpi-refs',       total);
   setEl('kpi-stock-val',  formatMoney(valeur));
-  setEl('kpi-alerts',     lowStock + rupture);
+  setEl('kpi-alerts',     aCommander);
 }
 
-// ─── Alertes stock bas ──────────────────────────────────────────────────────
+/**
+ * Règle « à commander » côté page, reflet de `sqlSousSeuil()` (src/lib/stockSeuil.ts) : seuil
+ * d'alerte > 0 (produit surveillé) et quantité ≤ seuil. Seuil 0 = non surveillé, jamais à commander.
+ */
+function estACommander(i) {
+  return parseInt(i.minQty) > 0 && parseInt(i.qty) <= parseInt(i.minQty);
+}
+
+// ─── Produits à commander (code mort : #low-stock-alerts absent de stock.html) ─
 function renderLowStockAlerts() {
   const items    = allStockCache.length ? allStockCache : getDB('stock');
   // Même règle que le serveur (src/lib/stockSeuil.ts) : un seuil 0 n'alerte jamais
@@ -193,7 +202,8 @@ function renderStock(search = '', categoryFilter = '', statusFilter = 'all') {
 
   // Filtre statut stock
   if (statusFilter === 'low') {
-    filtered = filtered.filter(i => parseInt(i.qty) > 0 && parseInt(i.qty) <= parseInt(i.minQty));
+    // Filtre « À commander » : même règle que l'indicateur, rupture surveillée comprise
+    filtered = filtered.filter(estACommander);
   } else if (statusFilter === 'out') {
     filtered = filtered.filter(i => parseInt(i.qty) === 0);
   } else if (statusFilter === 'ok') {
@@ -264,7 +274,8 @@ function renderStock(search = '', categoryFilter = '', statusFilter = 'all') {
 
 function getStockStatus(qty, minQty) {
   if (qty === 0)       return { label: 'Rupture',   badgeClass: 'badge-danger',  color: '#e74c3c' };
-  if (qty <= minQty)   return { label: 'Stock bas',  badgeClass: 'badge-warning', color: '#f5a623' };
+  // La rupture reste un état affiché à part ; seuil 0 = non surveillé, jamais « à commander »
+  if (minQty > 0 && qty <= minQty) return { label: 'À commander', badgeClass: 'badge-warning', color: '#f5a623' };
   return                      { label: 'En stock',   badgeClass: 'badge-success', color: '#2ecc71' };
 }
 

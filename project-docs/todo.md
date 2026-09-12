@@ -1,5 +1,20 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
+
+Demande de l'exploitant, en même temps que le refus d'une quantité de départ négative
+(`bugs.md`) : le **manager ou l'admin de la boutique** doit pouvoir décrémenter le stock de pièces
+défectueuses (film de protection en verre cassé, accessoire non conforme…) depuis la mise à jour
+du stock, avec un **historique** exploitable par la comptabilité lors de l'inventaire.
+
+Existant, mesuré le 2026-09-12 : « Ajuster le stock » (`POST /api/produits/:id/mouvement`) propose
+déjà une « Sortie stock » tracée (quantité, auteur, date, motif **libre**). Ce qui manque : la
+route est ouverte à **tous les rôles** ; aucun motif structuré (casse, non-conforme…) ;
+`mouvements_stock` ne garde **aucune valeur** (coût moyen au moment de la sortie) ; aucune
+restitution des pertes pour l'inventaire ou la comptabilité.
+
+- [ ] Ouvrir le chantier : `/mattpocock-skills:grill-with-docs` (à taper par l'exploitant)
+
 ## ✅ 🟠 P2 — `/fournisseurs` : boutons sans style, fenêtre de saisie tronquée, rappel « à commander » obscur (signalé le 2026-09-11, **CORRIGÉ le 2026-09-11**)
 
 Détail et cause : `bugs.md` § du même titre. Test : `tests/e2e/fournisseurs-ecran.spec.ts`.

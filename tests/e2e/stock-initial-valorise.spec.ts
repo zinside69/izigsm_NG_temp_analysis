@@ -41,3 +41,17 @@ test('stock initial : valorisé au prix d\'achat, tracé « Stock initial » —
   expect(sansStock.prix_achat_cump).toBe(0)
   expect(sansStock.mouvements).toEqual([])
 })
+
+test('quantité de départ négative : refusée en 422, aucun produit créé (décision du 2026-09-12)', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+
+  // Un stock négatif sans mouvement tracé est impossible : la sortie de pièces (casse, non
+  // conforme) passe par un mouvement, jamais par une quantité de départ
+  const refus = await request.post('/api/produits', { headers, data: { nom: 'E2E quantité négative', stock_actuel: -3 } })
+  expect(refus.status(), await refus.text()).toBe(422)
+  expect((await refus.json()).error).toBe('La quantité de départ doit être un entier positif ou nul.')
+
+  const kpis = await (await request.get('/api/produits/kpis', { headers })).json()
+  expect(kpis.data.nb_produits).toBe(0)
+})

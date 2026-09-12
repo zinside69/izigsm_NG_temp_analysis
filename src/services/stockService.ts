@@ -248,6 +248,14 @@ export async function getProduitById(
 export const ERREUR_PRIX_ACHAT_NEGATIF = 'Le prix d\'achat ne peut pas être négatif.'
 
 /**
+ * Message du refus d'une quantité de départ qui n'est pas un entier ≥ 0 (décision de l'exploitant,
+ * 2026-09-12) : un stock négatif sans mouvement tracé est impossible. Retirer des pièces (casse,
+ * non conforme) passe par un mouvement de sortie, jamais par la quantité de départ. Même règle que
+ * l'import CSV (`entierCsv()`).
+ */
+export const ERREUR_QUANTITE_DEPART_INVALIDE = 'La quantité de départ doit être un entier positif ou nul.'
+
+/**
  * Règle unique : un prix d'achat ne peut pas être négatif (décision de l'exploitant, 2026-09-12).
  * Depuis le ticket 02 `reglages-stock-boutique`, le prix d'achat valorise le stock initial au
  * coût moyen — un prix négatif ferait baisser la valeur du stock.
@@ -332,8 +340,12 @@ export async function createProduit(
   data: CreateProduitData,
   options: CreateProduitOptions = {}
 ): Promise<{ id: number }> {
-  // Toute validation précède l'écriture : rien n'est inséré pour un prix refusé
+  // Toute validation précède l'écriture : rien n'est inséré pour un prix ou une quantité refusés
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+  // Entier ≥ 0 exigé : un « abc » donnait NaN, que `NaN < 0` laissait passer ; 1.5 aussi
+  const quantiteDepart = Number(data.stock_actuel)
+  if (data.stock_actuel != null && !(Number.isInteger(quantiteDepart) && quantiteDepart >= 0))
+    throw new Error(ERREUR_QUANTITE_DEPART_INVALIDE)
 
   // Seuil absent du corps → seuil d'alerte par défaut de la boutique (0 si jamais réglé), lu
   // seulement dans ce cas ; plus de repli 5 codé en dur (ticket 03 `reglages-stock-boutique`).

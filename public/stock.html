@@ -75,9 +75,9 @@
             <div class="kpi-value" style="font-size:1.6rem;" id="kpi-stock-val">—</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Alertes seuil bas</div>
+            <div class="kpi-label">À commander</div>
             <div class="kpi-value" style="font-size:1.6rem;color:var(--red);" id="kpi-alerts">—</div>
-            <div class="kpi-delta down">À commander</div>
+            <div class="kpi-delta down">Sous le seuil d'alerte</div>
           </div>
         </div>
 
@@ -102,7 +102,7 @@
           </select>
           <div style="display:flex;gap:6px;">
             <button class="btn btn-sm btn-outline" data-filter-stock="all" onclick="applyFilters()">Tous</button>
-            <button class="btn btn-sm btn-outline" data-filter-stock="low" onclick="applyFilters()">⚠ Stock bas</button>
+            <button class="btn btn-sm btn-outline" data-filter-stock="low" onclick="applyFilters()">⚠ À commander</button>
             <button class="btn btn-sm btn-outline" data-filter-stock="out" onclick="applyFilters()">❌ Rupture</button>
           </div>
         </div>

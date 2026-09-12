@@ -578,6 +578,17 @@ describe('stockService', () => {
       expect(calls.some(c => c.sql === SQL_INSERT_PRODUIT)).toBe(false)
       expect(calls.some(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)).toBe(false)
     })
+
+    // Même règle que l'import CSV (entierCsv) : entier ≥ 0, sinon refus — un « abc » donnait NaN,
+    // que `NaN < 0` laissait passer
+    it.each([-3, 'abc', 1.5])('refuse une quantité de départ qui n\'est pas un entier ≥ 0 (%s), sans rien écrire', async (quantite) => {
+      await expect(createProduit(dbD1 as any, 1, 10, { nom: 'Quantité invalide', stock_actuel: quantite as any }))
+        .rejects.toThrow('La quantité de départ doit être un entier positif ou nul.')
+
+      const calls = dbD1.__getCalls()
+      expect(calls.some(c => c.sql === SQL_INSERT_PRODUIT)).toBe(false)
+      expect(calls.some(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)).toBe(false)
+    })
   })
 
   // ─── updateProduit ─────────────────────────────────────────────────────────

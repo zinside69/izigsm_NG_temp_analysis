@@ -18,6 +18,12 @@ est ignorée avec un message. L'import Mobilax passe par `createProduit()` et h�
 Preuve : `tests/e2e/stock-prix-achat-negatif.spec.ts` (D1 locale) et 3 tests unitaires, tous vus
 rouges avant le correctif. **Non traité, même famille** : une quantité négative à la création
 (`stock_actuel: -3`) est insérée sans mouvement tracé.
+→ **Corrigé le 2026-09-12** (décision de l'exploitant) : `createProduit()` refuse une quantité de
+départ qui n'est pas un entier ≥ 0 — négative, décimale ou illisible (`ERREUR_QUANTITE_DEPART_INVALIDE`,
+422 côté route, rien d'écrit), même règle que l'import CSV (`entierCsv()`, ticket 04). Retirer des pièces défectueuses passe par un mouvement
+de sortie — besoin exprimé le même jour d'une sortie réservée manager/admin, motivée et valorisée
+pour la comptabilité : chantier à cadrer (`todo.md`). Preuve : E2E `stock-initial-valorise.spec.ts`
+et 1 test unitaire, vus rouges avant le correctif.
 
 ## 🟡 Reconditionnement : un produit naît avec 1 en stock sans mouvement de stock (trouvé le 2026-09-12, NON corrigé)
 
