@@ -795,12 +795,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
-**État au 2026-09-12 (checkpoint 103) : migration `0046` EN ATTENTE — dépôt en avance sur la
-production.** Seuil 0, quantité de la fiche, doublon d'import (`izigsm-v3.01`). Ordre : contrôler
-0 doublon actif en production, `migrations apply DB --remote` (`0046`), relire `d1_migrations`
-distant, **puis** `npm run deploy`. Déployer d'abord ne casse rien (aucun SELECT ne lit l'index)
-mais laisse la course au double clic ouverte. Lecture `--remote` refusée en `7403` depuis la
-session du jour malgré l'OAuth `d1 (write)` et `CLOUDFLARE_API_TOKEN` retiré — non élucidé.
+**État au 2026-09-12 (après le checkpoint 103) : aucune migration en attente — dépôt et
+production alignés.** `0046` appliquée à distance **puis** Worker déployé, par l'exploitant, dans
+cet ordre. Relu : `d1_migrations` distant = `0046`, index `idx_produits_source_fournisseur`
+présent, `sw.js` `izigsm-v3.01`, `stock.9f831b32.js` servi en JavaScript (= manifeste local,
+contient le correctif de la fiche), `/stock` porte `#btn-stock-ajuster`, `/api/health` 200.
+La lecture `--remote` refusée en `7403` le matin passait à nouveau l'après-midi (même shell,
+`CLOUDFLARE_API_TOKEN` retiré) — cause non élucidée.
 
 **État au 2026-09-11 (fin de journée) : aucune migration en attente — dépôt et production
 alignés.** `ad04d24` (fiche d'une pièce importée remplie, notes enregistrées, recherche paginée,

@@ -2,6 +2,8 @@
 
 ## Checkpoint 103 — Stock : seuil 0, quantité de la fiche, doublon d'import (2026-09-12)
 
+**✅ Déployé le 2026-09-12 après ce checkpoint** — `0046` appliquée puis Worker déployé par
+l'exploitant, production relue (`CLAUDE.md` § Déploiement). Texte d'origine :
 **Dépôt EN AVANCE sur la production, migration `0046` EN ATTENTE** — rien de commité à
 l'écriture de ce checkpoint. Ordre obligatoire : contrôler 0 doublon actif en production,
 `wrangler d1 migrations apply DB --remote` (**`0046`**), relire `d1_migrations` distant, puis

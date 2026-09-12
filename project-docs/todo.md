@@ -604,8 +604,8 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       que la vérification) ; `importerProduitMobilax()` convertit la violation en `deja_importe`
       avec le produit du premier import, toute autre erreur remonte. Tests vus rouges : migration
       contre un vrai SQLite + course simulée dans `mobilaxService.test.ts`.
-      ⚠ **`0046` à appliquer en distant AVANT le déploiement** — et contrôler d'abord 0 doublon
-      actif en production (lecture refusée en `7403` depuis la session du 2026-09-12)
+      ✅ **`0046` appliquée en distant puis déployée le 2026-09-12** (0 doublon contrôlé, index
+      relu en production)
 - [x] 🟡 **Produit importé à 0 en stock : alerte « à commander » quand même** (trouvé le
       2026-09-11) — `getProduitsACommander()`/KPI et la liste « Alertes seuil bas » de
       `stock.js` comparent `stock_actuel <= stock_minimum` : avec seuil 0, 0 ≤ 0 est vrai.
