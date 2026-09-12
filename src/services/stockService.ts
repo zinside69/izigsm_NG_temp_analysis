@@ -241,6 +241,21 @@ export async function getProduitById(
   }
 }
 
+/** Message du refus d'un prix d'achat négatif — commun à la création, la modification et au CSV. */
+export const ERREUR_PRIX_ACHAT_NEGATIF = 'Le prix d\'achat ne peut pas être négatif.'
+
+/**
+ * Règle unique : un prix d'achat ne peut pas être négatif (décision de l'exploitant, 2026-09-12).
+ * Depuis le ticket 02 `reglages-stock-boutique`, le prix d'achat valorise le stock initial au
+ * coût moyen — un prix négatif ferait baisser la valeur du stock.
+ *
+ * @param prix  Prix d'achat HT tel que reçu (nombre, ou chaîne d'un corps JSON), absent permis
+ * @returns     `true` si le prix est fourni et strictement négatif
+ */
+export function prixAchatNegatif(prix: unknown): boolean {
+  return prix != null && Number(prix) < 0
+}
+
 /**
  * Crée un nouveau produit.
  * Si stock_actuel > 0, enregistre automatiquement un mouvement 'entree' (stock initial) et pose
@@ -259,6 +274,9 @@ export async function createProduit(
   data: CreateProduitData,
   options: CreateProduitOptions = {}
 ): Promise<{ id: number }> {
+  // Toute validation précède l'écriture : rien n'est inséré pour un prix refusé
+  if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+
   const famille = FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille! : 'piece'
 
@@ -373,6 +391,8 @@ export async function updateProduit(
   userId: number,
   data: UpdateProduitData
 ): Promise<void> {
+  if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+
   const existing = await db
     .prepare('SELECT id FROM produits WHERE id = ? AND actif = 1')
     .bind(id)
@@ -640,6 +660,7 @@ export async function importCatalogueCsv(
 
       const sku     = iSku    >= 0 && row[iSku]?.trim()   ? row[iSku].trim()  : null
       const paHt    = iPaHt   >= 0 ? parseFloat(row[iPaHt]  ?? '0') || 0  : 0
+      if (prixAchatNegatif(paHt)) { skipped++; errors.push(`Ligne ${num} : prix d'achat négatif — ignorée.`); continue }
       const pvHt    = iPvHt   >= 0 ? parseFloat(row[iPvHt]  ?? '0') || 0  : 0
       const stock   = iStock  >= 0 ? parseInt(row[iStock]   ?? '0', 10) || 0 : 0
       const tva     = iTva    >= 0 ? parseFloat(row[iTva]   ?? '20') || 20 : 20

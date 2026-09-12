@@ -1,5 +1,24 @@
 # iziGSM — Bugs connus
 
+## ✅ Stock : un prix d'achat négatif était accepté, et valorisait le stock (trouvé le 2026-09-12, **CORRIGÉ le 2026-09-12**, non déployé)
+
+Relevé par la revue du ticket 02 `reglages-stock-boutique`. `POST /produits` et
+`PUT /produits/:id` ne validaient pas le prix d'achat, et l'import CSV le prenait tel quel
+(`parseFloat`). Défaut ancien, mais **aggravé par le ticket 02** : le stock initial étant
+désormais valorisé au prix d'achat, `prix_achat_ht: -10` avec 2 pièces faisait **baisser** la
+valeur du stock au coût moyen de 20 €. Atteignable **aussi par l'écran** : `min="0"` sur le
+champ n'empêche pas de taper −10, et `saveStock()` envoie la valeur telle quelle (aucun
+formulaire soumis, donc aucune validation du navigateur). Le refus du serveur s'y affiche
+désormais par le message d'erreur existant.
+
+**Règle de l'exploitant : un prix d'achat ne peut pas être négatif.** Une seule définition,
+`prixAchatNegatif()` (`stockService.ts`), appliquée aux trois chemins d'écriture : création et
+modification refusent (`ERREUR_PRIX_ACHAT_NEGATIF`, 422 côté route, rien d'écrit), une ligne CSV
+est ignorée avec un message. L'import Mobilax passe par `createProduit()` et hérite du refus.
+Preuve : `tests/e2e/stock-prix-achat-negatif.spec.ts` (D1 locale) et 3 tests unitaires, tous vus
+rouges avant le correctif. **Non traité, même famille** : une quantité négative à la création
+(`stock_actuel: -3`) est insérée sans mouvement tracé.
+
 ## 🟡 Reconditionnement : un produit naît avec 1 en stock sans mouvement de stock (trouvé le 2026-09-12, NON corrigé)
 
 Trouvé en cadrant les réglages de stock par boutique. `reconditionnementService.ts:528-531` crée

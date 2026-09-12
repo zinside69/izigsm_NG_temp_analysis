@@ -22,6 +22,7 @@ import {
   createCategorie,
   getKpisStock,
   importCatalogueCsv,
+  ERREUR_PRIX_ACHAT_NEGATIF,
   type MouvementData,
   type FamilleProduit,
 } from '../services/stockService'
@@ -124,8 +125,14 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString() ?? queryBoutiqueId)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const created = await createProduit(db, boutiqueId, user.sub, body)
-  return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
+  // Refus de validation du service (prix d'achat négatif) → 422, jamais un 500 nu
+  try {
+    const created = await createProduit(db, boutiqueId, user.sub, body)
+    return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
+  } catch (err: any) {
+    if (err.message === ERREUR_PRIX_ACHAT_NEGATIF) return c.json({ success: false, error: err.message }, 422)
+    throw err
+  }
 })
 
 // ── POST /api/produits/import-csv ────────────────────────────────────────────

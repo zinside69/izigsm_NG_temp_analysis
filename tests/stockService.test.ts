@@ -544,11 +544,29 @@ describe('stockService', () => {
       expect(insertCall!.params[8]).toBe(20)
       expect(insertCall!.params[10]).toBe(5)
     })
+
+    it('refuse un prix d\'achat négatif, sans rien écrire', async () => {
+      await expect(createProduit(dbD1 as any, 1, 10, { nom: 'Prix négatif', prix_achat_ht: -10, stock_actuel: 2 }))
+        .rejects.toThrow('Le prix d\'achat ne peut pas être négatif.')
+
+      const calls = dbD1.__getCalls()
+      expect(calls.some(c => c.sql === SQL_INSERT_PRODUIT)).toBe(false)
+      expect(calls.some(c => c.sql === SQL_INSERT_MOUVEMENT_INITIAL)).toBe(false)
+    })
   })
 
   // ─── updateProduit ─────────────────────────────────────────────────────────
 
   describe('updateProduit()', () => {
+    it('refuse un prix d\'achat négatif, sans rien écrire', async () => {
+      dbD1.__setResponse(SQL_CHECK_PRODUIT_ACTIF, { id: 5 })
+
+      await expect(updateProduit(dbD1 as any, 5, 10, { prix_achat_ht: -5 }))
+        .rejects.toThrow('Le prix d\'achat ne peut pas être négatif.')
+
+      expect(dbD1.__getCalls().some(c => c.sql === SQL_UPDATE_PRODUIT)).toBe(false)
+    })
+
     it('lance une Error si produit introuvable', async () => {
       dbD1.__setNotFound(SQL_CHECK_PRODUIT_ACTIF)
 
@@ -942,6 +960,18 @@ describe('stockService', () => {
       expect(insertCall).toBeDefined()
       // params[2] = nom
       expect(insertCall!.params[2]).toBe('Écran iPhone 14')
+    })
+
+    it('ignore une ligne au prix d\'achat négatif, sans rien écrire, et le dit', async () => {
+      db.__setResponse(SQL_IMPORT_SELECT_SKU, null)
+      db.__setResponse(SQL_IMPORT_INSERT_PRODUIT, { id: 10 })
+      const csv = 'sku,nom,prix_achat_ht\nNEG-1,Pièce négative,-10'
+
+      const result = await importCatalogueCsv(db as any, 1, 1, csv)
+
+      expect(result).toMatchObject({ imported: 0, updated: 0, skipped: 1 })
+      expect(result.errors).toEqual(['Ligne 2 : prix d\'achat négatif — ignorée.'])
+      expect(db.__getCalls().some(c => c.sql === SQL_IMPORT_INSERT_PRODUIT)).toBe(false)
     })
 
     it('met à jour un produit existant si le SKU est connu', async () => {
