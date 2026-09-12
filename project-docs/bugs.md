@@ -46,6 +46,10 @@ fonction) — ticket `cache-service-worker/01`. **Même classe, non corrigée, �
 passe sans `method`.
 → **Correctif déployé et relu le 2026-09-12** (`izigsm-v3.03`) : aperçu `555be4a6` puis apex,
 `#login-form` en `method="post" onsubmit="return false"`.
+→ **Clôture du 2026-09-12** : mot de passe du compte exposé (`telnet@bbox.fr`) **changé** par
+l'exploitant. Diagnostic de « landingPageFor is not defined » **abandonné** sur sa décision (ticket
+`cache-service-worker/01` en `wontfix`, mesures conservées). `register.html` et
+`reset-password.html` : reportés, `todo.md` 🟠.
 
 ## ✅ Stock : un prix d'achat négatif était accepté, et valorisait le stock (trouvé le 2026-09-12, **CORRIGÉ le 2026-09-12**, non déployé)
 

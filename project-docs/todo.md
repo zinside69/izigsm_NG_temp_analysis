@@ -1,5 +1,19 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **NON corrigé**, reporté)
+
+Même classe de défaut que la connexion, corrigée et déployée le 2026-09-12 (`izigsm-v3.03`,
+`bugs.md`, `CLAUDE.md` § Formulaires avec mot de passe) : `register.html` (`#form-step1`) et
+`reset-password.html` (`#form-reset`) portent un mot de passe sans `method` ni blocage de l'envoi
+natif. Si l'utilisateur valide avant que le script de la page soit attaché, le navigateur soumet
+en GET et le mot de passe part dans l'adresse. **Non vérifié** : où ces scripts sont attachés
+(derrière un script bloquant ou non) — à mesurer d'abord. Reporté par l'exploitant le 2026-09-12.
+
+- [ ] Reproduire par la méthode de la connexion : script retenu (`page.route()`), envoi pendant
+      le chargement, lecture des requêtes de navigation — test vu rouge
+- [ ] `method="post"` + `onsubmit="return false"` sur chaque formulaire portant un mot de passe
+- [ ] `CACHE_VERSION` incrémenté, déploiement sur accord
+
 ## 🟠 P2 — Import en masse depuis la recherche fournisseur (demandé le 2026-09-12, **prochaine session**)
 
 Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, importées une par une

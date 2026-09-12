@@ -1,4 +1,18 @@
-# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 106 — fuite des identifiants à la connexion corrigée ; à déployer)
+# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 107 — fin de soirée, dépôt et production alignés)
+
+## Checkpoint 107 — Clôture de la soirée (2026-09-12)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.03` : réglages de stock
++ correctif de la fuite des identifiants à la connexion, tous deux déployés et relus).
+
+Clôture de l'incident de connexion, sur décisions de l'exploitant (`decisions.md`) : mot de passe
+du compte exposé changé ; diagnostic de « landingPageFor is not defined » abandonné (ticket
+`cache-service-worker/01` → `wontfix`) ; inscription et réinitialisation du mot de passe (même
+classe de défaut) **reportées**, `todo.md` 🟠.
+
+**Prochaine session** (`todo.md`) : import en masse **B puis A** (B = import par génération,
+4 tickets prêts) ; formulaires `register.html`/`reset-password.html` ; sortie de stock des
+produits défectueux (à cadrer) ; « Stock bas » hors page Stock et `nb_alertes` à aligner.
 
 ## Checkpoint 106 — Incident de connexion en production, fuite des identifiants corrigée (2026-09-12)
 

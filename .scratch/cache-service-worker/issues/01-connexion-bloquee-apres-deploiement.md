@@ -1,5 +1,5 @@
 ---
-statut: needs-triage
+statut: wontfix
 date: 2026-09-12
 bloque-par: aucun
 ---
@@ -47,3 +47,8 @@ propre cause, **prouvée** : une course au chargement (envoi natif avant que le 
 ne soit attaché, derrière le téléchargement bloquant d'app.js) — `bugs.md`. Corrigée
 (`onsubmit="return false"` + `method="post"`), test `connexion-formulaire-post.spec.ts` vu rouge.
 **Ce ticket garde son objet** : l'origine de « landingPageFor is not defined », toujours non établie.
+
+**Écarté le 2026-09-12 (`wontfix`), par décision de l'exploitant** (« oublie-le ») : la fuite des
+identifiants, seule conséquence grave, est corrigée et déployée (`izigsm-v3.03`) ; le blocage se
+lève par un rechargement forcé ; aucune autre occurrence signalée. Fichier conservé avec ses
+mesures et hypothèses écartées : s'il se reproduit, repartir d'ici.

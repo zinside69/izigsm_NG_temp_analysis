@@ -1,5 +1,14 @@
 # iziGSM — Décisions
 
+## 2026-09-12 (soir) — Incident de connexion : clôture
+
+- **Diagnostic de « landingPageFor is not defined » abandonné** (« oublie-le ») : la fuite des
+  identifiants, seule conséquence grave, est corrigée et déployée ; un rechargement forcé lève le
+  blocage. Ticket `cache-service-worker/01` en `wontfix`, conservé avec ses mesures.
+- **Inscription et réinitialisation du mot de passe** (`register.html`, `reset-password.html`,
+  même classe de défaut) : **reportées**, `todo.md` 🟠 — pas corrigées ce soir.
+- Mot de passe du compte exposé changé par l'exploitant.
+
 ## 2026-09-12 — Import en masse : import par génération d'abord, cases à cocher ensuite
 
 Demande de l'exploitant (import pièce par pièce jugé chronophage, 2 662 résultats pour

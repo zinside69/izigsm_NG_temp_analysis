@@ -1,4 +1,18 @@
-# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 106 — fuite des identifiants à la connexion corrigée ; à déployer)
+# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 107 — fin de soirée, dépôt et production alignés)
+
+## Ce qui a changé au checkpoint 107
+
+**Rien n'attend de déploiement, rien n'attend de migration** : `izigsm-v3.03` en production
+(réglages de stock + correctif de connexion), relu. Le « landingPageFor » du bloc 106 ci-dessous
+est **abandonné** par décision de l'exploitant (ticket `wontfix`) — ⊥ le rouvrir sans nouvelle
+occurrence.
+
+**Première question à poser : quel chantier ?** Ordre voulu par l'exploitant (`todo.md`) :
+1. **Import en masse, B puis A** — B : `/mattpocock-skills:implement
+   .scratch/import-par-generation/issues/01-series-d-une-generation.md` (tapé par l'exploitant,
+   un ticket = une session) ; A (cases à cocher) à cadrer après B ;
+2. 🟠 `register.html` / `reset-password.html` : même défaut que la connexion, reportés ;
+3. 🟠 sortie de stock des produits défectueux — `/mattpocock-skills:grill-with-docs`.
 
 ## Ce qui a changé au checkpoint 106
 
