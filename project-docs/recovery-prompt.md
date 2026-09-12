@@ -1,4 +1,28 @@
-# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 104 — ticket 01 réglages de stock ; 0047 en attente)
+# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 105 — chantier réglages de stock terminé ; 0047 en attente)
+
+## Ce qui a changé au checkpoint 105
+
+**Le chantier `reglages-stock-boutique` est complet (tickets 01-05), poussé, NON déployé.** Le bloc
+104 ci-dessous (« trois chantiers prêts », « réglages 02, 03… ») est **dépassé** pour les réglages.
+
+**Première action possible : la mise en production, par l'exploitant**, dans cet ordre :
+`npx wrangler d1 migrations apply DB --remote` (lire `Resource location: remote`) → relire
+`d1_migrations` distant (`0047`) → **puis** `npm run deploy` → relire l'asset hashé `stock.*.js`
+sur l'apex et `sw.js` `izigsm-v3.02`. Déployer avant `0047` : `PUT /api/boutiques/:id/stock` en
+`no such column`.
+
+**Règles désormais communes à tout chemin de création de produit** (`CLAUDE.md` § Stock) : seuil
+absent → seuil par défaut ; quantité > 0 → mouvement « Stock initial » + coût moyen = prix
+d'achat ; quantité entier ≥ 0 ; prix d'achat ≥ 0.
+
+**Candidats pour la suite** :
+- ticket 05 Mobilax (rafraîchir un produit importé) · import par génération 01 → 04
+  (`.scratch/import-par-generation/`, débloqué par le ticket 05 des réglages) ;
+- 🟠 sortie de stock des produits défectueux (nouveau, `todo.md`) — `/mattpocock-skills:grill-with-docs` ;
+- restes du vocabulaire « Stock bas » hors page Stock, et `nb_alertes` à aligner sur le glossaire.
+
+**Leçon de la session** : un « ok » répondu à un choix entre options n'est pas un choix — le
+redemander (mémoire `feedback-ok-ambigu`).
 
 ## Ce qui a changé au checkpoint 104
 

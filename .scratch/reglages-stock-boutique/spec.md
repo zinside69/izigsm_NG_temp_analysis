@@ -1,6 +1,6 @@
 ---
 chantier: reglages-stock-boutique
-statut: ready-for-agent
+statut: done (2026-09-12, tickets 01-05 — déploiement en attente de 0047)
 date: 2026-09-12
 ---
 

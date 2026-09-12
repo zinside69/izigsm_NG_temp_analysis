@@ -1,5 +1,18 @@
 # iziGSM — Décisions
 
+## 2026-09-12 — Stock : quatre règles tranchées par l'exploitant pendant le chantier réglages de stock
+
+| Sujet | Décision | Écarté, et pourquoi |
+|---|---|---|
+| Prix d'achat négatif | **Refusé partout** : création et modification → 422 sans rien écrire, ligne CSV ignorée, l'import fournisseur hérite (`prixAchatNegatif()`) | Le laisser passer : depuis le ticket 02, il valorisait le stock initial à la baisse |
+| Motif du mouvement de départ | **« Stock initial » sur tous les chemins de création**, CSV compris ; la mise à jour d'un SKU existant par CSV garde « Import catalogue CSV » (ce n'est pas un stock de départ) | Un motif par chemin (option B) : historique non uniforme, contraire à la story 25 |
+| Libellés « Stock bas » / « Alertes seuil bas » de la page Stock | **« À commander »**, avec l'indicateur et le filtre recalculés selon le glossaire : surveillé (seuil > 0), quantité ≤ seuil, rupture comprise | Renommer sans aligner : l'indicateur comptait aussi les ruptures non surveillées — faux chiffre sous le bon mot |
+| Quantité de départ négative | **Refusée** : entier ≥ 0, même règle que le CSV. Retirer des pièces défectueuses passe par un mouvement de sortie | Un stock négatif sans mouvement tracé |
+
+**Demande associée, non tranchée** : sortie de stock des produits défectueux (verre cassé,
+accessoire non conforme…) réservée au manager et à l'admin de la boutique, avec historique
+exploitable par la comptabilité à l'inventaire — `todo.md` 🟠, à cadrer par `grill-with-docs`.
+
 ## 2026-09-12 — Import par génération (grilling, 14 questions)
 
 Précise la décision du 2026-09-11 (« import en masse par modèle »). Vocabulaire fixé dans

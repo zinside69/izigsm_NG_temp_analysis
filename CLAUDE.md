@@ -561,6 +561,11 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   l'import passe ; **marge résolue sur cette famille** ; catégorie locale = catégorie Mobilax la
   plus fine, `trouverOuCreerCategorie()` ; **marque = `models.brand_name`** (objet ou tableau),
   gamme `mobilax_brand.name` en tête de la description.
+- **« Qté en rayon » à l'import (ticket 05 `reglages-stock-boutique`)** : `quantite_en_rayon`
+  facultative dans le corps, **nombre JSON** entier ≥ 0, **validée avant tout appel à Mobilax**
+  (`quantite_invalide`, 400, aucun quota brûlé) ; absente → stock initial par défaut ; seuil =
+  seuil par défaut de la boutique. Une pièce déjà importée n'ajoute jamais la quantité saisie
+  (`deja_importe`) — l'écran le dit. En-tête « Dispo. fournisseur » : ⊥ « stock » Mobilax.
 - **Recherche paginée : 100 résultats par page** (maximum de `/products`), `?page=` validé en
   entier ≥ 1 par la route (400 sinon, aucun appel brûlé). Une page = un appel au quota 30/min :
   ⊥ charger toutes les pages d'un coup (5 095 pièces pour « iphone 12 » = 51 appels).
@@ -601,6 +606,18 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `PUT /api/boutiques/:id/stock` seule (`updateDefautsStock()`, remplacement complet, `""` →
   `NULL`, entier ≥ 0 sinon 422), jamais par `/settings`. Lues par **`resoudreDefautsStock()`**
   seule (`NULL` → 0) : ⊥ un repli codé chez un chemin de création.
+- **Tout chemin de création de produit applique les mêmes règles** (manuel, CSV, fournisseur
+  connecté — chantier `reglages-stock-boutique`, 2026-09-12) : seuil absent → seuil par défaut ;
+  quantité > 0 → mouvement **« Stock initial »** et coût moyen = prix d'achat
+  (`coutMoyenInitial()`) ; quantité = entier ≥ 0 (`estEntierPositifOuNul()`, `entierCsv()` pour
+  une cellule) ; prix d'achat ≥ 0 (`prixAchatNegatif()`). Réglages lus par `lireDefautsStock()`
+  (D1 brut, `stockService`) ou `getBoutiqueSettings()` + `resoudreDefautsStock()`. La colonne CSV
+  du seuil est `stock_minimum` — elle n'était pas lue avant le ticket 04. ⊥ un nouveau chemin de
+  création qui réécrirait l'une de ces règles au lieu de passer par `createProduit()`.
+- **Page Stock, « À commander »** : `estACommander()` (`stock.js`) reflète `sqlSousSeuil()` —
+  surveillé et quantité ≤ seuil, rupture comprise ; la rupture reste un badge à part. ⚠
+  `getKpisStock().nb_alertes` exclut encore les ruptures : deux définitions coexistent tant qu'il
+  n'est pas aligné, et « Stock bas » reste affiché hors de la page Stock (décision du 2026-09-12).
 
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
@@ -800,6 +817,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-12 (checkpoint 105) : chantier `reglages-stock-boutique` COMPLET dans le dépôt,
+migration `0047` EN ATTENTE — dépôt en avance sur la production.** Tickets 01-05 et décisions du
+jour (`8e5ff54`), `CACHE_VERSION` `izigsm-v3.02`. Ordre : `0047` en `--remote` (lire `Resource
+location: remote`), relire `d1_migrations` distant, **puis** `npm run deploy`, puis relire l'asset
+hashé `stock.*.js` et `sw.js`. Effet visible : sans réglage, un produit créé n'est plus surveillé.
 
 **État au 2026-09-12 (ticket 01 réglages de stock) : migration `0047` EN ATTENTE — dépôt en
 avance sur la production.** Valeurs par défaut de stock par boutique (onglet Réglages › Stock).

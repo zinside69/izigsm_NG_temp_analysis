@@ -1,4 +1,38 @@
-# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 104 — ticket 01 réglages de stock ; 0047 en attente)
+# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 105 — chantier réglages de stock terminé ; 0047 en attente)
+
+## Checkpoint 105 — Chantier réglages de stock terminé (tickets 02-05) + quatre décisions de l'exploitant (2026-09-12)
+
+**Dépôt en avance, `0047` EN ATTENTE, non déployé — volontairement.** Le chantier
+`reglages-stock-boutique` est complet (5/5) et part en un bloc : `0047` en `--remote` (lire
+`Resource location: remote`), relire `d1_migrations` distant, **puis** `npm run deploy`
+(`izigsm-v3.02`). Effet visible : sans réglage, un produit créé n'est plus surveillé (seuil 0) et
+la page Stock affiche le rappel vers Réglages › Stock.
+
+Livré (commits `0c2a9f5` → `8e5ff54`) :
+- **02** stock initial valorisé au coût moyen à la création manuelle ;
+- **03** seuil d'alerte par défaut à la création manuelle (repli 5 supprimé), formulaire
+  pré-rempli, seuil vide non envoyé, rappel sur la page Stock (`/settings#stock`) ;
+- **04** import CSV : la colonne `stock_minimum`, annoncée par l'écran, **n'était pas lue** (5 en
+  dur) ; vide → réglage ; coût moyen initial ; quantité ou seuil invalides → ligne ignorée ;
+  virgule décimale lue (`12,50`) ;
+- **05** import fournisseur : « Qté en rayon » pré-remplie, seuil par défaut, `quantite_invalide`
+  400 sans appel Mobilax, message d'import qui dit ce qu'est devenue la quantité ; `CACHE_VERSION`
+  `izigsm-v3.02`.
+
+Décisions de l'exploitant (`decisions.md`) : prix d'achat négatif refusé partout ; motif « Stock
+initial » sur tous les chemins de création, CSV compris ; « À commander » sur la page Stock
+(libellés **et** calcul alignés sur `sqlSousSeuil()`) ; quantité de départ = entier ≥ 0. Nouveau
+chantier consigné (`todo.md` 🟠) : **sortie de stock des produits défectueux**, réservée
+manager/admin, motivée et valorisée pour la comptabilité — à ouvrir par `grill-with-docs`.
+
+Relevés, non traités : « Stock bas » encore affiché ailleurs (tableau de bord, statistiques,
+fournisseurs, accueil) ; `getKpisStock().nb_alertes` exclut les ruptures (≠ page Stock) ; puce du
+tableau de bord « en rupture » qui compte des produits à commander ; indicateur de la page Stock
+calculé sur 200 produits ; instabilité E2E vue une fois (`stock-seuil-defaut-creation`, non
+reproduite — ticket 04).
+
+**Gates** : vitest 1069/1071 (baseline), tsc 32, E2E stock/réglages/Mobilax réel/balayage du menu
+38/38. Chaque ticket : tests vus rouges, revue à deux axes, défauts corrigés avant commit.
 
 ## Checkpoint 104 — Ticket 01 réglages de stock : onglet Réglages › Stock (2026-09-12)
 

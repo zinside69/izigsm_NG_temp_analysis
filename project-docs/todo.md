@@ -642,6 +642,10 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       CSV (← 01, 03) · 05 import fournisseur « Qté en rayon » (← 01, 02). Un ticket = une session
       neuve par `/mattpocock-skills:implement`. Déployer le chantier en un bloc (rappel livré
       avec le changement de comportement)
+      → **✅ 02, 03, 04, 05 faits le 2026-09-12** (checkpoint 105, `0c2a9f5` → `8e5ff54`) — le
+      chantier est complet dans le dépôt. **Reste : la mise en production**, par l'exploitant :
+      `0047` en `--remote`, relire `d1_migrations` distant, puis `npm run deploy` (`izigsm-v3.02`).
+      Case laissée ouverte jusqu'au déploiement vérifié.
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06
@@ -661,7 +665,8 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       (`/grill-with-docs`, 14 questions, `decisions.md` même date) : boucle pilotée par le
       navigateur à 20/min, génération = séries au nom commençant par le texte tapé (confirmées),
       déjà-importés repérés par la `reference` de la liste sans appel de fiche, pause sur quota,
-      reprise par relance. Dépend du ticket 05 des réglages de stock. **Spec + 4 tickets
+      reprise par relance. Dépend du ticket 05 des réglages de stock (✅ fait le 2026-09-12,
+      `8e5ff54`, non déployé). **Spec + 4 tickets
       publiés le 2026-09-12** (`.scratch/import-par-generation/`), chaîne linéaire : 01 séries
       d'une génération → 02 aperçu chiffré (+ E2E réel, aperçu seul) → 03 boucle, progression,
       bilan → 04 quota, panne, reprise. Un ticket = une session neuve par
