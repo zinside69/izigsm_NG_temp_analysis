@@ -31,6 +31,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
 import { createMockDatabase } from './helpers/mockDatabase'
+import { sqlSousSeuil } from '../src/lib/stockSeuil'
 import {
   listProduits,
   getProduitById,
@@ -110,7 +111,7 @@ const SQL_SELECT_BASE = n(`
          ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
          CASE
            WHEN p.stock_actuel = 0               THEN 'rupture'
-           WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+           WHEN ${sqlSousSeuil('p')} THEN 'bas'
            ELSE 'ok'
          END AS alerte_stock
   FROM   produits p
@@ -211,7 +212,7 @@ const SQL_KPIS_STOCK = n(`
     COUNT(*)                                                         AS nb_produits,
     SUM(CASE WHEN stock_actuel = 0 THEN 1 ELSE 0 END)               AS nb_ruptures,
     SUM(CASE WHEN stock_actuel > 0
-             AND stock_actuel <= stock_minimum THEN 1 ELSE 0 END)   AS nb_alertes,
+             AND ${sqlSousSeuil()} THEN 1 ELSE 0 END)   AS nb_alertes,
     ROUND(SUM(stock_actuel * prix_achat_ht), 2)                     AS valeur_stock_ht,
     ROUND(SUM(stock_actuel * prix_achat_cump), 2)                   AS valeur_stock_cump
   FROM produits
@@ -314,7 +315,7 @@ describe('stockService', () => {
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
-                 WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+                 WHEN ${sqlSousSeuil('p')} THEN 'bas'
                  ELSE 'ok'
                END AS alerte_stock
         FROM   produits p
@@ -342,7 +343,7 @@ describe('stockService', () => {
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
-                 WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+                 WHEN ${sqlSousSeuil('p')} THEN 'bas'
                  ELSE 'ok'
                END AS alerte_stock
         FROM   produits p
@@ -359,8 +360,8 @@ describe('stockService', () => {
       expect(result.pagination.total).toBe(1)
     })
 
-    it('filtre stock_bas : ajoute condition stock_actuel <= stock_minimum', async () => {
-      const sqlCountBas = n(`SELECT COUNT(*) AS cnt FROM produits p WHERE p.boutique_id = ? AND p.actif = 1 AND p.stock_actuel <= p.stock_minimum`)
+    it('filtre stock_bas : ajoute la condition sqlSousSeuil() (seuil 0 exclu)', async () => {
+      const sqlCountBas = n(`SELECT COUNT(*) AS cnt FROM produits p WHERE p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')}`)
       db.__setResponse(sqlCountBas, { cnt: 3 })
 
       const sqlSelectBas = n(`
@@ -369,12 +370,12 @@ describe('stockService', () => {
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
-                 WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+                 WHEN ${sqlSousSeuil('p')} THEN 'bas'
                  ELSE 'ok'
                END AS alerte_stock
         FROM   produits p
         LEFT JOIN categories c ON c.id = p.categorie_id
-        WHERE p.boutique_id = ? AND p.actif = 1 AND p.stock_actuel <= p.stock_minimum
+        WHERE p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')}
         ORDER  BY p.nom ASC
         LIMIT ? OFFSET ?
       `)
@@ -400,7 +401,7 @@ describe('stockService', () => {
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
-                 WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+                 WHEN ${sqlSousSeuil('p')} THEN 'bas'
                  ELSE 'ok'
                END AS alerte_stock
         FROM   produits p

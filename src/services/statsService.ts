@@ -28,6 +28,7 @@
 
 import { todayParis, currentMonthParis } from '../lib/timezone'
 import type { Database } from '../ports/database'
+import { sqlSousSeuil } from '../lib/stockSeuil'
 
 // ─── Helpers dates (arithmétique UTC pure sur une date Paris — voir agendaService.ts) ──
 
@@ -123,7 +124,7 @@ export async function getKpisDashboard(db: Database, boutiqueId: number) {
 
     db.get<{ cnt: number }>(
       `SELECT COUNT(*) as cnt FROM produits
-       WHERE boutique_id=? AND stock_actuel<=stock_minimum AND actif=1`, [boutiqueId]
+       WHERE boutique_id=? AND ${sqlSousSeuil()} AND actif=1`, [boutiqueId]
     ),
 
     db.get<{ cnt: number }>(

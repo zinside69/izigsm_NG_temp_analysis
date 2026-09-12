@@ -118,7 +118,8 @@ function renderKPIs() {
 // ─── Alertes stock bas ──────────────────────────────────────────────────────
 function renderLowStockAlerts() {
   const items    = allStockCache.length ? allStockCache : getDB('stock');
-  const low      = items.filter(i => parseInt(i.qty) <= parseInt(i.minQty));
+  // Même règle que le serveur (src/lib/stockSeuil.ts) : un seuil 0 n'alerte jamais
+  const low      = items.filter(i => parseInt(i.minQty) > 0 && parseInt(i.qty) <= parseInt(i.minQty));
   const alertBox = document.getElementById('low-stock-alerts');
   if (!alertBox) return;
 
@@ -296,6 +297,10 @@ function editStock(id) {
   document.getElementById('stock-famille').value            = item.famille     || 'piece';
   document.getElementById('stock-marque').value             = item.marque      || '';
   document.getElementById('stock-qty').value                = item.qty         ?? 0;
+  // Quantité en lecture seule : PUT /produits/:id ignore stock_actuel, le stock ne bouge que par
+  // un mouvement tracé (décision du 2026-09-12) — la saisie était perdue sans message
+  document.getElementById('stock-qty').readOnly             = true;
+  document.getElementById('btn-stock-ajuster').style.display = '';
   document.getElementById('stock-min-qty').value            = item.minQty      ?? 2;
   document.getElementById('stock-price').value              = item.prix_vente_ht ?? '';
   document.getElementById('stock-price-buy').value          = item.prix_achat_ht ?? '';
@@ -333,6 +338,18 @@ function resetStockForm() {
   if (familleEl) familleEl.value = 'piece';
   const catEl = document.getElementById('stock-category');
   if (catEl) catEl.value = '';
+  // Création : la quantité initiale se saisit (POST /produits trace le mouvement d'entrée)
+  const qtyEl = document.getElementById('stock-qty');
+  if (qtyEl) qtyEl.readOnly = false;
+  const btnAjuster = document.getElementById('btn-stock-ajuster');
+  if (btnAjuster) btnAjuster.style.display = 'none';
+}
+
+/** Depuis la fiche d'un produit : la ferme et ouvre « Ajuster le stock » sur ce produit. */
+function ajusterDepuisFiche() {
+  const id = document.getElementById('stock-id').value;
+  closeModal('modal-stock');
+  openAdjustStock(id);
 }
 
 async function saveStock() {
@@ -365,7 +382,9 @@ async function saveStock() {
     if (stockUseApi) {
       let result;
       if (id) {
-        result = await apiPut('/api/produits/' + id, data);
+        // stock_actuel non envoyé : le serveur l'ignore, le stock passe par « Ajuster le stock »
+        const { stock_actuel, ...modifs } = data;
+        result = await apiPut('/api/produits/' + id, modifs);
       } else {
         result = await apiPost('/api/produits', data);
       }

@@ -1,5 +1,25 @@
 # iziGSM — Décisions
 
+## 2026-09-12 — Stock : seuil 0, quantité de la fiche, doublon d'import, étanchéité par boutique
+
+Trois défauts consignés au checkpoint 102, arbitrés par l'exploitant puis corrigés le même jour ;
+et une consigne générale donnée en cours de route : *« les stocks de chaque tenant doivent être
+étanches. Chaque tenant doit pouvoir décider gérer son stock comme il l'entend. L'import via l'API
+Mobilax ou un autre fournisseur doit être transparent vis-à-vis des tenants. »*
+
+| Question | Décision | Écarté |
+|---|---|---|
+| Seuil 0 | **Seuil 0 = produit non surveillé** : jamais « à commander », quel que soit le stock ; alerte si seuil > 0 et stock ≤ seuil. Règle unique `sqlSousSeuil()`. La rupture reste un état affiché | `stock < seuil` pour tous (change les produits à seuil > 0) · rupture = toujours à commander |
+| Quantité dans la fiche | **Lecture seule en modification + bouton « Ajuster le stock »** : le stock ne bouge jamais sans mouvement tracé | Saisie convertie en mouvement automatique (motif peu parlant) |
+| Doublon d'import | **Index unique partiel (migration `0046`)**, violation rendue en `deja_importe` | Accepter le risque (bouton désactivé) |
+| Réglages propres à chaque boutique | **Seuil par défaut à l'import, « rupture à seuil 0 = à commander ? », stock initial à l'import** — chantier à cadrer (`todo.md`). Le correctif du seuil 0 est **gardé** comme comportement par défaut | Rien de plus que le seuil par produit |
+| Clé API fournisseur | **Chaque boutique saisit sa propre clé** : elle bénéficie de son tarif dédié (confirme l'existant) | Clé gérée par la plateforme |
+| « Transparent » | **Même geste quel que soit le fournisseur**, et **un produit importé se gère comme tout produit** | — |
+| Catalogue fournisseur (chantier hors stock) | **Rien de partagé entre boutiques** : libellés, catégories et prix par boutique | Référentiel partagé, prix isolés (piste du 2026-09-11) |
+
+**Révise la piste du 2026-09-11** (« libellés et catégories pouvant être partagés ») : le futur
+catalogue est entièrement cloisonné par boutique, au prix d'un stockage multiplié.
+
 ## 2026-09-11 — Import en masse : par modèle en stock, catalogue entier hors stock
 
 Demande de l'exploitant : importer tous les produits liés à un modèle (« iPhone 17 »), ou le

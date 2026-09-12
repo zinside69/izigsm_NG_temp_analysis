@@ -165,6 +165,11 @@
           <div class="form-field">
             <label>Quantité en stock</label>
             <input type="number" id="stock-qty" min="0" value="0">
+            <!-- Modification d'un produit : quantité en lecture seule (editStock()), le stock ne
+                 bouge que par un mouvement tracé — ce bouton y mène. Masqué à la création. -->
+            <button type="button" class="btn btn-sm btn-outline" id="btn-stock-ajuster" style="display:none;margin-top:6px" onclick="ajusterDepuisFiche()">
+              <i class="fas fa-sliders-h"></i> Ajuster le stock
+            </button>
           </div>
           <div class="form-field">
             <label>Seuil d'alerte</label>

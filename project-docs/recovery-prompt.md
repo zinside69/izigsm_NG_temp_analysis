@@ -1,4 +1,22 @@
-# Recovery Prompt — iziGSM — 2026-09-11 (checkpoint 102 — Mobilax 03-04 en production, import en masse cadré)
+# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 103 — trois défauts du stock corrigés, 0046 en attente)
+
+## Ce qui a changé au checkpoint 103
+
+**Première action : vérifier que le travail est commité et poussé**, puis la mise en production
+dans cet ordre — contrôler 0 doublon actif en production (`SELECT … GROUP BY boutique_id,
+fournisseur_id, reference_fournisseur HAVING COUNT(*) > 1` sur `produits` actifs), appliquer
+**`0046`** en `--remote`, relire `d1_migrations` distant, **puis** `npm run deploy`
+(`izigsm-v3.01`). Déployer avant `0046` ne casse rien (l'index n'est lu par aucun SELECT) mais
+laisse la course au double clic ouverte.
+
+Corrigé : seuil 0 = non surveillé (`sqlSousSeuil()`, ne jamais réécrire la comparaison à la main
+— garde-fou statique), quantité de la fiche en lecture seule, doublon d'import par index unique.
+
+**Prochain chantier selon l'ordre demandé (court → long)** : ticket 05 (rafraîchir un produit
+importé) · supervision Mobilax journalisée · 🟠 réglages de stock par boutique (nouveau,
+`decisions.md` du 2026-09-12) · import en masse par modèle · catalogue hors stock (rien partagé
+entre boutiques) · pièce consommée sur réparation. Les chantiers neufs s'ouvrent par
+`/mattpocock-skills:grill-with-docs`, tapé par l'exploitant.
 
 ## Ce qui a changé au checkpoint 102
 

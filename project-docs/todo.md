@@ -588,21 +588,38 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       production : `stock.c242abce.js` = manifeste local (pagination, notes → description,
       réf. Mobilax), `stock.html` charge Font Awesome, import et recherche 401 sans jeton.
       Reste le geste à l'écran par l'exploitant.
-- [ ] 🟠 **La quantité saisie dans la fiche d'un produit est perdue sans message** (trouvé en
+- [x] 🟠 **La quantité saisie dans la fiche d'un produit est perdue sans message** (trouvé en
       revue du ticket 04, 2026-09-11, défaut ANTÉRIEUR, tous produits) — `editStock()` affiche un
       champ quantité modifiable, mais `PUT /produits/:id` → `updateProduit()` ignore `stock_actuel`
       (le stock ne bouge que par mouvement tracé). L'opérateur croit avoir corrigé son stock.
-      Contournement posé : le message après import renvoie vers « Ajuster le stock ». À trancher :
-      champ en lecture seule dans la fiche, ou saisie convertie en mouvement
-- [ ] 🟡 **Doublon d'import possible par deux clics simultanés** (revue du ticket 04) — la
+      **CORRIGÉ le 2026-09-12** (décision : lecture seule + lien) — en modification `#stock-qty`
+      est `readOnly` et `#btn-stock-ajuster` ouvre « Ajuster le stock » sur le produit ; le PUT
+      n'envoie plus `stock_actuel` ; à la création la quantité reste saisissable.
+      `tests/e2e/stock-fiche-quantite.spec.ts` vu rouge
+- [x] 🟡 **Doublon d'import possible par deux clics simultanés** (revue du ticket 04) — la
       vérification `deja_importe` puis `createProduit()` n'est pas atomique, aucune contrainte
       `UNIQUE(boutique_id, fournisseur_id, reference_fournisseur)`. Bouton désactivé pendant
-      l'import : fenêtre étroite. Parade complète = index unique partiel (migration)
-- [ ] 🟡 **Produit importé à 0 en stock : alerte « à commander » quand même** (trouvé le
+      l'import : fenêtre étroite. **CORRIGÉ le 2026-09-12** — migration **`0046`** (index unique
+      partiel `WHERE actif = 1 AND fournisseur_id/reference_fournisseur NOT NULL`, même périmètre
+      que la vérification) ; `importerProduitMobilax()` convertit la violation en `deja_importe`
+      avec le produit du premier import, toute autre erreur remonte. Tests vus rouges : migration
+      contre un vrai SQLite + course simulée dans `mobilaxService.test.ts`.
+      ⚠ **`0046` à appliquer en distant AVANT le déploiement** — et contrôler d'abord 0 doublon
+      actif en production (lecture refusée en `7403` depuis la session du 2026-09-12)
+- [x] 🟡 **Produit importé à 0 en stock : alerte « à commander » quand même** (trouvé le
       2026-09-11) — `getProduitsACommander()`/KPI et la liste « Alertes seuil bas » de
-      `stock.js` comparent `stock_actuel <= stock_minimum` : avec seuil 0, 0 ≤ 0 est vrai. La
-      promesse « pas d'alerte dès l'import » n'est tenue que par le KPI stock bas. Décision à
-      prendre : règle globale (`<` quand seuil = 0 ?) ou rupture assumée comme « à commander »
+      `stock.js` comparent `stock_actuel <= stock_minimum` : avec seuil 0, 0 ≤ 0 est vrai.
+      **CORRIGÉ le 2026-09-12** (décision : seuil 0 = produit non surveillé) — règle unique
+      `sqlSousSeuil()` (`src/lib/stockSeuil.ts`) sur les 7 sites SQL + `stock.js` ; la rupture
+      reste un état affiché. Garde-fou `tests/stock-sous-seuil.test.ts` (vrai SQLite + scan
+      statique) et `tests/e2e/stock-seuil-zero.spec.ts`, tous deux vus rouges
+- [ ] 🟠 **Réglages de stock propres à chaque boutique** (demandé le 2026-09-12, `decisions.md`) —
+      chaque boutique gère son stock comme elle l'entend : **seuil par défaut à l'import**,
+      **« une rupture à seuil 0 est-elle à commander ? »** (défaut = non, règle du 2026-09-12),
+      **stock initial à l'import**. Aujourd'hui codés en dur (0/0, `importerProduitMobilax()`) ou
+      communs (`sqlSousSeuil()`). Colonnes `boutique_settings` (migration) + onglet Réglages ;
+      `sqlSousSeuil()` devra alors lire le réglage de la boutique. Valable pour tout fournisseur,
+      pas seulement Mobilax. À cadrer par `/mattpocock-skills:grill-with-docs`
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06

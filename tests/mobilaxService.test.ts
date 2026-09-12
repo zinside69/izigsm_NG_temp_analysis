@@ -387,6 +387,25 @@ describe('importerProduitMobilax()', () => {
     expect(recherche.params).toEqual([BOUTIQUE, 3, 'ECRTAREAPPIPHNE12MNO'])
   })
 
+  it('deux imports simultanés : le second heurte l\'index unique (0046) et rend le produit du premier', async () => {
+    // Les deux clics passent la vérification ; le premier crée, l'INSERT du second est refusé par la
+    // base. Il ne doit ni lever (500) ni créer : même réponse qu'un doublon vu à la vérification.
+    let recherches = 0
+    db.__setResponseFn(SQL_DOUBLON, () => (++recherches === 1 ? null : { id: 41 }))
+    d1.__setResponseFn(SQL_INSERT_PRODUIT, () => {
+      throw new Error('D1_ERROR: UNIQUE constraint failed: produits.boutique_id, produits.fournisseur_id, produits.reference_fournisseur: SQLITE_CONSTRAINT')
+    })
+    mobilaxRenvoieLaFiche()
+    const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+    expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
+  })
+
+  it('autre échec de la base à la création : l\'erreur remonte, jamais maquillée en doublon', async () => {
+    d1.__setResponseFn(SQL_INSERT_PRODUIT, () => { throw new Error('D1_ERROR: no such column: fournisseur_id') })
+    mobilaxRenvoieLaFiche()
+    await expect(importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)).rejects.toThrow(/no such column/)
+  })
+
   it('pièce inconnue chez Mobilax (404) : introuvable, aucun produit', async () => {
     mobilaxRenvoieLaFiche()
     const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 999999)

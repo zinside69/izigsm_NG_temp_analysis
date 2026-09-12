@@ -27,6 +27,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockD1 } from './helpers/mockD1'
 import { createMockDatabase } from './helpers/mockDatabase'
 import { chiffrer } from '../src/lib/chiffrement'
+import { sqlSousSeuil } from '../src/lib/stockSeuil'
 import {
   listFournisseurs,
   getFournisseur,
@@ -151,9 +152,9 @@ const SQL_UPDATE_BC_RECEIVED = `UPDATE bons_commande SET statut = 'received', da
 
 const SQL_KPI_FOURNISSEURS = `SELECT COUNT(DISTINCT f.id) as nb_fournisseurs, COUNT(bc.id) as nb_commandes_total, SUM(CASE WHEN bc.statut = 'awaiting_delivery' THEN 1 ELSE 0 END) as nb_en_attente, SUM(CASE WHEN bc.statut = 'received' THEN bc.montant_ht ELSE 0 END) as montant_achats_ht, SUM(CASE WHEN bc.statut = 'received' AND bc.statut_paiement != 'paid' THEN bc.montant_ttc ELSE 0 END) as montant_impaye_ttc FROM fournisseurs f LEFT JOIN bons_commande bc ON bc.fournisseur_id = f.id WHERE f.boutique_id = ? AND f.actif = 1`
 
-const SQL_KPI_A_COMMANDER = 'SELECT COUNT(*) as nb_produits_a_commander FROM produits WHERE boutique_id = ? AND actif = 1 AND stock_actuel <= stock_minimum'
+const SQL_KPI_A_COMMANDER = `SELECT COUNT(*) as nb_produits_a_commander FROM produits WHERE boutique_id = ? AND actif = 1 AND ${sqlSousSeuil()}`
 
-const SQL_PRODUITS_A_COMMANDER = `SELECT p.id, p.nom, p.sku, p.marque, p.stock_actuel, p.stock_minimum, p.prix_achat_ht, p.prix_achat_cump, f.id as fournisseur_id, f.nom as fournisseur_nom, f.email as fournisseur_email, (p.stock_minimum - p.stock_actuel + 1) as quantite_suggere, CASE WHEN p.stock_actuel = 0 THEN 'rupture' ELSE 'bas' END as alerte FROM produits p LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.actif = 1 WHERE p.boutique_id = ? AND p.actif = 1 AND p.stock_actuel <= p.stock_minimum ORDER BY p.stock_actuel ASC, p.nom ASC`
+const SQL_PRODUITS_A_COMMANDER = `SELECT p.id, p.nom, p.sku, p.marque, p.stock_actuel, p.stock_minimum, p.prix_achat_ht, p.prix_achat_cump, f.id as fournisseur_id, f.nom as fournisseur_nom, f.email as fournisseur_email, (p.stock_minimum - p.stock_actuel + 1) as quantite_suggere, CASE WHEN p.stock_actuel = 0 THEN 'rupture' ELSE 'bas' END as alerte FROM produits p LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.actif = 1 WHERE p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')} ORDER BY p.stock_actuel ASC, p.nom ASC`
 
 // ─── listFournisseurs ─────────────────────────────────────────────────────────
 

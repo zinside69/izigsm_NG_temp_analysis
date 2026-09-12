@@ -1,4 +1,32 @@
-# iziGSM — État courant (MàJ : 2026-09-11, checkpoint 102 — Mobilax : recherche, import et fiche enrichie en production ; import en masse cadré)
+# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 103 — trois défauts du stock corrigés, migration 0046 en attente)
+
+## Checkpoint 103 — Stock : seuil 0, quantité de la fiche, doublon d'import (2026-09-12)
+
+**Dépôt EN AVANCE sur la production, migration `0046` EN ATTENTE** — rien de commité à
+l'écriture de ce checkpoint. Ordre obligatoire : contrôler 0 doublon actif en production,
+`wrangler d1 migrations apply DB --remote` (**`0046`**), relire `d1_migrations` distant, puis
+`npm run deploy` (`izigsm-v3.01`). La lecture distante est refusée en `7403` depuis cette session
+malgré l'OAuth `d1 (write)` — à lancer par l'exploitant.
+
+Trois défauts du checkpoint 102, pris du plus court au plus long, chacun arbitré puis vu rouge :
+1. **Seuil 0 = produit non surveillé** — règle unique `sqlSousSeuil()` (`src/lib/stockSeuil.ts`)
+   sur 7 sites SQL (filtre `stock_bas`, KPI et liste « à commander », `produits_stock_bas`,
+   stats, `nb_alertes`, état `bas`) + `stock.js`. Garde-fou statique : plus aucune comparaison
+   écrite à la main.
+2. **Quantité de la fiche en lecture seule** en modification, bouton « Ajuster le stock » ; le
+   PUT n'envoie plus `stock_actuel`.
+3. **Doublon d'import** — index unique partiel `0046`, violation → `deja_importe`.
+
+**Consigne de l'exploitant** (`decisions.md`) : stocks étanches, chaque boutique gère le sien →
+nouveau chantier 🟠 **réglages de stock par boutique** (seuil par défaut à l'import, rupture à
+seuil 0 à commander ?, stock initial à l'import) ; clé API par boutique confirmée ; catalogue
+fournisseur **sans rien de partagé**.
+
+Constat au passage : `renderLowStockAlerts()` (`stock.js`) est du code mort — `#low-stock-alerts`
+n'existe pas dans `stock.html`.
+
+**Gates** : vitest **1045/1047**, tsc **32**, E2E ciblés **23/23** (2 nouvelles specs, Mobilax réel
+en préproduction, balayage du menu), sur serveur dédié :3100.
 
 ## Checkpoint 102 — Import Mobilax complété en production, deux défauts anciens du Stock réparés (2026-09-11)
 

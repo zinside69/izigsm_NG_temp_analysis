@@ -50,7 +50,7 @@ fournisseurs.get('/fournisseurs/kpis', async (c) => {
 })
 
 // ── GET /api/fournisseurs/a-commander ─────────────────────────────────────────
-/** Vue "À commander" : produits dont stock_actuel ≤ stock_minimum */
+/** Vue "À commander" : produits sous leur seuil d'alerte (un seuil 0 n'alerte pas) */
 fournisseurs.get('/fournisseurs/a-commander', async (c) => {
   const user       = c.get('user')
   const boutiqueId = getBoutiqueId(user, c.req.query('boutique_id'))

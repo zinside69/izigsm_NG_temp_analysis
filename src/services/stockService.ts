@@ -21,6 +21,7 @@
 
 import { parsePagination, auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
+import { sqlSousSeuil } from '../lib/stockSeuil'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -161,7 +162,7 @@ export async function listProduits(
     bindings.push(opts.famille)
   }
   if (opts.stock_bas) {
-    conditions.push('p.stock_actuel <= p.stock_minimum')
+    conditions.push(sqlSousSeuil('p'))   // un seuil 0 n'alerte pas (lib/stockSeuil.ts)
   }
   if (opts.search) {
     conditions.push('(p.nom LIKE ? OR p.sku LIKE ? OR p.marque LIKE ?)')
@@ -182,7 +183,7 @@ export async function listProduits(
            ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
            CASE
              WHEN p.stock_actuel = 0               THEN 'rupture'
-             WHEN p.stock_actuel <= p.stock_minimum THEN 'bas'
+             WHEN ${sqlSousSeuil('p')}             THEN 'bas'
              ELSE 'ok'
            END AS alerte_stock
     FROM   produits p
@@ -727,7 +728,7 @@ export async function getKpisStock(
       COUNT(*)                                                         AS nb_produits,
       SUM(CASE WHEN stock_actuel = 0 THEN 1 ELSE 0 END)               AS nb_ruptures,
       SUM(CASE WHEN stock_actuel > 0
-               AND stock_actuel <= stock_minimum THEN 1 ELSE 0 END)   AS nb_alertes,
+               AND ${sqlSousSeuil()} THEN 1 ELSE 0 END)                AS nb_alertes,
       ROUND(SUM(stock_actuel * prix_achat_ht), 2)                     AS valeur_stock_ht,
       ROUND(SUM(stock_actuel * prix_achat_cump), 2)                   AS valeur_stock_cump
     FROM produits

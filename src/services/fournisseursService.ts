@@ -27,6 +27,7 @@
 import { parsePagination, auditLog } from '../lib/db'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import type { Database } from '../ports/database'
+import { sqlSousSeuil } from '../lib/stockSeuil'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -790,11 +791,11 @@ export async function getKpisFournisseurs(
       WHERE f.boutique_id = ? AND f.actif = 1
     `, [boutiqueId]),
 
-    // Produits en stock bas = besoins potentiels à commander
+    // Produits sous leur seuil = besoins potentiels à commander (un seuil 0 n'alerte pas)
     db.get<{ nb_produits_a_commander: number }>(`
       SELECT COUNT(*) as nb_produits_a_commander
       FROM   produits
-      WHERE  boutique_id = ? AND actif = 1 AND stock_actuel <= stock_minimum
+      WHERE  boutique_id = ? AND actif = 1 AND ${sqlSousSeuil()}
     `, [boutiqueId])
   ])
 
@@ -802,7 +803,8 @@ export async function getKpisFournisseurs(
 }
 
 /**
- * Retourne les produits dont le stock est inférieur ou égal au seuil minimum.
+ * Retourne les produits sous leur seuil d'alerte (`sqlSousSeuil()` : stock ≤ seuil, et un
+ * seuil 0 — produit non surveillé — n'y figure jamais).
  * Enrichit chaque produit avec son fournisseur principal (si renseigné).
  * Calcule la quantité suggérée à commander : `stock_minimum - stock_actuel + 1`.
  *
@@ -824,7 +826,7 @@ export async function getProduitsACommander(
            CASE WHEN p.stock_actuel = 0 THEN 'rupture' ELSE 'bas' END as alerte
     FROM   produits p
     LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.actif = 1
-    WHERE  p.boutique_id = ? AND p.actif = 1 AND p.stock_actuel <= p.stock_minimum
+    WHERE  p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')}
     ORDER BY p.stock_actuel ASC, p.nom ASC
   `, [boutiqueId])
 }

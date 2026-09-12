@@ -1,5 +1,6 @@
 import type { Database } from '../ports/database'
 import type { FamilleProduit } from './stockService'
+import { sqlSousSeuil } from '../lib/stockSeuil'
 
 /**
  * @module services/boutiqueService
@@ -523,7 +524,7 @@ export async function updateTauxMarge(
  *   - `nb_clients`         : nombre de clients actifs (`actif = 1`)
  *   - `tickets_en_cours`   : tickets actifs hors statuts `livre` et `annule`
  *   - `ca_mois`            : CA TTC des factures `payee` du mois courant
- *   - `produits_stock_bas` : produits dont `stock_actuel <= stock_minimum`
+ *   - `produits_stock_bas` : produits sous leur seuil d'alerte (`sqlSousSeuil()`, seuil 0 exclu)
  *
  * @param db         Port Database
  * @param boutiqueId Identifiant numérique de la boutique
@@ -548,7 +549,7 @@ export async function getStatsBoutique(
     ),
 
     db.get<{ cnt: number }>(
-      'SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1', [boutiqueId]
+      `SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND ${sqlSousSeuil()} AND actif = 1`, [boutiqueId]
     ),
   ])
 

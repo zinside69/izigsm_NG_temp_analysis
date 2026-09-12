@@ -131,8 +131,8 @@ export async function rechercherProduitsMobilax(
  * le coût enregistré est celui du fournisseur. Défauts, tous modifiables ensuite : prix de
  * vente = prix d'achat × marge résolue (famille « pièce », sinon défaut boutique ; 0 sans
  * taux — `null` n'est jamais remplacé par un taux inventé, décision du 2026-09-10), stock 0,
- * seuil d'alerte 0. ⚠ Ce seuil n'évite PAS l'alerte de rupture : le dépôt compare
- * `stock_actuel <= stock_minimum`, 0 ≤ 0 est vrai (`todo.md`, décision à prendre).
+ * seuil d'alerte 0 — produit non surveillé, jamais « à commander » (`lib/stockSeuil.ts`,
+ * décision du 2026-09-12).
  *
  * Un produit par pièce : une pièce déjà importée (même fiche fournisseur, même référence) est
  * refusée en `deja_importe`, avec l'identifiant du produit existant.
@@ -177,22 +177,33 @@ export async function importerProduitMobilax(
     ? (await trouverOuCreerCategorie(deps.db, boutiqueId, fiche.categorie_nom)).id
     : null
 
-  const { id } = await createProduit(deps.d1, boutiqueId, userId, {
-    nom:                   fiche.nom,
-    // SKU = EAN (scannable) ; la référence Mobilax reste en `reference_fournisseur`
-    sku:                   fiche.ean13,
-    description:           fiche.description,
-    famille,
-    categorie_id:          categorieId,
-    marque:                fiche.marque,
-    prix_achat_ht:         fiche.prix_achat_ht,
-    prix_vente_ht:         prixVente,
-    stock_actuel:          0,
-    stock_minimum:         0,
-    fournisseur:           cle.fiche.nom,
-    reference_fournisseur: fiche.reference,
-    code_barre:            fiche.ean13,
-  }, { fournisseur_id: cle.fiche.id })
+  let id: number
+  try {
+    ({ id } = await createProduit(deps.d1, boutiqueId, userId, {
+      nom:                   fiche.nom,
+      // SKU = EAN (scannable) ; la référence Mobilax reste en `reference_fournisseur`
+      sku:                   fiche.ean13,
+      description:           fiche.description,
+      famille,
+      categorie_id:          categorieId,
+      marque:                fiche.marque,
+      prix_achat_ht:         fiche.prix_achat_ht,
+      prix_vente_ht:         prixVente,
+      stock_actuel:          0,
+      stock_minimum:         0,
+      fournisseur:           cle.fiche.nom,
+      reference_fournisseur: fiche.reference,
+      code_barre:            fiche.ean13,
+    }, { fournisseur_id: cle.fiche.id }))
+  } catch (err) {
+    // Deux imports simultanés passent tous deux la vérification ci-dessus : l'index unique
+    // `idx_produits_source_fournisseur` (migration 0046) refuse le second. Même réponse qu'un
+    // doublon vu à la vérification, avec le produit du premier. Toute autre erreur remonte.
+    if (!/UNIQUE constraint failed/.test(String((err as Error)?.message))) throw err
+    const gagnant = await trouverProduitImporte(deps.db, boutiqueId, cle.fiche.id, fiche.reference)
+    if (!gagnant) throw err
+    return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: gagnant.id })
+  }
   return { ok: true, produit_id: id }
 }
 

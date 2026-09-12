@@ -433,7 +433,7 @@ boutiques.put('/:id/creneaux', requireRole('admin', 'manager'), async (c) => {
  *   - `nb_clients`          : clients actifs
  *   - `tickets_en_cours`    : tickets actifs hors statuts `livre` et `annule`
  *   - `ca_mois`             : CA TTC encaissé sur le mois courant (factures `payee`)
- *   - `produits_stock_bas`  : produits dont `stock_actuel <= stock_minimum`
+ *   - `produits_stock_bas`  : produits sous leur seuil d'alerte (seuil 0 exclu, `lib/stockSeuil.ts`)
  *
  * @param id  Identifiant numérique de la boutique
  * @returns 200 `{ success: true, data: StatsBoutique }`

@@ -11,8 +11,8 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
 ## Stack
 
 - Backend : Hono (TypeScript) sur Cloudflare Workers/Pages Functions
-- Base de données : Cloudflare D1 (SQLite edge) — 45 migrations dans `migrations/`
-  (dernière : `0045_fournisseur_api_plateforme.sql`, compté le 2026-09-11)
+- Base de données : Cloudflare D1 (SQLite edge) — 46 migrations dans `migrations/`
+  (dernière : `0046_produits_source_fournisseur_unique.sql`, compté le 2026-09-12)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
 - Tests unitaires : Vitest (1036/1038 au 2026-09-11, 37 suites) — `tests/`, mocks D1 dans
@@ -573,6 +573,26 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   ⊥ `import 'node:fs'` dans une spec : `tsconfig` n'a pas les types Node, la baseline tsc monte.
   Sans clé, le test est sauté, jamais faussement vert.
 
+## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
+
+- **Seuil 0 = produit non surveillé** : jamais « à commander », quel que soit le stock. Toute
+  requête « sous le seuil » passe par **`sqlSousSeuil(alias?)`** (`src/lib/stockSeuil.ts`) —
+  ⊥ réécrire `stock_actuel <= stock_minimum` à la main : `tests/stock-sous-seuil.test.ts` fait
+  échouer la suite (scan statique de `src/`, commentaires retirés). La rupture (stock 0) reste
+  un état affiché à part (`nb_ruptures`, badge), ce fragment ne dit que « à commander ».
+  Règle **commune pour l'instant** : un réglage par boutique est demandé (`todo.md`), il devra
+  être lu par ce fragment, jamais par un second.
+- **Le stock d'un produit existant ne bouge que par un mouvement tracé.** `PUT /produits/:id`
+  ignore `stock_actuel` ; la fiche l'affiche en `readOnly` avec « Ajuster le stock »
+  (`#btn-stock-ajuster`). ⊥ rendre ce champ saisissable en modification sans convertir la
+  saisie en mouvement.
+- **Une pièce fournisseur n'existe qu'une fois par boutique** : index unique partiel
+  `idx_produits_source_fournisseur` (migration `0046`, `WHERE actif = 1` et
+  `fournisseur_id`/`reference_fournisseur` non nuls — même périmètre que
+  `trouverProduitImporte()`). Un futur import (masse, autre grossiste) doit rattraper la
+  violation comme `importerProduitMobilax()` : `deja_importe` avec le produit existant, toute
+  autre erreur relevée telle quelle.
+
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
 - **`resoudreTauxMarge(settings, famille)`** (`boutiqueService.ts`, pure) est le seul point de
@@ -771,6 +791,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-12 (checkpoint 103) : migration `0046` EN ATTENTE — dépôt en avance sur la
+production.** Seuil 0, quantité de la fiche, doublon d'import (`izigsm-v3.01`). Ordre : contrôler
+0 doublon actif en production, `migrations apply DB --remote` (`0046`), relire `d1_migrations`
+distant, **puis** `npm run deploy`. Déployer d'abord ne casse rien (aucun SELECT ne lit l'index)
+mais laisse la course au double clic ouverte. Lecture `--remote` refusée en `7403` depuis la
+session du jour malgré l'OAuth `d1 (write)` et `CLOUDFLARE_API_TOKEN` retiré — non élucidé.
 
 **État au 2026-09-11 (fin de journée) : aucune migration en attente — dépôt et production
 alignés.** `ad04d24` (fiche d'une pièce importée remplie, notes enregistrées, recherche paginée,

@@ -15,6 +15,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createMockDatabase } from './helpers/mockDatabase'
+import { sqlSousSeuil } from '../src/lib/stockSeuil'
 import {
   listAllBoutiques,
   listBoutiqueForUser,
@@ -514,7 +515,7 @@ describe('getStatsBoutique', () => {
     db.__setListResponse('SELECT COUNT(*) as cnt FROM clients WHERE boutique_id = ? AND actif = 1', [])
     db.__setListResponse("SELECT COUNT(*) as cnt FROM tickets WHERE boutique_id = ? AND statut NOT IN ('livre','annule') AND actif = 1", [])
     db.__setListResponse("SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id = ? AND statut='payee' AND strftime('%Y-%m',date_emission) = strftime('%Y-%m','now')", [])
-    db.__setListResponse('SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1', [])
+    db.__setListResponse(`SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND ${sqlSousSeuil()} AND actif = 1`, [])
 
     // Réponses scalar via __setResponseFn
     db.__setResponseFn(
@@ -530,7 +531,7 @@ describe('getStatsBoutique', () => {
       () => ({ ca: 4250.50 })
     )
     db.__setResponseFn(
-      'SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND stock_actuel <= stock_minimum AND actif = 1',
+      `SELECT COUNT(*) as cnt FROM produits WHERE boutique_id = ? AND ${sqlSousSeuil()} AND actif = 1`,
       () => ({ cnt: 2 })
     )
 
