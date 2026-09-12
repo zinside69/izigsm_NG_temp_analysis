@@ -29,7 +29,7 @@ const SQL_DOUBLON = 'SELECT id FROM produits WHERE boutique_id = ? AND fournisse
 const SQL_REGLAGES = 'SELECT * FROM boutique_settings WHERE boutique_id = ?'
 const SQL_CATEGORIE = 'SELECT id FROM categories WHERE boutique_id = ? AND nom = ? AND actif = 1 LIMIT 1'
 const SQL_CREER_CATEGORIE = 'INSERT INTO categories (boutique_id, nom, parent_id) VALUES (?, ?, ?) RETURNING id'
-const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
 
 /** Extrait réduit de l'arbre réel des catégories Mobilax. */
 const ARBRE = [

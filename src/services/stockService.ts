@@ -243,7 +243,8 @@ export async function getProduitById(
 
 /**
  * Crée un nouveau produit.
- * Si stock_actuel > 0, enregistre automatiquement un mouvement 'entree' (stock initial).
+ * Si stock_actuel > 0, enregistre automatiquement un mouvement 'entree' (stock initial) et pose
+ * le coût moyen (`prix_achat_cump`) au prix d'achat HT saisi ; sinon le coût moyen vaut 0.
  *
  * @param db          — Instance D1Database
  * @param boutiqueId  — ID boutique
@@ -261,13 +262,19 @@ export async function createProduit(
   const famille = FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille! : 'piece'
 
+  const stockInitial = data.stock_actuel ?? 0
+
   // `description` et `fournisseur_id` en fin de liste : ajoutés au ticket 04 (import Mobilax),
-  // ils ne décalent aucune colonne existante.
+  // ils ne décalent aucune colonne existante. `prix_achat_cump` de même (ticket 02
+  // `reglages-stock-boutique`) : des pièces déjà en rayon valent leur prix d'achat au coût moyen
+  // dès la création, au lieu de 0 € jusqu'à la première réception. Sans stock, 0 est écrit
+  // explicitement — la même valeur que le `DEFAULT 0` de la colonne (migration 0014).
   const result = await db.prepare(`
     INSERT INTO produits
       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
-       stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
+       prix_achat_cump)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -286,12 +293,13 @@ export async function createProduit(
     data.code_barre            ?? null,
     data.description           ?? null,
     options.fournisseur_id     ?? null,
+    stockInitial > 0 ? (data.prix_achat_ht ?? 0) : 0,
   ).first<{ id: number }>()
 
   const produitId = result!.id
 
   // Mouvement stock initial si stock de départ > 0
-  if ((data.stock_actuel ?? 0) > 0) {
+  if (stockInitial > 0) {
     await db.prepare(`
       INSERT INTO mouvements_stock
         (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)

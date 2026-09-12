@@ -302,7 +302,7 @@ describe('rechercherProduitsMobilax()', () => {
 // `{ status: 'OK', data: { id, reference, ean13, name, description (HTML), price, quantity, … } }`,
 // une pièce inexistante `404 { status: 'NOT_FOUND' }`. La référence n'existe que là.
 
-const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
 const SQL_REGLAGES = 'SELECT * FROM boutique_settings WHERE boutique_id = ?'
 const SQL_DOUBLON = 'SELECT id FROM produits WHERE boutique_id = ? AND fournisseur_id = ? AND reference_fournisseur = ? AND actif = 1 LIMIT 1'
 
