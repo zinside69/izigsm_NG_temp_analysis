@@ -663,7 +663,7 @@ export async function createCategorie(
  *   - SKU absent/inconnu → INSERT nouveau produit (ticket 04 `reglages-stock-boutique`) :
  *       · `stock_minimum` vide → seuil d'alerte par défaut de la boutique ; rempli → sa valeur,
  *         même 0 ; rempli mais pas un entier ≥ 0 → ligne ignorée
- *       · `stock_actuel` vide → 0, aucun mouvement ; > 0 → mouvement d'entrée et coût moyen
+ *       · `stock_actuel` vide → 0, aucun mouvement ; > 0 → mouvement « Stock initial » et coût moyen
  *         (`prix_achat_cump`) au prix d'achat de la ligne ; rempli mais pas un entier ≥ 0 →
  *         ligne ignorée (jamais de stock fictif)
  *   - Prix et TVA : virgule décimale admise (« 12,50 »), pour tous les chemins
@@ -801,11 +801,13 @@ export async function importCatalogueCsv(
               coutMoyenInitial(qte, paHt))
         .first<{ id: number }>()
 
+      // Motif « Stock initial », commun à tous les chemins de création (decisions.md, story 25 —
+      // tranché le 2026-09-12) ; la mise à jour d'un SKU existant garde « Import catalogue CSV »
       if (res && qte > 0) {
         await db.prepare(`
           INSERT INTO mouvements_stock
             (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
-          VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
+          VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Stock initial')
         `).bind(res.id, boutiqueId, qte, qte, userId).run()
       }
 

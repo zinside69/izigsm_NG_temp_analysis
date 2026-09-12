@@ -40,6 +40,10 @@ Mobilax réel, balayage du menu 33/33 ; vitest baseline, tsc 32.
 **À trancher avant le ticket 05** : motif du mouvement de départ. `decisions.md` et la story 25
 disent « Stock initial » sur tous les chemins ; le CSV écrit toujours « Import catalogue CSV »
 (ce ticket : « mouvement d'entrée existant conservé »).
+→ **Tranché le 2026-09-12 par l'exploitant : « Stock initial »** (option recommandée, conforme à
+la spec). Le mouvement d'un produit créé par le CSV porte désormais ce motif ; la mise à jour d'un
+SKU existant garde « Import catalogue CSV » (ce n'est pas un stock de départ). Vu rouge (E2E et
+2 tests unitaires) puis vert.
 
 **Relevés, non traités** : prix d'achat vide avec quantité > 0 → pièces valorisées 0 € sans
 avertissement (conforme : aucun prix connu) ; paramètres SQL positionnels (12) dans l'INSERT.

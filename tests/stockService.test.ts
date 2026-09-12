@@ -261,7 +261,7 @@ const SQL_IMPORT_INSERT_PRODUIT = n(`
 const SQL_IMPORT_MOUVEMENT_ENTREE = n(`
   INSERT INTO mouvements_stock
     (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
-  VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Import catalogue CSV')
+  VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Stock initial')
 `)
 
 const SQL_IMPORT_MOUVEMENT_INVENTAIRE = n(`

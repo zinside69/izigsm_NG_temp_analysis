@@ -50,11 +50,12 @@ test('import CSV : seuil vide → réglage, rempli → sa valeur ; quantité val
   const kpis = await (await request.get('/api/produits/kpis', { headers })).json()
   expect(kpis.data.valeur_stock_cump).toBe(35)
 
-  // Quantité > 0 : l'entrée reste tracée ; quantité vide : aucun mouvement
+  // Quantité > 0 : l'entrée reste tracée, sous le motif commun à tous les chemins de création
+  // (« Stock initial », decisions.md) ; quantité vide : aucun mouvement
   const fiche = async (nom: string) =>
     (await (await request.get(`/api/produits/${produits[nom].id}`, { headers })).json()).data
-  expect((await fiche('E2E CSV seuil vide qte 2')).mouvements.map((m: any) => [m.type_mouvement, m.quantite]))
-    .toEqual([['entree', 2]])
+  expect((await fiche('E2E CSV seuil vide qte 2')).mouvements.map((m: any) => [m.type_mouvement, m.quantite, m.motif]))
+    .toEqual([['entree', 2, 'Stock initial']])
   expect((await fiche('E2E CSV seuil vide qte vide')).mouvements).toEqual([])
 })
 
