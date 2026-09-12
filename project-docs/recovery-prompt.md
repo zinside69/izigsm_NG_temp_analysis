@@ -1,4 +1,32 @@
-# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 103 — trois défauts du stock corrigés, 0046 en attente)
+# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 104 — ticket 01 réglages de stock ; 0047 en attente)
+
+## Ce qui a changé au checkpoint 104
+
+**Production** : checkpoint 103 **déployé et relu** (`0046` + `izigsm-v3.01`). Le bloc 103
+ci-dessous qui dit « 0046 en attente » est **dépassé**.
+
+**Dépôt en avance, `0047` EN ATTENTE, volontairement non déployé** : ticket 01 du chantier
+`reglages-stock-boutique` fait (onglet Réglages › Stock, `PUT /api/boutiques/:id/stock`,
+`resoudreDefautsStock()`). Le chantier part **en un bloc** après les tickets 03-04 (le rappel de
+la page Stock doit accompagner le seuil par défaut à 0). Le moment venu : `0047` en `--remote`,
+relire `d1_migrations`, puis `npm run deploy`.
+
+**Trois chantiers prêts à coder** (un ticket = une session neuve,
+`/mattpocock-skills:implement <chemin du ticket>`, tapé par l'exploitant) :
+- `.scratch/reglages-stock-boutique/issues/` — 02 (sans bloqueur) et 03 (débloqué) prenables ;
+  puis 04 (← 01, 03), 05 (← 01, 02) ;
+- ticket 05 Mobilax `.scratch/integration-mobilax/issues/05-…` — cadré (dispo fournisseur
+  affichée, prix d'achat seul mis à jour), `/products/lookup` mesuré ;
+- `.scratch/import-par-generation/issues/` — 01 → 04 en chaîne ; 03-04 ne se **déploient**
+  qu'après le ticket 05 des réglages.
+
+Ordre conseillé (court → long) : réglages 02, 03 · ticket 05 Mobilax · réglages 04, 05 · import
+par génération 01 → 04.
+
+**À savoir avant de coder** : vocabulaire du stock dans `CONTEXT.md` (seuil d'alerte, à
+commander, rupture, stock initial, fournisseur connecté, article fournisseur, produit importé,
+disponibilité fournisseur, série, génération) ; `sqlSousSeuil()` ne lit aucun réglage ;
+`resoudreDefautsStock()` est le seul point de résolution des valeurs par défaut.
 
 ## Ce qui a changé au checkpoint 103
 
