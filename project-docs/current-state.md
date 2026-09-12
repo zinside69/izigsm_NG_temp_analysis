@@ -2,6 +2,11 @@
 
 ## Checkpoint 105 — Chantier réglages de stock terminé (tickets 02-05) + quatre décisions de l'exploitant (2026-09-12)
 
+**✅ Déployé le 2026-09-12 après ce checkpoint** — `0047` appliquée puis Worker déployé par
+l'exploitant, production relue (`CLAUDE.md` § Déploiement) : `izigsm-v3.02`, `stock.41248caa.js`
+servi par l'aperçu et l'apex, `/api/health` 200. Reste le geste à l'écran de l'exploitant.
+Texte d'origine :
+
 **Dépôt en avance, `0047` EN ATTENTE, non déployé — volontairement.** Le chantier
 `reglages-stock-boutique` est complet (5/5) et part en un bloc : `0047` en `--remote` (lire
 `Resource location: remote`), relire `d1_migrations` distant, **puis** `npm run deploy`

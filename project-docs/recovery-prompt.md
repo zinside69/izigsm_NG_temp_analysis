@@ -2,6 +2,10 @@
 
 ## Ce qui a changé au checkpoint 105
 
+**✅ Mise à jour après le checkpoint : DÉPLOYÉ et relu le 2026-09-12** (`0047` + `izigsm-v3.02`,
+dépôt et production alignés, aucune migration en attente). La « première action » ci-dessous est
+faite ; reste le geste à l'écran de l'exploitant (Réglages › Stock, rappel, « Qté en rayon »).
+
 **Le chantier `reglages-stock-boutique` est complet (tickets 01-05), poussé, NON déployé.** Le bloc
 104 ci-dessous (« trois chantiers prêts », « réglages 02, 03… ») est **dépassé** pour les réglages.
 

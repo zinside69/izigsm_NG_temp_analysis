@@ -818,6 +818,15 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-12 (après le checkpoint 105) : aucune migration en attente — dépôt et
+production alignés.** `0047` appliquée à distance **puis** Worker déployé, par l'exploitant, dans
+cet ordre (première tentative en `7403` — `CLOUDFLARE_API_TOKEN` resté dans le shell — puis une
+seconde sans `--remote`, faux succès « No migrations to apply » en local : les deux pièges
+documentés, rattrapés avant tout déploiement). Relu : `d1_migrations` distant = `0047`,
+colonnes `stock_seuil_defaut`/`stock_initial_defaut` présentes, `stock.41248caa.js` servi en
+JavaScript par l'aperçu **puis** l'apex (= manifeste local, contient le code du ticket 05),
+`sw.js` `izigsm-v3.02`, `/api/health` 200, `PUT /api/boutiques/1/stock` sans jeton → 401.
+
 **État au 2026-09-12 (checkpoint 105) : chantier `reglages-stock-boutique` COMPLET dans le dépôt,
 migration `0047` EN ATTENTE — dépôt en avance sur la production.** Tickets 01-05 et décisions du
 jour (`8e5ff54`), `CACHE_VERSION` `izigsm-v3.02`. Ordre : `0047` en `--remote` (lire `Resource

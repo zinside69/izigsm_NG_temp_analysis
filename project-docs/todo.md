@@ -628,7 +628,7 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       `sqlSousSeuil()` (`src/lib/stockSeuil.ts`) sur les 7 sites SQL + `stock.js` ; la rupture
       reste un état affiché. Garde-fou `tests/stock-sous-seuil.test.ts` (vrai SQLite + scan
       statique) et `tests/e2e/stock-seuil-zero.spec.ts`, tous deux vus rouges
-- [ ] 🟠 **Réglages de stock propres à chaque boutique** (demandé le 2026-09-12) — **CADRÉ le
+- [x] 🟠 **Réglages de stock propres à chaque boutique** (demandé le 2026-09-12) — **CADRÉ le
       2026-09-12** par `/grill-with-docs` (21 questions, `decisions.md` même date, glossaire
       `CONTEXT.md`) : **seuil d'alerte par défaut** et **stock initial par défaut** (0 si rien
       réglé), seuil par défaut sur toute création (formulaire, CSV, import fournisseur), champ
@@ -646,6 +646,8 @@ route : la facturation indépendante d'une prise en charge passe par `/caisse` (
       chantier est complet dans le dépôt. **Reste : la mise en production**, par l'exploitant :
       `0047` en `--remote`, relire `d1_migrations` distant, puis `npm run deploy` (`izigsm-v3.02`).
       Case laissée ouverte jusqu'au déploiement vérifié.
+      → **✅ Déployé et relu le 2026-09-12** : `0047` à distance puis `npm run deploy`
+      (`izigsm-v3.02`), relecture de l'aperçu puis de l'apex (`CLAUDE.md` § Déploiement).
 - [ ] **05** — Rafraîchissement manuel d'un produit importé — bloqué par 04
 - [ ] **06** — Recherche + ligne marginée dans un devis — bloqué par 03, 02
 - [ ] **07** — Même widget sur Facture — bloqué par 06
