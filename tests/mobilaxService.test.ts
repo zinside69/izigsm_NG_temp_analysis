@@ -346,7 +346,8 @@ describe('importerProduitMobilax()', () => {
     mobilaxRenvoieLaFiche()
     const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
 
-    expect(r).toEqual({ ok: true, produit_id: 77 })
+    // La famille voyage dans la réponse : le bilan de l'import par génération la répartit (ticket 03)
+    expect(r).toEqual({ ok: true, produit_id: 77, famille: 'piece' })
     expect(insertProduit(d1)).toMatchObject({
       boutique_id:           BOUTIQUE,
       nom:                   'Ecran Tactile Original Refurb (PIEC) Apple iPhone 12 Mini Noir',

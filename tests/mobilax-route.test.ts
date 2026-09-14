@@ -193,6 +193,7 @@ describe('GET /api/mobilax/apercu', () => {
     expect(await res.json()).toEqual({
       success: true,
       data: {
+        fournisseur_id: 3,
         series: [{ id: 2358, nb_articles: 1 }, { id: 2360, nb_articles: 1 }],
         articles: [
           { mobilax_id: 2359, reference: 'REF-2358', nom: 'Article 2358', series: [2358], deja_en_stock: false },
@@ -290,7 +291,8 @@ describe('POST /api/mobilax/import', () => {
     mobilaxRenvoieLaFiche()
     const { res, d1 } = await importer({ role: 'manager', boutique_id: 1 }, { mobilax_id: 17, boutique_id: 99 })
     expect(res.status).toBe(201)
-    expect(await res.json()).toEqual({ success: true, data: { produit_id: 88 } })
+    // Famille dans la réponse : lue par le bilan de l'import par génération (ticket 03)
+    expect(await res.json()).toEqual({ success: true, data: { produit_id: 88, famille: 'piece' } })
     const insert = d1.__getCalls().find(c => c.sql.startsWith('INSERT INTO produits'))!
     expect(insert.params[0]).toBe(1)   // boutique du jeton, jamais le boutique_id du corps
   })

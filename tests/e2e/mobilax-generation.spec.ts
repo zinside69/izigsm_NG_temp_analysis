@@ -186,6 +186,127 @@ test.describe('Mobilax — mode « Par génération »', () => {
     await expect(page.locator('#btn-generation-importer')).toBeDisabled()
   })
 
+  // ── Ticket 03 : boucle d'import, progression, bilan — horloge simulée (`page.clock`) ──
+
+  /** Réponse simulée de `POST /api/mobilax/import`, par identifiant d'article. */
+  const REPONSES_IMPORT: Record<number, { status: number; json: unknown }> = {
+    1: { status: 201, json: { success: true, data: { produit_id: 101, famille: 'piece' } } },
+    2: { status: 409, json: { success: false, code: 'deja_importe', error: 'Cette pièce est déjà dans votre stock.', data: { produit_id: 41 } } },
+    3: { status: 404, json: { success: false, code: 'introuvable', error: 'Cette pièce n\'existe plus chez Mobilax.' } },
+    4: { status: 201, json: { success: true, data: { produit_id: 104, famille: 'accessoire' } } },
+  }
+
+  /**
+   * Génération simulée de 4 articles (série 2358), import simulé article par article ; horloge
+   * installée AVANT toute navigation. Rend les corps reçus par la route d'import, dans l'ordre.
+   */
+  async function importSimule(page: Page, request: any) {
+    await page.clock.install()
+    await simulerGeneration(page, { success: true, data: {
+      fournisseur_id: 3,
+      series: [{ id: 2358, nb_articles: 5 }, { id: 2360, nb_articles: 0 }],
+      articles: [
+        ...[1, 2, 3, 4].map(id => ({ mobilax_id: id, reference: `R${id}`, nom: `Article ${id}`, series: [2358], deja_en_stock: false })),
+        // Déjà dans le stock à l'aperçu : jamais importé, mais compté au bilan
+        { mobilax_id: 5, reference: 'R5', nom: 'Article 5', series: [2358], deja_en_stock: true },
+      ],
+    } })
+    const corps: unknown[] = []
+    await page.route('**/api/mobilax/import*', async route => {
+      const recu = route.request().postDataJSON()
+      corps.push(recu)
+      await route.fulfill(REPONSES_IMPORT[recu.mobilax_id])
+    })
+    await modeGenerationSimule(page, request)
+    await page.fill('#mobilax-terme', 'iPhone 17')
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-apercu')).toContainText('4 à importer')
+    // Temps figé à partir d'ici : seul runFor() fait partir l'article suivant
+    await page.clock.pauseAt(Date.now() + 60_000)
+    return corps
+  }
+
+  test('import : un départ toutes les 3 s, sans quantité, échec isolé, déjà en stock compté, bilan', async ({ page, request }) => {
+    const corps = await importSimule(page, request)
+    await page.click('#btn-generation-importer')
+
+    const progression = page.locator('#mobilax-import-progression')
+    await expect(progression).toContainText('1 / 4')
+    expect(corps).toHaveLength(1)
+    // Pas de second départ avant 3 s (20 imports par minute au plus)
+    await page.clock.runFor(2_900)
+    expect(corps).toHaveLength(1)
+    await page.clock.runFor(100)
+    await expect(progression).toContainText('2 / 4')
+    await page.clock.runFor(3_000)
+    await expect(progression).toContainText('3 / 4')   // l'échec de l'article 3 n'arrête pas la boucle
+    await page.clock.runFor(3_000)
+    await expect(progression).toContainText('4 / 4')
+
+    // Import unitaire existant, SANS quantité en rayon (→ stock initial par défaut de la boutique)
+    expect(corps).toEqual([{ mobilax_id: 1 }, { mobilax_id: 2 }, { mobilax_id: 3 }, { mobilax_id: 4 }])
+
+    const journal = page.locator('#mobilax-import-journal')
+    await expect(journal).toContainText('Article 1')
+    await expect(journal).toContainText('Cette pièce n\'existe plus chez Mobilax.')
+
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('2 importés')
+    // 1 déjà en stock à l'aperçu (article 5, jamais envoyé) + 1 `deja_importe` pendant l'import
+    await expect(bilan).toContainText('2 déjà dans votre stock')
+    await expect(bilan).toContainText('1 échec')
+    await expect(bilan).toContainText('Article 3')
+    await expect(bilan).toContainText('Pièce : 1')
+    await expect(bilan).toContainText('Accessoire : 1')
+    await expect(bilan.locator('a[href="/stock?fournisseur_id=3"]')).toHaveCount(1)
+  })
+
+  test('import en cours : chercher une pièce par article reste possible, la progression est gardée (story 14)', async ({ page, request }) => {
+    await page.route('**/api/mobilax/produits?*', route => route.fulfill({ json: { success: true, data: {
+      total: 1, page: 1, pages: 1,
+      produits: [{ mobilax_id: 900, nom: 'Batterie comptoir', ean13: null, prix_achat_ht: 9, stock: 2 }],
+    } } }))
+    await importSimule(page, request)
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 4')
+
+    await page.check('#mobilax-mode-article')
+    await page.fill('#mobilax-terme', 'batterie')
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-resultats')).toContainText('Batterie comptoir')
+
+    await page.check('#mobilax-mode-generation')
+    await expect(page.locator('#mobilax-import')).toBeVisible()
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 4')
+  })
+
+  test('import en cours : fermer l\'onglet déclenche l\'avertissement du navigateur', async ({ page, request }) => {
+    await importSimule(page, request)
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 4')
+
+    const dialogue = page.waitForEvent('dialog')
+    await page.close({ runBeforeUnload: true })
+    const d = await dialogue
+    expect(d.type()).toBe('beforeunload')
+    await d.dismiss()
+  })
+
+  test('page Stock filtrée sur un fournisseur : ?fournisseur_id= transmis à la liste, bandeau « Tout afficher »', async ({ page, request }) => {
+    const demandes: string[] = []
+    await page.route('**/api/produits?*', route => {
+      demandes.push(route.request().url())
+      return route.fulfill({ json: { success: true, data: [], pagination: { page: 1, limit: 200, total: 0, pages: 0 } } })
+    })
+    const tenant = await createTenantAdmin(request)
+    await seConnecter(page, { email: tenant.email, password: tenant.password })
+    await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+    await page.goto('/stock?fournisseur_id=3')
+    await expect(page.locator('#filtre-fournisseur')).toBeVisible()
+    await expect(page.locator('#filtre-fournisseur a[href="/stock"]')).toHaveCount(1)
+    await expect.poll(() => demandes.some(u => new URL(u).searchParams.get('fournisseur_id') === '3')).toBe(true)
+  })
+
   test('« iPhone 1 » : aucune série, message qui dit quoi saisir', async ({ page, request }) => {
     const cle = cleMobilaxPreprod()
     test.skip(!cle, 'MOBILAX_API_KEY absente de .dev.vars — catalogue réel inaccessible')

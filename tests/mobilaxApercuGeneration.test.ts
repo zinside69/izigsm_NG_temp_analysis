@@ -104,6 +104,8 @@ describe('apercuGeneration() — articles des séries', () => {
     const r = await apercuGeneration(deps(), BOUTIQUE, [2358])
     expect(r).toEqual({
       ok: true,
+      // Fiche fournisseur de la boutique : le bilan de l'import y renvoie (ticket 03)
+      fournisseur_id: 3,
       series: [{ id: 2358, nb_articles: 1 }],
       articles: [{ mobilax_id: 1, reference: 'REF-1', nom: 'Article 1', series: [2358], deja_en_stock: false }],
     })
@@ -117,7 +119,7 @@ describe('apercuGeneration() — articles des séries', () => {
   })
 
   it('aucune série demandée : aperçu vide, Mobilax jamais appelé', async () => {
-    expect(await apercuGeneration(deps(), BOUTIQUE, [])).toEqual({ ok: true, series: [], articles: [] })
+    expect(await apercuGeneration(deps(), BOUTIQUE, [])).toEqual({ ok: true, fournisseur_id: 3, series: [], articles: [] })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

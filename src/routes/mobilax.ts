@@ -117,7 +117,7 @@ mobilax.get('/mobilax/apercu', async (c) => {
     user.boutique_id,
     seriesIds,
   )
-  if (r.ok) return c.json({ success: true, data: { series: r.series, articles: r.articles } })
+  if (r.ok) return c.json({ success: true, data: { fournisseur_id: r.fournisseur_id, series: r.series, articles: r.articles } })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 
@@ -144,7 +144,8 @@ mobilax.post('/mobilax/import', requireRole('admin', 'manager'), async (c) => {
     { db: c.get('db'), d1: c.env.DB, kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
     user.boutique_id, user.sub, mobilaxId, body.quantite_en_rayon,
   )
-  if (r.ok) return c.json({ success: true, data: { produit_id: r.produit_id } }, 201)
+  // Famille du produit créé : le bilan de l'import par génération la répartit (ticket 03)
+  if (r.ok) return c.json({ success: true, data: { produit_id: r.produit_id, famille: r.famille } }, 201)
   // 409 `deja_importe` : le produit existant sous `data`, comme en succès — enveloppe du dépôt
   return c.json({
     success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s,

@@ -58,6 +58,8 @@ export interface ProduitRow {
 
 export interface ListProduitsOpts {
   categorie_id?: number
+  /** Fiche fournisseur source (lien du bilan de l'import par génération) */
+  fournisseur_id?: number
   famille?:      FamilleProduit | string
   stock_bas?:    boolean
   search?:       string
@@ -159,6 +161,11 @@ export async function listProduits(
   if (opts.categorie_id) {
     conditions.push('p.categorie_id = ?')
     bindings.push(opts.categorie_id)
+  }
+  // Fiche fournisseur source (bilan de l'import par génération) — la boutique reste filtrée ci-dessus
+  if (opts.fournisseur_id) {
+    conditions.push('p.fournisseur_id = ?')
+    bindings.push(opts.fournisseur_id)
   }
   if (opts.famille && FAMILLES.includes(opts.famille as FamilleProduit)) {
     conditions.push('p.famille = ?')

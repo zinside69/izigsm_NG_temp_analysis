@@ -129,6 +129,10 @@ dit ce qui a été importé, ce qui était déjà là, et ce qui a échoué.
     articles dédoublonnés, déjà en stock compris. Sans les séries de chaque article, l'écran ne
     peut pas recalculer au décochage (story 12) sans rappeler le fournisseur. Liste à importer =
     `articles` des séries cochées dont `deja_en_stock` est faux (ticket 03)._
+    _Complété au ticket 03 (2026-09-14) : l'aperçu rend aussi `fournisseur_id` (fiche Mobilax de
+    la boutique, lien du bilan) ; la réponse de l'import unitaire porte `famille` (répartition du
+    bilan) — deux champs ajoutés, aucune route nouvelle ; `GET /api/produits` accepte
+    `fournisseur_id` (`/stock?fournisseur_id=`, lien du bilan)._
   - La recherche par série range sa liste sous `data.products` (et non `data` comme la recherche
     texte) : seul le service le sait.
   - Quota atteint et fournisseur indisponible suivent les signaux existants (délai de

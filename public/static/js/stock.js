@@ -18,6 +18,12 @@ let seuilAlerteDefaut = null;
 // Stock initial par défaut effectif (ticket 05) : pré-remplit « Qté en rayon » de la recherche
 // fournisseur. `null` tant qu'il n'est pas lu — champ vide, non envoyé, le serveur applique le réglage.
 let stockInitialDefaut = null;
+// Liste restreinte à une fiche fournisseur (`/stock?fournisseur_id=3`) — lien du bilan de l'import
+// par génération (ticket 03). Filtré par le serveur : la liste n'en charge que 200.
+const fournisseurFiltre = (() => {
+  const n = Number(new URLSearchParams(location.search).get('fournisseur_id'));
+  return Number.isInteger(n) && n > 0 ? n : null;
+})();
 
 // Palette couleur par famille
 const FAMILLE_CONFIG = {
@@ -37,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   chargerDefautsStock();
   bindSearch();
   bindFilters();
+  document.getElementById('filtre-fournisseur').hidden = !fournisseurFiltre;
 });
 
 // ─── Seuil d'alerte par défaut de la boutique (ticket 03 réglages de stock) ──
@@ -90,6 +97,7 @@ async function loadStock() {
     const params = { limit: 200 };
     if (boutiqueId) params.boutique_id = boutiqueId;
     if (currentFamilleFilter) params.famille = currentFamilleFilter;
+    if (fournisseurFiltre) params.fournisseur_id = fournisseurFiltre;
 
     const result = await apiGet('/api/produits', params);
     if (!result.ok) throw new Error(result.error || 'Erreur API');
@@ -656,6 +664,8 @@ function exportStock() {
 // chez Mobilax côté serveur, jamais pris dans ce que l'écran affiche.
 
 function ouvrirRechercheMobilax() {
+  // Import par génération en cours : rouvrir la fenêtre sans effacer sa progression
+  if (importEnCours) { openModal('modal-mobilax'); return; }
   document.getElementById('mobilax-terme').value = '';
   // Résultats vidés et message d'aide du mode en cours (article ou génération)
   basculerModeMobilax();
@@ -792,8 +802,14 @@ function basculerModeMobilax() {
   document.getElementById('mobilax-series').hidden = !generation;
   document.getElementById('mobilax-pagination').hidden = true;
   document.getElementById('mobilax-resultats').innerHTML = '';
-  document.getElementById('mobilax-series-liste').innerHTML = '';
-  oublierApercu();
+  // Import par génération en cours : chercher une pièce par article reste possible (story 14),
+  // mais séries, aperçu et progression de l'import sont gardés tels quels
+  if (!importEnCours) {
+    document.getElementById('mobilax-series-liste').innerHTML = '';
+    oublierApercu();
+    document.getElementById('mobilax-import').hidden = true;
+    document.getElementById('mobilax-bilan').hidden = true;
+  }
   document.getElementById('mobilax-terme').placeholder = generation
     ? 'Nom de la génération — ex. iPhone 17, Galaxy S24'
     : 'Nom ou EAN — ex. écran iPhone 12';
@@ -805,7 +821,13 @@ document.querySelectorAll('input[name="mobilax-mode"]').forEach(r => r.addEventL
 
 /** Envoi du formulaire de la fenêtre Mobilax : recherche du mode choisi. */
 function soumettreRechercheMobilax() {
-  return modeMobilax() === 'generation' ? chercherGeneration() : chercherMobilax();
+  if (modeMobilax() !== 'generation') return chercherMobilax();
+  // Une nouvelle génération effacerait la progression de l'import en cours
+  if (importEnCours) {
+    messageMobilax('Un import par génération est en cours : attendez sa fin pour en préparer un autre.', true);
+    return;
+  }
+  return chercherGeneration();
 }
 
 /** Séries Mobilax de la génération saisie, cochées par défaut ; message clair si aucune. */
@@ -968,13 +990,139 @@ function demanderImportGeneration() {
   lancerImportGeneration();
 }
 
+// ─── Import par génération : boucle, progression, bilan (ticket 03) ──────────
+// Pilotée par le navigateur (précédent : startSync() de services.js) : un article à la fois, par
+// la route d'import unitaire existante, un départ toutes les 3 s au plus (20 par minute) pour
+// laisser 10 appels par minute aux recherches du comptoir. Sans quantité en rayon : le serveur
+// applique le stock initial et le seuil d'alerte par défaut de la boutique. Un échec n'arrête
+// pas les suivants ; `deja_importe` est compté « déjà en stock », jamais en échec.
+
+/** Écart minimal entre deux départs d'import (spec : au plus 20 par minute). */
+const INTERVALLE_IMPORT_MS = SECONDES_PAR_IMPORT * 1000;
+
+/** Import par génération en cours : fenêtre gardée telle quelle, fermeture de l'onglet avertie. */
+let importEnCours = false;
+
+/** Avertissement du navigateur à la fermeture de l'onglet pendant l'import (story 28). */
+function retenirFermeture(e) {
+  e.preventDefault();
+  e.returnValue = '';
+}
+
+/** Attend `ms` millisecondes — `setTimeout`, que l'horloge simulée des E2E pilote. */
+function patienter(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
- * Lancement de l'import des articles à importer — la boucle d'import vient au ticket 03. Ce
- * message ne doit jamais partir en production : le chantier se déploie en un bloc après 04.
+ * Fige (ou libère) la sélection pendant l'import : séries cochées et bouton d'import. Le mode et
+ * la recherche restent libres — un collègue doit pouvoir chercher une pièce (story 14).
  */
-function lancerImportGeneration() {
+function basculerSaisieGeneration(actif) {
+  document.querySelectorAll('#mobilax-series-liste input').forEach(el => { el.disabled = !actif; });
+  document.getElementById('btn-generation-importer').disabled = !actif;
+}
+
+/** Ajoute une ligne au journal de l'import (textContent : noms tiers jamais interprétés). */
+function journaliserImport(texte, couleur) {
+  const journal = document.getElementById('mobilax-import-journal');
+  const ligne = document.createElement('div');
+  ligne.textContent = texte;
+  ligne.style.color = couleur;
+  journal.appendChild(ligne);
+  journal.scrollTop = journal.scrollHeight;
+}
+
+/** Barre et libellé de progression : `fait` articles traités sur `total`. */
+function afficherProgression(fait, total) {
+  document.getElementById('mobilax-import-barre').style.width = `${Math.round(fait / total * 100)}%`;
+  document.getElementById('mobilax-import-progression').textContent = `${fait} / ${total}`;
+}
+
+/**
+ * Importe les articles à importer des séries cochées, un par un, puis affiche le bilan. Le
+ * rythme se mesure de départ à départ : une réponse lente ne rajoute pas 3 s d'attente.
+ */
+async function lancerImportGeneration() {
+  const { deja, aImporter } = selectionApercu();
+  if (!aImporter.length) return;
   afficherConfirmation(false);
-  messageMobilax('L\'import par génération n\'est pas encore disponible.');
+  // Fiche fournisseur figée au lancement : le lien du bilan ne dépend pas de l'aperçu, oublié ensuite
+  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId: apercuCourant?.fournisseur_id };
+
+  importEnCours = true;
+  basculerSaisieGeneration(false);
+  document.getElementById('mobilax-bilan').hidden = true;
+  document.getElementById('mobilax-import-journal').replaceChildren();
+  afficherProgression(0, aImporter.length);
+  document.getElementById('mobilax-import').hidden = false;
+  window.addEventListener('beforeunload', retenirFermeture);
+
+  let dernierDepart = -Infinity;
+  try {
+    for (const [i, article] of aImporter.entries()) {
+      const attente = dernierDepart + INTERVALLE_IMPORT_MS - Date.now();
+      if (attente > 0) await patienter(attente);
+      dernierDepart = Date.now();
+
+      let res = null;
+      try {
+        // Import unitaire existant, SANS quantité en rayon ; déballage au point d'appel (CLAUDE.md)
+        res = (await apiPost('/api/mobilax/import', { mobilax_id: article.mobilax_id })).data;
+      } catch { /* réseau coupé : consigné en échec ci-dessous */ }
+
+      if (res?.success) {
+        bilan.importes++;
+        // Famille décidée par le serveur (illisible → pièce, côté service) : aucun repli ici, qui
+        // rangerait en silence un défaut futur dans « Pièce »
+        const famille = res.data?.famille ?? 'famille inconnue';
+        bilan.familles[famille] = (bilan.familles[famille] || 0) + 1;
+        journaliserImport(`✓ ${article.nom}`, '#059669');
+      } else if (res?.code === 'deja_importe') {
+        bilan.deja++;
+        journaliserImport(`= ${article.nom} — déjà dans votre stock`, '#6b7280');
+      } else {
+        const motif = res?.error || MESSAGE_MOBILAX_INJOIGNABLE;
+        bilan.echecs.push({ nom: article.nom, motif });
+        journaliserImport(`✗ ${article.nom} — ${motif}`, '#b42318');
+      }
+      afficherProgression(i + 1, aImporter.length);
+    }
+  } finally {
+    window.removeEventListener('beforeunload', retenirFermeture);
+    importEnCours = false;
+    basculerSaisieGeneration(true);
+  }
+  afficherBilan(bilan);
+  // L'aperçu est périmé (ce qui était à importer l'est désormais) : une nouvelle recherche en relit un
+  oublierApercu();
+  await loadStock();
+}
+
+/** Bilan : importés, déjà en stock, échecs nommés, répartition par famille, lien vers le stock. */
+function afficherBilan({ importes, deja, echecs, familles, fournisseurId }) {
+  const zone = document.getElementById('mobilax-bilan');
+  zone.replaceChildren();
+  const ajouter = (parent, balise, texte) => {
+    const el = document.createElement(balise);
+    el.textContent = texte;
+    parent.appendChild(el);
+    return el;
+  };
+  ajouter(zone, 'strong', `Import terminé : ${compter(importes, 'importé')} · `
+    + `${deja} déjà dans votre stock · ${compter(echecs.length, 'échec')}`);
+  const repartition = Object.entries(familles)
+    .map(([famille, n]) => `${FAMILLE_CONFIG[famille]?.label || famille} : ${n}`).join(' · ');
+  if (repartition) ajouter(zone, 'p', `Répartition des importés — ${repartition}`);
+  if (echecs.length) {
+    const liste = ajouter(zone, 'ul', '');
+    for (const e of echecs) ajouter(liste, 'li', `${e.nom} — ${e.motif}`);
+  }
+  if (Number(fournisseurId) > 0) {
+    const lien = ajouter(zone, 'a', 'Voir les produits de ce fournisseur dans le stock');
+    lien.href = `/stock?fournisseur_id=${Number(fournisseurId)}`;
+  }
+  zone.hidden = false;
 }
 
 document.getElementById('mobilax-series-liste')?.addEventListener('change', recalculerApercu);

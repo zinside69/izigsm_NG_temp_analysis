@@ -103,7 +103,7 @@ describe('importerProduitMobilax() — fiche enrichie depuis Mobilax', () => {
     mobilax(FICHE)
     const r = await importerProduitMobilax(deps(), BOUTIQUE, 5, 10242)
 
-    expect(r).toEqual({ ok: true, produit_id: 77 })
+    expect(r).toEqual({ ok: true, produit_id: 77, famille: 'piece' })
     const p = insertProduit()
     expect(p).toMatchObject({
       sku: '3000000059487', code_barre: '3000000059487', famille: 'piece',

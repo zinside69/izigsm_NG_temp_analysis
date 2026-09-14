@@ -81,6 +81,7 @@ stocks.get('/produits', async (c) => {
 
   const result = await listProduits(dbPort, boutiqueId, {
     categorie_id: query.categorie_id ? parseInt(query.categorie_id, 10) : undefined,
+    fournisseur_id: query.fournisseur_id ? parseInt(query.fournisseur_id, 10) : undefined,
     stock_bas:    query.stock_bas === 'true',
     search:       query.search    ?? undefined,
     famille:      query.famille   ?? undefined,

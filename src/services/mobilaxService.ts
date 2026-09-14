@@ -16,7 +16,7 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul } from './stockService'
+import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, type FamilleProduit } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,7 +54,8 @@ export type ResultatRechercheMobilax =
   | EchecMobilax
 
 export type ResultatImportMobilax =
-  | { ok: true; produit_id: number }
+  /** `famille` : lue par le bilan de l'import par génération (répartition, ticket 03). */
+  | { ok: true; produit_id: number; famille: FamilleProduit }
   | EchecMobilax
 
 /** Dépendances injectées — tout ce que le service touche hors de lui-même. */
@@ -215,7 +216,8 @@ export interface SerieApercu {
 }
 
 export type ResultatApercuMobilax =
-  | { ok: true; series: SerieApercu[]; articles: ArticleApercu[] }
+  /** `fournisseur_id` : fiche Mobilax de la boutique — le bilan de l'import y renvoie (ticket 03). */
+  | { ok: true; fournisseur_id: number; series: SerieApercu[]; articles: ArticleApercu[] }
   | EchecMobilax
 
 /**
@@ -234,14 +236,13 @@ export type ResultatApercuMobilax =
  * @param deps        Dépendances (base, KV, secret, adresse de l'API)
  * @param boutiqueId  Boutique appelante — SA clé, SON stock
  * @param seriesIds   Séries cochées (identifiants Mobilax) ; un doublon n'est lu qu'une fois
- * @returns           Nombre d'articles par série et articles dédoublonnés, ou une erreur nommée
+ * @returns           Fiche fournisseur de la boutique (`fournisseur_id`, lien du bilan), nombre
+ *                    d'articles par série et articles dédoublonnés, ou une erreur nommée
  */
 export async function apercuGeneration(
   deps: DepsMobilax, boutiqueId: number, seriesIds: number[]
 ): Promise<ResultatApercuMobilax> {
   const ids = [...new Set(seriesIds)]
-  if (ids.length === 0) return { ok: true, series: [], articles: [] }
-
   const cle = await resoudreCle(deps, boutiqueId)
   if (!cle.ok) return cle.echec
 
@@ -283,7 +284,7 @@ export async function apercuGeneration(
 
   const enStock = await referencesImportees(deps.db, boutiqueId, cle.fiche.id)
   const articles = [...parId.values()].map(a => ({ ...a, deja_en_stock: enStock.has(a.reference) }))
-  return { ok: true, series, articles }
+  return { ok: true, fournisseur_id: cle.fiche.id, series, articles }
 }
 
 // ─── Import dans le stock (ticket 04) ─────────────────────────────────────────
@@ -385,7 +386,7 @@ export async function importerProduitMobilax(
     if (!gagnant) throw err
     return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: gagnant.id })
   }
-  return { ok: true, produit_id: id }
+  return { ok: true, produit_id: id, famille }
 }
 
 /** Fiche complète normalisée — ce que l'import retient de `/products/:id/full`. */

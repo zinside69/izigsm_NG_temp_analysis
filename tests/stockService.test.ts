@@ -366,6 +366,17 @@ describe('stockService', () => {
       expect(result.pagination.total).toBe(1)
     })
 
+    it('filtre fournisseur_id : seuls les produits de cette fiche fournisseur (bilan de l\'import par génération)', async () => {
+      const sqlCount = n('SELECT COUNT(*) AS cnt FROM produits p WHERE p.boutique_id = ? AND p.actif = 1 AND p.fournisseur_id = ?')
+      db.__setResponse(sqlCount, { cnt: 2 })
+
+      const result = await listProduits(db as any, 1, { fournisseur_id: 3 })
+
+      expect(result.pagination.total).toBe(2)
+      const comptage = db.__getCalls().find((c: any) => c.sql === sqlCount)!
+      expect(comptage.params).toEqual([1, 3])
+    })
+
     it('filtre stock_bas : ajoute la condition sqlSousSeuil() (seuil 0 exclu)', async () => {
       const sqlCountBas = n(`SELECT COUNT(*) AS cnt FROM produits p WHERE p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')}`)
       db.__setResponse(sqlCountBas, { cnt: 3 })
