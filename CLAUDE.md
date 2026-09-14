@@ -15,7 +15,7 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
   (dernière : `0047_boutique_settings_defauts_stock.sql`, compté le 2026-09-12)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (1086/1088 au 2026-09-14, 40 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (1105/1107 au 2026-09-14, 41 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -607,6 +607,28 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `/catalog/series` (`{ status, data: [...] }`, hors quota `/products` ; une connexion `/auth`
   possible). Une série par **identifiant** : deux homonymes restent deux, les articles communs se
   dédoublonnent à l'aperçu (ticket 02). Triées par nom (`position` n'est pas chronologique).
+- **Import par génération (tickets 02-04, en production le 2026-09-14, `izigsm-v3.04`)** :
+  - **Aperçu** `apercuGeneration()` + `GET /api/mobilax/apercu?series=` : chaque série lue
+    **toutes pages** (`/products/search?seriesId=`, liste sous `data.products` — la règle « ⊥ toutes
+    les pages d'un coup » vise la recherche texte, la spec décide ici l'inverse), rend **tous** les
+    articles dédoublonnés avec `series[]` et `deja_en_stock` (par `referencesImportees()`, même clé
+    que l'anti-doublon), plus `fournisseur_id`. L'écran recalcule au décochage **sans rappeler
+    Mobilax** — ⊥ un appel par décochage.
+  - **Boucle** `lancerImportGeneration()` (`stock.js`), pilotée par le navigateur : route d'import
+    unitaire **inchangée**, corps `{ mobilax_id }` seul (stock initial et seuil par défaut), départs
+    espacés d'au moins 3 s (mesurés de départ à départ). La réponse de l'import porte `famille`
+    (bilan) ; `deja_importe` = « déjà en stock », jamais un échec.
+  - **Seule reprise automatique du dépôt sur 429** : quota **avec** délai (`reessayer_dans_s`) →
+    pause, compte à rebours, **même** article. Quota sans délai, `indisponible`, rejet de `fetch`
+    (connexion perdue) → **arrêt**, bilan partiel avec restants. ⊥ une nouvelle tentative sans délai
+    connu, ⊥ continuer après une coupure (chaque article restant échouerait).
+  - Pendant l'import, la recherche **par article** reste libre dans l'onglet (story 14) ; une
+    nouvelle génération est refusée. `beforeunload` tant que l'import tourne.
+  - `GET /api/produits?fournisseur_id=` (filtre ajouté au filtre boutique) ; `/stock?fournisseur_id=`
+    l'applique avec un bandeau « Tout afficher » — lien du bilan.
+  - E2E à horloge simulée (`tests/e2e/mobilax-generation.spec.ts`) : `page.clock.install()` **avant**
+    toute navigation, `pauseAt()` avant le geste, `runFor(1_000)` seconde par seconde pour un compte
+    à rebours (chaque seconde est un minuteur chaîné).
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -847,6 +869,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-14 (checkpoint 109) : aucune migration en attente — dépôt et production
+alignés.** Chantier `import-par-generation` (tickets 01-04, jusqu'à `8854918`) déployé en un bloc
+par l'exploitant, sans migration. Relu sur l'apex : `/api/health` 200, `sw.js` `izigsm-v3.04`,
+`/stock` sert `stock.4d9b5fbd.js` = manifeste reconstruit depuis `8854918` (JavaScript, code des
+tickets présent), `/api/mobilax/series|apercu` et `/api/produits?fournisseur_id=` sans jeton → 401.
 
 **État au 2026-09-14 (checkpoint 108) : aucune migration en attente, dépôt EN AVANCE sur la
 production — volontairement.** `f2c42a8` (ticket 01 `import-par-generation` : mode « Par

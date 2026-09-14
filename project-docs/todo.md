@@ -1,5 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
+
+Une fois lancé, l'import ne s'arrête que seul (fin, panne, quota sans délai, connexion perdue) ou
+en fermant l'onglet (avertissement). Une suite de quotas répétés **avec** délai le fait durer sans
+fin. Relevé en revue du ticket 04, hors spec.
+
+- [ ] Bouton « Interrompre » pendant l'import : arrêt propre après l'article en cours, bilan
+      partiel avec restants (même chemin que l'arrêt du ticket 04) — test vu rouge
+
 ## 🟡 P3 — Recherche Mobilax par article : « Recherche en cours… » figé sur coupure réseau (trouvé le 2026-09-14)
 
 Même défaut que celui corrigé sur `chercherGeneration()` (`bugs.md`) : `chercherMobilax()`
@@ -37,7 +46,7 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
 (chronophage). La recherche texte ratisse large (pièces S23, S25). Ordre décidé le 2026-09-12 :
 **B puis A, dans une prochaine session** — pas le soir même (`decisions.md`).
 
-- [ ] **B — Import par génération** : spec + 4 tickets `ready-for-agent`
+- [x] **B — Import par génération** : spec + 4 tickets `ready-for-agent`
       (`.scratch/import-par-generation/`), débloqués par le ticket 05 des réglages de stock. On tape
       « Galaxy S24 » → séries S24, S24+, S24 Ultra et **seulement** leurs pièces ; aperçu chiffré
       (articles, déjà en stock, durée), 20 imports/min, stock initial par défaut. Un ticket = une
@@ -45,6 +54,8 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       — **ticket 01 fait le 2026-09-14** (`f2c42a8`, poussé, non déployé : séries d'une génération,
       mode « Par génération ») ; **prochain : 02** (aperçu). Déploiement du chantier en un bloc
       après 04.
+      — **✅ chantier complet et DÉPLOYÉ le 2026-09-14** : 02 `a80de57`, 03 `d4835dc`, 04 `8854918`,
+      `izigsm-v3.04`, relu en production. Reste le geste à l'écran de l'exploitant.
 - [ ] **A — Cases à cocher dans les résultats de recherche** : une case par article, « Tout
       cocher » (page de 100), « Importer la sélection » avec progression ; quantité = stock initial
       par défaut. **À cadrer après B** (`/mattpocock-skills:grill-with-docs`) pour réutiliser sa

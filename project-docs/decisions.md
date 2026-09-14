@@ -1,5 +1,17 @@
 # iziGSM — Décisions
 
+## 2026-09-14 (soir) — Import par génération : arrêts de la boucle, déploiement
+
+- **Connexion perdue côté navigateur → arrêt de l'import** — confirmé par l'exploitant (« ok »),
+  après signalement explicite de l'écart avec la note du ticket 03. Continuer compterait chaque
+  article restant en échec, un toutes les 3 s ; l'arrêt laisse une relance propre.
+- **Quota sans délai annoncé → arrêt** (prise en implémentation, spec amendée) : seule lecture
+  compatible avec « aucune nouvelle tentative à l'aveugle ». Quota **avec** délai : pause, compte à
+  rebours, reprise du même article — seule reprise automatique du dépôt.
+- **Contrat de l'aperçu** : tous les articles dédoublonnés avec leurs séries et `deja_en_stock`,
+  plus `fournisseur_id` ; `famille` dans la réponse de l'import unitaire — sans route nouvelle.
+- **Chantier déployé en un bloc** (tickets 01-04, `izigsm-v3.04`) par l'exploitant, sans migration.
+
 ## 2026-09-14 — Import par génération, ticket 01 : choix techniques
 
 - **Séries triées par nom** pour l'opérateur (17, 17 Air, 17 Pro, 17 Pro Max) : le champ

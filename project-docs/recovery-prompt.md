@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 108 — import par génération, ticket 01 fait)
+# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 109 — import par génération complet, en production)
+
+## Ce qui a changé au checkpoint 109
+
+**Rien n'attend de déploiement, rien n'attend de migration** : chantier `import-par-generation`
+complet (tickets 01-04) et **en production** (`izigsm-v3.04`, relu). Le bloc 108 ci-dessous qui dit
+« non déployé » et « première action : ticket 02 » est **dépassé**. Reste le geste à l'écran de
+l'exploitant : un vrai import de génération.
+
+**Première question à poser : quel chantier ?** Ordre voulu (`todo.md`) :
+1. **A — cases à cocher** dans les résultats de recherche Mobilax — à cadrer par
+   `/mattpocock-skills:grill-with-docs`, pour réutiliser la boucle d'import du chantier B
+   (`lancerImportGeneration()`, rythme, quota, arrêts) ;
+2. 🟠 `register.html` / `reset-password.html` (même fuite que la connexion) ;
+3. 🟠 sortie de stock des produits défectueux ;
+4. 🟡 bouton pour interrompre un import par génération (relevé en revue).
+
+**À savoir avant de toucher à l'import par génération** : `CLAUDE.md` § Service Mobilax (seule
+reprise automatique sur 429 = quota **avec** délai ; arrêts : quota sans délai, `indisponible`,
+connexion perdue) ; contrat aperçu/import dans la spec amendée
+(`.scratch/import-par-generation/spec.md`) ; E2E à horloge simulée : `page.clock.install()` avant
+toute navigation, `pauseAt()` avant le geste, `runFor(1_000)` seconde par seconde pour un compte à
+rebours.
 
 ## Ce qui a changé au checkpoint 108
 

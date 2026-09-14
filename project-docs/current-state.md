@@ -1,4 +1,34 @@
-# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 108 — import par génération, ticket 01 fait)
+# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 109 — import par génération complet, en production)
+
+## Checkpoint 109 — Import par génération : tickets 02-04, chantier complet et déployé (2026-09-14)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.04`). Chantier
+`import-par-generation` complet (tickets 01-04), déployé en un bloc par l'exploitant, **relu en
+production** : `/api/health` 200, `sw.js` `izigsm-v3.04`, `/stock` sert `stock.4d9b5fbd.js` =
+manifeste reconstruit depuis `8854918` (JavaScript, contient `chercherGeneration`/`compteARebours`),
+`/api/mobilax/series`, `/api/mobilax/apercu`, `/api/produits?fournisseur_id=` sans jeton → 401.
+**Reste le geste à l'écran de l'exploitant** : un vrai import de génération (quota réel Mobilax).
+
+Livré depuis le checkpoint 108 :
+- **02** (`a80de57`) aperçu chiffré : `apercuGeneration()` lit chaque série toutes pages, dédoublonne,
+  « déjà en stock » par `referencesImportees()` (une requête) ; écran : nombre par série, total, déjà
+  en stock, à importer, durée ; recalcul au décochage **sans rappeler Mobilax** ; confirmation > 200 ;
+- **03** (`d4835dc`) boucle d'import pilotée par le navigateur (≥ 3 s entre départs, sans quantité),
+  journal, bilan (répartition par famille, lien `/stock?fournisseur_id=`), `beforeunload`, recherche
+  par article possible pendant l'import ; `famille` dans la réponse de l'import, `fournisseur_id`
+  dans l'aperçu, filtre `fournisseur_id` sur `GET /api/produits` ;
+- **04** (`8854918`) quota avec délai → pause + compte à rebours + reprise du même article ; quota
+  sans délai, `indisponible`, connexion perdue → arrêt, bilan partiel avec restants ; relance = seul
+  le manquant ; `CACHE_VERSION` `izigsm-v3.04`.
+
+Décision confirmée par l'exploitant : la **connexion perdue arrête l'import** (spec amendée).
+
+**Gates** : vitest 1105/1107 (baseline), tsc 32, E2E 42/42 (dont balayage du menu). Chaque ticket :
+tests vus rouges, revue à deux axes, défauts corrigés avant commit (story 14 débloquée au 03).
+
+**Prochaine session** : A — cases à cocher dans les résultats de recherche, à cadrer par
+`/mattpocock-skills:grill-with-docs` (tapé par l'exploitant) ; puis `register.html`/`reset-password.html`,
+sortie de stock des produits défectueux.
 
 ## Checkpoint 108 — Import par génération : ticket 01, séries d'une génération (2026-09-14)
 

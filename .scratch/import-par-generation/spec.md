@@ -1,6 +1,6 @@
 ---
 chantier: import-par-generation
-statut: ready-for-agent
+statut: done
 date: 2026-09-12
 ---
 
