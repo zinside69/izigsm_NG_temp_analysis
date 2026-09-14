@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟡 Recherche fournisseur : « Recherche en cours… » figé sur coupure réseau (trouvé en revue le 2026-09-14, corrigé en mode génération, OUVERT en mode article)
+
+**Symptôme** : réseau coupé pendant une recherche Mobilax depuis `/stock` → le message « Recherche
+… chez Mobilax… » reste affiché indéfiniment, aucune erreur visible (le bouton redevient actif).
+
+**Cause** : `api()` (`app.js`) ne rattrape pas un rejet de `fetch` ; l'exception remonte à la
+page. `chercherGeneration()` et `chercherMobilax()` (`stock.js`) n'avaient qu'un `finally`.
+
+**Correctif** (`f2c42a8`, ticket 01 `import-par-generation`) : `catch` dans `chercherGeneration()`
+→ « Mobilax est injoignable pour le moment (réseau coupé ?). Réessayez dans un instant. » Test
+`mobilax-generation.spec.ts` § « réseau coupé », vu rouge (`page.route(…).abort()`).
+**Reste ouvert** : `chercherMobilax()` (mode article), `todo.md` 🟡 P3. Règle générale dans
+`CLAUDE.md` § Enveloppe des réponses API.
+
 ## 🟠 Connexion bloquée juste après un déploiement : « landingPageFor is not defined », identifiants dans l'URL (vécu en production le 2026-09-12, NON corrigé, cause NON établie)
 
 **Symptôme** (exploitant, quelques minutes après le déploiement `izigsm-v3.02`) : la page de

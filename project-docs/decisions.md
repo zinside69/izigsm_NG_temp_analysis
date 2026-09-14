@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-09-14 — Import par génération, ticket 01 : choix techniques
+
+- **Séries triées par nom** pour l'opérateur (17, 17 Air, 17 Pro, 17 Pro Max) : le champ
+  `position` de Mobilax n'est pas chronologique (mesuré le 2026-09-12).
+- **Une série par identifiant, homonymes gardés** : deux séries de même nom sous deux
+  identifiants restent deux séries. Fusionner par nom perdrait les articles de l'une ; c'est
+  l'aperçu (ticket 02) qui dédoublonne les **articles** communs.
+- **Déploiement du chantier en un bloc après le ticket 04** (recommandation retenue, rien déployé
+  ce jour) : seul, le ticket 01 propose des séries sans rien pouvoir en faire.
+
 ## 2026-09-12 (soir) — Incident de connexion : clôture
 
 - **Diagnostic de « landingPageFor is not defined » abandonné** (« oublie-le ») : la fuite des

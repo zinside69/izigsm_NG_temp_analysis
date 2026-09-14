@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-09-12, checkpoint 107 — fin de soirée, dépôt et production alignés)
+# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 108 — import par génération, ticket 01 fait)
+
+## Checkpoint 108 — Import par génération : ticket 01, séries d'une génération (2026-09-14)
+
+**Dépôt en avance sur la production, volontairement, aucune migration** : `f2c42a8` commité et
+poussé, **non déployé** — le chantier `import-par-generation` part en un bloc après les tickets
+02-04. `CACHE_VERSION` inchangé (`izigsm-v3.03`).
+
+Livré : `seriesDeGeneration()` (`mobilaxService.ts`, lit `/catalog/series`), `GET
+/api/mobilax/series?q=` (gardes de la recherche), bascule « Par article / Par génération » dans la
+fenêtre Mobilax de `/stock` — séries toutes cochées, message clair si aucune (« iPhone 17 » → 17,
+17 Air, 17 Pro, 17 Pro Max ; « Galaxy S2 » ⊥ S20–S25 ; « iPhone 1 » → rien). Aucun import encore.
+
+Revue à deux axes : aucune violation dure ; un défaut corrigé (réseau coupé → « Recherche des
+séries… » figé, `api()` ne rattrape pas un rejet de `fetch` — vu rouge) ; même défaut resté ouvert
+sur `chercherMobilax()` (mode article, `bugs.md`, `todo.md` 🟡) ; duplications de tests relevées
+(`todo.md` 🟡 P3).
+
+**Gates** : vitest 1086/1088 (baseline), tsc 32, E2E `mobilax-generation` 4/4 (2 préproduction
+réelle, 2 à réponses simulées) + Mobilax existants + balayage du menu (28/28 puis 21/21).
+
+**Prochaine session** : ticket 02 (aperçu d'une génération), `/mattpocock-skills:implement
+.scratch/import-par-generation/issues/02-apercu-d-une-generation.md`, tapé par l'exploitant.
 
 ## Checkpoint 107 — Clôture de la soirée (2026-09-12)
 

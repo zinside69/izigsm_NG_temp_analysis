@@ -15,7 +15,7 @@ vitrine publique). Repo de production : sert `https://repairdesk.fr`.
   (dernière : `0047_boutique_settings_defauts_stock.sql`, compté le 2026-09-12)
 - Frontend : HTML/CSS/JS vanilla (`public/`) + Tailwind CDN, pas de framework JS
 - Build : Vite + `@hono/vite-build/cloudflare-pages`
-- Tests unitaires : Vitest (1036/1038 au 2026-09-11, 37 suites) — `tests/`, mocks D1 dans
+- Tests unitaires : Vitest (1086/1088 au 2026-09-14, 40 suites) — `tests/`, mocks D1 dans
   `tests/helpers/`. Les **2 échecs sont permanents** (fuseau horaire, `agendaService`) : ils font
   partie de la baseline, ⊥ les prendre pour une régression. Ces chiffres bougent à chaque
   chantier — les **mesurer** (`npx vitest run`) plutôt que se fier à cette ligne, qui a déjà
@@ -300,6 +300,12 @@ sans faux positifs — `res.data` est aussi l'écriture correcte pour atteindre 
 
 `services.js` garde **deux conventions, délibérément** : `res.ok` sur les chemins Catégories
 et Services (corrects), déballage sur Marques/Modèles/Liaisons. Ne pas uniformiser.
+
+**`api()` ne rattrape pas un rejet de `fetch`** (réseau coupé) : l'exception remonte à la page.
+Tout écran qui affiche un état « en cours… » avant un `apiGet`/`apiPost` doit avoir un `catch`
+qui le remplace par un message d'erreur — un `finally` seul laisse « Recherche en cours… » figé
+à l'écran. Trouvé en revue le 2026-09-14 (`chercherGeneration()` corrigé, vu rouge par
+`page.route(…).abort()` ; `chercherMobilax()` ouvert, `bugs.md`).
 
 ## Gabarits et XSS stockée — règle de câblage (depuis 2026-08-02)
 
@@ -593,6 +599,14 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   2 recherches) avec `MOBILAX_API_KEY` lue dans `.dev.vars` via `process.getBuiltinModule()` —
   ⊥ `import 'node:fs'` dans une spec : `tsconfig` n'a pas les types Node, la baseline tsc monte.
   Sans clé, le test est sauté, jamais faussement vert.
+- **Séries d'une génération (ticket 01 `import-par-generation`, 2026-09-14)** :
+  `seriesDeGeneration()` + `GET /api/mobilax/series?q=` (gardes de la recherche : boutique du
+  jeton, admin plateforme 403, texte vide 400 sans appel). Série retenue si son nom **est** le
+  texte ou **commence par lui suivi d'un espace**, casse et espaces ignorés — ⊥ simple préfixe
+  (« Galaxy S2 » capterait S20–S25). Porte sur le nom de la **série**, jamais de la gamme. Lit
+  `/catalog/series` (`{ status, data: [...] }`, hors quota `/products` ; une connexion `/auth`
+  possible). Une série par **identifiant** : deux homonymes restent deux, les articles communs se
+  dédoublonnent à l'aperçu (ticket 02). Triées par nom (`position` n'est pas chronologique).
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -833,6 +847,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-14 (checkpoint 108) : aucune migration en attente, dépôt EN AVANCE sur la
+production — volontairement.** `f2c42a8` (ticket 01 `import-par-generation` : mode « Par
+génération », séries seules, aucun import) commité et poussé, **non déployé** : le chantier part en
+un bloc après les tickets 02-04 (seul, l'écran propose des séries sans rien pouvoir en faire).
+`CACHE_VERSION` reste `izigsm-v3.03`, à incrémenter au dernier ticket d'écran du chantier.
 
 **État au 2026-09-12 (après le checkpoint 106) : aucune migration en attente — dépôt et
 production alignés.** `062b7b8` (fuite des identifiants à la connexion) déployé par l'exploitant,

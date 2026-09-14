@@ -1,5 +1,22 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 P3 — Recherche Mobilax par article : « Recherche en cours… » figé sur coupure réseau (trouvé le 2026-09-14)
+
+Même défaut que celui corrigé sur `chercherGeneration()` (`bugs.md`) : `chercherMobilax()`
+(`stock.js`) n'a qu'un `finally`, `api()` laisse passer le rejet de `fetch`.
+
+- [ ] Test E2E vu rouge (`page.route('**/api/mobilax/produits?*', r => r.abort())`), puis `catch`
+      qui remplace le message — même texte que le mode génération
+
+## 🟡 P3 — Code de test Mobilax recopié (relevé en revue le 2026-09-14)
+
+`SQL_FOURNISSEUR_API`, `SQL_CLE_API`, `json()`, `kvMemoire()` recopiés dans 5 fichiers de test ;
+`cleMobilaxPreprod()` et la création de la fiche fournisseur dans 3 E2E ; dans
+`routes/mobilax.ts`, le littéral `deps` et la garde admin plateforme écrits 3 fois. Si la requête
+du service change, 5 fichiers à retoucher.
+
+- [ ] Regrouper dans `tests/helpers/` et `tests/e2e/fixtures/` ; un `depsMobilax(c)` dans la route
+
 ## 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **NON corrigé**, reporté)
 
 Même classe de défaut que la connexion, corrigée et déployée le 2026-09-12 (`izigsm-v3.03`,
@@ -25,6 +42,9 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       « Galaxy S24 » → séries S24, S24+, S24 Ultra et **seulement** leurs pièces ; aperçu chiffré
       (articles, déjà en stock, durée), 20 imports/min, stock initial par défaut. Un ticket = une
       session, `/mattpocock-skills:implement`
+      — **ticket 01 fait le 2026-09-14** (`f2c42a8`, poussé, non déployé : séries d'une génération,
+      mode « Par génération ») ; **prochain : 02** (aperçu). Déploiement du chantier en un bloc
+      après 04.
 - [ ] **A — Cases à cocher dans les résultats de recherche** : une case par article, « Tout
       cocher » (page de 100), « Importer la sélection » avec progression ; quantité = stock initial
       par défaut. **À cadrer après B** (`/mattpocock-skills:grill-with-docs`) pour réutiliser sa

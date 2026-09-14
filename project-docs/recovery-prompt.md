@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-12 (checkpoint 107 — fin de soirée, dépôt et production alignés)
+# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 108 — import par génération, ticket 01 fait)
+
+## Ce qui a changé au checkpoint 108
+
+**Import par génération (B) commencé : ticket 01 fait** (`f2c42a8`, poussé, **non déployé** —
+volontairement, le chantier part en un bloc après 02-04 ; aucune migration). Le « rien n'attend de
+déploiement » du bloc 107 ci-dessous reste vrai pour la production : elle n'a rien de cassé, elle
+est seulement en retard d'un ticket.
+
+**Première action : ticket 02 (aperçu d'une génération)**, session neuve, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/import-par-generation/issues/02-apercu-d-une-generation.md`.
+À savoir avant : `seriesDeGeneration()` rend `{ id, nom }` par série, une par identifiant — deux
+séries homonymes restent deux, c'est l'aperçu qui dédoublonne les **articles** entre séries ;
+la recherche par série range sa liste sous `data.products` (mesuré, spec).
+
+**Pièges vécus ce jour** : arrêter la tâche wrangler ne tue pas son `workerd` — tester l'ancien
+build par erreur est possible, vérifier `netstat` :3000 avant de relancer (mémoire
+`feedback-wrangler-relance-apres-build`) ; `api()` ne rattrape pas un rejet de `fetch` — tout écran
+« en cours » doit un `catch` (`CLAUDE.md` § Enveloppe). **Checkpoint = tout écrire et commiter sans
+demander** (consigne de l'exploitant, mémoire `feedback-checkpoint-protocol`).
+
+**Toujours ouverts** : `register.html`/`reset-password.html` (même fuite que la connexion) ; sortie
+de stock des produits défectueux (à cadrer) ; `chercherMobilax()` sans `catch` (🟡).
 
 ## Ce qui a changé au checkpoint 107
 
