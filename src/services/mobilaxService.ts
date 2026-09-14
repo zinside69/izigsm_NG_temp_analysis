@@ -121,6 +121,81 @@ export async function rechercherProduitsMobilax(
   }
 }
 
+// ─── Séries d'une génération (ticket 01, chantier import-par-generation) ─────
+
+/** Série Mobilax (modèle d'appareil catalogué, `CONTEXT.md` § Série) sous la forme qui sort d'ici. */
+export interface SerieMobilax {
+  id:  number
+  nom: string
+}
+
+export type ResultatSeriesMobilax =
+  | { ok: true; series: SerieMobilax[] }
+  | EchecMobilax
+
+/** Nom comparable : espaces superflus retirés, casse ignorée. */
+function nomComparable(nom: string): string {
+  return nom.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+/**
+ * Séries Mobilax d'une génération : celles dont le nom **est** le texte saisi ou **commence par
+ * lui suivi d'un espace** (« iPhone 17 » → 17, 17 Air, 17 Pro, 17 Pro Max ; jamais 17e).
+ *
+ * Un simple préfixe déborde : « Galaxy S2 » capterait S20–S25, « iPhone 1 » les iPhone 11 à 17
+ * (mesuré, `recherche-api-mobilax-2026-09-09.md` v1.5). La correspondance porte sur le nom de
+ * la série, jamais sur celui de la gamme — une gamme Mobilax mélange plusieurs générations.
+ *
+ * `GET /catalog/series` (2 316 séries, 268 ko) ne relève d'aucun quota (mesuré) : relu à chaque
+ * demande plutôt que gardé, comme l'arbre des catégories. Seul coût possible : une connexion
+ * (`/auth`, 10/min) si aucun jeton n'est gardé pour la boutique.
+ *
+ * @param deps        Dépendances (base, KV, secret, adresse de l'API)
+ * @param boutiqueId  Boutique appelante — c'est SA clé qui est utilisée
+ * @param texte       Nom de base saisi par l'opérateur
+ * @returns           Séries triées par nom, dédoublonnées, ou une erreur nommée
+ */
+export async function seriesDeGeneration(
+  deps: DepsMobilax, boutiqueId: number, texte: string
+): Promise<ResultatSeriesMobilax> {
+  const base = nomComparable(texte)
+  if (!base) return { ok: true, series: [] }
+
+  const cle = await resoudreCle(deps, boutiqueId)
+  if (!cle.ok) return cle.echec
+
+  let catalogue: unknown
+  try {
+    const appel = await appelerMobilax(deps, boutiqueId, cle.apiKey, `${deps.baseUrl}/catalog/series`)
+    if (!appel.ok) return appel.echec
+    if (!appel.rep.ok) return indisponible()
+    // `{ status: "OK", data: [...] }` (mesuré le 2026-09-12) ; une autre forme n'est PAS un
+    // catalogue vide — la présenter comme « aucune série » cacherait un changement d'API
+    catalogue = (await appel.rep.json() as { data?: unknown }).data
+  } catch {
+    return indisponible()
+  }
+  if (!Array.isArray(catalogue)) return indisponible()
+
+  // Une série par identifiant : une même série répétée dans la réponse n'est proposée qu'une
+  // fois. Deux séries homonymes sous deux identifiants restent deux séries — les articles
+  // communs seront dédoublonnés à l'aperçu (ticket 02), jamais ici.
+  const parId = new Map<number, SerieMobilax & { cle: string }>()
+  for (const s of catalogue as any[]) {
+    const id = Number(s?.id)
+    const cle = nomComparable(String(s?.name ?? ''))
+    if (!Number.isInteger(id) || !cle || parId.has(id)) continue
+    if (cle === base || cle.startsWith(`${base} `))
+      parId.set(id, { id, nom: String(s.name).trim().replace(/\s+/g, ' '), cle })
+  }
+  // Ordre de lecture pour l'opérateur (17, 17 Air, 17 Pro, 17 Pro Max) — `position` Mobilax
+  // n'est pas chronologique (mesuré)
+  const series = [...parId.values()]
+    .sort((a, b) => (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0))
+    .map(({ id, nom }) => ({ id, nom }))
+  return { ok: true, series }
+}
+
 // ─── Import dans le stock (ticket 04) ─────────────────────────────────────────
 
 /**

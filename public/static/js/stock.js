@@ -657,8 +657,8 @@ function exportStock() {
 
 function ouvrirRechercheMobilax() {
   document.getElementById('mobilax-terme').value = '';
-  document.getElementById('mobilax-resultats').innerHTML = '';
-  messageMobilax('Saisissez le nom d\'une pièce ou son code EAN.');
+  // Résultats vidés et message d'aide du mode en cours (article ou génération)
+  basculerModeMobilax();
   openModal('modal-mobilax');
   document.getElementById('mobilax-terme').focus();
 }
@@ -775,6 +775,76 @@ document.getElementById('mobilax-resultats')?.addEventListener('click', e => {
   if (bouton) importerMobilax(Number(bouton.dataset.mobilaxId), bouton);
 });
 
+// ─── Mode « Par génération » (ticket 01, chantier import-par-generation) ─────
+// L'opérateur tape un nom de base (« iPhone 17 ») : les séries Mobilax de cette génération
+// s'affichent, toutes cochées. Aucun import à ce stade — aperçu et boucle d'import viennent
+// aux tickets 02-04. Noms de série = donnée tierce, échappés (escHtml).
+
+/** Mode de la fenêtre Mobilax : `'article'` (recherche texte) ou `'generation'`. */
+function modeMobilax() {
+  return document.querySelector('input[name="mobilax-mode"]:checked')?.value === 'generation' ? 'generation' : 'article';
+}
+
+/** Affiche la zone du mode choisi, vide les résultats des deux modes, adapte l'aide de saisie. */
+function basculerModeMobilax() {
+  const generation = modeMobilax() === 'generation';
+  document.getElementById('mobilax-zone-articles').hidden = generation;
+  document.getElementById('mobilax-series').hidden = !generation;
+  document.getElementById('mobilax-pagination').hidden = true;
+  document.getElementById('mobilax-resultats').innerHTML = '';
+  document.getElementById('mobilax-series-liste').innerHTML = '';
+  document.getElementById('mobilax-terme').placeholder = generation
+    ? 'Nom de la génération — ex. iPhone 17, Galaxy S24'
+    : 'Nom ou EAN — ex. écran iPhone 12';
+  messageMobilax(generation
+    ? 'Saisissez le nom d\'une génération : ses séries vous seront proposées.'
+    : 'Saisissez le nom d\'une pièce ou son code EAN.');
+}
+document.querySelectorAll('input[name="mobilax-mode"]').forEach(r => r.addEventListener('change', basculerModeMobilax));
+
+/** Envoi du formulaire de la fenêtre Mobilax : recherche du mode choisi. */
+function soumettreRechercheMobilax() {
+  return modeMobilax() === 'generation' ? chercherGeneration() : chercherMobilax();
+}
+
+/** Séries Mobilax de la génération saisie, cochées par défaut ; message clair si aucune. */
+async function chercherGeneration() {
+  const texte  = document.getElementById('mobilax-terme').value.trim();
+  const liste  = document.getElementById('mobilax-series-liste');
+  const bouton = document.getElementById('btn-mobilax-chercher');
+  if (!texte) { messageMobilax('Saisissez le nom d\'une génération, ex. « iPhone 17 ».', true); return; }
+
+  liste.innerHTML = '';
+  messageMobilax('Recherche des séries chez Mobilax…');
+  bouton.disabled = true;
+  try {
+    // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+    const res = (await apiGet(`/api/mobilax/series?q=${encodeURIComponent(texte)}`)).data;
+    // Échec nommé par le serveur (pas de fournisseur connecté, pas de clé, panne) : son message tel quel
+    if (!res?.success) { messageMobilax(res?.error || 'Lecture des séries Mobilax impossible.', true); return; }
+
+    const { series } = res.data;
+    if (!series.length) {
+      messageMobilax(`Aucune série Mobilax ne s'appelle « ${texte} » ni ne commence par « ${texte} ». `
+        + 'Saisissez le nom de base de la génération, ex. « iPhone 17 » ou « Galaxy S24 ».', true);
+      return;
+    }
+    const n = series.length;
+    messageMobilax(`${n} série${n > 1 ? 's' : ''} pour « ${texte} », ${n > 1 ? 'toutes cochées' : 'cochée'} — décochez celles que vous ne vendez pas.`);
+    liste.innerHTML = series.map(s => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
+        <input type="checkbox" class="mobilax-serie" value="${Number(s.id)}" checked>
+        <span>${escHtml(s.nom)}</span>
+      </label>`).join('');
+  } catch {
+    // `api()` laisse passer un rejet de `fetch` (réseau coupé) : sans ce message, « Recherche
+    // des séries… » resterait affiché indéfiniment
+    messageMobilax('Mobilax est injoignable pour le moment (réseau coupé ?). Réessayez dans un instant.', true);
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function setEl(id, val) {
   const el = document.getElementById(id);
@@ -804,3 +874,5 @@ window.openImportCsv       = openImportCsv;
 window.confirmImportCsv    = confirmImportCsv;
 window.ouvrirRechercheMobilax = ouvrirRechercheMobilax;
 window.chercherMobilax        = chercherMobilax;
+window.chercherGeneration     = chercherGeneration;
+window.soumettreRechercheMobilax = soumettreRechercheMobilax;

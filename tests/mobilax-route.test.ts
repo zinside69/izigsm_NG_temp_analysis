@@ -111,6 +111,64 @@ describe('GET /api/mobilax/produits', () => {
 })
 
 // ════════════════════════════════════════════════════════════════════════════════
+// GET /api/mobilax/series?q= — séries d'une génération (ticket 01, import par génération)
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// Mêmes gardes que la recherche : boutique du jeton seulement, admin plateforme refusé,
+// fournisseur connecté manquant nommé, texte vide refusé sans appel au fournisseur.
+
+function catalogueRepond() {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === `${BASE}/auth`) return json({ token: 'jwt-1', expireIn: '1h' })
+    if (url === `${BASE}/catalog/series`)
+      return json({ status: 'OK', data: [{ id: 2358, name: 'iPhone 17' }, { id: 2360, name: 'iPhone 17 Pro' }, { id: 12, name: 'iPhone 11' }] })
+    return json({ status: 'NOT_FOUND' }, 404)
+  })
+}
+
+describe('GET /api/mobilax/series', () => {
+  it('manager : séries de la génération dans l\'enveloppe du dépôt', async () => {
+    catalogueRepond()
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/series?q=iPhone%2017')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { series: [{ id: 2358, nom: 'iPhone 17' }, { id: 2360, nom: 'iPhone 17 Pro' }] },
+    })
+  })
+
+  it('la clé utilisée est celle de la boutique du jeton — ?boutique_id= est ignoré', async () => {
+    catalogueRepond()
+    const { res, d1 } = await chercher({ role: 'admin', boutique_id: 1 }, '/api/mobilax/series?q=iPhone%2017&boutique_id=99')
+    expect(res.status).toBe(200)
+    const lecture = d1.__getCalls().find(c => c.sql.includes('api_plateforme = ?'))!
+    expect(lecture.params[0]).toBe(1)
+  })
+
+  it('admin plateforme : refusé, Mobilax jamais appelé', async () => {
+    const { res } = await chercher({ role: 'admin', boutique_id: null }, '/api/mobilax/series?q=iPhone%2017&boutique_id=1')
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('texte absent ou vide : 400, Mobilax jamais appelé', async () => {
+    for (const chemin of ['/api/mobilax/series', '/api/mobilax/series?q=', '/api/mobilax/series?q=%20%20']) {
+      const { res } = await chercher({ role: 'manager', boutique_id: 1 }, chemin)
+      expect(res.status, chemin).toBe(400)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('aucun fournisseur connecté : 422 avec le code et un message qui dit comment en brancher un', async () => {
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/series?q=iPhone%2017', { sansFiche: true })
+    expect(res.status).toBe(422)
+    const corps = await res.json() as { code: string; error: string }
+    expect(corps).toMatchObject({ success: false, code: 'sans_fournisseur' })
+    expect(corps.error).toMatch(/Fournisseurs/)
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════════
 // POST /api/mobilax/import — ticket 04 : une pièce trouvée devient un produit du stock
 // ════════════════════════════════════════════════════════════════════════════════
 //

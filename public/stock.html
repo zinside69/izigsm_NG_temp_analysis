@@ -280,27 +280,40 @@
         <button class="modal-close" onclick="closeModal('modal-mobilax')">✕</button>
       </div>
       <div class="modal-body">
-        <form onsubmit="event.preventDefault(); chercherMobilax()" style="display:flex;gap:10px;margin-bottom:12px;">
+        <!-- Mode de recherche (ticket 01 import-par-generation) : un article, ou les séries d'une
+             génération (« iPhone 17 » → 17, 17 Air, 17 Pro, 17 Pro Max). basculerModeMobilax(). -->
+        <div role="radiogroup" aria-label="Mode de recherche" style="display:flex;gap:18px;margin-bottom:10px;font-size:.9rem;">
+          <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="mobilax-mode" value="article" id="mobilax-mode-article" checked> Par article</label>
+          <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="mobilax-mode" value="generation" id="mobilax-mode-generation"> Par génération</label>
+        </div>
+        <form onsubmit="event.preventDefault(); soumettreRechercheMobilax()" style="display:flex;gap:10px;margin-bottom:12px;">
           <input type="search" id="mobilax-terme" placeholder="Nom ou EAN — ex. écran iPhone 12"
                  style="flex:1;padding:10px 12px;border:1px solid #d0d5dd;border-radius:10px;">
           <button type="submit" class="btn btn-primary btn-sm" id="btn-mobilax-chercher">Rechercher</button>
         </form>
         <p id="mobilax-message" style="font-size:.87rem;color:var(--text-muted);margin:0 0 10px;"></p>
-        <!-- Pagination : 100 pièces par page, une page = un appel au quota Mobilax (30/min) -->
-        <div id="mobilax-pagination" style="display:flex;align-items:center;gap:10px;margin:0 0 10px;" hidden>
-          <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-precedente">← Précédente</button>
-          <span id="mobilax-page" style="font-size:.87rem;"></span>
-          <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-suivante">Suivante →</button>
+        <!-- Séries de la génération, toutes cochées (rempli par chercherGeneration()) -->
+        <div id="mobilax-series" hidden>
+          <div id="mobilax-series-liste" style="max-height:50vh;overflow-y:auto;"></div>
         </div>
-        <div style="max-height:50vh;overflow-y:auto;">
-          <table>
-            <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
-            <tbody id="mobilax-resultats"></tbody>
-          </table>
+        <!-- Mode « Par article » : pagination, résultats, mention — masqués en mode génération -->
+        <div id="mobilax-zone-articles">
+          <!-- Pagination : 100 pièces par page, une page = un appel au quota Mobilax (30/min) -->
+          <div id="mobilax-pagination" style="display:flex;align-items:center;gap:10px;margin:0 0 10px;" hidden>
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-precedente">← Précédente</button>
+            <span id="mobilax-page" style="font-size:.87rem;"></span>
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-suivante">Suivante →</button>
+          </div>
+          <div style="max-height:50vh;overflow-y:auto;">
+            <table>
+              <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
+              <tbody id="mobilax-resultats"></tbody>
+            </table>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin:10px 0 0;">
+            Prix et stock fournis par Mobilax pour votre compte, à titre indicatif.
+          </p>
         </div>
-        <p style="font-size:.78rem;color:var(--text-muted);margin:10px 0 0;">
-          Prix et stock fournis par Mobilax pour votre compte, à titre indicatif.
-        </p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-mobilax')">Fermer</button>

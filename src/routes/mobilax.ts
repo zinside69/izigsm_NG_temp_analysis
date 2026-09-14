@@ -5,6 +5,7 @@
  *
  * Routes :
  *   GET  /api/mobilax/produits?q=  — recherche par nom ou EAN13, avec la clé de la boutique
+ *   GET  /api/mobilax/series?q=    — séries d'une génération (ticket 01 `import-par-generation`)
  *   POST /api/mobilax/import       — importe une pièce dans le stock (`{ mobilax_id }`, ticket 04 ;
  *                                    `quantite_en_rayon?` facultative, ticket 05 réglages de stock)
  *
@@ -18,7 +19,7 @@ import { Hono } from 'hono'
 import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middleware'
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
-import { rechercherProduitsMobilax, importerProduitMobilax, type ErreurMobilax } from '../services/mobilaxService'
+import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, type ErreurMobilax } from '../services/mobilaxService'
 
 // MOBILAX_API_BASE : préproduction ou production (`wrangler.jsonc` › vars), jamais en dur.
 type Bindings  = { DB: D1Database; KV: D1KVNamespace; JWT_SECRET: string; FOURNISSEUR_CRYPTO_KEY: string; MOBILAX_API_BASE: string }
@@ -71,6 +72,28 @@ mobilax.get('/mobilax/produits', async (c) => {
     page,
   )
   if (r.ok) return c.json({ success: true, data: { total: r.total, page: r.page, pages: r.pages, produits: r.produits } })
+  return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
+})
+
+// ── GET /api/mobilax/series?q= ────────────────────────────────────────────────
+// Ticket 01 `import-par-generation` : séries Mobilax d'une génération (« iPhone 17 » → 17,
+// 17 Air, 17 Pro, 17 Pro Max). Lecture du catalogue des séries, sans quota. Mêmes gardes que la
+// recherche : boutique du jeton seulement, admin plateforme et compte sans boutique refusés.
+mobilax.get('/mobilax/series', async (c) => {
+  const user = c.get('user')
+  if (isAdminPlateforme(user) || !user.boutique_id)
+    return c.json({ success: false, error: 'Les séries Mobilax se lisent avec la clé d\'une boutique : réservées à ses utilisateurs.' }, 403)
+
+  const texte = (c.req.query('q') ?? '').trim()
+  if (!texte)
+    return c.json({ success: false, error: 'Saisissez le nom d\'une génération, ex. « iPhone 17 ».' }, 400)
+
+  const r = await seriesDeGeneration(
+    { db: c.get('db'), kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
+    user.boutique_id,
+    texte,
+  )
+  if (r.ok) return c.json({ success: true, data: { series: r.series } })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 
