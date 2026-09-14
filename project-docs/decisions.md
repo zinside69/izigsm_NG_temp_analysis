@@ -1,5 +1,29 @@
 # iziGSM — Décisions
 
+## 2026-09-14 (nuit) — Import d'une sélection (chantier A) : cadrage
+
+Cadré par `/grill-with-docs` (18 questions, 3 rounds), toutes les recommandations retenues par
+l'exploitant. Vocabulaire : « import d'une sélection » (`CONTEXT.md`).
+
+- **Sélection** gardée d'une page de résultats à l'autre, vidée à chaque nouvelle recherche ;
+  « Tout cocher » = page affichée seulement (tout cocher sur l'ensemble serait l'import en masse
+  écarté le 2026-09-12) ; barre « N sélectionnés · durée » avec « Importer la sélection » et
+  « Vider la sélection ».
+- **Quantité** : chaque article part avec la « Qté en rayon » de sa ligne (vide → stock initial par
+  défaut) ; valeur retenue = dernière vue, réaffichée en revenant sur la page ; une quantité
+  invalide sur une ligne cochée empêche le lancement.
+- **« Déjà en stock »** connu à l'import seulement (`deja_importe`) : la liste de recherche ne porte
+  pas la référence, un contrôle préalable coûterait un appel de quota par article.
+- **Règles de l'import par génération à l'identique** (rythme, quota, arrêts, confirmation > 200,
+  bilan, avertissement de fermeture) — une seule boucle pour les deux imports.
+- **« Interrompre »** pour les deux imports : l'article en cours finit, puis arrêt ; bilan « Import
+  interrompu », distinct d'« Import arrêté ».
+- **Pendant un import** : recherche libre, cases figées, boutons « Importer » des lignes désactivés
+  (un seul import à la fois). **Après** : restent cochés les échecs et les restants.
+- **Rôles** : cases et boutons d'import réservés au manager et à l'admin de boutique ; import
+  unitaire (ouvre la fiche) gardé.
+- **Tests** : écran à réponses et horloge simulées, aucun appel réel. **Déploiement** en un bloc.
+
 ## 2026-09-14 (soir) — Import par génération : arrêts de la boucle, déploiement
 
 - **Connexion perdue côté navigateur → arrêt de l'import** — confirmé par l'exploitant (« ok »),

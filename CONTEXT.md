@@ -136,6 +136,10 @@ propre au fournisseur, sans rapport fiable avec une génération), modèle.
 compatibles avec une génération.
 _À éviter_ : import en masse, import par modèle.
 
+**Import d'une sélection** — import en une fois, dans le stock, des articles fournisseur que
+l'opérateur a cochés dans les résultats d'une recherche fournisseur.
+_À éviter_ : import en masse, import groupé.
+
 **Service** — prestation facturable sans stock (main d'œuvre, diagnostic).
 `categories_services` + `services`.
 

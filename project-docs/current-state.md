@@ -1,4 +1,22 @@
-# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 109 — import par génération complet, en production)
+# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 110 — import d'une sélection cadré, spec publiée)
+
+## Checkpoint 110 — Import d'une sélection (chantier A) : cadré, spec publiée, tickets à valider (2026-09-14)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.04`) — aucun code modifié
+depuis le checkpoint 109.
+
+- **Incident de connexion du soir, clos** : `HTTP ERROR 405` sur `/login` dans le Chrome de
+  l'exploitant. Mesuré : production saine (page, en-têtes, aucune CSP, aucun `form.submit()`, navigateur
+  neuf sans erreur ; `POST /login` → 405 = soumission native). Cause trouvée par l'exploitant :
+  l'extension **NoScript**, qui empêche le JavaScript de la page (garde `onsubmit` en ligne compris).
+  Rien à corriger côté iziGSM ; l'exploitant n'a pas voulu de suite (ni bandeau `<noscript>`, ni note).
+- **Chantier A « import d'une sélection »** : cadré par `grill-with-docs` (18 questions, toutes les
+  recommandations retenues, `decisions.md`), terme au glossaire (`CONTEXT.md`), **spec publiée**
+  (`.scratch/import-d-une-selection/spec.md`, 40 stories). `to-tickets` lancé : découpage **proposé,
+  pas encore validé ni publié** (voir `recovery-prompt.md`).
+
+**Prochaine session** : valider le découpage en tickets et les publier (`/mattpocock-skills:to-tickets`
+avec le chemin de la spec, tapé par l'exploitant), puis `/mattpocock-skills:implement` ticket par ticket.
 
 ## Checkpoint 109 — Import par génération : tickets 02-04, chantier complet et déployé (2026-09-14)
 

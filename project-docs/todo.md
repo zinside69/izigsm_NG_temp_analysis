@@ -8,6 +8,8 @@ fin. Relevé en revue du ticket 04, hors spec.
 
 - [ ] Bouton « Interrompre » pendant l'import : arrêt propre après l'article en cours, bilan
       partiel avec restants (même chemin que l'arrêt du ticket 04) — test vu rouge
+      — **rattaché au chantier A le 2026-09-14** (décision de l'exploitant, grilling Q9) : un seul
+      bouton pour les **deux** imports (par génération et d'une sélection), la boucle étant commune.
 
 ## 🟡 P3 — Recherche Mobilax par article : « Recherche en cours… » figé sur coupure réseau (trouvé le 2026-09-14)
 
@@ -60,6 +62,24 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       cocher » (page de 100), « Importer la sélection » avec progression ; quantité = stock initial
       par défaut. **À cadrer après B** (`/mattpocock-skills:grill-with-docs`) pour réutiliser sa
       boucle d'import, son rythme et sa gestion du quota
+      — **cadrage en cours le 2026-09-14** (`grill-with-docs`) : nom « import d'une sélection »
+      (`CONTEXT.md`) ; sélection gardée d'une page à l'autre, vidée à chaque nouvelle recherche ;
+      « Tout cocher » = page affichée seulement ; quantité de chaque ligne (vide → défaut) ; « déjà
+      en stock » connu à l'import seulement (aucun quota en plus) ; règles de B à l'identique ;
+      cases et boutons d'import réservés au manager / admin de boutique ; import unitaire gardé ;
+      bouton « Interrompre » pour les deux imports (l'article en cours finit, puis arrêt ; bilan
+      « Import interrompu » ≠ « Import arrêté ») ; barre de sélection avec « Vider la sélection » ;
+      recherche libre pendant l'import, cases figées ; après l'import, restent cochés les échecs et
+      les restants (relance en un clic) ; quantité invalide sur une ligne cochée → l'import ne part
+      pas, lignes signalées ; quantité retenue = dernière valeur vue, réaffichée en revenant sur la page ;
+      boutons « Importer » des lignes désactivés pendant tout import (un seul import à la fois) ; tests
+      d'écran simulés + horloge simulée, aucun appel réel ; déploiement en un bloc à la fin.
+      **Cadrage terminé** (18 questions, `decisions.md` du 2026-09-14) — suite : `/mattpocock-skills:to-spec`
+      — **spec publiée le 2026-09-14** : `.scratch/import-d-une-selection/spec.md` (`ready-for-agent`,
+      40 stories) — suite : `/mattpocock-skills:to-tickets`
+      — **découpage proposé le 2026-09-14, NON validé, tickets non publiés** (3 tickets :
+      boucle commune + « Interrompre » → sélection sur la page → sélection sur plusieurs pages ;
+      détail dans `recovery-prompt.md` § checkpoint 110)
 
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 

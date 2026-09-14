@@ -1,4 +1,32 @@
-# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 109 — import par génération complet, en production)
+# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 110 — import d'une sélection cadré, spec publiée)
+
+## Ce qui a changé au checkpoint 110
+
+**Rien n'attend de déploiement, rien n'attend de migration** (`izigsm-v3.04`, inchangé depuis le 109).
+
+**Première action : reprendre `to-tickets` du chantier A « import d'une sélection ».** Cadrage et spec
+faits (`decisions.md` du 2026-09-14, `.scratch/import-d-une-selection/spec.md`). L'exploitant tape
+`/mattpocock-skills:to-tickets .scratch/import-d-une-selection/spec.md`. Découpage **proposé la veille,
+pas encore validé** — le reproposer, puis attendre l'accord avant de publier :
+1. **Boucle d'import commune + « Interrompre »** — aucun bloqueur. La boucle de l'import par
+   génération devient générique (liste d'articles avec quantité éventuelle, fiche fournisseur du bilan,
+   « déjà en stock » connu d'avance), zone d'import commune aux deux modes, « Interrompre » opérationnel
+   sur l'import par génération (article en cours fini, arrêt immédiat en pause, bilan « Import
+   interrompu »). Démontrable seul, règle le 🟡 P3 du `todo.md`.
+2. **Cocher et importer une sélection sur la page affichée** — bloqué par 1. Cases et boutons d'import
+   réservés manager / admin de boutique, barre « N sélectionnés · durée » + « Importer la sélection »,
+   quantité de ligne (invalide → pas de lancement), boucle commune, `fournisseur_id` dans la réponse de
+   recherche (lien du bilan), cases figées et « Importer » des lignes désactivés pendant l'import,
+   échecs et restants restés cochés après.
+3. **Sélection sur plusieurs pages, « Tout cocher », « Vider »** — bloqué par 2. Sélection gardée entre
+   pages (cases et quantités réaffichées), nouvelle recherche qui vide, « Tout cocher » = page affichée,
+   « Vider la sélection », `CACHE_VERSION` incrémenté (dernier ticket d'écran).
+Questions laissées à l'exploitant : granularité (sortir la quantité de ligne du 2 ?), dépendances.
+Déploiement en un bloc après 3, sans migration.
+
+**Incident du soir, clos** : 405 sur `/login` = extension Chrome **NoScript** (le JavaScript de la page
+ne tourne pas → soumission native en POST). Production saine, mesurée. ⊥ rouvrir sans nouvelle
+occurrence hors NoScript ; l'exploitant ne veut pas de suite.
 
 ## Ce qui a changé au checkpoint 109
 
