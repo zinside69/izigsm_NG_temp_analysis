@@ -990,7 +990,10 @@ function demanderImportGeneration() {
   lancerImportGeneration();
 }
 
-// ─── Import par génération : boucle, progression, bilan (ticket 03) ──────────
+// ─── Import par génération : boucle, progression, bilan (ticket 03) ; quota, arrêt (ticket 04) ─
+// Quota atteint avec délai annoncé : pause, compte à rebours, même article (seule reprise
+// automatique). Quota sans délai, fournisseur `indisponible` ou connexion perdue : arrêt, bilan
+// partiel avec les restants — relancer la même génération n'importe que le manquant.
 // Pilotée par le navigateur (précédent : startSync() de services.js) : un article à la fois, par
 // la route d'import unitaire existante, un départ toutes les 3 s au plus (20 par minute) pour
 // laisser 10 appels par minute aux recherches du comptoir. Sans quantité en rayon : le serveur
@@ -999,6 +1002,9 @@ function demanderImportGeneration() {
 
 /** Écart minimal entre deux départs d'import (spec : au plus 20 par minute). */
 const INTERVALLE_IMPORT_MS = SECONDES_PAR_IMPORT * 1000;
+
+/** Motif d'arrêt quand `fetch` est rejeté pendant l'import — distinct d'une panne du fournisseur. */
+const MESSAGE_CONNEXION_PERDUE = 'Connexion perdue avec iziGSM (réseau coupé ?).';
 
 /** Import par génération en cours : fenêtre gardée telle quelle, fermeture de l'onglet avertie. */
 let importEnCours = false;
@@ -1012,6 +1018,21 @@ function retenirFermeture(e) {
 /** Attend `ms` millisecondes — `setTimeout`, que l'horloge simulée des E2E pilote. */
 function patienter(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Pause de quota (story 15) : compte à rebours seconde par seconde du délai annoncé par le
+ * fournisseur, puis la boucle reprend l'article interrompu (story 16).
+ * @param secondes Délai entier > 0, lu dans la réponse du serveur (`reessayer_dans_s`)
+ */
+async function compteARebours(secondes) {
+  const pause = document.getElementById('mobilax-import-pause');
+  pause.hidden = false;
+  for (let reste = secondes; reste > 0; reste--) {
+    pause.textContent = `Quota fournisseur atteint — reprise dans ${reste} s`;
+    await patienter(1000);
+  }
+  pause.hidden = true;
 }
 
 /**
@@ -1061,15 +1082,29 @@ async function lancerImportGeneration() {
   let dernierDepart = -Infinity;
   try {
     for (const [i, article] of aImporter.entries()) {
-      const attente = dernierDepart + INTERVALLE_IMPORT_MS - Date.now();
-      if (attente > 0) await patienter(attente);
-      dernierDepart = Date.now();
-
+      // Un article peut partir plusieurs fois : après une pause de quota, c'est LUI qui repart
       let res = null;
-      try {
-        // Import unitaire existant, SANS quantité en rayon ; déballage au point d'appel (CLAUDE.md)
-        res = (await apiPost('/api/mobilax/import', { mobilax_id: article.mobilax_id })).data;
-      } catch { /* réseau coupé : consigné en échec ci-dessous */ }
+      let connexionPerdue = false;
+      for (;;) {
+        const attente = dernierDepart + INTERVALLE_IMPORT_MS - Date.now();
+        if (attente > 0) await patienter(attente);
+        dernierDepart = Date.now();
+        res = null;
+        connexionPerdue = false;
+        try {
+          // Import unitaire existant, SANS quantité en rayon ; déballage au point d'appel (CLAUDE.md)
+          res = (await apiPost('/api/mobilax/import', { mobilax_id: article.mobilax_id })).data;
+        } catch {
+          // Rejet de `fetch` : c'est la connexion à iziGSM qui manque, pas le fournisseur
+          connexionPerdue = true;
+        }
+        // Quota atteint AVEC délai annoncé (`ratelimit-reset`) : pause, compte à rebours, puis
+        // même article (ticket 04). Sans délai connu : pas de nouvelle tentative, arrêt ci-dessous.
+        const delai = Math.ceil(Number(res?.reessayer_dans_s));
+        if (res?.code !== 'quota' || !(delai > 0)) break;
+        journaliserImport(`⏸ ${article.nom} — quota fournisseur atteint, pause de ${delai} s`, '#b45309');
+        await compteARebours(delai);
+      }
 
       if (res?.success) {
         bilan.importes++;
@@ -1081,8 +1116,18 @@ async function lancerImportGeneration() {
       } else if (res?.code === 'deja_importe') {
         bilan.deja++;
         journaliserImport(`= ${article.nom} — déjà dans votre stock`, '#6b7280');
+      } else if (connexionPerdue || res?.code === 'indisponible' || res?.code === 'quota') {
+        // Arrêt (ticket 04) : fournisseur injoignable, connexion perdue, ou quota sans délai
+        // connu — jamais de nouvelle tentative à l'aveugle. Cet article et les suivants restent
+        // à importer ; relancer la même génération n'importera qu'eux (anti-doublon 0046).
+        bilan.arret = {
+          motif: connexionPerdue ? MESSAGE_CONNEXION_PERDUE : (res?.error || MESSAGE_MOBILAX_INJOIGNABLE),
+          restants: aImporter.length - i,
+        };
+        journaliserImport(`■ Import arrêté — ${bilan.arret.motif}`, '#b42318');
+        break;
       } else {
-        const motif = res?.error || MESSAGE_MOBILAX_INJOIGNABLE;
+        const motif = res?.error || 'Réponse inattendue du serveur.';
         bilan.echecs.push({ nom: article.nom, motif });
         journaliserImport(`✗ ${article.nom} — ${motif}`, '#b42318');
       }
@@ -1090,6 +1135,7 @@ async function lancerImportGeneration() {
     }
   } finally {
     window.removeEventListener('beforeunload', retenirFermeture);
+    document.getElementById('mobilax-import-pause').hidden = true;
     importEnCours = false;
     basculerSaisieGeneration(true);
   }
@@ -1099,8 +1145,11 @@ async function lancerImportGeneration() {
   await loadStock();
 }
 
-/** Bilan : importés, déjà en stock, échecs nommés, répartition par famille, lien vers le stock. */
-function afficherBilan({ importes, deja, echecs, familles, fournisseurId }) {
+/**
+ * Bilan : importés, déjà en stock, échecs nommés, répartition par famille, lien vers le stock ;
+ * sur arrêt (`arret` : motif, restants — ticket 04), « Import arrêté » et ce qu'il reste à importer.
+ */
+function afficherBilan({ importes, deja, echecs, familles, fournisseurId, arret }) {
   const zone = document.getElementById('mobilax-bilan');
   zone.replaceChildren();
   const ajouter = (parent, balise, texte) => {
@@ -1109,8 +1158,13 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId }) {
     parent.appendChild(el);
     return el;
   };
-  ajouter(zone, 'strong', `Import terminé : ${compter(importes, 'importé')} · `
+  ajouter(zone, 'strong', `${arret ? 'Import arrêté' : 'Import terminé'} : ${compter(importes, 'importé')} · `
     + `${deja} déjà dans votre stock · ${compter(echecs.length, 'échec')}`);
+  // Bilan partiel (ticket 04) : pourquoi l'import s'est arrêté, et ce qu'il reste à importer
+  if (arret) {
+    ajouter(zone, 'p', `${arret.motif} — ${compter(arret.restants, 'article')} restant${arret.restants > 1 ? 's' : ''} : `
+      + 'relancez la même génération, seul le manquant sera importé.');
+  }
   const repartition = Object.entries(familles)
     .map(([famille, n]) => `${FAMILLE_CONFIG[famille]?.label || famille} : ${n}`).join(' · ');
   if (repartition) ajouter(zone, 'p', `Répartition des importés — ${repartition}`);

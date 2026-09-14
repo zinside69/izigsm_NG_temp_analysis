@@ -307,6 +307,143 @@ test.describe('Mobilax — mode « Par génération »', () => {
     await expect.poll(() => demandes.some(u => new URL(u).searchParams.get('fournisseur_id') === '3')).toBe(true)
   })
 
+  // ── Ticket 04 : quota, panne du fournisseur, reprise — horloge simulée ──────────
+
+  /** Réponse simulée d'un import : corps HTTP, ou coupure réseau côté navigateur. */
+  type ReponseImport = { status: number; json: unknown } | 'coupure'
+  const IMPORT_OK = (id: number): ReponseImport => ({ status: 201, json: { success: true, data: { produit_id: 100 + id, famille: 'piece' } } })
+  const QUOTA = (delai?: number): ReponseImport => ({ status: 429, json: {
+    success: false, code: 'quota',
+    error: delai ? `Limite d'appels Mobilax atteinte. Réessayez dans ${delai} s.` : 'Limite d\'appels Mobilax atteinte. Réessayez dans quelques instants.',
+    ...(delai ? { reessayer_dans_s: delai } : {}),
+  } })
+  const PANNE: ReponseImport = { status: 502, json: { success: false, code: 'indisponible', error: 'Mobilax ne répond pas pour le moment. Réessayez plus tard.' } }
+
+  /** Aperçu simulé des articles `ids` (série 2358), `deja` marqués déjà dans le stock. */
+  const apercuDe = (ids: number[], deja: number[] = []) => ({ success: true, data: {
+    fournisseur_id: 3,
+    series: [{ id: 2358, nb_articles: ids.length }, { id: 2360, nb_articles: 0 }],
+    articles: ids.map(id => ({ mobilax_id: id, reference: `R${id}`, nom: `Article ${id}`, series: [2358], deja_en_stock: deja.includes(id) })),
+  } })
+
+  /**
+   * Scénario d'import : horloge installée avant toute navigation ; `apercu()` relu à chaque
+   * demande d'aperçu (la relance voit l'état « après import ») ; `reponses[id]` = réponses
+   * successives de l'import de cet article, la dernière se répétant. Rend les identifiants
+   * envoyés à la route d'import, dans l'ordre — une nouvelle tentative y apparaît deux fois.
+   */
+  async function scenarioImport(page: Page, request: any, apercu: () => unknown, reponses: Record<number, ReponseImport[]>) {
+    await page.clock.install()
+    await page.route('**/api/mobilax/series?*', route => route.fulfill({ json: { success: true, data: { series: SERIES_17 } } }))
+    await page.route('**/api/mobilax/apercu?*', route => route.fulfill({ json: apercu() }))
+    const envois: number[] = []
+    await page.route('**/api/mobilax/import*', async route => {
+      const id = route.request().postDataJSON().mobilax_id as number
+      envois.push(id)
+      const file = reponses[id]
+      const r = file.length > 1 ? file.shift()! : file[0]
+      if (r === 'coupure') return route.abort('internetdisconnected')
+      return route.fulfill(r)
+    })
+    await modeGenerationSimule(page, request)
+    await page.fill('#mobilax-terme', 'iPhone 17')
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-apercu')).toContainText('à importer')
+    // Temps figé : seul runFor() fait avancer les départs et le compte à rebours
+    await page.clock.pauseAt(Date.now() + 60_000)
+    return envois
+  }
+
+  /** Avance l'horloge seconde par seconde (chaque seconde du compte à rebours est un minuteur). */
+  async function avancer(page: Page, secondes: number) {
+    for (let s = 0; s < secondes; s++) await page.clock.runFor(1_000)
+  }
+
+  test('quota atteint : pause, compte à rebours du délai annoncé, puis reprise du même article', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3]),
+      { 1: [IMPORT_OK(1)], 2: [QUOTA(34), IMPORT_OK(2)], 3: [IMPORT_OK(3)] })
+    await page.click('#btn-generation-importer')
+    const progression = page.locator('#mobilax-import-progression')
+    const pause = page.locator('#mobilax-import-pause')
+    await expect(progression).toContainText('1 / 3')
+
+    await page.clock.runFor(3_000)
+    await expect(pause).toContainText('Quota fournisseur atteint — reprise dans 34 s')
+    await avancer(page, 1)
+    await expect(pause).toContainText('reprise dans 33 s')
+    await avancer(page, 32)
+    await expect(pause).toContainText('reprise dans 1 s')
+    // Jamais de nouvelle tentative avant la fin du compte à rebours
+    expect(envois).toEqual([1, 2])
+
+    await avancer(page, 1)
+    await expect(progression).toContainText('2 / 3')
+    await expect(pause).toBeHidden()
+    expect(envois).toEqual([1, 2, 2])
+    await page.clock.runFor(3_000)
+    await expect(page.locator('#mobilax-bilan')).toContainText('3 importés')
+  })
+
+  test('quota atteint sans délai annoncé : arrêt et bilan, aucune nouvelle tentative', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3]),
+      { 1: [IMPORT_OK(1)], 2: [QUOTA()], 3: [IMPORT_OK(3)] })
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 3')
+    await page.clock.runFor(3_000)
+
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import arrêté')
+    await expect(bilan).toContainText('Réessayez dans quelques instants')
+    await expect(bilan).toContainText('2 articles restants')
+    await avancer(page, 60)
+    expect(envois).toEqual([1, 2])
+  })
+
+  test('fournisseur indisponible : arrêt, bilan partiel ; relancer la génération n\'importe que le manquant', async ({ page, request }) => {
+    let apercu = apercuDe([1, 2, 3])
+    const envois = await scenarioImport(page, request, () => apercu,
+      { 1: [IMPORT_OK(1)], 2: [PANNE, IMPORT_OK(2)], 3: [IMPORT_OK(3)] })
+    await page.click('#btn-generation-importer')
+    const progression = page.locator('#mobilax-import-progression')
+    await expect(progression).toContainText('1 / 3')
+    await page.clock.runFor(3_000)
+
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import arrêté')
+    await expect(bilan).toContainText('Mobilax ne répond pas')
+    await expect(bilan).toContainText('1 importé')
+    await expect(bilan).toContainText('2 articles restants')
+    await avancer(page, 10)
+    expect(envois).toEqual([1, 2])   // rien ne part après l'arrêt
+
+    // Relance : le serveur compte désormais l'article 1 « déjà dans le stock » (anti-doublon 0046)
+    apercu = apercuDe([1, 2, 3], [1])
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-apercu')).toContainText('2 à importer')
+    await expect(page.locator('#mobilax-apercu')).toContainText('1 déjà dans votre stock')
+    await page.click('#btn-generation-importer')
+    await expect(progression).toContainText('1 / 2')
+    await page.clock.runFor(3_000)
+    await expect(progression).toContainText('2 / 2')
+    expect(envois).toEqual([1, 2, 2, 3])
+  })
+
+  test('connexion perdue côté navigateur : arrêt avec un motif distinct d\'une panne du fournisseur', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3]),
+      { 1: [IMPORT_OK(1)], 2: ['coupure'], 3: [IMPORT_OK(3)] })
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 3')
+    await page.clock.runFor(3_000)
+
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import arrêté')
+    await expect(bilan).toContainText('Connexion perdue')
+    await expect(bilan).not.toContainText('Mobilax ne répond pas')
+    await expect(bilan).toContainText('2 articles restants')
+    await avancer(page, 10)
+    expect(envois).toEqual([1, 2])
+  })
+
   test('« iPhone 1 » : aucune série, message qui dit quoi saisir', async ({ page, request }) => {
     const cle = cleMobilaxPreprod()
     test.skip(!cle, 'MOBILAX_API_KEY absente de .dev.vars — catalogue réel inaccessible')

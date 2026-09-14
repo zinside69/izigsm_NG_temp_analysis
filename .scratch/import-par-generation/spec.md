@@ -153,6 +153,12 @@ dit ce qui a été importé, ce qui était déjà là, et ce qui a échoué.
   du délai rendu par le serveur, puis reprise de l'article en cours. Sur « fournisseur
   indisponible » : arrêt et bilan. Tout autre échec d'un article : consigné, la boucle continue.
   Avertissement du navigateur si l'onglet est fermé pendant l'import.
+  _Amendé au ticket 04 (2026-09-14) — deux autres cas d'**arrêt** que « fournisseur indisponible » :
+  **quota atteint sans délai annoncé** (seule lecture compatible avec « aucune nouvelle tentative à
+  l'aveugle ») et **connexion à iziGSM perdue** côté navigateur (rejet de `fetch`, motif distinct de
+  la panne du fournisseur). Continuer après une coupure compterait chaque article restant en échec,
+  un toutes les 3 s ; s'arrêter laisse une relance propre (seul le manquant). Revient sur la note
+  « seul `indisponible` doit arrêter » du ticket 03._
 - **Aperçu à l'écran** : séries cochées par défaut, recalcul à chaque décochage, total à importer,
   déjà en stock, durée estimée (à importer × 3 s, arrondie à la minute) ; confirmation renforcée
   au-delà de 200 articles ; aucun plafond.
