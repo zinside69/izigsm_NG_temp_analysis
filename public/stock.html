@@ -294,7 +294,17 @@
         <p id="mobilax-message" style="font-size:.87rem;color:var(--text-muted);margin:0 0 10px;"></p>
         <!-- Séries de la génération, toutes cochées (rempli par chercherGeneration()) -->
         <div id="mobilax-series" hidden>
-          <div id="mobilax-series-liste" style="max-height:50vh;overflow-y:auto;"></div>
+          <div id="mobilax-series-liste" style="max-height:40vh;overflow-y:auto;"></div>
+          <!-- Aperçu chiffré (ticket 02) : recalculé à chaque décochage par recalculerApercu() -->
+          <p id="mobilax-apercu" style="font-size:.9rem;margin:12px 0 8px;"></p>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-generation-importer" disabled>Importer</button>
+          <!-- Confirmation renforcée au-delà de SEUIL_CONFIRMATION articles -->
+          <div id="mobilax-confirmation" hidden
+               style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:.88rem;">
+            <p id="mobilax-confirmation-texte" style="margin:0 0 8px;"></p>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-generation-lancer">Lancer l'import</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-generation-annuler">Annuler</button>
+          </div>
         </div>
         <!-- Mode « Par article » : pagination, résultats, mention — masqués en mode génération -->
         <div id="mobilax-zone-articles">

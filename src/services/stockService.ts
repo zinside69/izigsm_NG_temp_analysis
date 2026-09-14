@@ -444,6 +444,27 @@ export async function trouverProduitImporte(
 }
 
 /**
+ * Références fournisseur déjà importées dans la boutique pour une fiche fournisseur — même clé
+ * que `trouverProduitImporte()`, lue en une requête pour tout un aperçu (ticket 02
+ * `import-par-generation`) au lieu d'une par article.
+ *
+ * @param db             Port Database
+ * @param boutiqueId     Boutique — filtre d'isolation porté par la requête elle-même
+ * @param fournisseurId  Fiche fournisseur source
+ * @returns              Ensemble des `reference_fournisseur` des produits actifs
+ */
+export async function referencesImportees(
+  db: Database, boutiqueId: number, fournisseurId: number
+): Promise<Set<string>> {
+  const lignes = await db.all<{ reference_fournisseur: string }>(
+    `SELECT reference_fournisseur FROM produits
+     WHERE boutique_id = ? AND fournisseur_id = ? AND actif = 1 AND reference_fournisseur IS NOT NULL`,
+    [boutiqueId, fournisseurId]
+  )
+  return new Set(lignes.map(l => String(l.reference_fournisseur)))
+}
+
+/**
  * Catégorie de la boutique portant ce nom — créée si elle n'existe pas (import Mobilax : la
  * catégorie locale reçoit le nom de la catégorie Mobilax, décision du 2026-09-11).
  *

@@ -169,6 +169,80 @@ describe('GET /api/mobilax/series', () => {
 })
 
 // ════════════════════════════════════════════════════════════════════════════════
+// GET /api/mobilax/apercu?series= — aperçu d'une génération (ticket 02, import par génération)
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// Mêmes gardes que le ticket 01 ; une liste de séries invalide est refusée AVANT tout appel —
+// l'aperçu coûte un appel au quota par série et par page.
+
+function rechercheParSerieRepond() {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === `${BASE}/auth`) return json({ token: 'jwt-1', expireIn: '1h' })
+    const m = /\/products\/search\?seriesId=(\d+)&page=1&limit=100$/.exec(url)
+    if (m) return json({ data: { currentPage: 1, limit: 100, total: 1, totalPage: 1,
+      products: [{ id: Number(m[1]) + 1, reference: `REF-${m[1]}`, name: `Article ${m[1]}`, price: 5 }] } })
+    return json({ status: 'NOT_FOUND' }, 404)
+  })
+}
+
+describe('GET /api/mobilax/apercu', () => {
+  it('manager : aperçu par série et articles dans l\'enveloppe du dépôt', async () => {
+    rechercheParSerieRepond()
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/apercu?series=2358,2360')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      success: true,
+      data: {
+        series: [{ id: 2358, nb_articles: 1 }, { id: 2360, nb_articles: 1 }],
+        articles: [
+          { mobilax_id: 2359, reference: 'REF-2358', nom: 'Article 2358', series: [2358], deja_en_stock: false },
+          { mobilax_id: 2361, reference: 'REF-2360', nom: 'Article 2360', series: [2360], deja_en_stock: false },
+        ],
+      },
+    })
+  })
+
+  it('la clé utilisée est celle de la boutique du jeton — ?boutique_id= est ignoré', async () => {
+    rechercheParSerieRepond()
+    const { res, d1 } = await chercher({ role: 'admin', boutique_id: 1 }, '/api/mobilax/apercu?series=2358&boutique_id=99')
+    expect(res.status).toBe(200)
+    // Toute requête filtrée d'abord sur la boutique (fiche Mobilax, références déjà importées)
+    const lectures = d1.__getCalls().filter(c => c.sql.includes('WHERE boutique_id = ?'))
+    expect(lectures.length).toBeGreaterThanOrEqual(2)
+    for (const c of lectures) expect(c.params[0]).toBe(1)
+  })
+
+  it('admin plateforme : refusé, Mobilax jamais appelé', async () => {
+    const { res } = await chercher({ role: 'admin', boutique_id: null }, '/api/mobilax/apercu?series=2358&boutique_id=1')
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('liste de séries absente ou invalide : 400, Mobilax jamais appelé', async () => {
+    for (const q of ['', '?series=', '?series=abc', '?series=1,,2', '?series=0', '?series=-3', '?series=1.5', '?series=2358,x']) {
+      const { res } = await chercher({ role: 'manager', boutique_id: 1 }, `/api/mobilax/apercu${q}`)
+      expect(res.status, q).toBe(400)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('aucun fournisseur connecté : 422 avec le code', async () => {
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/apercu?series=2358', { sansFiche: true })
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ success: false, code: 'sans_fournisseur' })
+  })
+
+  it('quota Mobilax atteint : 429 avec le code et le délai', async () => {
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ status: 'RATE_LIMITED' }, 429, { 'ratelimit-reset': '30' }))
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/apercu?series=2358')
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ success: false, code: 'quota', reessayer_dans_s: 30 })
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════════
 // POST /api/mobilax/import — ticket 04 : une pièce trouvée devient un produit du stock
 // ════════════════════════════════════════════════════════════════════════════════
 //

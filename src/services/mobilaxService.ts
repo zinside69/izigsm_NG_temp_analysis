@@ -16,7 +16,7 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte, trouverOuCreerCategorie, estEntierPositifOuNul } from './stockService'
+import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,14 +106,13 @@ export async function rechercherProduitsMobilax(
     const produits = corps.data.products.map(versProduitMobilax)
       .filter((p): p is ProduitMobilax => p !== null)
     const total = Number(corps.data.total)
-    // `totalPage` au singulier et `currentPage` en camelCase (mesuré) — à défaut, la page demandée
-    const pages = Number(corps.data.totalPage)
+    // `currentPage` en camelCase (mesuré) — à défaut, la page demandée
     const pageRendue = Number(corps.data.currentPage)
     return {
       ok: true,
       total: Number.isFinite(total) ? total : produits.length,
       page:  Number.isInteger(pageRendue) && pageRendue > 0 ? pageRendue : page,
-      pages: Number.isInteger(pages) && pages > 0 ? pages : 1,
+      pages: nombreDePages(corps.data.totalPage),
       produits,
     }
   } catch {
@@ -194,6 +193,97 @@ export async function seriesDeGeneration(
     .sort((a, b) => (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0))
     .map(({ id, nom }) => ({ id, nom }))
   return { ok: true, series }
+}
+
+// ─── Aperçu d'une génération (ticket 02, chantier import-par-generation) ──────
+
+/** Article fournisseur d'un aperçu — ce que l'écran recalcule et ce que l'import (ticket 03) lira. */
+export interface ArticleApercu {
+  mobilax_id:    number
+  /** Référence Mobilax ; l'identifiant à défaut — même repli que l'import, même clé d'anti-doublon. */
+  reference:     string
+  nom:           string
+  /** Séries cochées qui contiennent l'article : l'écran recalcule au décochage sans rappeler Mobilax. */
+  series:        number[]
+  deja_en_stock: boolean
+}
+
+/** Série cochée d'un aperçu : nombre d'articles fournisseur qu'elle contient. */
+export interface SerieApercu {
+  id:          number
+  nb_articles: number
+}
+
+export type ResultatApercuMobilax =
+  | { ok: true; series: SerieApercu[]; articles: ArticleApercu[] }
+  | EchecMobilax
+
+/**
+ * Aperçu d'une génération : les articles fournisseur de chaque série, dédoublonnés entre
+ * séries, et ceux déjà dans le stock de la boutique.
+ *
+ * Chaque série est lue par la recherche par série, **toutes les pages** de `LIMITE_RESULTATS` —
+ * une page = un appel au quota `/products` (30/min, partagé par la boutique). Aucun aperçu
+ * partiel : un quota atteint ou une panne en cours de lecture rend le signal tel quel (délai
+ * compris), aucune nouvelle tentative à l'aveugle.
+ *
+ * « Déjà dans le stock » = référence déjà portée par un produit actif de CETTE boutique pour
+ * CETTE fiche fournisseur (même clé que l'anti-doublon de l'import), lue en une requête — aucun
+ * appel de fiche : la liste par série porte déjà la référence (mesuré le 2026-09-12).
+ *
+ * @param deps        Dépendances (base, KV, secret, adresse de l'API)
+ * @param boutiqueId  Boutique appelante — SA clé, SON stock
+ * @param seriesIds   Séries cochées (identifiants Mobilax) ; un doublon n'est lu qu'une fois
+ * @returns           Nombre d'articles par série et articles dédoublonnés, ou une erreur nommée
+ */
+export async function apercuGeneration(
+  deps: DepsMobilax, boutiqueId: number, seriesIds: number[]
+): Promise<ResultatApercuMobilax> {
+  const ids = [...new Set(seriesIds)]
+  if (ids.length === 0) return { ok: true, series: [], articles: [] }
+
+  const cle = await resoudreCle(deps, boutiqueId)
+  if (!cle.ok) return cle.echec
+
+  const parId = new Map<number, ArticleApercu>()
+  const series: SerieApercu[] = []
+  try {
+    for (const serieId of ids) {
+      const vus = new Set<number>()
+      for (let page = 1, pages = 1; page <= pages; page++) {
+        const url = `${deps.baseUrl}/products/search?seriesId=${serieId}&page=${page}&limit=${LIMITE_RESULTATS}`
+        const appel = await appelerMobilax(deps, boutiqueId, cle.apiKey, url)
+        if (!appel.ok) return appel.echec
+        if (!appel.rep.ok) return indisponible()
+        // La recherche par série range sa liste sous `data.products` (mesuré) ; une autre forme
+        // n'est PAS une série vide — la présenter comme « aucun article » cacherait un changement d'API
+        const corps = await appel.rep.json() as { data?: { totalPage?: unknown; products?: unknown } }
+        if (!Array.isArray(corps.data?.products)) return indisponible()
+        pages = nombreDePages(corps.data.totalPage)
+        for (const p of corps.data.products as any[]) {
+          const id = Number(p?.id)
+          if (!Number.isInteger(id) || vus.has(id)) continue
+          vus.add(id)
+          const dejaVu = parId.get(id)
+          if (dejaVu) { dejaVu.series.push(serieId); continue }
+          parId.set(id, {
+            mobilax_id:    id,
+            reference:     String(p.reference ?? p.id),
+            nom:           String(p.name ?? p.short_name ?? ''),
+            series:        [serieId],
+            deja_en_stock: false,
+          })
+        }
+      }
+      series.push({ id: serieId, nb_articles: vus.size })
+    }
+  } catch {
+    return indisponible()
+  }
+
+  const enStock = await referencesImportees(deps.db, boutiqueId, cle.fiche.id)
+  const articles = [...parId.values()].map(a => ({ ...a, deja_en_stock: enStock.has(a.reference) }))
+  return { ok: true, series, articles }
 }
 
 // ─── Import dans le stock (ticket 04) ─────────────────────────────────────────
@@ -570,6 +660,16 @@ function indisponible(): EchecMobilax {
 }
 
 // ─── Normalisation ────────────────────────────────────────────────────────────
+
+/**
+ * Nombre de pages annoncé par une recherche Mobilax (`totalPage`, au singulier — mesuré), lu
+ * au même endroit pour la recherche texte et la recherche par série.
+ * @returns Entier ≥ 1 ; 1 si la valeur est absente ou illisible
+ */
+function nombreDePages(totalPage: unknown): number {
+  const n = Number(totalPage)
+  return Number.isInteger(n) && n > 0 ? n : 1
+}
 
 /**
  * Normalise un produit brut de `GET /products` — le seul endroit qui lit ses champs.

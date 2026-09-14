@@ -793,6 +793,7 @@ function basculerModeMobilax() {
   document.getElementById('mobilax-pagination').hidden = true;
   document.getElementById('mobilax-resultats').innerHTML = '';
   document.getElementById('mobilax-series-liste').innerHTML = '';
+  oublierApercu();
   document.getElementById('mobilax-terme').placeholder = generation
     ? 'Nom de la génération — ex. iPhone 17, Galaxy S24'
     : 'Nom ou EAN — ex. écran iPhone 12';
@@ -815,6 +816,7 @@ async function chercherGeneration() {
   if (!texte) { messageMobilax('Saisissez le nom d\'une génération, ex. « iPhone 17 ».', true); return; }
 
   liste.innerHTML = '';
+  oublierApercu();
   messageMobilax('Recherche des séries chez Mobilax…');
   bouton.disabled = true;
   try {
@@ -834,16 +836,151 @@ async function chercherGeneration() {
     liste.innerHTML = series.map(s => `
       <label style="display:flex;align-items:center;gap:8px;padding:6px 0;">
         <input type="checkbox" class="mobilax-serie" value="${Number(s.id)}" checked>
-        <span>${escHtml(s.nom)}</span>
+        <span class="mobilax-serie-nom">${escHtml(s.nom)}</span>
+        <span class="mobilax-serie-nb" data-serie="${Number(s.id)}" style="color:var(--text-muted);font-size:.82rem;"></span>
       </label>`).join('');
+    // Aperçu de TOUTES les séries proposées, lu une fois : décocher ne rappelle pas Mobilax
+    chargerApercuGeneration(series.map(s => Number(s.id)));
   } catch {
     // `api()` laisse passer un rejet de `fetch` (réseau coupé) : sans ce message, « Recherche
     // des séries… » resterait affiché indéfiniment
-    messageMobilax('Mobilax est injoignable pour le moment (réseau coupé ?). Réessayez dans un instant.', true);
+    messageMobilax(MESSAGE_MOBILAX_INJOIGNABLE, true);
   } finally {
     bouton.disabled = false;
   }
 }
+
+// ─── Aperçu d'une génération (ticket 02, chantier import-par-generation) ──────
+// Lu une fois pour toutes les séries proposées ; chaque article sait dans quelles séries il
+// figure, donc décocher une série recalcule l'aperçu sur place, sans appel au quota Mobilax.
+
+/** Message affiché quand `fetch` est rejeté (réseau coupé) — `api()` ne le rattrape pas. */
+const MESSAGE_MOBILAX_INJOIGNABLE = 'Mobilax est injoignable pour le moment (réseau coupé ?). Réessayez dans un instant.';
+/** Rythme de l'import par génération (spec) : un départ toutes les 3 s au plus. */
+const SECONDES_PAR_IMPORT = 3;
+/** Au-delà, confirmation renforcée avant l'import (spec, story 11). */
+const SEUIL_CONFIRMATION = 200;
+
+/** Aperçu lu chez Mobilax (`{ series, articles }`), `null` tant qu'il n'est pas là. */
+let apercuCourant = null;
+/** Numéro de la dernière demande d'aperçu : une réponse plus ancienne (recherche relancée entre-temps) est ignorée. */
+let numeroApercu = 0;
+
+/** Oublie l'aperçu affiché et toute demande encore en vol. */
+function oublierApercu() {
+  apercuCourant = null;
+  numeroApercu++;
+  recalculerApercu();
+}
+
+/**
+ * Lit l'aperçu des séries proposées. Quota atteint ou fournisseur indisponible : message du
+ * serveur tel quel (il porte le délai), bouton d'import inactif.
+ */
+async function chargerApercuGeneration(seriesIds) {
+  const numero = ++numeroApercu;
+  document.getElementById('mobilax-apercu').textContent = 'Calcul de l\'aperçu chez Mobilax…';
+  try {
+    // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+    const res = (await apiGet(`/api/mobilax/apercu?series=${seriesIds.join(',')}`)).data;
+    if (numero !== numeroApercu) return;
+    if (!res?.success) {
+      document.getElementById('mobilax-apercu').textContent = '';
+      messageMobilax(res?.error || 'Aperçu Mobilax impossible.', true);
+      return;
+    }
+    apercuCourant = res.data;
+    recalculerApercu();
+  } catch {
+    if (numero !== numeroApercu) return;
+    document.getElementById('mobilax-apercu').textContent = '';
+    messageMobilax(MESSAGE_MOBILAX_INJOIGNABLE, true);
+  }
+}
+
+/** Articles des séries cochées : retenus, déjà dans le stock, à importer. */
+function selectionApercu() {
+  const cochees = new Set([...document.querySelectorAll('#mobilax-series-liste input.mobilax-serie:checked')]
+    .map(c => Number(c.value)));
+  const retenus = (apercuCourant?.articles ?? []).filter(a => a.series.some(id => cochees.has(Number(id))));
+  const aImporter = retenus.filter(a => !a.deja_en_stock);
+  return { retenus, deja: retenus.length - aImporter.length, aImporter };
+}
+
+/** « 1 article », « 2 articles » — `mot` au pluriel par simple « s ». */
+function compter(n, mot) {
+  return `${n} ${mot}${n > 1 ? 's' : ''}`;
+}
+
+/** Affiche ou masque la confirmation renforcée. */
+function afficherConfirmation(visible) {
+  document.getElementById('mobilax-confirmation').hidden = !visible;
+}
+
+/** Durée estimée d'un import de `n` articles : `n` × 3 s, arrondie à la minute (spec). */
+function libelleDuree(n) {
+  if (n === 0) return 'aucune';
+  const minutes = Math.round(n * SECONDES_PAR_IMPORT / 60);
+  return minutes === 0 ? 'moins d\'une minute' : `environ ${minutes} min`;
+}
+
+/** Réaffiche l'aperçu pour les séries cochées (textContent : noms tiers jamais interprétés). */
+function recalculerApercu() {
+  const zone = document.getElementById('mobilax-apercu');
+  const bouton = document.getElementById('btn-generation-importer');
+  if (!apercuCourant) {
+    zone.textContent = '';
+    bouton.disabled = true;
+    bouton.textContent = 'Importer';
+    afficherConfirmation(false);
+    return;
+  }
+  for (const s of apercuCourant.series) {
+    const el = document.querySelector(`.mobilax-serie-nb[data-serie="${Number(s.id)}"]`);
+    if (el) el.textContent = `— ${compter(Number(s.nb_articles) || 0, 'article')}`;
+  }
+  const { retenus, deja, aImporter } = selectionApercu();
+  const n = aImporter.length;
+  zone.textContent = `${compter(retenus.length, 'article')} fournisseur · `
+    + `${deja} déjà dans votre stock · ${n} à importer · durée estimée : ${libelleDuree(n)}`;
+  bouton.disabled = n === 0;
+  bouton.textContent = n ? `Importer ${compter(n, 'article')}` : 'Importer';
+  // Sélection redescendue sous le seuil : la confirmation renforcée n'a plus lieu d'être
+  if (n <= SEUIL_CONFIRMATION) afficherConfirmation(false);
+  else if (!document.getElementById('mobilax-confirmation').hidden) remplirConfirmation(n);
+}
+
+/** Texte de la confirmation renforcée pour `n` articles à importer. */
+function remplirConfirmation(n) {
+  document.getElementById('mobilax-confirmation-texte').textContent =
+    `${n} articles à importer — ${libelleDuree(n)}. Pendant l'import, gardez cet onglet ouvert.`;
+}
+
+/** « Importer » : confirmation renforcée au-delà du seuil, sinon lancement direct. */
+function demanderImportGeneration() {
+  const n = selectionApercu().aImporter.length;
+  if (n === 0) return;
+  if (n > SEUIL_CONFIRMATION) {
+    remplirConfirmation(n);
+    afficherConfirmation(true);
+    return;
+  }
+  lancerImportGeneration();
+}
+
+/**
+ * Lancement de l'import des articles à importer — la boucle d'import vient au ticket 03. Ce
+ * message ne doit jamais partir en production : le chantier se déploie en un bloc après 04.
+ */
+function lancerImportGeneration() {
+  afficherConfirmation(false);
+  messageMobilax('L\'import par génération n\'est pas encore disponible.');
+}
+
+document.getElementById('mobilax-series-liste')?.addEventListener('change', recalculerApercu);
+document.getElementById('btn-generation-importer')?.addEventListener('click', demanderImportGeneration);
+document.getElementById('btn-generation-lancer')?.addEventListener('click', lancerImportGeneration);
+document.getElementById('btn-generation-annuler')?.addEventListener('click', () => afficherConfirmation(false));
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function setEl(id, val) {

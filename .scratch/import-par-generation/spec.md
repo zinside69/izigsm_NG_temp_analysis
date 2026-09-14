@@ -124,6 +124,11 @@ dit ce qui a été importé, ce qui était déjà là, et ce qui a échoué.
     **référence** porte déjà un produit actif de la boutique pour cette fiche fournisseur — même
     clé que l'anti-doublon de l'import. Rend, par série, le nombre d'articles, et au global la
     liste des articles à importer (identifiant, référence, nom) et le nombre déjà en stock.
+    _Amendé au ticket 02 (2026-09-14) — contrat réel : `series: [{ id, nb_articles }]` et
+    `articles: [{ mobilax_id, reference, nom, series: [ids], deja_en_stock }]`, **tous** les
+    articles dédoublonnés, déjà en stock compris. Sans les séries de chaque article, l'écran ne
+    peut pas recalculer au décochage (story 12) sans rappeler le fournisseur. Liste à importer =
+    `articles` des séries cochées dont `deja_en_stock` est faux (ticket 03)._
   - La recherche par série range sa liste sous `data.products` (et non `data` comme la recherche
     texte) : seul le service le sait.
   - Quota atteint et fournisseur indisponible suivent les signaux existants (délai de
