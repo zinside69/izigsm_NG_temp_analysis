@@ -14,6 +14,19 @@ fin. Relevé en revue du ticket 04, hors spec.
       arrêt, attente et pause de quota coupées net, bilan « Import interrompu » ≠ « Import arrêté ».
       Non déployé : le chantier part en un bloc après le ticket 03.
 
+## 🟡 P3 — Recherche Mobilax par article : résultats hors de la génération cherchée (constaté le 2026-09-15)
+
+« ecran iphone 12 » rend aussi des écrans iPhone 14 Pro et 15 Pro. iziGSM transmet le texte tel
+quel à la recherche de Mobilax (`/products?search=`) et n'y est pour rien. **Hypothèse tirée de
+l'écran, non mesurée** : Mobilax cherche les mots séparément, et le « 12 » saisi figure dans
+« **12**0Hz » des deux pièces hors sujet. Contournement actuel : mode « Par génération » (séries
+Mobilax, sans cet effet).
+
+- [ ] Idée (exploitant, 2026-09-15) : limiter la recherche « Par article » à une génération — par
+      exemple un choix de série à côté du texte, en s'appuyant sur `/products/search?seriesId=` (déjà
+      lu par l'aperçu d'une génération). À cadrer (`/grill-with-docs`) : quota (un appel par série et
+      par page), combinaison texte + série côté Mobilax **à mesurer** avant toute promesse.
+
 ## 🟡 P3 — Recherche Mobilax par article : « Recherche en cours… » figé sur coupure réseau (trouvé le 2026-09-14)
 
 Même défaut que celui corrigé sur `chercherGeneration()` (`bugs.md`) : `chercherMobilax()`

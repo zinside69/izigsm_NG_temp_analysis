@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🟡 Recherche Mobilax par article : la pagination ne se masque probablement jamais (trouvé le 2026-09-15, NON corrigé, NON vu à l'écran)
+## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran puis CORRIGÉ le même jour — non déployé)
 
 **Symptôme attendu** : dans la fenêtre Mobilax de `/stock`, la barre « ← Précédente · page ·
 Suivante → » resterait affichée alors que le code la masque — avant toute recherche, pendant une
@@ -22,6 +22,16 @@ restait affiché hors import — `display: inline-flex` de `.btn` (`main.css`). 
 respecte `hidden` ; ou ajouter `[hidden] { display: none !important; }` au socle (`main.css`) —
 plus large, supprime la classe de défaut, mais touche toutes les pages du socle. Test : un E2E qui
 assertionne `#mobilax-pagination` masquée avant toute recherche, vu rouge d'abord.
+
+**Vu à l'écran le 2026-09-15** (exploitant, production `izigsm-v3.05`) : « ecran iphone 12 » →
+46 pièces, une seule page, et pourtant « ← Précédente » / « Suivante → » affichés. Cliquer
+« Suivante » demandait une page 2 vide à Mobilax (un appel de quota brûlé, « Aucune pièce trouvée »).
+
+**Correctif** (le même jour) : première option — `hidden` sur une enveloppe sans style,
+`display:flex` sur un bloc intérieur (même patron que la barre de sélection et « Interrompre »).
+L'option socle (`[hidden] { display: none !important }`) reste ouverte, non retenue : elle touche
+toutes les pages. E2E `mobilax-selection.spec.ts` § « une seule page de résultats », vu rouge sur le
+build de production. `CACHE_VERSION` `izigsm-v3.06`.
 
 ## 🟡 Recherche fournisseur : « Recherche en cours… » figé sur coupure réseau (trouvé en revue le 2026-09-14, corrigé en mode génération, OUVERT en mode article)
 

@@ -646,7 +646,8 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   - ⚠ **`hidden` ne masque ni un `.btn` ni un élément à `display` en ligne** : tout `display`
     d'auteur écrase `[hidden]` du navigateur, et aucune règle `[hidden]` n'existe dans `public/`.
     Poser `hidden` sur une enveloppe sans classe (`#mobilax-import-interrompre`). Le bouton
-    « Interrompre » restait affiché hors import ; `#mobilax-pagination` probablement aussi (`bugs.md`).
+    « Interrompre » restait affiché hors import ; `#mobilax-pagination` aussi — vu à l'écran puis
+    corrigé le 2026-09-15 par une enveloppe (`bugs.md`).
   - E2E « article en vol » : une `page.route()` enregistrée **après** celle du scénario passe en
     premier ; elle attend une promesse puis `route.fallback()`. Le départ se lit dans cette route —
     ce que le scénario enregistre ne l'est qu'au `fallback`.

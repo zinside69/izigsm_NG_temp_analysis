@@ -338,11 +338,15 @@
         </div>
         <!-- Mode « Par article » : pagination, résultats, mention — masqués en mode génération -->
         <div id="mobilax-zone-articles">
-          <!-- Pagination : 100 pièces par page, une page = un appel au quota Mobilax (30/min) -->
-          <div id="mobilax-pagination" style="display:flex;align-items:center;gap:10px;margin:0 0 10px;" hidden>
-            <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-precedente">← Précédente</button>
-            <span id="mobilax-page" style="font-size:.87rem;"></span>
-            <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-suivante">Suivante →</button>
+          <!-- Pagination : 100 pièces par page, une page = un appel au quota Mobilax (30/min).
+               `hidden` sur l'enveloppe sans style : posé à côté d'un `display:flex` en ligne, il était
+               écrasé et la barre restait affichée sur une seule page (bugs.md, vu le 2026-09-15) -->
+          <div id="mobilax-pagination" hidden>
+            <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;">
+              <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-precedente">← Précédente</button>
+              <span id="mobilax-page" style="font-size:.87rem;"></span>
+              <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-suivante">Suivante →</button>
+            </div>
           </div>
           <!-- Barre de sélection (ticket 02 import-d-une-selection) — majBarreSelection(). `hidden` sur
                ce conteneur sans classe ni display en ligne : l'un ou l'autre l'emporterait sur lui -->

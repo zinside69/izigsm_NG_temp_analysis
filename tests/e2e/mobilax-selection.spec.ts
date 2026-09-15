@@ -298,6 +298,7 @@ test.describe('Mobilax — import d\'une sélection (page affichée)', () => {
 test.describe('Mobilax — import d\'une sélection (plusieurs pages)', () => {
   test('sélection gardée d\'une page à l\'autre : cases et quantités réaffichées, compteur sur toute la sélection', async ({ page, request }) => {
     await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    await expect(page.locator('#mobilax-pagination')).toBeVisible()
     const barre = page.locator('#mobilax-selection')
     await caseDe(page, 1).check()
     await qteDe(page, 1).fill('7')
@@ -320,6 +321,15 @@ test.describe('Mobilax — import d\'une sélection (plusieurs pages)', () => {
     await allerPage(page, 'precedente', 'Page 1 / 2')
     await expect(qteDe(page, 1)).toHaveValue('8')
     await expect(barre).toContainText('2 sélectionnés')
+  })
+
+  test('une seule page de résultats : aucune pagination affichée (bugs.md, vu à l\'écran le 2026-09-15)', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2]])
+    await expect(page.locator('#mobilax-message')).toContainText('2 pièces trouvées')
+    // `hidden` était écrasé par le `display:flex` en ligne : Précédente / Suivante restaient
+    // affichés, et Suivante aurait brûlé un appel de quota pour une page vide
+    await expect(page.locator('#mobilax-pagination')).toBeHidden()
+    await expect(page.locator('#btn-mobilax-suivante')).toBeHidden()
   })
 
   test('nouvelle recherche : la sélection est vidée', async ({ page, request }) => {
