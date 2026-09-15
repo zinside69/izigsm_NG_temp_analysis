@@ -1,4 +1,29 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 115 — import d'une sélection déployé, izigsm-v3.06)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 116 — formulaires, page Stock, izigsm-v3.07 en production)
+
+## Ce qui a changé au checkpoint 116
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.07`). Trois correctifs
+déployés ensemble et relus (aperçu puis apex) : formulaires à mot de passe, enregistrement de la
+config email de Notifications, page Stock qui ne chargeait que 100 produits sur 795.
+
+Reste à l'écran, côté exploitant : v3.07 — Stock (« Références » = nombre réel, « iphone 12 »
+trouvé, filtres qui changent la liste), Réglages › Email (enregistrer).
+
+**Première action : 🔴 P1 page Notifications** (ordre voulu par l'exploitant) — `todo.md` en tête,
+`bugs.md` § « Page Notifications ». La constater à l'écran d'abord (statistiques, journal vides ?),
+puis un test de **rendu** par appel, vu rouge ; déballage au point d'appel ; extension du garde-fou
+d'enveloppe aux scripts inline de `public/*.html`, vue rouge sur `notifications.html`.
+
+À savoir :
+- **Mesurer dans la session de l'exploitant** : l'extension Chrome lit l'onglet où il est connecté.
+  Sans « se souvenir de moi », la session vit dans cet onglet : un onglet neuf retombe sur `/login`,
+  et ⊥ saisir un identifiant. Lire **`pagination.total`**, jamais les lignes affichées. ⊥ recharger
+  ni changer de page dans un onglet où un import tourne.
+- `loadStock()` charge toutes les pages (plafond serveur de 100, `lib/db.ts`) — CLAUDE.md § Stock.
+- Script de lecture dans l'onglet (`javascript_tool`) : `await` au niveau principal ; une fonction
+  asynchrone auto-appelée rend `{}`.
+- Backlog ensuite : 🟡 recherche par article limitée à une génération, 🟡 `chercherMobilax()` figé sur
+  coupure, 🟡 email de `#form-request`, 🟠 sortie de stock des produits défectueux.
 
 ## Ce qui a changé au checkpoint 115
 

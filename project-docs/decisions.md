@@ -1,5 +1,18 @@
 # iziGSM — Décisions
 
+## 2026-09-15 (fin de journée) — Page Stock, formulaires, ordre des chantiers
+
+- **`loadStock()` charge toutes les pages**, plutôt qu'une recherche et une pagination côté serveur :
+  recherche, filtres et compteurs de la page travaillent déjà côté navigateur, tout charger les rend
+  justes sans rien changer d'autre (8 appels pour 795 produits). À revoir au-delà de quelques milliers
+  de produits par boutique. Choix d'implémentation, non soumis à l'exploitant.
+- **Formulaires de clé API inclus dans la règle des mots de passe** (`notifications #config-form`,
+  `settings #form-email`) : un `type="password"` est soumis à la même règle, quel que soit ce qu'il
+  porte.
+- **Page Notifications : `saveConfig()` seul corrigé dans le lot des formulaires** (son test l'exigeait),
+  les 5 autres appels défaillants traités à part, avec un test de rendu chacun — proposé à
+  l'exploitant, qui a fixé l'ordre : **Notifications après le problème de la page Stock**.
+
 ## 2026-09-15 — Import d'une sélection, ticket 03 : choix d'implémentation
 
 Pris à l'implémentation, jugés conformes par la revue à deux axes (non soumis à l'exploitant — à

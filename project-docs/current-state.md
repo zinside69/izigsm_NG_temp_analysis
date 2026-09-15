@@ -1,4 +1,34 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 115 — import d'une sélection déployé, izigsm-v3.06)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 116 — formulaires, page Stock, izigsm-v3.07 en production)
+
+## Checkpoint 116 — Formulaires à mot de passe, page Stock (795 produits), v3.07 en production (2026-09-15)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.07`, `2fdc213`, aperçu
+`c6cd289c`). Relu sur l'aperçu puis l'apex : `sw.js` v3.07, `stock.80a428c1.js` servi en JavaScript
+avec le chargement de toutes les pages et référencé par `/stock`, les 4 formulaires conformes,
+écouteur et déballage de `saveConfig` servis, `/api/health` 200, Mobilax sans jeton 401.
+**Contrôle à l'écran de la v3.07 non encore rapporté.**
+
+- **Formulaires à mot de passe** (`6143c04`) : mesuré d'abord — aucune fuite réelle (E2E de garde
+  verts avant correctif) ; le garde-fou statique `formulaires-mot-de-passe-conformite.test.ts` (vu
+  rouge) a trouvé 4 formulaires non conformes, dont 2 inconnus (`notifications #config-form`,
+  `settings #form-email`, clés API) ; les 4 mis en conformité.
+- **Revue à deux axes** puis suites (`d4c74ef`) : E2E d'enregistrement de la config email (vu rouge),
+  détecteur durci et limites documentées, écouteurs harmonisés, docs.
+- **Trouvé en revue — page Notifications 🔴 P1** : 6 appels lisent l'enveloppe au mauvais niveau
+  (statistiques et journal jamais affichés, actions annoncées « Erreur ») ; `saveConfig` seul corrigé,
+  5 ouverts (`todo.md`, `bugs.md`). Le garde-fou d'enveloppe ne lit pas les scripts inline.
+- **Page Stock, vécu en production** (`2fdc213`) : 795 produits, 100 chargés — `limit: 200` côté page,
+  plafond de 100 côté serveur, pagination jamais lue. Mesuré dans la session de l'exploitant
+  (extension Chrome, lecture seule). `loadStock()` charge toutes les pages ; E2E à 105 produits vu
+  rouge sur le symptôme exact. Fausse piste d'abord (lignes affichées comptées au lieu du total
+  serveur) — `bugs.md`.
+
+**Gates** (`2fdc213`) : vitest 1108/1110 (baseline), tsc 32, E2E stock + Mobilax + balayage du menu
+80/80 ; formulaires + config email + connexion + réglages 28/28.
+
+**Prochaine session** : contrôle à l'écran de la v3.07 par l'exploitant (Stock : « Références » réel,
+« iphone 12 » trouvé, filtres) ; puis 🔴 page Notifications — la constater à l'écran d'abord, jamais
+dans l'onglet où tourne un import.
 
 ## Checkpoint 115 — Import d'une sélection en production ; pagination corrigée et déployée (2026-09-15)
 

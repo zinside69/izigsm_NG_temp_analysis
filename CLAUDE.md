@@ -298,6 +298,10 @@ Ce que le garde-fou **ne** couvre pas : `res.data` au lieu de `res.data.data`. I
 sans faux positifs — `res.data` est aussi l'écriture correcte pour atteindre le corps
 (`decisions.md`). Ce cas reste du ressort de la revue et des tests de rendu.
 
+Autre angle mort, trouvé le 2026-09-15 : le garde-fou ne lit que `public/static/js/*.js`, **jamais
+les scripts inline des pages HTML**. `notifications.html` en porte six (statistiques et journal jamais
+affichés, actions annoncées « Erreur ») — un corrigé, cinq ouverts (`todo.md` 🔴, `bugs.md`).
+
 `services.js` garde **deux conventions, délibérément** : `res.ok` sur les chemins Catégories
 et Services (corrects), déballage sur Marques/Modèles/Liaisons. Ne pas uniformiser.
 
@@ -735,6 +739,12 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   surveillé et quantité ≤ seuil, rupture comprise ; la rupture reste un badge à part. ⚠
   `getKpisStock().nb_alertes` exclut encore les ruptures : deux définitions coexistent tant qu'il
   n'est pas aligné, et « Stock bas » reste affiché hors de la page Stock (décision du 2026-09-12).
+- **Toute page qui charge une liste complète lit la pagination** (depuis le 2026-09-15) : le serveur
+  plafonne une page à 100 (`lib/db.ts`, `Math.min(100, …)`), quel que soit le `limit` demandé.
+  `loadStock()` boucle jusqu'à `pagination.pages`. Demander `limit: 200` en croyant tout recevoir a
+  caché 695 produits sur 795 en production : recherche, filtres et compteurs de la page Stock
+  travaillent côté navigateur sur ce qui est chargé (`bugs.md`). ⊥ juger d'un stock par les lignes
+  affichées — lire `pagination.total`.
 
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
@@ -934,6 +944,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-15 (checkpoint 116) : aucune migration en attente — dépôt et production
+alignés** (`izigsm-v3.07`, `2fdc213`). Formulaires à mot de passe (`6143c04`, `d4c74ef`) et page Stock
+(`2fdc213`) déployés par l'exploitant (aperçu `c6cd289c`), sans migration. Relu sur l'aperçu **puis**
+l'apex : `sw.js` v3.07, `stock.80a428c1.js` en JavaScript avec le chargement de toutes les pages et
+référencé par `/stock`, les 4 formulaires `method="post" onsubmit="return false"`, écouteur et
+déballage de `saveConfig` servis, `/api/health` 200, `/api/mobilax/produits` sans jeton → 401.
 
 **État au 2026-09-15 (checkpoint 115) : aucune migration en attente — dépôt et production
 alignés** (`izigsm-v3.06`, `44dfe9f`). Chantier `import-d-une-selection` déployé par l'exploitant

@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🔴 Page Stock : seuls les 100 premiers produits chargés — recherche, filtres et compteurs faux au-delà (vécu en production le 2026-09-15, CORRIGÉ le même jour, non déployé)
+## 🔴 Page Stock : seuls les 100 premiers produits chargés — recherche, filtres et compteurs faux au-delà (vécu en production le 2026-09-15, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.07)
 
 **Symptôme** (exploitant, capture) : « Références 100 », « iphone 12 » dans la recherche → « Aucun
 produit trouvé », filtres de famille et « Tous » sans effet visible — alors que l'import par
@@ -25,6 +25,10 @@ contient.
 rouge sur le symptôme exact (« Références » à 100 au lieu de 105). Au-delà de quelques milliers de
 produits, envisager recherche et pagination côté serveur.
 
+**Déployé le 2026-09-15** (`2fdc213`, aperçu `c6cd289c`) : relu sur l'aperçu puis l'apex —
+`stock.80a428c1.js` servi en JavaScript, avec le chargement de toutes les pages. Contrôle à l'écran
+par l'exploitant non encore rapporté.
+
 ## 🔴 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, 1 corrigé, 5 OUVERTS — déduit du code, NON vu à l'écran)
 
 **Défaut** : `notifications.html` (script inline) écrit `const data = await apiGet|apiPut|apiPost(…)`
@@ -40,7 +44,7 @@ lit que `public/static/js/*.js` — jamais les scripts inline des pages HTML ; e
 ne capte que les `>= 400` et les exceptions, pas une page muette.
 
 **Corrigé le 2026-09-15** : `saveConfig()` seul (déballage au point d'appel), vu rouge par
-`tests/e2e/config-email-enregistrement.spec.ts`. **Restent ouverts** : les 5 autres appels, et
+`tests/e2e/config-email-enregistrement.spec.ts` — déployé en `izigsm-v3.07`. **Restent ouverts** : les 5 autres appels, et
 l'extension du garde-fou d'enveloppe aux scripts inline (`todo.md` 🔴).
 
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)

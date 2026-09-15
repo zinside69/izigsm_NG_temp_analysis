@@ -56,7 +56,7 @@ du service change, 5 fichiers à retoucher.
 
 - [ ] Regrouper dans `tests/helpers/` et `tests/e2e/fixtures/` ; un `depsMobilax(c)` dans la route
 
-## ✅ 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **mis en conformité le 2026-09-15**, non déployé)
+## ✅ 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **mis en conformité et déployé le 2026-09-15**, `izigsm-v3.07`)
 
 **2026-09-15 — mesuré, puis mis en conformité.** Mesure (E2E `formulaires-mot-de-passe.spec.ts`,
 verts **avant** tout correctif) : aucune fuite réelle — `#form-step1` n'a aucun bouton de soumission
@@ -84,7 +84,8 @@ en GET et le mot de passe part dans l'adresse. **Non vérifié** : où ces scrip
       Le rouge vient du garde-fou statique (4 formulaires non conformes).
 - [x] `method="post"` + `onsubmit="return false"` sur chaque formulaire portant un mot de passe
       — les 4 (`#form-step1`, `#form-reset`, `#config-form`, `#form-email`)
-- [ ] `CACHE_VERSION` incrémenté (**fait**, `izigsm-v3.07`), déploiement sur accord (**en attente**)
+- [x] `CACHE_VERSION` incrémenté (**fait**, `izigsm-v3.07`), déploiement sur accord — **déployé le
+      2026-09-15** (aperçu `c6cd289c`), relu aperçu + apex : les 4 balises servies conformes
 
 ## 🟡 P3 — `reset-password.html #form-request` : l'email peut partir dans l'adresse (relevé en revue le 2026-09-15)
 
