@@ -99,7 +99,9 @@
           </div>
           <div class="separator">OU AVEC VOTRE EMAIL</div>
 
-          <form id="form-step1" class="grid-form" novalidate>
+          <!-- method="post" + onsubmit="return false" : jamais de soumission native, identifiants dans
+               l'URL (CLAUDE.md § Formulaires avec mot de passe) — l'envoi passe par submitStep1() -->
+          <form id="form-step1" class="grid-form" method="post" onsubmit="return false" novalidate>
             <div class="field">
               <label for="first_name">Prénom *</label>
               <input type="text" id="first_name" name="first_name" placeholder="Jean" required autocomplete="given-name">

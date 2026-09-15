@@ -339,9 +339,17 @@ même chose, aucune unification tentée.
   `app*.js`, envoi pendant le chargement, puis lecture des requêtes de navigation
   (`tests/e2e/connexion-formulaire-post.spec.ts`). Couper app.js ne reproduit pas : le script de
   la page s'attache sans lui.
-- `register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`) : même classe, **pas
-  encore corrigés** — à vérifier avant toute modification de ces pages. Reportés par
-  l'exploitant le 2026-09-12 (`todo.md` 🟠).
+- ~~`register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`) : même classe, **pas
+  encore corrigés**~~ — **mis en conformité le 2026-09-15**, avec `notifications.html #config-form` et
+  `settings.html #form-email` (clé API en `type="password"`), trouvés par le garde-fou statique
+  **`tests/formulaires-mot-de-passe-conformite.test.ts`** : la suite échoue si un `<form>` de
+  `public/*.html` portant un `type="password"` n'a pas `method="post"` et `onsubmit="return false"`.
+  Mesuré avant correctif : aucune de ces quatre pages ne fuyait réellement (inscription sans bouton
+  de soumission dans le formulaire, étape de réinitialisation masquée sans JavaScript, clés API sans
+  `name`) — les E2E `formulaires-mot-de-passe.spec.ts` gardent ces propriétés.
+- **Un `onsubmit="fonction(event)"` ne protège pas** : tant que le script qui définit la fonction
+  n'est pas chargé, l'appel lève une erreur et l'envoi natif part. Poser `onsubmit="return false"` et
+  appeler la fonction depuis un `addEventListener('submit', …)` du script de la page.
 
 ## Mémoire projet (context-guardian)
 

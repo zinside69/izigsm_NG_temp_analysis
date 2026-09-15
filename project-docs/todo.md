@@ -44,7 +44,18 @@ du service change, 5 fichiers à retoucher.
 
 - [ ] Regrouper dans `tests/helpers/` et `tests/e2e/fixtures/` ; un `depsMobilax(c)` dans la route
 
-## 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **NON corrigé**, reporté)
+## ✅ 🟠 P2 — Inscription et réinitialisation du mot de passe : même risque de fuite dans l'adresse (trouvé le 2026-09-12, **mis en conformité le 2026-09-15**, non déployé)
+
+**2026-09-15 — mesuré, puis mis en conformité.** Mesure (E2E `formulaires-mot-de-passe.spec.ts`,
+verts **avant** tout correctif) : aucune fuite réelle — `#form-step1` n'a aucun bouton de soumission
+et plusieurs champs texte (Entrée ne soumet rien), `#form-reset` est masqué sans JavaScript. Le
+garde-fou statique `tests/formulaires-mot-de-passe-conformite.test.ts`, vu rouge, a trouvé **deux
+formulaires de plus** : `notifications.html #config-form` et `settings.html #form-email` (clé API en
+`type="password"`, sans `name` donc sans fuite aujourd'hui, mais `onsubmit="fonction(event)"` qui
+laissait partir l'envoi natif tant que le script n'était pas chargé). Les quatre balises portent
+désormais `method="post" onsubmit="return false"` ; `CACHE_VERSION` `izigsm-v3.07`.
+
+Constat d'origine :
 
 Même classe de défaut que la connexion, corrigée et déployée le 2026-09-12 (`izigsm-v3.03`,
 `bugs.md`, `CLAUDE.md` § Formulaires avec mot de passe) : `register.html` (`#form-step1`) et

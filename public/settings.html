@@ -406,7 +406,9 @@
 
     <!-- TAB: Email -->
     <div id="tab-email" class="tab-content">
-      <form id="form-email" onsubmit="Settings.saveEmail(event)" class="space-y-6">
+      <!-- Clé API en type="password" : jamais de soumission native (CLAUDE.md § Formulaires avec mot
+           de passe) — l'écouteur `submit` est posé en fin de script, une fois `Settings` défini -->
+      <form id="form-email" method="post" onsubmit="return false" class="space-y-6">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 class="font-semibold text-gray-700 mb-4"><i class="fas fa-server mr-2 text-indigo-500"></i>Configuration SMTP / Provider</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -869,6 +871,9 @@ const Settings = (() => {
 })();
 
 document.addEventListener('DOMContentLoaded', Settings.init);
+// Onglet Email : écouteur plutôt qu'attribut `onsubmit`, qui laissait partir la soumission native
+// (clé API comprise dès qu'elle aurait un `name`) tant que ce script n'était pas chargé
+document.getElementById('form-email').addEventListener('submit', e => Settings.saveEmail(e));
 </script>
   <script src="/static/js/pwa.js"></script>
 </body>

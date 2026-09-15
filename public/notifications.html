@@ -105,7 +105,10 @@
               <span id="status-label" class="text-gray-500">Chargement…</span>
             </div>
           </div>
-          <form id="config-form" class="space-y-3" onsubmit="saveConfig(event)">
+          <!-- Clé API en type="password" : jamais de soumission native (CLAUDE.md § Formulaires avec mot
+               de passe). `onsubmit="saveConfig(event)"` échouait tant que le script de fin de page
+               n'était pas chargé, et l'envoi natif partait — l'écouteur est posé dans ce script -->
+          <form id="config-form" class="space-y-3" method="post" onsubmit="return false">
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Clé API Resend <span class="text-gray-400">(re_...)</span></label>
               <input id="cfg-api-key" type="password" placeholder="re_xxxxxxxxxxxxxxxx"
@@ -281,6 +284,10 @@
 
   <script src="/static/js/app.js"></script>
   <script>
+  // Envoi du formulaire de configuration : écouteur plutôt qu'attribut `onsubmit`, qui laissait
+  // partir la soumission native tant que ce script n'était pas chargé (saveConfig déclarée plus bas)
+  document.getElementById('config-form').addEventListener('submit', saveConfig)
+
   // ─── State ────────────────────────────────────────────────────────────────────
 
   let _boutiqueId = null
