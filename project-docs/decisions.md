@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-09-15 (soir) — Page Stock : les compteurs suivent la liste affichée (option B)
+
+- **« Références », « Valeur stock » et « À commander » comptent la liste AFFICHÉE** — recherche,
+  catégorie, famille et filtre de stock compris. Décision de l'exploitant (« ok pour B »), sur sa
+  remarque : « le nombre de références reste identique alors que j'ai demandé tous les iPhone 12 ».
+  Option A écartée : un compteur de la famille entière, indépendant de la recherche.
+- Mise en œuvre : `renderStock()` appelle `renderKPIs(filtered)` — un seul filtrage pour la liste et
+  les compteurs ; une liste vide affiche 0. E2E `stock-recherche-filtres.spec.ts` § « les compteurs
+  suivent la liste affichée », vu rouge (105 au lieu de 1).
+
 ## 2026-09-15 (fin de journée) — Page Stock, formulaires, ordre des chantiers
 
 - **`loadStock()` charge toutes les pages**, plutôt qu'une recherche et une pagination côté serveur :

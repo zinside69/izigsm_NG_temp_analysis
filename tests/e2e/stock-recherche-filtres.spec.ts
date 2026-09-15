@@ -120,6 +120,28 @@ test('Stock : la recherche reste appliquée après un clic sur une famille ou su
   await expect(liste).not.toContainText('Batterie E2E Samsung 000')
 })
 
+test('Stock : les compteurs suivent la liste affichée — recherche et filtres compris (décision du 2026-09-15)', async ({ page, request }) => {
+  await stockDe105Produits(page, request)
+  const references = page.locator('#kpi-refs')
+  await expect(references).toHaveText('105')
+
+  // « iphone 12 » : une seule référence affichée, un seul compté
+  await page.fill('#search-stock', 'iphone 12')
+  await expect(page.locator('#stock-tbody')).toContainText(IPHONE_12)
+  await expect(references).toHaveText('1')
+
+  // Recherche vidée : toute la boutique
+  await page.fill('#search-stock', '')
+  await expect(references).toHaveText('105')
+
+  // Filtre « À commander » : aucun des 105 produits n'est surveillé (seuil 0) — le compteur le dit
+  await page.click('[data-filter-stock="low"]')
+  await expect(references).toHaveText('0')
+  // « Tous » : retour à toute la boutique
+  await page.click('[data-filter-stock="all"]')
+  await expect(references).toHaveText('105')
+})
+
 test('Stock : une recherche saisie pendant le chargement de la liste reste appliquée', async ({ page, request }) => {
   // Page 2 de la liste retenue : la recherche est saisie pendant que le chargement est en cours —
   // chez l'exploitant, 8 pages à charger laissent largement le temps de taper « iphone 12 »
@@ -139,7 +161,8 @@ test('Stock : une recherche saisie pendant le chargement de la liste reste appli
   await page.waitForLoadState('networkidle')
 
   const liste = page.locator('#stock-tbody')
-  await expect(page.locator('#kpi-refs')).toHaveText('105')
   await expect(liste).toContainText(IPHONE_12)
   await expect(liste).not.toContainText('Batterie E2E Samsung 000')
+  // Compteurs = liste affichée (décision B du 2026-09-15) : l'écran iPhone 12 seul
+  await expect(page.locator('#kpi-refs')).toHaveText('1')
 })

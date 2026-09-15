@@ -147,8 +147,7 @@ async function loadStock() {
     stockUseApi = false;
   }
 
-  renderKPIs();
-  // Filtres de l'écran réappliqués (recherche, catégorie, stock) : `renderStock()` sans argument
+  // Filtres de l'écran réappliqués (recherche, catégorie, stock) — les compteurs avec, par renderStock() : `renderStock()` sans argument
   // réaffichait toute la liste par-dessus la recherche, à la fin de chaque chargement — ouverture de
   // la page (8 pages chez l'exploitant, le temps de taper) et clic sur une famille (vécu le 2026-09-15)
   applyFilters();
@@ -156,8 +155,13 @@ async function loadStock() {
 }
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────
-function renderKPIs() {
-  const items = allStockCache.length ? allStockCache : getDB('stock');
+/**
+ * Compteurs « Références », « Valeur stock », « À commander » de la liste AFFICHÉE — recherche,
+ * catégorie, famille et filtre de stock compris (décision de l'exploitant du 2026-09-15, option B :
+ * « iphone 12 » doit compter les iPhone 12, pas toute la famille). Appelé par renderStock() seul.
+ * @param items Produits affichés, déjà filtrés
+ */
+function renderKPIs(items) {
 
   const total    = items.length;
   // « À commander » (CONTEXT.md) : produits surveillés sous leur seuil, rupture comprise — même
@@ -246,6 +250,9 @@ function renderStock(search = '', categoryFilter = '', statusFilter = 'all') {
       (i.category  || '').toLowerCase().includes(q)
     );
   }
+
+  // Compteurs = liste affichée, y compris vide (0) — un seul filtrage pour les deux
+  renderKPIs(filtered);
 
   if (!filtered.length) {
     tbody.innerHTML = `
