@@ -1,0 +1,91 @@
+/**
+ * @file tests/e2e/stock-recherche-filtres.spec.ts
+ * @description Page Stock — recherche, filtres de famille et filtres de stock (signalé par
+ * l'exploitant le 2026-09-15, production `izigsm-v3.06`) : « Références 100 », mais « iphone 12 »
+ * dans la recherche → « Aucun produit trouvé » ; filtres de famille sans effet ; « Tous » sans effet.
+ *
+ * Boucle de diagnostic (`/diagnosing-bugs`) : chaque symptôme a son propre contrôle, pour que le
+ * premier rouge désigne le geste en cause. Produits créés par l'API, à l'image de la boutique de
+ * l'exploitant : pièces importées à stock 0, un accessoire en stock. Boutique neuve par test.
+ *
+ * Cause mesurée en production le 2026-09-15 : 795 produits, la page n'en chargeait que 100 — elle
+ * demandait `limit: 200`, le serveur plafonne une page à 100 (`lib/db.ts`) et la page ne lisait pas
+ * la pagination. Recherche, filtres et compteur « Références » ne voyaient que ces 100 produits,
+ * triés par nom : « Batterie Samsung… » en tête, les écrans iPhone au-delà. Le second test en est la
+ * reproduction ; le premier, écrit avant la mesure, restait vert avec 3 produits.
+ */
+import { test, expect } from '@playwright/test'
+import { createTenantAdmin } from './fixtures/tenant'
+import { seConnecter } from './fixtures/comptes'
+
+const PRODUITS = [
+  { nom: 'Ecran Tactile Apple iPhone 12 Pro Max Noir', famille: 'piece',      stock_actuel: 0, stock_minimum: 0 },
+  { nom: 'Batterie Apple iPhone 11',                  famille: 'piece',      stock_actuel: 0, stock_minimum: 0 },
+  { nom: 'Coque Samsung Galaxy S24',                  famille: 'accessoire', stock_actuel: 5, stock_minimum: 1 },
+]
+
+test('Stock : la liste, la recherche et les filtres montrent les bons produits', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  for (const p of PRODUITS) {
+    const res = await request.post('/api/produits', { headers, data: p })
+    expect(res.status(), await res.text()).toBe(201)
+  }
+  await seConnecter(page, { email: tenant.email, password: tenant.password })
+  await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  await page.goto('/stock')
+
+  const liste = page.locator('#stock-tbody')
+  const [iphone12, iphone11, coque] = PRODUITS.map(p => p.nom)
+
+  // 1. Sans filtre : les trois produits
+  await expect(liste).toContainText(iphone12)
+  await expect(liste).toContainText(iphone11)
+  await expect(liste).toContainText(coque)
+
+  // 2. Recherche « iphone 12 » (casse de l'exploitant) : le seul iPhone 12
+  await page.fill('#search-stock', 'iphone 12')
+  await expect(liste).toContainText(iphone12)
+  await expect(liste).not.toContainText(iphone11)
+  await expect(liste).not.toContainText(coque)
+  await page.fill('#search-stock', '')
+  await expect(liste).toContainText(coque)
+
+  // 3. Famille « Pièce » : l'accessoire sort ; « Toutes » le fait revenir
+  await page.click('.btn-famille[data-f="piece"]')
+  await expect(liste).toContainText(iphone12)
+  await expect(liste).not.toContainText(coque)
+  await page.click('.btn-famille[data-f=""]')
+  await expect(liste).toContainText(coque)
+
+  // 4. « Rupture » : seulement les produits à 0 ; « Tous » fait tout revenir
+  await page.click('[data-filter-stock="out"]')
+  await expect(liste).toContainText(iphone12)
+  await expect(liste).not.toContainText(coque)
+  await page.click('[data-filter-stock="all"]')
+  await expect(liste).toContainText(coque)
+  await expect(liste).toContainText(iphone11)
+})
+
+test('Stock : plus de 100 produits — tous chargés, la recherche trouve celui rangé au-delà du 100e', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  // 104 « Batterie… » puis un « Ecran… iPhone 12 » : trié par nom, l'écran est le 105e — hors de la
+  // première page de 100, comme les écrans iPhone de l'exploitant derrière ses batteries Samsung
+  const IPHONE_12 = 'Ecran Tactile E2E Apple iPhone 12 Noir'
+  const lignes = ['nom,prix_achat_ht,stock_actuel,stock_minimum']
+  for (let i = 0; i < 104; i++) lignes.push(`Batterie E2E Samsung ${String(i).padStart(3, '0')},10,0,0`)
+  lignes.push(`${IPHONE_12},40,0,0`)
+  const res = await request.post('/api/produits/import-csv', { headers, data: { csvContent: lignes.join('\n') } })
+  expect(res.status(), await res.text()).toBe(200)
+  expect(await res.json()).toMatchObject({ imported: 105, skipped: 0 })
+
+  await seConnecter(page, { email: tenant.email, password: tenant.password })
+  await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  await page.goto('/stock')
+
+  // Le compteur dit le nombre réel de références, pas celui de la première page
+  await expect(page.locator('#kpi-refs')).toHaveText('105')
+  await page.fill('#search-stock', 'iphone 12')
+  await expect(page.locator('#stock-tbody')).toContainText(IPHONE_12)
+})

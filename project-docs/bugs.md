@@ -1,5 +1,30 @@
 # iziGSM — Bugs connus
 
+## 🔴 Page Stock : seuls les 100 premiers produits chargés — recherche, filtres et compteurs faux au-delà (vécu en production le 2026-09-15, CORRIGÉ le même jour, non déployé)
+
+**Symptôme** (exploitant, capture) : « Références 100 », « iphone 12 » dans la recherche → « Aucun
+produit trouvé », filtres de famille et « Tous » sans effet visible — alors que l'import par
+génération répondait « déjà dans votre stock » pour des écrans iPhone 12.
+
+**Mesuré dans sa session** (lecture seule, extension Chrome) : `GET /api/produits` → `pagination
+{ total: 795, pages: 8, limit: 100 }`, 100 produits renvoyés, triés par nom — 100 batteries Samsung
+(« B… ») en tête, les écrans iPhone (« E… ») au-delà.
+
+**Cause** : `loadStock()` (`stock.js`) demandait `limit: 200` et ne lisait jamais la pagination ; le
+serveur plafonne toute page à 100 (`lib/db.ts`, `Math.min(100, …)`). Recherche, filtres de stock et
+compteurs travaillent côté navigateur sur les produits chargés — donc sur les 100 premiers. Aucun
+test ne dépassait 100 produits.
+
+**Fausse piste, à ne pas refaire** : la première relecture a compté les 100 lignes AFFICHÉES (0
+iPhone, 100 Samsung) et conclu « aucun iPhone dans votre stock, pas de défaut ». Le total serveur
+(`pagination.total`) aurait dû être lu d'abord : ce qu'une page affiche n'est pas ce que la base
+contient.
+
+**Correctif** : `loadStock()` charge toutes les pages de 100, jusqu'à `pagination.pages`. E2E
+`stock-recherche-filtres.spec.ts` § « plus de 100 produits » (105 produits, l'iPhone 105e), vu
+rouge sur le symptôme exact (« Références » à 100 au lieu de 105). Au-delà de quelques milliers de
+produits, envisager recherche et pagination côté serveur.
+
 ## 🔴 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, 1 corrigé, 5 OUVERTS — déduit du code, NON vu à l'écran)
 
 **Défaut** : `notifications.html` (script inline) écrit `const data = await apiGet|apiPut|apiPost(…)`

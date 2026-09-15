@@ -94,15 +94,25 @@ async function loadCategories() {
 async function loadStock() {
   try {
     const boutiqueId = getBoutiqueId();
-    const params = { limit: 200 };
+    // Pages de 100 : le serveur plafonne toute page à 100 produits (`lib/db.ts`). N'en charger qu'une
+    // rendait invisibles tous les suivants — recherche, filtres et compteurs compris (vécu en
+    // production le 2026-09-15 : 100 produits affichés sur 795, les écrans iPhone introuvables).
+    const params = { limit: 100 };
     if (boutiqueId) params.boutique_id = boutiqueId;
     if (currentFamilleFilter) params.famille = currentFamilleFilter;
     if (fournisseurFiltre) params.fournisseur_id = fournisseurFiltre;
 
-    const result = await apiGet('/api/produits', params);
-    if (!result.ok) throw new Error(result.error || 'Erreur API');
+    // Toutes les pages, jusqu'à la dernière annoncée par le serveur (pagination absente → une seule)
+    const produits = [];
+    for (let page = 1; ; page++) {
+      const result = await apiGet('/api/produits', { ...params, page });
+      if (!result.ok) throw new Error(result.error || 'Erreur API');
+      // Déballage : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+      produits.push(...(result.data?.data || []));
+      if (page >= (Number(result.data?.pagination?.pages) || 1)) break;
+    }
 
-    allStockCache = (result.data?.data || []).map(p => ({
+    allStockCache = produits.map(p => ({
       id:              p.id,
       name:            p.nom            || '—',
       nom:             p.nom            || '',
