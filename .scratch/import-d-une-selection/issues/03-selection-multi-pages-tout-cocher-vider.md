@@ -20,6 +20,10 @@ Dernier ticket d'écran du chantier : la version de cache du service worker est 
       import
 - [ ] « Vider la sélection » dans la barre
 - [ ] L'import envoie les articles cochés sur toutes les pages, avec leurs quantités retenues
+- [ ] Confirmation renforcée au-delà de 200 articles sélectionnés (story 17) — **reportée du ticket
+      02** (2026-09-15) : une page compte au plus 100 articles, le seuil n'y était pas atteignable ; la
+      confirmation de `#mobilax-zone-import` est aujourd'hui câblée sur la seule génération
+      (`btn-generation-lancer`/`-annuler`) — à rendre commune ; E2E > 200 sur plusieurs pages
 - [ ] `CACHE_VERSION` incrémenté (dernière tâche d'écran du chantier)
 - [ ] E2E écran (réponses simulées) : coche sur deux pages et retour, quantité retenue après changement
       de page, nouvelle recherche qui vide, « Tout cocher » limité à la page, « Vider », import d'une

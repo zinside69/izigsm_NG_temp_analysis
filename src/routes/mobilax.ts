@@ -72,7 +72,8 @@ mobilax.get('/mobilax/produits', async (c) => {
     terme,
     page,
   )
-  if (r.ok) return c.json({ success: true, data: { total: r.total, page: r.page, pages: r.pages, produits: r.produits } })
+  // `fournisseur_id` : lien du bilan de l'import d'une sélection (ticket 02 import-d-une-selection)
+  if (r.ok) return c.json({ success: true, data: { fournisseur_id: r.fournisseur_id, total: r.total, page: r.page, pages: r.pages, produits: r.produits } })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 

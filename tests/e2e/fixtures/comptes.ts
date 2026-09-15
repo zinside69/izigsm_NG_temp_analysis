@@ -18,6 +18,8 @@ export interface Compte {
 
 export const ADMIN_PLATEFORME: Compte = { email: 'admin@izigsm.fr',   password: 'Admin@2026!' }
 export const MANAGER:          Compte = { email: 'manager@izigsm.fr', password: 'Admin@2026!' }
+/** Technicien de la boutique 1 (`seed.sql`, role_id 3) — n'a pas le droit d'importer au stock. */
+export const TECHNICIEN:       Compte = { email: 'tech1@izigsm.fr',   password: 'Admin@2026!' }
 
 /**
  * Connexion par le formulaire réel, sans présumer de la page d'arrivée.

@@ -62,13 +62,15 @@ function mobilaxRepond() {
 }
 
 describe('GET /api/mobilax/produits', () => {
-  it('manager : résultats normalisés dans l\'enveloppe du dépôt', async () => {
+  it('manager : résultats normalisés dans l\'enveloppe du dépôt, avec la fiche fournisseur de la boutique', async () => {
     mobilaxRepond()
     const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/produits?q=batterie')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       success: true,
-      data: { total: 1, page: 1, pages: 1, produits: [{ mobilax_id: 17, nom: 'Batterie test', ean13: '3000000000017', prix_achat_ht: 8.68, stock: 10 }] },
+      // `fournisseur_id` : fiche Mobilax de la boutique du jeton — lien du bilan de l'import d'une
+      // sélection (ticket 02 `import-d-une-selection`), comme l'aperçu d'une génération
+      data: { fournisseur_id: 3, total: 1, page: 1, pages: 1, produits: [{ mobilax_id: 17, nom: 'Batterie test', ean13: '3000000000017', prix_achat_ht: 8.68, stock: 10 }] },
     })
   })
 

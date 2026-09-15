@@ -343,6 +343,14 @@
             <span id="mobilax-page" style="font-size:.87rem;"></span>
             <button type="button" class="btn btn-sm btn-secondary" id="btn-mobilax-suivante">Suivante →</button>
           </div>
+          <!-- Barre de sélection (ticket 02 import-d-une-selection) — majBarreSelection(). `hidden` sur
+               ce conteneur sans classe ni display en ligne : l'un ou l'autre l'emporterait sur lui -->
+          <div id="mobilax-selection" hidden>
+            <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#eef2ff;font-size:.88rem;">
+              <span id="mobilax-selection-texte"></span>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-selection-importer">Importer la sélection</button>
+            </div>
+          </div>
           <div style="max-height:50vh;overflow-y:auto;">
             <table>
               <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>

@@ -682,7 +682,7 @@ function messageMobilax(texte, erreur = false) {
 
 // Recherche en cours : le terme reste celui de la recherche lancée, même si le champ change
 // entre deux pages. 100 pièces par page, une page = un appel au quota Mobilax (30/min).
-let rechercheMobilax = { terme: '', page: 1, pages: 1 };
+let rechercheMobilax = { terme: '', page: 1, pages: 1, fournisseurId: null };
 document.getElementById('btn-mobilax-precedente')?.addEventListener('click', () => chercherMobilax(rechercheMobilax.page - 1, true));
 document.getElementById('btn-mobilax-suivante')?.addEventListener('click', () => chercherMobilax(rechercheMobilax.page + 1, true));
 
@@ -699,6 +699,8 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
   if (terme.length < 2) { messageMobilax('Saisissez au moins 2 caractères.', true); return; }
 
   tbody.innerHTML = '';
+  // Résultats vidés = sélection vidée (ticket 02 : sélection de la page affichée seulement)
+  majBarreSelection();
   pagination.hidden = true;
   messageMobilax('Recherche en cours chez Mobilax…');
   bouton.disabled = true;
@@ -709,7 +711,8 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
     if (!res?.success) { messageMobilax(res?.error || 'Recherche Mobilax impossible.', true); return; }
 
     const { produits, total, pages } = res.data;
-    rechercheMobilax = { terme, page: res.data.page, pages };
+    // Fiche fournisseur de la boutique : lien du bilan de l'import d'une sélection (ticket 02)
+    rechercheMobilax = { terme, page: res.data.page, pages, fournisseurId: res.data.fournisseur_id };
     if (!produits.length) {
       messageMobilax(`Aucune pièce trouvée chez Mobilax pour « ${terme} ».`);
       return;
@@ -721,17 +724,26 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
       document.getElementById('btn-mobilax-suivante').disabled   = rechercheMobilax.page >= pages;
       pagination.hidden = false;
     }
+    // Case, « Qté en rayon » et « Importer » : manager et admin de boutique seulement (story 38 —
+    // un geste proposé ne doit pas échouer à coup sûr). Pendant un import, les lignes d'une
+    // nouvelle recherche naissent figées (un seul import à la fois, story 33-34).
+    const importer = peutImporterMobilax();
+    const fige = importEnCours ? ' disabled' : '';
     tbody.innerHTML = produits.map(p => `
       <tr>
-        <td>${escHtml(p.nom)}</td>
+        <td>${importer
+          ? `<label style="display:flex;align-items:center;gap:8px;margin:0;">
+               <input type="checkbox" class="mobilax-case" value="${Number(p.mobilax_id)}"${fige}>
+               <span class="mobilax-nom">${escHtml(p.nom)}</span></label>`
+          : escHtml(p.nom)}</td>
         <td style="font-family:monospace;font-size:.82rem">${escHtml(p.ean13 ?? '—')}</td>
         <td style="text-align:right">${p.prix_achat_ht != null
           ? Number(p.prix_achat_ht).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
         <td style="text-align:right">${Number(p.stock) || 0}</td>
-        <td style="text-align:right;white-space:nowrap">
+        <td style="text-align:right;white-space:nowrap">${importer ? `
           <input type="number" min="0" step="1" class="mobilax-qte" aria-label="Qté en rayon"
                  value="${stockInitialDefaut === null ? '' : Number(stockInitialDefaut)}" style="width:64px;margin-right:6px">
-          <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}">Importer</button>
+          <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}"${fige}>Importer</button>` : ''}
         </td>
       </tr>`).join('');
   } finally {
@@ -747,6 +759,8 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
  * stock) : elle passe par « Ajuster le stock », qui trace le mouvement.
  */
 async function importerMobilax(mobilaxId, bouton) {
+  // Un seul import à la fois : l'import unitaire fermerait la fenêtre sous l'import en cours
+  if (importEnCours) return;
   bouton.disabled = true;
   bouton.textContent = 'Import…';
   // « Qté en rayon » de la ligne (ticket 05) : vide = non envoyée, le serveur applique le stock
@@ -785,6 +799,100 @@ document.getElementById('mobilax-resultats')?.addEventListener('click', e => {
   if (bouton) importerMobilax(Number(bouton.dataset.mobilaxId), bouton);
 });
 
+// ─── Import d'une sélection (ticket 02, chantier import-d-une-selection) ──────
+// L'opérateur coche des articles de la page affichée ; « Importer la sélection » les passe à la
+// boucle commune (importerArticles), chacun avec la « Qté en rayon » de sa ligne. Après l'import,
+// importés et déjà en stock sont décochés : échecs et restants restent cochés, prêts à relancer.
+// La sélection garde d'une page à l'autre, « Tout cocher » et « Vider » viennent au ticket 03.
+
+/**
+ * Manager ou admin de boutique : seuls rôles autorisés à importer (le serveur garde son propre
+ * refus). L'admin plateforme n'atteint jamais les résultats : la recherche le refuse.
+ */
+function peutImporterMobilax() {
+  return ['admin', 'manager'].includes(sessionCourante()?.role);
+}
+
+/** Cases des résultats affichés — une par article, pour un manager ou un admin de boutique. */
+const SELECTEUR_CASES = '#mobilax-resultats input.mobilax-case';
+
+/** Cases cochées des résultats affichés. */
+function casesCochees() {
+  return [...document.querySelectorAll(`${SELECTEUR_CASES}:checked`)];
+}
+
+/** Barre de sélection : nombre et durée estimée (même règle que l'import par génération), masquée sans coche. */
+function majBarreSelection() {
+  const n = casesCochees().length;
+  document.getElementById('mobilax-selection').hidden = n === 0;
+  document.getElementById('mobilax-selection-texte').textContent =
+    `${compter(n, 'sélectionné')} · durée estimée : ${libelleDuree(n)}`;
+  document.getElementById('btn-selection-importer').disabled = importEnCours;
+}
+
+/**
+ * « Importer la sélection » : quantités vérifiées AVANT tout départ — une ligne cochée invalide
+ * (autre qu'un entier ≥ 0 ou vide) est signalée et rien ne part (story 15). Vide → quantité non
+ * envoyée, le serveur applique le stock initial par défaut.
+ */
+async function lancerImportSelection() {
+  if (importEnCours) return;
+  const articles = [];
+  const invalides = [];
+  // Case de chaque article lancé : une recherche relancée pendant l'import remplace les lignes, et
+  // ces cases-là quittent alors la page — le bilan et le décochage le vérifient (vu en revue)
+  const casesLancees = new Map();
+  for (const caseArticle of casesCochees()) {
+    const ligne = caseArticle.closest('tr');
+    const nom = ligne.querySelector('.mobilax-nom')?.textContent ?? '';
+    const champ = ligne.querySelector('input.mobilax-qte');
+    const saisie = champ?.value.trim() ?? '';
+    // `badInput` : texte non numérique, que `value` d'un champ nombre rend vide
+    const valide = !champ?.validity.badInput && (saisie === '' || /^\d+$/.test(saisie));
+    champ?.setAttribute('aria-invalid', valide ? 'false' : 'true');
+    if (champ) champ.style.borderColor = valide ? '' : '#b42318';
+    if (!valide) { invalides.push(nom); continue; }
+    casesLancees.set(Number(caseArticle.value), caseArticle);
+    articles.push({ mobilax_id: Number(caseArticle.value), nom, ...(saisie !== '' ? { quantite: Number(saisie) } : {}) });
+  }
+  if (invalides.length) {
+    messageMobilax(`Qté en rayon invalide pour ${invalides.join(', ')} : saisissez une quantité entière, `
+      + 'positive ou nulle, ou laissez vide.', true);
+    return;
+  }
+  // Saisie corrigée : un signalement d'une tentative précédente ne doit pas rester à l'écran
+  messageMobilax('');
+  const lignesToujoursAffichees = () => [...casesLancees.values()].every(c => c.isConnected);
+  const bilan = await importerArticles(articles, {
+    deja: 0,   // « déjà en stock » connu à l'import seulement (`deja_importe`)
+    fournisseurId: rechercheMobilax.fournisseurId,
+    // Lu au moment du bilan : les restants ne « restent cochés » que si leurs lignes sont encore là
+    relance: () => lignesToujoursAffichees()
+      ? 'ils restent cochés, relancez « Importer la sélection ».'
+      : 'relancez la recherche pour les cocher à nouveau.',
+  });
+  if (!bilan) return;
+  // Importés et déjà en stock décochés (story 31) ; échecs et restants restent cochés (story 30).
+  // Case déjà sortie de la page (recherche relancée) : rien à décocher
+  for (const id of bilan.idsTraites) {
+    const caseArticle = casesLancees.get(id);
+    if (caseArticle?.isConnected) caseArticle.checked = false;
+  }
+  majBarreSelection();
+  await loadStock();
+}
+
+document.getElementById('mobilax-resultats')?.addEventListener('change', e => {
+  if (e.target.matches('input.mobilax-case')) majBarreSelection();
+});
+// Quantité corrigée : le signalement de la ligne disparaît
+document.getElementById('mobilax-resultats')?.addEventListener('input', e => {
+  if (!e.target.matches('input.mobilax-qte')) return;
+  e.target.removeAttribute('aria-invalid');
+  e.target.style.borderColor = '';
+});
+document.getElementById('btn-selection-importer')?.addEventListener('click', lancerImportSelection);
+
 // ─── Mode « Par génération » (ticket 01, chantier import-par-generation) ─────
 // L'opérateur tape un nom de base (« iPhone 17 ») : les séries Mobilax de cette génération
 // s'affichent, toutes cochées. Aucun import à ce stade — aperçu et boucle d'import viennent
@@ -802,6 +910,7 @@ function basculerModeMobilax() {
   document.getElementById('mobilax-series').hidden = !generation;
   document.getElementById('mobilax-pagination').hidden = true;
   document.getElementById('mobilax-resultats').innerHTML = '';
+  majBarreSelection();
   // Import en cours : chercher une pièce par article reste possible (story 14), mais séries,
   // aperçu et zone d'import (commune aux deux modes) sont gardés tels quels
   if (!importEnCours) {
@@ -824,7 +933,7 @@ function soumettreRechercheMobilax() {
   if (modeMobilax() !== 'generation') return chercherMobilax();
   // Une nouvelle génération effacerait la progression de l'import en cours
   if (importEnCours) {
-    messageMobilax('Un import par génération est en cours : attendez sa fin pour en préparer un autre.', true);
+    messageMobilax('Un import est en cours : attendez sa fin pour préparer une génération.', true);
     return;
   }
   return chercherGeneration();
@@ -1064,9 +1173,16 @@ async function compteARebours(secondes) {
  * Fige (ou libère) la saisie pendant l'import : séries cochées et bouton d'import. Le mode et
  * la recherche restent libres — un collègue doit pouvoir chercher une pièce (story 14).
  */
-function basculerSaisieGeneration(actif) {
+function basculerSaisieImport(actif) {
   document.querySelectorAll('#mobilax-series-liste input').forEach(el => { el.disabled = !actif; });
-  document.getElementById('btn-generation-importer').disabled = !actif;
+  // Libéré, le bouton de la génération reprend l'état de l'aperçu : réactivé d'office, il resterait
+  // actif sur un aperçu vide après un import d'une sélection
+  if (actif) recalculerApercu();
+  else document.getElementById('btn-generation-importer').disabled = true;
+  // Import d'une sélection (ticket 02) : cases et « Importer » des lignes figés, barre inactive
+  document.querySelectorAll(`${SELECTEUR_CASES}, #mobilax-resultats button[data-mobilax-id]`)
+    .forEach(el => { el.disabled = !actif; });
+  document.getElementById('btn-selection-importer').disabled = !actif;
 }
 
 /** Ajoute une ligne au journal de l'import (textContent : noms tiers jamais interprétés). */
@@ -1114,18 +1230,21 @@ async function lancerImportGeneration() {
  *   serveur applique le stock initial par défaut de la boutique
  * @param options.deja Articles déjà dans le stock connus d'avance (aperçu), comptés au bilan
  * @param options.fournisseurId Fiche fournisseur du lien du bilan
- * @param options.relance Fin de phrase du bilan partiel : comment importer les restants
+ * @param options.relance Fin de phrase du bilan partiel : comment importer les restants — texte,
+ *   ou fonction lue au moment du bilan (l'écran a pu changer pendant l'import)
  * Rend la main après le bilan, stock NON rechargé : l'appelant range d'abord son propre état
  * (aperçu, sélection), puis appelle `loadStock()`.
+ * @returns Le bilan (`idsTraites` : identifiants importés ou déjà en stock), `null` si rien n'est parti
  */
 async function importerArticles(articles, { deja, fournisseurId, relance }) {
   // Un seul import à la fois : les deux modes partagent la même zone et le même quota
-  if (importEnCours || !articles.length) return;
-  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance };
+  if (importEnCours || !articles.length) return null;
+  // `idsTraites` : identifiants importés ou déjà en stock — l'import d'une sélection les décoche
+  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance, idsTraites: [] };
 
   importEnCours = true;
   interruptionDemandee = false;
-  basculerSaisieGeneration(false);
+  basculerSaisieImport(false);
   document.getElementById('mobilax-bilan').hidden = true;
   document.getElementById('mobilax-import-journal').replaceChildren();
   afficherProgression(0, articles.length);
@@ -1179,6 +1298,7 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
       }
       if (res?.success) {
         bilan.importes++;
+        bilan.idsTraites.push(article.mobilax_id);
         // Famille décidée par le serveur (illisible → pièce, côté service) : aucun repli ici, qui
         // rangerait en silence un défaut futur dans « Pièce »
         const famille = res.data?.famille ?? 'famille inconnue';
@@ -1186,6 +1306,7 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
         journaliserImport(`✓ ${article.nom}`, '#059669');
       } else if (res?.code === 'deja_importe') {
         bilan.deja++;
+        bilan.idsTraites.push(article.mobilax_id);
         journaliserImport(`= ${article.nom} — déjà dans votre stock`, '#6b7280');
       } else if (connexionPerdue || res?.code === 'indisponible' || res?.code === 'quota') {
         // Arrêt (ticket 04) : fournisseur injoignable, connexion perdue, ou quota sans délai
@@ -1216,9 +1337,10 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
     document.getElementById('mobilax-import-interrompre').hidden = true;
     importEnCours = false;
     interruptionDemandee = false;
-    basculerSaisieGeneration(true);
+    basculerSaisieImport(true);
   }
   afficherBilan(bilan);
+  return bilan;
 }
 
 /**
@@ -1246,7 +1368,8 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relanc
     const { motif, restants } = partielle;
     // 0 restant : interruption pendant le dernier article (un arrêt sur incident en laisse toujours un)
     ajouter(zone, 'p', restants > 0
-      ? `${motif} — ${compter(restants, 'article')} restant${restants > 1 ? 's' : ''} : ${relance}`
+      ? `${motif} — ${compter(restants, 'article')} restant${restants > 1 ? 's' : ''} : `
+        + (typeof relance === 'function' ? relance() : relance)
       : `${motif} pendant le dernier article : rien ne reste à importer.`);
   }
   const repartition = Object.entries(familles)

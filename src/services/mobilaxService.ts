@@ -50,7 +50,8 @@ export interface EchecMobilax {
 }
 
 export type ResultatRechercheMobilax =
-  | { ok: true; total: number; page: number; pages: number; produits: ProduitMobilax[] }
+  /** `fournisseur_id` : fiche Mobilax de la boutique — lien du bilan de l'import d'une sélection (ticket 02). */
+  | { ok: true; fournisseur_id: number; total: number; page: number; pages: number; produits: ProduitMobilax[] }
   | EchecMobilax
 
 export type ResultatImportMobilax =
@@ -111,6 +112,7 @@ export async function rechercherProduitsMobilax(
     const pageRendue = Number(corps.data.currentPage)
     return {
       ok: true,
+      fournisseur_id: cle.fiche.id,
       total: Number.isFinite(total) ? total : produits.length,
       page:  Number.isInteger(pageRendue) && pageRendue > 0 ? pageRendue : page,
       pages: nombreDePages(corps.data.totalPage),
