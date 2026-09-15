@@ -1,5 +1,27 @@
 # iziGSM — Bugs connus
 
+## 🔴 Page Stock : la recherche effacée par la fin de chaque chargement (vécu en production le 2026-09-15 sur la v3.07, CORRIGÉ le même jour, non déployé)
+
+**Symptôme** (exploitant, capture, `izigsm-v3.07`) : « iphone 12 » dans la recherche, famille
+« Pièce » active, et la liste montre des batteries Samsung — la recherche n'est pas appliquée.
+
+**Cause** : `loadStock()` finissait par `renderStock()` **sans argument** — soit recherche vide,
+toutes catégories, tous statuts — alors que seul `applyFilters()` lit l'écran. Toute fin de
+chargement réaffichait donc la liste entière : ouverture de la page (8 pages chez l'exploitant
+depuis le correctif précédent, le temps de taper) et clic sur une famille (`filterFamille()` relance
+`loadStock()`). Défaut ancien, rendu visible par le chargement de toutes les pages (plus long).
+
+**Hypothèses écartées** : clic sur une famille qui viderait le champ (le texte restait affiché) ;
+filtres sur une copie remplacée par le rechargement (une seule liste, `allStockCache`).
+
+**Piège de test vécu** : le premier E2E vérifiait juste après le clic — l'ancienne vue encore
+filtrée suffisait à le faire passer. Juger APRÈS le rechargement (`waitForLoadState('networkidle')`),
+et retenir une page de la liste pour taper pendant le chargement, de façon déterministe.
+
+**Correctif** : la fin de `loadStock()` appelle `applyFilters()`. E2E
+`stock-recherche-filtres.spec.ts` § « reste appliquée après un clic » et § « saisie pendant le
+chargement », vus rouges (4 échecs sur 4 passages), verts après correctif.
+
 ## 🔴 Page Stock : seuls les 100 premiers produits chargés — recherche, filtres et compteurs faux au-delà (vécu en production le 2026-09-15, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.07)
 
 **Symptôme** (exploitant, capture) : « Références 100 », « iphone 12 » dans la recherche → « Aucun

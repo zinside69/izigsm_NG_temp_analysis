@@ -148,7 +148,10 @@ async function loadStock() {
   }
 
   renderKPIs();
-  renderStock();
+  // Filtres de l'écran réappliqués (recherche, catégorie, stock) : `renderStock()` sans argument
+  // réaffichait toute la liste par-dessus la recherche, à la fin de chaque chargement — ouverture de
+  // la page (8 pages chez l'exploitant, le temps de taper) et clic sur une famille (vécu le 2026-09-15)
+  applyFilters();
   renderLowStockAlerts();
 }
 
