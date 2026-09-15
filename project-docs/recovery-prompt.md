@@ -1,4 +1,30 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 114 — import d'une sélection : chantier complet, à déployer)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 115 — import d'une sélection déployé, izigsm-v3.06)
+
+## Ce qui a changé au checkpoint 115
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.06`). Le « première
+action : déploiement » du bloc 114 ci-dessous est **fait** : chantier `import-d-une-selection` en
+production (v3.05), puis correctif de la pagination (v3.06) — chacun relu sur l'aperçu puis l'apex.
+
+Reste à l'écran, côté exploitant : contrôler la v3.06 (« ecran iphone 12 » → plus de Précédente /
+Suivante ; « ecran iphone » → pagination présente) ; un import réel d'une sélection et un
+« Interrompre » en production n'ont pas été rapportés.
+
+**Première question à poser : quel chantier ?** Backlog (`todo.md`) :
+1. 🟠 `register.html` (`#form-step1`) / `reset-password.html` (`#form-reset`) — même fuite
+   d'identifiants que la connexion (`CLAUDE.md` § Formulaires avec mot de passe) ;
+2. 🟠 sortie de stock des produits défectueux, tracée pour la comptabilité ;
+3. 🟡 recherche « Par article » limitée à une génération — idée de l'exploitant, à cadrer par
+   `/mattpocock-skills:grill-with-docs` ; mesurer d'abord si Mobilax combine texte et série ;
+4. 🟡 `chercherMobilax()` figé sur coupure réseau (`bugs.md`).
+
+Rappels de la relecture d'un déploiement (vécue deux fois ce jour) :
+- ordre : URL d'aperçu (sortie de `npm run deploy`) → `sw.js`, asset hashé du **manifeste**, page qui
+  le référence, `/api/health`, route protégée → 401 → **puis** l'apex ; je peux faire ces lectures
+  moi-même dès que l'exploitant colle l'URL d'aperçu ;
+- un asset hashé qui garde son nom après un correctif HTML seul est **normal** (JS inchangé) ;
+- commandes pour l'exploitant : PowerShell, `curl.exe`, adresse dans une variable `$APERCU` — jamais
+  un mot à remplacer laissé nu (tapé tel quel le 2026-09-15 : `000`, rien d'affiché).
 
 ## Ce qui a changé au checkpoint 114
 

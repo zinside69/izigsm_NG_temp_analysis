@@ -926,6 +926,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-15 (checkpoint 115) : aucune migration en attente — dépôt et production
+alignés** (`izigsm-v3.06`, `44dfe9f`). Chantier `import-d-une-selection` déployé par l'exploitant
+(v3.05, aperçu `216a9d1c`), puis correctif de la pagination (v3.06, aperçu `4ac37c67`), sans
+migration. Relu sur l'aperçu **puis** l'apex à chaque fois : `sw.js`, `stock.97941ca7.js` servi en
+JavaScript et référencé par `/stock`, `/api/health` 200, `/api/mobilax/produits` sans jeton → 401 ;
+pour la v3.06, `<div id="mobilax-pagination" hidden>` servi.
+
 **État au 2026-09-15 (checkpoint 114) : aucune migration en attente, dépôt EN AVANCE sur la
 production — chantier `import-d-une-selection` COMPLET, prêt à déployer.** Tickets 01-03 (jusqu'à
 `130c4d7`) commités et poussés, **non déployés**. `CACHE_VERSION` `izigsm-v3.05`. Déploiement par

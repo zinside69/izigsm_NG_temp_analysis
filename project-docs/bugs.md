@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran puis CORRIGÉ le même jour — non déployé)
+## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 
 **Symptôme attendu** : dans la fenêtre Mobilax de `/stock`, la barre « ← Précédente · page ·
 Suivante → » resterait affichée alors que le code la masque — avant toute recherche, pendant une
@@ -32,6 +32,10 @@ assertionne `#mobilax-pagination` masquée avant toute recherche, vu rouge d'abo
 L'option socle (`[hidden] { display: none !important }`) reste ouverte, non retenue : elle touche
 toutes les pages. E2E `mobilax-selection.spec.ts` § « une seule page de résultats », vu rouge sur le
 build de production. `CACHE_VERSION` `izigsm-v3.06`.
+
+**Déployé le 2026-09-15** (`44dfe9f`, aperçu `4ac37c67`) : relu sur l'aperçu puis l'apex —
+`sw.js` v3.06, `<div id="mobilax-pagination" hidden>` servi par `/stock`. Contrôle à l'écran par
+l'exploitant non encore rapporté.
 
 ## 🟡 Recherche fournisseur : « Recherche en cours… » figé sur coupure réseau (trouvé en revue le 2026-09-14, corrigé en mode génération, OUVERT en mode article)
 

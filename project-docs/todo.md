@@ -110,6 +110,8 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       cocher », « Vider », confirmation > 200 commune, `CACHE_VERSION` `izigsm-v3.05`.
       **✅ CHANTIER COMPLET, NON DÉPLOYÉ** — reste : `npm run deploy` par l'exploitant (aucune
       migration), relecture aperçu puis apex, geste réel à l'écran (`recovery-prompt.md` § 114).
+      — **✅ DÉPLOYÉ le 2026-09-15** (`izigsm-v3.05`, puis correctif de pagination `izigsm-v3.06`),
+      relu aperçu + apex ; sélection sur deux pages vérifiée à l'écran par l'exploitant.
 
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 

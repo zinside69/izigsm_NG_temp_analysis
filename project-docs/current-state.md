@@ -1,4 +1,30 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 114 — import d'une sélection : chantier complet, à déployer)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 115 — import d'une sélection déployé, izigsm-v3.06)
+
+## Checkpoint 115 — Import d'une sélection en production ; pagination corrigée et déployée (2026-09-15)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.06`, `44dfe9f`).
+
+- **Chantier `import-d-une-selection` déployé** par l'exploitant (`izigsm-v3.05`, aperçu `216a9d1c`),
+  relu sur l'aperçu **puis** l'apex : `sw.js` v3.05, `stock.97941ca7.js` servi en JavaScript (code du
+  chantier présent), `/stock` le référence, `/api/health` 200, `/api/mobilax/produits` sans jeton → 401.
+- **Geste réel de l'exploitant** : cases, barre de sélection, sélection gardée sur deux pages
+  (« ecran iphone », plus de 100 résultats) — conforme. **Non rapportés** : un import réel d'une
+  sélection et un « Interrompre » en production.
+- **Constaté à l'écran** : « ecran iphone 12 » rend des écrans iPhone 14 / 15 Pro (recherche texte
+  Mobilax ; « 12 » dans « 120Hz », hypothèse non mesurée) → `todo.md` 🟡 avec l'idée d'une recherche
+  par article limitée à une génération ; pagination affichée sur une seule page (46 pièces) → défaut
+  de `bugs.md` confirmé.
+- **Pagination corrigée** (`44dfe9f` : `hidden` sur une enveloppe, E2E vu rouge sur le build de
+  production, `CACHE_VERSION` `izigsm-v3.06`) puis **déployée** (aperçu `4ac37c67`) : relu aperçu puis
+  apex — v3.06, `<div id="mobilax-pagination" hidden>` servi, `stock.97941ca7.js` inchangé (seuls
+  `stock.html` et `sw.js` ont changé). **Contrôle à l'écran de la v3.06 non encore rapporté.**
+
+**Gates** (`44dfe9f`) : vitest 1105/1107 (baseline), E2E Mobilax + balayage du menu 66/66.
+
+**Prochaine session** : choisir dans le backlog (`todo.md`) — 🟠 `register.html` /
+`reset-password.html` (même fuite d'identifiants que la connexion), 🟠 sortie de stock des produits
+défectueux, 🟡 recherche par article limitée à une génération (à cadrer), 🟡 `chercherMobilax()` figé
+sur coupure réseau.
 
 ## Checkpoint 114 — Import d'une sélection : ticket 03, chantier complet (2026-09-15)
 
