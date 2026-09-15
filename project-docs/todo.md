@@ -80,6 +80,9 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       — **découpage proposé le 2026-09-14, NON validé, tickets non publiés** (3 tickets :
       boucle commune + « Interrompre » → sélection sur la page → sélection sur plusieurs pages ;
       détail dans `recovery-prompt.md` § checkpoint 110)
+      — **✅ validé et publié le 2026-09-15** : `.scratch/import-d-une-selection/issues/01-03`
+      (`ready-for-agent`, chaîne 01 → 02 → 03). Un ticket = une session :
+      `/mattpocock-skills:implement .scratch/import-d-une-selection/issues/01-boucle-commune-et-interrompre.md`
 
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 
