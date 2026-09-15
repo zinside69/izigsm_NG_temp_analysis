@@ -306,6 +306,10 @@
           <!-- Aperçu chiffré (ticket 02) : recalculé à chaque décochage par recalculerApercu() -->
           <p id="mobilax-apercu" style="font-size:.9rem;margin:12px 0 8px;"></p>
           <button type="button" class="btn btn-primary btn-sm" id="btn-generation-importer" disabled>Importer</button>
+        </div>
+        <!-- Zone d'import commune aux deux modes (ticket 01 import-d-une-selection) : un seul import
+             tourne à la fois, sa progression reste visible quel que soit le mode — importerArticles() -->
+        <div id="mobilax-zone-import">
           <!-- Confirmation renforcée au-delà de SEUIL_CONFIRMATION articles -->
           <div id="mobilax-confirmation" hidden
                style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:.88rem;">
@@ -313,12 +317,17 @@
             <button type="button" class="btn btn-primary btn-sm" id="btn-generation-lancer">Lancer l'import</button>
             <button type="button" class="btn btn-secondary btn-sm" id="btn-generation-annuler">Annuler</button>
           </div>
-          <!-- Import en cours (ticket 03) : barre, progression, journal — lancerImportGeneration() -->
+          <!-- Import en cours (ticket 03) : barre, progression, journal, « Interrompre » -->
           <div id="mobilax-import" hidden style="margin-top:12px;">
             <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
               <div id="mobilax-import-barre" style="height:100%;width:0;background:var(--primary,#6366f1);transition:width .2s;"></div>
             </div>
-            <p id="mobilax-import-progression" style="font-size:.85rem;margin:6px 0;"></p>
+            <div style="display:flex;align-items:center;gap:10px;margin:6px 0;">
+              <p id="mobilax-import-progression" style="font-size:.85rem;margin:0;"></p>
+              <!-- Arrêt demandé par l'opérateur : l'article en cours finit, une pause s'arrête net.
+                   `hidden` sur l'enveloppe : le `display` de `.btn` l'emporterait sur celui du bouton -->
+              <span id="mobilax-import-interrompre" hidden><button type="button" class="btn btn-secondary btn-sm" id="btn-import-interrompre">Interrompre</button></span>
+            </div>
             <!-- Pause de quota (ticket 04) : compte à rebours de compteARebours() -->
             <p id="mobilax-import-pause" hidden style="font-size:.85rem;margin:0 0 6px;color:#b45309;font-weight:600;"></p>
             <div id="mobilax-import-journal" style="max-height:25vh;overflow-y:auto;font-size:.82rem;"></div>

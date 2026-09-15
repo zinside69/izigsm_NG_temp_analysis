@@ -271,6 +271,10 @@ test.describe('Mobilax — mode « Par génération »', () => {
     await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 4')
 
     await page.check('#mobilax-mode-article')
+    // Zone d'import commune aux deux modes (ticket 01 import-d-une-selection) : progression et
+    // « Interrompre » restent sous les yeux pendant la recherche par article
+    await expect(page.locator('#mobilax-import')).toBeVisible()
+    await expect(page.locator('#btn-import-interrompre')).toBeVisible()
     await page.fill('#mobilax-terme', 'batterie')
     await page.click('#btn-mobilax-chercher')
     await expect(page.locator('#mobilax-resultats')).toContainText('Batterie comptoir')
@@ -442,6 +446,77 @@ test.describe('Mobilax — mode « Par génération »', () => {
     await expect(bilan).toContainText('2 articles restants')
     await avancer(page, 10)
     expect(envois).toEqual([1, 2])
+  })
+
+  // ── « Interrompre » (ticket 01, chantier import-d-une-selection) — horloge simulée ──
+
+  test('interrompre pendant un article : il finit son import, puis arrêt « Import interrompu » avec les restants', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3, 4]),
+      { 1: [IMPORT_OK(1)], 2: [IMPORT_OK(2)], 3: [IMPORT_OK(3)], 4: [IMPORT_OK(4)] })
+    // Import de l'article 2 retenu jusqu'au clic : l'interruption tombe pendant qu'il est en vol.
+    // Enregistrée après scenarioImport(), cette route passe en premier puis lui rend la main.
+    // `envois` n'est rempli qu'au `fallback`, donc après la libération : le départ se lit ici.
+    let relacher!: () => void
+    const retenue = new Promise<void>(r => { relacher = r })
+    let deuxEnVol = false
+    await page.route('**/api/mobilax/import*', async route => {
+      if (route.request().postDataJSON().mobilax_id === 2) { deuxEnVol = true; await retenue }
+      return route.fallback()
+    })
+    await page.click('#btn-generation-importer')
+    const progression = page.locator('#mobilax-import-progression')
+    await expect(progression).toContainText('1 / 4')
+    await page.clock.runFor(3_000)
+    await expect.poll(() => deuxEnVol).toBe(true)
+
+    await page.click('#btn-import-interrompre')
+    relacher()
+    // L'article en cours n'est pas coupé : il est importé et compté
+    await expect(progression).toContainText('2 / 4')
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import interrompu')
+    await expect(bilan).not.toContainText('Import arrêté')
+    await expect(bilan).toContainText('2 importés')
+    await expect(bilan).toContainText('2 articles restants')
+    await expect(page.locator('#btn-import-interrompre')).toBeHidden()
+    await avancer(page, 10)
+    expect(envois).toEqual([1, 2])   // rien ne part après l'interruption
+  })
+
+  test('interrompre entre deux articles : arrêt immédiat, sans attendre le départ suivant', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3, 4]),
+      { 1: [IMPORT_OK(1)], 2: [IMPORT_OK(2)], 3: [IMPORT_OK(3)], 4: [IMPORT_OK(4)] })
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 4')
+
+    // Article 1 fini, départ du 2 dans 3 s : aucune milliseconde d'horloge ne passe avant le bilan
+    await page.click('#btn-import-interrompre')
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import interrompu')
+    await expect(bilan).toContainText('1 importé')
+    await expect(bilan).toContainText('3 articles restants')
+    await avancer(page, 10)
+    expect(envois).toEqual([1])
+  })
+
+  test('interrompre pendant une pause de quota : arrêt immédiat, sans attendre le compte à rebours', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3]),
+      { 1: [IMPORT_OK(1)], 2: [QUOTA(34), IMPORT_OK(2)], 3: [IMPORT_OK(3)] })
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 3')
+    await page.clock.runFor(3_000)
+    const pause = page.locator('#mobilax-import-pause')
+    await expect(pause).toContainText('reprise dans 34 s')
+
+    // Aucune seconde d'horloge ne passe : l'arrêt ne doit rien au compte à rebours
+    await page.click('#btn-import-interrompre')
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import interrompu')
+    await expect(bilan).toContainText('1 importé')
+    await expect(bilan).toContainText('2 articles restants')
+    await expect(pause).toBeHidden()
+    await avancer(page, 40)
+    expect(envois).toEqual([1, 2])   // l'article en pause ne repart jamais
   })
 
   test('« iPhone 1 » : aucune série, message qui dit quoi saisir', async ({ page, request }) => {

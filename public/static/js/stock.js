@@ -802,8 +802,8 @@ function basculerModeMobilax() {
   document.getElementById('mobilax-series').hidden = !generation;
   document.getElementById('mobilax-pagination').hidden = true;
   document.getElementById('mobilax-resultats').innerHTML = '';
-  // Import par génération en cours : chercher une pièce par article reste possible (story 14),
-  // mais séries, aperçu et progression de l'import sont gardés tels quels
+  // Import en cours : chercher une pièce par article reste possible (story 14), mais séries,
+  // aperçu et zone d'import (commune aux deux modes) sont gardés tels quels
   if (!importEnCours) {
     document.getElementById('mobilax-series-liste').innerHTML = '';
     oublierApercu();
@@ -990,7 +990,8 @@ function demanderImportGeneration() {
   lancerImportGeneration();
 }
 
-// ─── Import par génération : boucle, progression, bilan (ticket 03) ; quota, arrêt (ticket 04) ─
+// ─── Boucle d'import commune (génération, puis sélection) : progression, bilan (ticket 03) ; ──
+// quota, arrêt (ticket 04) ; « Interrompre » (ticket 01, chantier import-d-une-selection)
 // Quota atteint avec délai annoncé : pause, compte à rebours, même article (seule reprise
 // automatique). Quota sans délai, fournisseur `indisponible` ou connexion perdue : arrêt, bilan
 // partiel avec les restants — relancer la même génération n'importe que le manquant.
@@ -1006,8 +1007,12 @@ const INTERVALLE_IMPORT_MS = SECONDES_PAR_IMPORT * 1000;
 /** Motif d'arrêt quand `fetch` est rejeté pendant l'import — distinct d'une panne du fournisseur. */
 const MESSAGE_CONNEXION_PERDUE = 'Connexion perdue avec iziGSM (réseau coupé ?).';
 
-/** Import par génération en cours : fenêtre gardée telle quelle, fermeture de l'onglet avertie. */
+/** Import en cours (génération ou sélection) : fenêtre gardée telle quelle, fermeture de l'onglet avertie. */
 let importEnCours = false;
+/** « Interrompre » cliqué : la boucle s'arrête avant le prochain départ (ticket 01 import-d-une-selection). */
+let interruptionDemandee = false;
+/** Réveille l'attente en cours (rythme ou seconde de pause) ; `null` hors attente. */
+let reveillerAttente = null;
 
 /** Avertissement du navigateur à la fermeture de l'onglet pendant l'import (story 28). */
 function retenirFermeture(e) {
@@ -1015,20 +1020,40 @@ function retenirFermeture(e) {
   e.returnValue = '';
 }
 
-/** Attend `ms` millisecondes — `setTimeout`, que l'horloge simulée des E2E pilote. */
+/**
+ * Attend `ms` millisecondes — `setTimeout`, que l'horloge simulée des E2E pilote. « Interrompre »
+ * met fin à l'attente sur-le-champ : ni l'écart entre deux départs ni une pause ne le retardent.
+ */
 function patienter(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => {
+    const minuteur = setTimeout(() => { reveillerAttente = null; resolve(); }, ms);
+    reveillerAttente = () => { clearTimeout(minuteur); reveillerAttente = null; resolve(); };
+  });
+}
+
+/**
+ * « Interrompre » : l'article en vol finit son import, puis la boucle s'arrête ; une attente
+ * (rythme, pause de quota) est coupée net (stories 26-27, spec import-d-une-selection).
+ */
+function interrompreImport() {
+  if (!importEnCours) return;
+  interruptionDemandee = true;
+  const bouton = document.getElementById('btn-import-interrompre');
+  bouton.disabled = true;
+  bouton.textContent = 'Interruption…';
+  reveillerAttente?.();
 }
 
 /**
  * Pause de quota (story 15) : compte à rebours seconde par seconde du délai annoncé par le
- * fournisseur, puis la boucle reprend l'article interrompu (story 16).
+ * fournisseur, puis la boucle reprend l'article interrompu (story 16) — sauf « Interrompre »,
+ * qui arrête le compte à rebours sur-le-champ.
  * @param secondes Délai entier > 0, lu dans la réponse du serveur (`reessayer_dans_s`)
  */
 async function compteARebours(secondes) {
   const pause = document.getElementById('mobilax-import-pause');
   pause.hidden = false;
-  for (let reste = secondes; reste > 0; reste--) {
+  for (let reste = secondes; reste > 0 && !interruptionDemandee; reste--) {
     pause.textContent = `Quota fournisseur atteint — reprise dans ${reste} s`;
     await patienter(1000);
   }
@@ -1036,7 +1061,7 @@ async function compteARebours(secondes) {
 }
 
 /**
- * Fige (ou libère) la sélection pendant l'import : séries cochées et bouton d'import. Le mode et
+ * Fige (ou libère) la saisie pendant l'import : séries cochées et bouton d'import. Le mode et
  * la recherche restent libres — un collègue doit pouvoir chercher une pièce (story 14).
  */
 function basculerSaisieGeneration(actif) {
@@ -1061,39 +1086,78 @@ function afficherProgression(fait, total) {
 }
 
 /**
- * Importe les articles à importer des séries cochées, un par un, puis affiche le bilan. Le
- * rythme se mesure de départ à départ : une réponse lente ne rajoute pas 3 s d'attente.
+ * Import par génération : les articles à importer des séries cochées, sans quantité (stock
+ * initial par défaut de la boutique), par la boucle commune.
  */
 async function lancerImportGeneration() {
   const { deja, aImporter } = selectionApercu();
   if (!aImporter.length) return;
   afficherConfirmation(false);
-  // Fiche fournisseur figée au lancement : le lien du bilan ne dépend pas de l'aperçu, oublié ensuite
-  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId: apercuCourant?.fournisseur_id };
+  await importerArticles(aImporter.map(a => ({ mobilax_id: a.mobilax_id, nom: a.nom })), {
+    deja,
+    // Fiche fournisseur figée au lancement : le lien du bilan ne dépend pas de l'aperçu, oublié ensuite
+    fournisseurId: apercuCourant?.fournisseur_id,
+    relance: 'relancez la même génération, seul le manquant sera importé.',
+  });
+  // L'aperçu est périmé (ce qui était à importer l'est désormais) : une nouvelle recherche en relit
+  // un. AVANT le rechargement du stock : sinon « Importer N articles » redevient cliquable sur
+  // l'aperçu périmé le temps de l'aller-retour, et relancerait l'import (défaut vu en revue)
+  oublierApercu();
+  await loadStock();
+}
+
+/**
+ * Boucle d'import commune (ticket 01 import-d-une-selection) — import par génération et import
+ * d'une sélection : un article à la fois, puis le bilan. Le rythme se mesure de départ à départ :
+ * une réponse lente ne rajoute pas 3 s d'attente.
+ * @param articles `{ mobilax_id, nom, quantite? }` — `quantite` absente : non envoyée, le
+ *   serveur applique le stock initial par défaut de la boutique
+ * @param options.deja Articles déjà dans le stock connus d'avance (aperçu), comptés au bilan
+ * @param options.fournisseurId Fiche fournisseur du lien du bilan
+ * @param options.relance Fin de phrase du bilan partiel : comment importer les restants
+ * Rend la main après le bilan, stock NON rechargé : l'appelant range d'abord son propre état
+ * (aperçu, sélection), puis appelle `loadStock()`.
+ */
+async function importerArticles(articles, { deja, fournisseurId, relance }) {
+  // Un seul import à la fois : les deux modes partagent la même zone et le même quota
+  if (importEnCours || !articles.length) return;
+  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance };
 
   importEnCours = true;
+  interruptionDemandee = false;
   basculerSaisieGeneration(false);
   document.getElementById('mobilax-bilan').hidden = true;
   document.getElementById('mobilax-import-journal').replaceChildren();
-  afficherProgression(0, aImporter.length);
+  afficherProgression(0, articles.length);
+  const interrompre = document.getElementById('btn-import-interrompre');
+  interrompre.disabled = false;
+  interrompre.textContent = 'Interrompre';
+  // Enveloppe, pas le bouton : le `display` de `.btn` l'emporte sur l'attribut `hidden`
+  document.getElementById('mobilax-import-interrompre').hidden = false;
   document.getElementById('mobilax-import').hidden = false;
   window.addEventListener('beforeunload', retenirFermeture);
 
   let dernierDepart = -Infinity;
   try {
-    for (const [i, article] of aImporter.entries()) {
+    for (const [i, article] of articles.entries()) {
       // Un article peut partir plusieurs fois : après une pause de quota, c'est LUI qui repart
       let res = null;
       let connexionPerdue = false;
+      let interrompu = false;
       for (;;) {
         const attente = dernierDepart + INTERVALLE_IMPORT_MS - Date.now();
-        if (attente > 0) await patienter(attente);
+        if (attente > 0 && !interruptionDemandee) await patienter(attente);
+        // « Interrompre » pendant l'attente ou la pause : cet article n'est pas reparti
+        if (interruptionDemandee) { interrompu = true; break; }
         dernierDepart = Date.now();
         res = null;
         connexionPerdue = false;
         try {
-          // Import unitaire existant, SANS quantité en rayon ; déballage au point d'appel (CLAUDE.md)
-          res = (await apiPost('/api/mobilax/import', { mobilax_id: article.mobilax_id })).data;
+          // Import unitaire existant ; quantité en rayon seulement si l'appelant en donne une
+          const corps = { mobilax_id: article.mobilax_id };
+          if (article.quantite != null) corps.quantite_en_rayon = article.quantite;
+          // Déballage au point d'appel (CLAUDE.md § enveloppe)
+          res = (await apiPost('/api/mobilax/import', corps)).data;
         } catch {
           // Rejet de `fetch` : c'est la connexion à iziGSM qui manque, pas le fournisseur
           connexionPerdue = true;
@@ -1106,6 +1170,14 @@ async function lancerImportGeneration() {
         await compteARebours(delai);
       }
 
+      if (interrompu) {
+        // Arrêt voulu par l'opérateur (story 28, spec import-d-une-selection) : distinct d'un
+        // arrêt sur incident. Interrompre pendant le DERNIER article en vol ne laisse rien à
+        // importer : la boucle finit d'elle-même, bilan « Import terminé » (0 restant, exact)
+        bilan.interruption = { restants: articles.length - i };
+        journaliserImport('■ Import interrompu à votre demande', '#b42318');
+        break;
+      }
       if (res?.success) {
         bilan.importes++;
         // Famille décidée par le serveur (illisible → pièce, côté service) : aucun repli ici, qui
@@ -1119,10 +1191,10 @@ async function lancerImportGeneration() {
       } else if (connexionPerdue || res?.code === 'indisponible' || res?.code === 'quota') {
         // Arrêt (ticket 04) : fournisseur injoignable, connexion perdue, ou quota sans délai
         // connu — jamais de nouvelle tentative à l'aveugle. Cet article et les suivants restent
-        // à importer ; relancer la même génération n'importera qu'eux (anti-doublon 0046).
+        // à importer ; relancer le même import n'importera qu'eux (anti-doublon 0046).
         bilan.arret = {
           motif: connexionPerdue ? MESSAGE_CONNEXION_PERDUE : (res?.error || MESSAGE_MOBILAX_INJOIGNABLE),
-          restants: aImporter.length - i,
+          restants: articles.length - i,
         };
         journaliserImport(`■ Import arrêté — ${bilan.arret.motif}`, '#b42318');
         break;
@@ -1131,25 +1203,25 @@ async function lancerImportGeneration() {
         bilan.echecs.push({ nom: article.nom, motif });
         journaliserImport(`✗ ${article.nom} — ${motif}`, '#b42318');
       }
-      afficherProgression(i + 1, aImporter.length);
+      afficherProgression(i + 1, articles.length);
     }
   } finally {
     window.removeEventListener('beforeunload', retenirFermeture);
     document.getElementById('mobilax-import-pause').hidden = true;
+    document.getElementById('mobilax-import-interrompre').hidden = true;
     importEnCours = false;
+    interruptionDemandee = false;
     basculerSaisieGeneration(true);
   }
   afficherBilan(bilan);
-  // L'aperçu est périmé (ce qui était à importer l'est désormais) : une nouvelle recherche en relit un
-  oublierApercu();
-  await loadStock();
 }
 
 /**
  * Bilan : importés, déjà en stock, échecs nommés, répartition par famille, lien vers le stock ;
- * sur arrêt (`arret` : motif, restants — ticket 04), « Import arrêté » et ce qu'il reste à importer.
+ * sur arrêt (`arret` : motif, restants — ticket 04), « Import arrêté » et ce qu'il reste à importer ;
+ * sur « Interrompre » (`interruption` : restants), « Import interrompu », distinct d'un incident.
  */
-function afficherBilan({ importes, deja, echecs, familles, fournisseurId, arret }) {
+function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relance, arret, interruption }) {
   const zone = document.getElementById('mobilax-bilan');
   zone.replaceChildren();
   const ajouter = (parent, balise, texte) => {
@@ -1158,12 +1230,16 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId, arret 
     parent.appendChild(el);
     return el;
   };
-  ajouter(zone, 'strong', `${arret ? 'Import arrêté' : 'Import terminé'} : ${compter(importes, 'importé')} · `
+  // Fin partielle, s'il y en a une : un seul aiguillage donne le titre, le motif et les restants
+  const partielle = interruption ? { titre: 'Import interrompu', motif: 'Interrompu à votre demande', restants: interruption.restants }
+    : arret ? { titre: 'Import arrêté', motif: arret.motif, restants: arret.restants }
+    : null;
+  ajouter(zone, 'strong', `${partielle?.titre ?? 'Import terminé'} : ${compter(importes, 'importé')} · `
     + `${deja} déjà dans votre stock · ${compter(echecs.length, 'échec')}`);
-  // Bilan partiel (ticket 04) : pourquoi l'import s'est arrêté, et ce qu'il reste à importer
-  if (arret) {
-    ajouter(zone, 'p', `${arret.motif} — ${compter(arret.restants, 'article')} restant${arret.restants > 1 ? 's' : ''} : `
-      + 'relancez la même génération, seul le manquant sera importé.');
+  // Bilan partiel : pourquoi l'import s'est arrêté, et ce qu'il reste à importer
+  if (partielle) {
+    const { motif, restants } = partielle;
+    ajouter(zone, 'p', `${motif} — ${compter(restants, 'article')} restant${restants > 1 ? 's' : ''} : ${relance}`);
   }
   const repartition = Object.entries(familles)
     .map(([famille, n]) => `${FAMILLE_CONFIG[famille]?.label || famille} : ${n}`).join(' · ');
@@ -1183,6 +1259,7 @@ document.getElementById('mobilax-series-liste')?.addEventListener('change', reca
 document.getElementById('btn-generation-importer')?.addEventListener('click', demanderImportGeneration);
 document.getElementById('btn-generation-lancer')?.addEventListener('click', lancerImportGeneration);
 document.getElementById('btn-generation-annuler')?.addEventListener('click', () => afficherConfirmation(false));
+document.getElementById('btn-import-interrompre')?.addEventListener('click', interrompreImport);
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────
 function setEl(id, val) {

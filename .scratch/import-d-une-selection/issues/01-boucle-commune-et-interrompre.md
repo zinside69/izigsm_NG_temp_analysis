@@ -12,18 +12,30 @@ d'import » et « Interrompre »).
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done (2026-09-15)
 
-- [ ] Boucle d'import commune : liste d'articles (identifiant, nom, quantité éventuelle), fiche
+- [x] Boucle d'import commune : liste d'articles (identifiant, nom, quantité éventuelle), fiche
       fournisseur du bilan, « déjà en stock » connu d'avance — l'import par génération l'appelle avec
       les articles de l'aperçu, sans quantité
-- [ ] Comportement de l'import par génération inchangé : rythme ≥ 3 s, pause et reprise sur quota avec
+- [x] Comportement de l'import par génération inchangé : rythme ≥ 3 s, pause et reprise sur quota avec
       délai, arrêts (quota sans délai, indisponible, connexion perdue), confirmation > 200, bilan,
       avertissement de fermeture — les E2E existants restent verts
-- [ ] Zone d'import commune aux deux modes de la fenêtre fournisseur (un seul import à la fois)
-- [ ] « Interrompre » visible pendant tout import : l'article en cours finit puis arrêt ; pendant une
+- [x] Zone d'import commune aux deux modes de la fenêtre fournisseur (un seul import à la fois)
+- [x] « Interrompre » visible pendant tout import : l'article en cours finit puis arrêt ; pendant une
       pause de quota, arrêt immédiat ; bilan « Import interrompu » avec les restants, distinct
       d'« Import arrêté »
-- [ ] E2E écran (réponses et horloge simulées) : interruption entre deux articles, interruption pendant
+- [x] E2E écran (réponses et horloge simulées) : interruption entre deux articles, interruption pendant
       une pause de quota — vus rouges
-- [ ] `npx vitest run` vert (baseline), tsc ≤ 32, balayage du menu vert
+- [x] `npx vitest run` vert (baseline), tsc ≤ 32, balayage du menu vert
+
+Notes de réalisation :
+- Trois E2E d'interruption : article en vol (il finit, compté), entre deux départs, pendant une pause
+  de quota. Les deux derniers vus rouges une seconde fois par mutation (réveil de l'attente retiré).
+- Interrompre pendant le **dernier** article en vol : la boucle finit d'elle-même, bilan « Import
+  terminé » (0 restant, exact) — tranché en revue.
+- `importerArticles()` rend la main **sans** recharger le stock : l'appelant range son état (aperçu,
+  sélection) puis appelle `loadStock()` — sinon « Importer N articles » redevenait cliquable sur un
+  aperçu périmé pendant le rechargement (défaut vu en revue, corrigé avant commit).
+- `basculerSaisieGeneration()` ne fige que les séries et le bouton de la génération : le ticket 02 y
+  ajoute les cases de la sélection. Les ids `btn-generation-lancer`/`-annuler` de la confirmation
+  (désormais dans la zone commune) restent à nommer quand la sélection s'en servira.

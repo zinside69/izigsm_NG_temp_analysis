@@ -6,10 +6,13 @@ Une fois lancé, l'import ne s'arrête que seul (fin, panne, quota sans délai, 
 en fermant l'onglet (avertissement). Une suite de quotas répétés **avec** délai le fait durer sans
 fin. Relevé en revue du ticket 04, hors spec.
 
-- [ ] Bouton « Interrompre » pendant l'import : arrêt propre après l'article en cours, bilan
+- [x] Bouton « Interrompre » pendant l'import : arrêt propre après l'article en cours, bilan
       partiel avec restants (même chemin que l'arrêt du ticket 04) — test vu rouge
       — **rattaché au chantier A le 2026-09-14** (décision de l'exploitant, grilling Q9) : un seul
       bouton pour les **deux** imports (par génération et d'une sélection), la boucle étant commune.
+      — **✅ fait le 2026-09-15** (ticket 01 `import-d-une-selection`) : article en vol fini puis
+      arrêt, attente et pause de quota coupées net, bilan « Import interrompu » ≠ « Import arrêté ».
+      Non déployé : le chantier part en un bloc après le ticket 03.
 
 ## 🟡 P3 — Recherche Mobilax par article : « Recherche en cours… » figé sur coupure réseau (trouvé le 2026-09-14)
 
