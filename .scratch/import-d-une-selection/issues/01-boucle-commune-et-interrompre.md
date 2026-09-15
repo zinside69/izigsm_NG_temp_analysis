@@ -31,8 +31,9 @@ d'import » et « Interrompre »).
 Notes de réalisation :
 - Trois E2E d'interruption : article en vol (il finit, compté), entre deux départs, pendant une pause
   de quota. Les deux derniers vus rouges une seconde fois par mutation (réveil de l'attente retiré).
-- Interrompre pendant le **dernier** article en vol : la boucle finit d'elle-même, bilan « Import
-  terminé » (0 restant, exact) — tranché en revue.
+- Interrompre pendant le **dernier** article en vol : la boucle finit d'elle-même, mais le bilan dit
+  « Import interrompu » — « rien ne reste à importer » (décision de l'exploitant le 2026-09-15, plus
+  explicite qu'« Import terminé » ; E2E « pendant le dernier article », vu rouge).
 - `importerArticles()` rend la main **sans** recharger le stock : l'appelant range son état (aperçu,
   sélection) puis appelle `loadStock()` — sinon « Importer N articles » redevenait cliquable sur un
   aperçu périmé pendant le rechargement (défaut vu en revue, corrigé avant commit).

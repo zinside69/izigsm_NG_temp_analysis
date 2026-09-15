@@ -483,6 +483,32 @@ test.describe('Mobilax — mode « Par génération »', () => {
     expect(envois).toEqual([1, 2])   // rien ne part après l'interruption
   })
 
+  test('interrompre pendant le dernier article : il finit, bilan « Import interrompu » sans restant', async ({ page, request }) => {
+    const envois = await scenarioImport(page, request, () => apercuDe([1, 2]), { 1: [IMPORT_OK(1)], 2: [IMPORT_OK(2)] })
+    // Import du dernier article retenu jusqu'au clic (même mécanisme que « pendant un article »)
+    let relacher!: () => void
+    const retenue = new Promise<void>(r => { relacher = r })
+    let dernierEnVol = false
+    await page.route('**/api/mobilax/import*', async route => {
+      if (route.request().postDataJSON().mobilax_id === 2) { dernierEnVol = true; await retenue }
+      return route.fallback()
+    })
+    await page.click('#btn-generation-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 2')
+    await page.clock.runFor(3_000)
+    await expect.poll(() => dernierEnVol).toBe(true)
+
+    await page.click('#btn-import-interrompre')
+    relacher()
+    // Décision de l'exploitant (2026-09-15) : le clic se lit au bilan, même sans rien à laisser
+    const bilan = page.locator('#mobilax-bilan')
+    await expect(bilan).toContainText('Import interrompu')
+    await expect(bilan).not.toContainText('Import terminé')
+    await expect(bilan).toContainText('2 importés')
+    await expect(bilan).toContainText('rien ne reste à importer')
+    expect(envois).toEqual([1, 2])
+  })
+
   test('interrompre entre deux articles : arrêt immédiat, sans attendre le départ suivant', async ({ page, request }) => {
     const envois = await scenarioImport(page, request, () => apercuDe([1, 2, 3, 4]),
       { 1: [IMPORT_OK(1)], 2: [IMPORT_OK(2)], 3: [IMPORT_OK(3)], 4: [IMPORT_OK(4)] })

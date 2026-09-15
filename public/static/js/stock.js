@@ -1172,8 +1172,7 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
 
       if (interrompu) {
         // Arrêt voulu par l'opérateur (story 28, spec import-d-une-selection) : distinct d'un
-        // arrêt sur incident. Interrompre pendant le DERNIER article en vol ne laisse rien à
-        // importer : la boucle finit d'elle-même, bilan « Import terminé » (0 restant, exact)
+        // arrêt sur incident. Interrompre pendant le DERNIER article en vol : voir après la boucle
         bilan.interruption = { restants: articles.length - i };
         journaliserImport('■ Import interrompu à votre demande', '#b42318');
         break;
@@ -1204,6 +1203,12 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
         journaliserImport(`✗ ${article.nom} — ${motif}`, '#b42318');
       }
       afficherProgression(i + 1, articles.length);
+    }
+    // « Interrompre » pendant le DERNIER article en vol : la boucle a fini d'elle-même, rien ne
+    // reste — mais le clic se lit au bilan (décision de l'exploitant, 2026-09-15), jamais « terminé »
+    if (interruptionDemandee && !bilan.arret && !bilan.interruption) {
+      bilan.interruption = { restants: 0 };
+      journaliserImport('■ Import interrompu à votre demande', '#b42318');
     }
   } finally {
     window.removeEventListener('beforeunload', retenirFermeture);
@@ -1239,7 +1244,10 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relanc
   // Bilan partiel : pourquoi l'import s'est arrêté, et ce qu'il reste à importer
   if (partielle) {
     const { motif, restants } = partielle;
-    ajouter(zone, 'p', `${motif} — ${compter(restants, 'article')} restant${restants > 1 ? 's' : ''} : ${relance}`);
+    // 0 restant : interruption pendant le dernier article (un arrêt sur incident en laisse toujours un)
+    ajouter(zone, 'p', restants > 0
+      ? `${motif} — ${compter(restants, 'article')} restant${restants > 1 ? 's' : ''} : ${relance}`
+      : `${motif} pendant le dernier article : rien ne reste à importer.`);
   }
   const repartition = Object.entries(familles)
     .map(([famille, n]) => `${FAMILLE_CONFIG[famille]?.label || famille} : ${n}`).join(' · ');
