@@ -1,4 +1,19 @@
-# iziGSM — État courant (MàJ : 2026-09-14, checkpoint 110 — import d'une sélection cadré, spec publiée)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 111 — import d'une sélection : tickets publiés)
+
+## Checkpoint 111 — Import d'une sélection : 3 tickets validés et publiés (2026-09-15)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.04`) — aucun code modifié.
+
+Découpage validé par l'exploitant (en l'état : la quantité par ligne reste dans le 02) et publié
+(`50829a8`) : `.scratch/import-d-une-selection/issues/`
+- **01** boucle d'import commune + « Interrompre » — aucun bloqueur ;
+- **02** cocher et importer une sélection sur la page affichée — bloqué par 01 ;
+- **03** sélection sur plusieurs pages, « Tout cocher », « Vider », `CACHE_VERSION` — bloqué par 02.
+Déploiement en un bloc après 03, sans migration.
+
+**Prochaine session** : `/mattpocock-skills:implement
+.scratch/import-d-une-selection/issues/01-boucle-commune-et-interrompre.md` (tapé par l'exploitant,
+session neuve — un ticket = une session).
 
 ## Checkpoint 110 — Import d'une sélection (chantier A) : cadré, spec publiée, tickets à valider (2026-09-14)
 

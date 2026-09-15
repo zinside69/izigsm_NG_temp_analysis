@@ -1,4 +1,25 @@
-# Recovery Prompt — iziGSM — 2026-09-14 (checkpoint 110 — import d'une sélection cadré, spec publiée)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 111 — import d'une sélection : tickets publiés)
+
+## Ce qui a changé au checkpoint 111
+
+**Rien n'attend de déploiement, rien n'attend de migration** (`izigsm-v3.04`). Le « découpage proposé,
+pas encore validé » du bloc 110 ci-dessous est **dépassé** : les 3 tickets sont validés et publiés
+(`.scratch/import-d-une-selection/issues/01-03`, `ready-for-agent`, chaîne 01 → 02 → 03).
+
+**Première action : ticket 01**, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/import-d-une-selection/issues/01-boucle-commune-et-interrompre.md`
+
+À savoir avant de coder le 01 :
+- la boucle à rendre commune est `lancerImportGeneration()` (`stock.js`) — aujourd'hui alimentée par
+  `selectionApercu()` (articles de l'aperçu, sans quantité), avec `bilan.fournisseurId` figé au
+  lancement et `deja` connu d'avance ; sa zone (`#mobilax-import`, `#mobilax-bilan`,
+  `#mobilax-confirmation`) vit **dans** `#mobilax-series`, donc masquée en mode « Par article » —
+  c'est ce que le ticket déplace ;
+- `CLAUDE.md` § Service Mobilax › Import par génération : seule reprise automatique sur 429 = quota
+  **avec** délai ; arrêts : quota sans délai, `indisponible`, connexion perdue ;
+- E2E de référence : `tests/e2e/mobilax-generation.spec.ts` (`scenarioImport()`, `avancer()`,
+  horloge simulée) — tous doivent rester verts ;
+- après chaque build : relancer wrangler et tuer le `workerd` resté sur :3000 (mémoire).
 
 ## Ce qui a changé au checkpoint 110
 
