@@ -629,6 +629,27 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   - E2E à horloge simulée (`tests/e2e/mobilax-generation.spec.ts`) : `page.clock.install()` **avant**
     toute navigation, `pauseAt()` avant le geste, `runFor(1_000)` seconde par seconde pour un compte
     à rebours (chaque seconde est un minuteur chaîné).
+- **Boucle d'import commune (ticket 01 `import-d-une-selection`, 2026-09-15, non déployé)** :
+  - **`importerArticles(articles, { deja, fournisseurId, relance })`** (`stock.js`) est la seule
+    boucle d'import : `lancerImportGeneration()` et, au ticket 02, l'import d'une sélection
+    l'appellent. Articles `{ mobilax_id, nom, quantite? }` — `quantite` non nulle → envoyée en
+    `quantite_en_rayon`, sinon rien (stock initial par défaut). ⊥ une seconde boucle.
+  - **Elle ne recharge pas le stock** : l'appelant range son état (aperçu, sélection) **puis**
+    `await loadStock()`. L'inverse laissait « Importer N articles » cliquable sur un aperçu périmé
+    pendant le rechargement (`decisions.md` 2026-09-15).
+  - **Zone d'import commune** `#mobilax-zone-import` (confirmation, progression, journal, bilan),
+    hors de `#mobilax-series` : visible dans les deux modes, un seul import à la fois.
+  - **« Interrompre »** : drapeau `interruptionDemandee` + `patienter()` réveillable
+    (`reveillerAttente`). L'article en vol finit ; attente entre départs et pause de quota coupées
+    net. Bilan « Import interrompu » (`interruption.restants`, 0 = dernier article → « rien ne
+    reste à importer ») ≠ « Import arrêté » (`arret`, incident). ⊥ « Import terminé » après un clic.
+  - ⚠ **`hidden` ne masque ni un `.btn` ni un élément à `display` en ligne** : tout `display`
+    d'auteur écrase `[hidden]` du navigateur, et aucune règle `[hidden]` n'existe dans `public/`.
+    Poser `hidden` sur une enveloppe sans classe (`#mobilax-import-interrompre`). Le bouton
+    « Interrompre » restait affiché hors import ; `#mobilax-pagination` probablement aussi (`bugs.md`).
+  - E2E « article en vol » : une `page.route()` enregistrée **après** celle du scénario passe en
+    premier ; elle attend une promesse puis `route.fallback()`. Le départ se lit dans cette route —
+    ce que le scénario enregistre ne l'est qu'au `fallback`.
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -869,6 +890,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-15 (checkpoint 112) : aucune migration en attente, dépôt EN AVANCE sur la
+production — volontairement.** Ticket 01 `import-d-une-selection` (boucle commune, « Interrompre »,
+`4decfdc` + `401f4f6`) commité et poussé, **non déployé** : le chantier part en un bloc après le
+ticket 03, sans migration. `CACHE_VERSION` reste `izigsm-v3.04`, à incrémenter au 03.
 
 **État au 2026-09-14 (checkpoint 109) : aucune migration en attente — dépôt et production
 alignés.** Chantier `import-par-generation` (tickets 01-04, jusqu'à `8854918`) déployé en un bloc

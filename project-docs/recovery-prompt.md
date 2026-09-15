@@ -1,4 +1,35 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 111 — import d'une sélection : tickets publiés)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 112 — import d'une sélection : ticket 01 fait)
+
+## Ce qui a changé au checkpoint 112
+
+**Aucune migration en attente ; dépôt EN AVANCE sur la production, volontairement** : ticket 01
+fait et poussé, **non déployé** — le chantier part en un bloc après le 03 (`CACHE_VERSION`
+`izigsm-v3.04` inchangé, à incrémenter au 03). Le « première action : ticket 01 » du bloc 111
+ci-dessous est **dépassé**.
+
+**Première action : ticket 02**, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/import-d-une-selection/issues/02-selection-sur-la-page-et-import.md`
+
+À savoir avant de coder le 02 :
+- **`importerArticles(articles, { deja, fournisseurId, relance })`** (`stock.js`) est LA boucle :
+  articles `{ mobilax_id, nom, quantite? }` (`quantite` ≠ null → `quantite_en_rayon` envoyé),
+  `deja` = 0 pour une sélection, `relance` = fin de phrase du bilan partiel (à écrire pour la
+  sélection : les restants restent cochés). Un seul import à la fois (garde `importEnCours`).
+- **Elle rend la main SANS recharger le stock** : l'appelant range d'abord son état (pour la
+  sélection : échecs et restants restés cochés), puis `await loadStock()` — l'inverse a laissé
+  « Importer N articles » cliquable sur un aperçu périmé (vu en revue du 01).
+- `basculerSaisieGeneration()` ne fige que les séries et le bouton de la génération : le 02 y
+  ajoute les cases de sélection et les « Importer » de ligne.
+- `#mobilax-confirmation` est dans la zone commune, mais ses boutons (`btn-generation-lancer` /
+  `-annuler`) sont câblés sur la génération : à généraliser seulement si la spec en veut une pour
+  la sélection.
+- Bilan : `interruption { restants }` (0 = dernier article) ou `arret { motif, restants }`.
+- ⚠ **`hidden` ne masque pas un `.btn`** (ni un élément à `display` en ligne) : poser `hidden`
+  sur une enveloppe sans classe. `#mobilax-pagination` a probablement ce défaut (`bugs.md`).
+- E2E : retenir un article en vol = `page.route()` enregistrée **après** celle du scénario (elle
+  passe en premier), qui attend une promesse puis `route.fallback()`. `envois` du scénario n'est
+  rempli qu'au `fallback` : lire le départ dans la route ajoutée.
+- Toujours : relancer wrangler après chaque build et tuer le `workerd` resté sur :3000.
 
 ## Ce qui a changé au checkpoint 111
 

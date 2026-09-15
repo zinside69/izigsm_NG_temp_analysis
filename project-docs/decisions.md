@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-09-15 — Import d'une sélection, ticket 01 : « Interrompre » pendant le dernier article
+
+- **Le bilan dit « Import interrompu »**, suivi de « rien ne reste à importer » — jamais « Import
+  terminé », bien que la boucle finisse d'elle-même (aucun article restant). Choix de l'exploitant
+  (« plus explicite ») entre deux options proposées en fin de ticket : le clic doit se lire au
+  bilan. E2E `mobilax-generation.spec.ts` § « pendant le dernier article ».
+- **La boucle commune ne recharge pas le stock** : `importerArticles()` rend la main après le
+  bilan, l'appelant range son état puis appelle `loadStock()`. Décidé en revue du ticket 01 — sinon
+  l'écran de l'appelant reste périmé mais actif le temps du rechargement.
+
 ## 2026-09-14 (nuit) — Import d'une sélection (chantier A) : cadrage
 
 Cadré par `/grill-with-docs` (18 questions, 3 rounds), toutes les recommandations retenues par

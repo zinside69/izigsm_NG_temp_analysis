@@ -86,6 +86,9 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       — **✅ validé et publié le 2026-09-15** : `.scratch/import-d-une-selection/issues/01-03`
       (`ready-for-agent`, chaîne 01 → 02 → 03). Un ticket = une session :
       `/mattpocock-skills:implement .scratch/import-d-une-selection/issues/01-boucle-commune-et-interrompre.md`
+      — **✅ ticket 01 fait le 2026-09-15** (`4decfdc`, `401f4f6`, non déployé) : boucle commune
+      `importerArticles()`, zone d'import commune, « Interrompre ». **Prochain : 02** —
+      `/mattpocock-skills:implement .scratch/import-d-une-selection/issues/02-selection-sur-la-page-et-import.md`
 
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 

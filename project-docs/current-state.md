@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 111 — import d'une sélection : tickets publiés)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 112 — import d'une sélection : ticket 01 fait)
+
+## Checkpoint 112 — Import d'une sélection : ticket 01, boucle commune et « Interrompre » (2026-09-15)
+
+**Dépôt en avance sur la production, volontairement, aucune migration** : `4decfdc`, `fc4f2ad`,
+`401f4f6` commités et poussés avec ce checkpoint, **non déployés** — le chantier part en un bloc
+après le ticket 03. `CACHE_VERSION` inchangé (`izigsm-v3.04`), à incrémenter au 03.
+
+Livré (ticket 01, `.scratch/import-d-une-selection/issues/01-…`, `done`) :
+- **boucle commune** `importerArticles(articles, { deja, fournisseurId, relance })` (`stock.js`) :
+  `lancerImportGeneration()` l'appelle avec les articles de l'aperçu, sans quantité ; quantité en
+  rayon envoyée seulement si l'article en porte une (ticket 02). Rythme, quota, arrêts,
+  confirmation > 200, bilan, `beforeunload` inchangés ;
+- **zone d'import commune** (`#mobilax-zone-import` : confirmation, progression, journal, bilan)
+  sortie de `#mobilax-series`, visible dans les deux modes ;
+- **« Interrompre »** : l'article en vol finit puis arrêt ; attente entre départs et pause de
+  quota coupées net ; bilan « Import interrompu » ≠ « Import arrêté » ; pendant le **dernier**
+  article : « Import interrompu — rien ne reste à importer » (décision de l'exploitant) ;
+- `todo.md` 🟡 P3 « aucun bouton pour interrompre » clos.
+
+Revue à deux axes : aucune violation dure. Corrigés avant commit : `oublierApercu()` passait après
+`loadStock()` (« Importer N articles » cliquable sur un aperçu périmé pendant le rechargement) →
+`importerArticles()` ne recharge plus le stock, l'appelant le fait après avoir rangé son état ;
+cas « interrompre entre deux articles » non testé → E2E ajouté. Trouvé en route : le bouton
+restait affiché hors import (`display` de `.btn` > `hidden`) → `hidden` sur une enveloppe ; même
+classe probable sur `#mobilax-pagination` (`bugs.md`, non vu à l'écran, non corrigé).
+
+**Gates** : vitest 1105/1107 (baseline), tsc 32, E2E Mobilax + balayage du menu 47/47. Tests
+d'interruption vus rouges, puis revus rouges par mutation (réveil de l'attente retiré).
+
+**Prochaine session** : `/mattpocock-skills:implement
+.scratch/import-d-une-selection/issues/02-selection-sur-la-page-et-import.md` (tapé par
+l'exploitant, session neuve).
 
 ## Checkpoint 111 — Import d'une sélection : 3 tickets validés et publiés (2026-09-15)
 
