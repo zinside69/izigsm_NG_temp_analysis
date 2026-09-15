@@ -34,8 +34,9 @@ toutes les pages. E2E `mobilax-selection.spec.ts` § « une seule page de résul
 build de production. `CACHE_VERSION` `izigsm-v3.06`.
 
 **Déployé le 2026-09-15** (`44dfe9f`, aperçu `4ac37c67`) : relu sur l'aperçu puis l'apex —
-`sw.js` v3.06, `<div id="mobilax-pagination" hidden>` servi par `/stock`. Contrôle à l'écran par
-l'exploitant non encore rapporté.
+`sw.js` v3.06, `<div id="mobilax-pagination" hidden>` servi par `/stock`. **Vérifié à l'écran par
+l'exploitant** le même jour : « ecran iphone 12 » (46 pièces, une page) sans pagination,
+« ecran iphone » avec pagination.
 
 ## 🟡 Recherche fournisseur : « Recherche en cours… » figé sur coupure réseau (trouvé en revue le 2026-09-14, corrigé en mode génération, OUVERT en mode article)
 

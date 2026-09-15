@@ -17,7 +17,8 @@
 - **Pagination corrigée** (`44dfe9f` : `hidden` sur une enveloppe, E2E vu rouge sur le build de
   production, `CACHE_VERSION` `izigsm-v3.06`) puis **déployée** (aperçu `4ac37c67`) : relu aperçu puis
   apex — v3.06, `<div id="mobilax-pagination" hidden>` servi, `stock.97941ca7.js` inchangé (seuls
-  `stock.html` et `sw.js` ont changé). **Contrôle à l'écran de la v3.06 non encore rapporté.**
+  `stock.html` et `sw.js` ont changé). **Contrôle à l'écran de la v3.06 fait par l'exploitant** :
+  « ecran iphone 12 » (46 pièces, une page) sans pagination, « ecran iphone » avec — conforme.
 
 **Gates** (`44dfe9f`) : vitest 1105/1107 (baseline), E2E Mobilax + balayage du menu 66/66.
 

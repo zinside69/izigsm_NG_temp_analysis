@@ -6,9 +6,9 @@
 action : déploiement » du bloc 114 ci-dessous est **fait** : chantier `import-d-une-selection` en
 production (v3.05), puis correctif de la pagination (v3.06) — chacun relu sur l'aperçu puis l'apex.
 
-Reste à l'écran, côté exploitant : contrôler la v3.06 (« ecran iphone 12 » → plus de Précédente /
-Suivante ; « ecran iphone » → pagination présente) ; un import réel d'une sélection et un
-« Interrompre » en production n'ont pas été rapportés.
+Contrôle à l'écran de la v3.06 **fait** par l'exploitant : « ecran iphone 12 » → plus de Précédente /
+Suivante ; « ecran iphone » → pagination présente. Non rapportés : un import réel d'une sélection et
+un « Interrompre » en production.
 
 **Première question à poser : quel chantier ?** Backlog (`todo.md`) :
 1. 🟠 `register.html` (`#form-step1`) / `reset-password.html` (`#form-reset`) — même fuite
