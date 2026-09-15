@@ -1,5 +1,17 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 — Page Notifications : 5 appels lisent l'enveloppe API au mauvais niveau (trouvé en revue le 2026-09-15)
+
+Détail et cause : `bugs.md` § « Page Notifications ». Statistiques et journal des envois jamais
+affichés ; relances tickets, relances devis et email de test annoncés « Erreur » même réussis.
+**Déduit du code, à constater à l'écran d'abord.** `saveConfig()` déjà corrigé (même jour).
+
+- [ ] Constater à l'écran (page `/notifications`, compte de boutique) : stats et journal vides ?
+- [ ] Déballer les 5 appels au point d'appel (`(await apiX(…)).data`) — un test de **rendu** par
+      appel, vu rouge (précédent : les 5 fichiers corrigés le 2026-08-02)
+- [ ] Étendre `tests/frontend-enveloppe-api-conformite.test.ts` aux scripts inline de
+      `public/*.html` — vu rouge sur `notifications.html` avant correctif
+
 ## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
 
 Une fois lancé, l'import ne s'arrête que seul (fin, panne, quota sans délai, connexion perdue) ou
@@ -64,10 +76,26 @@ natif. Si l'utilisateur valide avant que le script de la page soit attaché, le 
 en GET et le mot de passe part dans l'adresse. **Non vérifié** : où ces scripts sont attachés
 (derrière un script bloquant ou non) — à mesurer d'abord. Reporté par l'exploitant le 2026-09-12.
 
-- [ ] Reproduire par la méthode de la connexion : script retenu (`page.route()`), envoi pendant
+- [x] Reproduire par la méthode de la connexion : script retenu (`page.route()`), envoi pendant
       le chargement, lecture des requêtes de navigation — test vu rouge
-- [ ] `method="post"` + `onsubmit="return false"` sur chaque formulaire portant un mot de passe
-- [ ] `CACHE_VERSION` incrémenté, déploiement sur accord
+      — **« vu rouge » NON TENU, et c'est la mesure** : aucune fuite à reproduire, les deux E2E
+      (`formulaires-mot-de-passe.spec.ts`) étaient verts avant correctif — ce sont des gardes.
+      `#form-reset` est testé JavaScript coupé (NoScript), faute de pouvoir retenir un script inline.
+      Le rouge vient du garde-fou statique (4 formulaires non conformes).
+- [x] `method="post"` + `onsubmit="return false"` sur chaque formulaire portant un mot de passe
+      — les 4 (`#form-step1`, `#form-reset`, `#config-form`, `#form-email`)
+- [ ] `CACHE_VERSION` incrémenté (**fait**, `izigsm-v3.07`), déploiement sur accord (**en attente**)
+
+## 🟡 P3 — `reset-password.html #form-request` : l'email peut partir dans l'adresse (relevé en revue le 2026-09-15)
+
+Hors de la règle des mots de passe, même classe de défaut : `#form-request` (email seul) a un vrai
+bouton `type="submit"`, il est visible sans JavaScript et son écouteur est posé par le script inline
+de fin de page. Un envoi natif (NoScript, script pas encore exécuté) ferait `GET
+/reset-password?email=…` — une donnée personnelle dans l'historique et les journaux. Aucune
+occurrence constatée.
+
+- [ ] `method="post"` + `onsubmit="return false"` sur `#form-request` (et étendre éventuellement le
+      garde-fou statique aux formulaires portant un email — à décider)
 
 ## 🟠 P2 — Import en masse depuis la recherche fournisseur (demandé le 2026-09-12, **prochaine session**)
 

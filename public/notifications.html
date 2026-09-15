@@ -286,7 +286,7 @@
   <script>
   // Envoi du formulaire de configuration : écouteur plutôt qu'attribut `onsubmit`, qui laissait
   // partir la soumission native tant que ce script n'était pas chargé (saveConfig déclarée plus bas)
-  document.getElementById('config-form').addEventListener('submit', saveConfig)
+  document.getElementById('config-form').addEventListener('submit', e => saveConfig(e))
 
   // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -368,8 +368,11 @@
     if (from)   payload.email_from    = from
 
     try {
-      const data = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
-      if (data.success) {
+      // Déballage au point d'appel : `apiPut` rend l'enveloppe { ok, status, data, error } — lire
+      // `.success` dessus donnait toujours undefined, « Erreur » affichée sur un enregistrement
+      // réussi (CLAUDE.md § Enveloppe des réponses API ; trouvé en revue le 2026-09-15)
+      const data = (await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)).data
+      if (data?.success) {
         showToast('Configuration sauvegardée ✓', 'green')
         document.getElementById('cfg-api-key').value = ''
         await loadStats()

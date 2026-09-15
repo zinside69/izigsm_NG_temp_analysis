@@ -340,7 +340,8 @@ même chose, aucune unification tentée.
   (`tests/e2e/connexion-formulaire-post.spec.ts`). Couper app.js ne reproduit pas : le script de
   la page s'attache sans lui.
 - ~~`register.html` (`#form-step1`) et `reset-password.html` (`#form-reset`) : même classe, **pas
-  encore corrigés**~~ — **mis en conformité le 2026-09-15**, avec `notifications.html #config-form` et
+  encore corrigés** — à vérifier avant toute modification de ces pages. Reportés par
+  l'exploitant le 2026-09-12 (`todo.md` 🟠).~~ — **mis en conformité le 2026-09-15**, avec `notifications.html #config-form` et
   `settings.html #form-email` (clé API en `type="password"`), trouvés par le garde-fou statique
   **`tests/formulaires-mot-de-passe-conformite.test.ts`** : la suite échoue si un `<form>` de
   `public/*.html` portant un `type="password"` n'a pas `method="post"` et `onsubmit="return false"`.

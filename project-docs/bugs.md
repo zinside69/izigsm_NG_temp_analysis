@@ -1,5 +1,23 @@
 # iziGSM — Bugs connus
 
+## 🔴 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, 1 corrigé, 5 OUVERTS — déduit du code, NON vu à l'écran)
+
+**Défaut** : `notifications.html` (script inline) écrit `const data = await apiGet|apiPut|apiPost(…)`
+puis `data.success` — or ces helpers rendent l'**enveloppe** `{ ok, status, data, error }`, dont
+`success` vaut toujours `undefined` (CLAUDE.md § Enveloppe des réponses API, la classe de défaut
+« la plus coûteuse du frontend »). Six appels : statistiques (l. ~319, `if (!data.success) return` —
+**jamais affichées**), enregistrement de la config (l. ~371), relances tickets (l. ~406), relances
+devis (l. ~421), journal des envois (l. ~451, **jamais affiché**), email de test (l. ~513). Côté
+serveur les actions aboutissent ; l'écran annonce « Erreur » ou n'affiche rien, sans exception.
+
+**Pourquoi personne ne l'a vu** : le garde-fou `tests/frontend-enveloppe-api-conformite.test.ts` ne
+lit que `public/static/js/*.js` — jamais les scripts inline des pages HTML ; et le balayage du menu
+ne capte que les `>= 400` et les exceptions, pas une page muette.
+
+**Corrigé le 2026-09-15** : `saveConfig()` seul (déballage au point d'appel), vu rouge par
+`tests/e2e/config-email-enregistrement.spec.ts`. **Restent ouverts** : les 5 autres appels, et
+l'extension du garde-fou d'enveloppe aux scripts inline (`todo.md` 🔴).
+
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 
 **Symptôme attendu** : dans la fenêtre Mobilax de `/stock`, la barre « ← Précédente · page ·
