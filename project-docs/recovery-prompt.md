@@ -1,4 +1,31 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 113 — import d'une sélection : ticket 02 fait)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 114 — import d'une sélection : chantier complet, à déployer)
+
+## Ce qui a changé au checkpoint 114
+
+**Aucune migration en attente ; dépôt EN AVANCE sur la production — chantier `import-d-une-selection`
+complet (tickets 01-03), poussé, NON déployé.** Le « première action : ticket 03 » du bloc 113
+ci-dessous est **dépassé** ; ses mentions de `btn-generation-lancer`/`-annuler` aussi (renommés
+`btn-import-lancer`/`-annuler`, confirmation commune).
+
+**Première action : le déploiement, par l'exploitant** (jamais automatique) :
+1. `npm run deploy` — aucune migration ; il chaîne `scripts/verifier-deploiement.mjs` ;
+2. relire l'URL d'**aperçu** (sortie de `npm run deploy`) **avant** l'apex : `sw.js` annonce
+   `izigsm-v3.05`, l'asset hashé `stock.*.js` du manifeste est servi en JavaScript ;
+3. puis l'apex : mêmes contrôles, `/api/health` 200, `GET /api/mobilax/produits` sans jeton → 401 ;
+4. geste réel à l'écran (quota réel Mobilax) : cocher sur deux pages, importer une petite sélection,
+   « Interrompre » un import par génération.
+⚠ Ne jamais ouvrir le domaine dans un navigateur avant la vérification (CLAUDE.md § Fenêtre de
+propagation). Si le déploiement est bloqué par le mode automatique, l'exploitant le lance lui-même.
+
+Après le déploiement : noter l'état « dépôt et production alignés » (CLAUDE.md § Déploiement), puis
+backlog (`todo.md`) — 🟠 `register.html` / `reset-password.html` (même fuite d'identifiants que la
+connexion), 🟠 sortie de stock des produits défectueux, 🟡 `#mobilax-pagination` jamais masquée
+(`bugs.md`, à constater à l'écran), 🟡 `chercherMobilax()` figé sur coupure réseau.
+
+À savoir sur le chantier livré (détail : `CLAUDE.md` § Service Mobilax) : une seule boucle
+`importerArticles()` ; sélection tenue par l'écran (`selectionMobilax`), oubliée par nouvelle
+recherche ou changement de mode ; confirmation > 200 commune (`importAConfirmer`) ; un correctif de
+revue se prouve par mutation — et une mutation qui laisse le test vert désigne du code en double.
 
 ## Ce qui a changé au checkpoint 113
 

@@ -93,6 +93,10 @@ Demande de l'exploitant, sur capture : « samsung S24 » → 2 662 pièces, impo
       de sélection, quantités de ligne, import par la boucle commune, rôles. Confirmation > 200
       reportée au 03. **Prochain : 03** (dernier, `CACHE_VERSION`, puis déploiement en un bloc) —
       `/mattpocock-skills:implement .scratch/import-d-une-selection/issues/03-selection-multi-pages-tout-cocher-vider.md`
+      — **✅ ticket 03 fait le 2026-09-15** (`130c4d7`) : sélection sur plusieurs pages, « Tout
+      cocher », « Vider », confirmation > 200 commune, `CACHE_VERSION` `izigsm-v3.05`.
+      **✅ CHANTIER COMPLET, NON DÉPLOYÉ** — reste : `npm run deploy` par l'exploitant (aucune
+      migration), relecture aperçu puis apex, geste réel à l'écran (`recovery-prompt.md` § 114).
 
 ## 🟠 P2 — Sortie de stock des produits défectueux, tracée pour la comptabilité (demandé le 2026-09-12)
 

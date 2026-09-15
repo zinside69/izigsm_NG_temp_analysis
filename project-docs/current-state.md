@@ -1,4 +1,33 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 113 — import d'une sélection : ticket 02 fait)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 114 — import d'une sélection : chantier complet, à déployer)
+
+## Checkpoint 114 — Import d'une sélection : ticket 03, chantier complet (2026-09-15)
+
+**Dépôt EN AVANCE sur la production, aucune migration — prêt à déployer** : `130c4d7` (ticket 03)
+commité et poussé avec ce checkpoint. Chantier `import-d-une-selection` complet (tickets 01-03,
+`4decfdc`, `401f4f6`, `ce9e780`, `130c4d7`), **non déployé** : le déploiement en un bloc revient à
+l'exploitant. `CACHE_VERSION` `izigsm-v3.05`.
+
+Livré (ticket 03, `.scratch/import-d-une-selection/issues/03-…`, `done`) :
+- sélection tenue par l'écran (`selectionMobilax` : identifiant → nom, quantité retenue,
+  `illisible`), gardée d'une page à l'autre avec cases et quantités, oubliée par une nouvelle
+  recherche ou un changement de mode (`oublierSelection()`, `numeroRecherche`) ; l'import envoie les
+  articles cochés sur toutes les pages ;
+- « Tout cocher » (page affichée, état mixte, figé pendant un import, masqué sans case) et « Vider la
+  sélection » ;
+- confirmation renforcée > 200 **commune** aux deux imports (`importAConfirmer`,
+  `suivreConfirmation()`, `btn-import-lancer`/`-annuler`) — reportée du ticket 02 ;
+- un seul écrivain de l'état de la barre et de « Tout cocher » (`majAffichageSelection()`).
+
+Revue à deux axes : aucune violation bloquante. Corrigés avant commit : texte non numérique retenu
+réaffiché comme un champ vide (désormais en erreur), confirmation restée ouverte sur une quantité
+invalide, 5 tests manquants (vus rouges, par mutation pour ceux écrits après le code). Une mutation a
+révélé une fermeture de confirmation en double dans `viderSelection()`, retirée.
+
+**Gates** : vitest 1105/1107 (baseline), tsc 32, E2E Mobilax + balayage du menu 65/65.
+
+**Prochaine étape** : déploiement du chantier par l'exploitant (`npm run deploy`, aucune migration),
+relecture de l'aperçu puis de l'apex, geste réel à l'écran. Ensuite, backlog : 🟠 `register.html` /
+`reset-password.html`, 🟠 sortie de stock des produits défectueux.
 
 ## Checkpoint 113 — Import d'une sélection : ticket 02, cocher et importer sur la page affichée (2026-09-15)
 

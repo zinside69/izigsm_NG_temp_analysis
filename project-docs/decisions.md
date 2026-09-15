@@ -1,5 +1,20 @@
 # iziGSM — Décisions
 
+## 2026-09-15 — Import d'une sélection, ticket 03 : choix d'implémentation
+
+Pris à l'implémentation, jugés conformes par la revue à deux axes (non soumis à l'exploitant — à
+rouvrir s'il le souhaite) :
+- **Un changement de mode (article ↔ génération) oublie la sélection**, comme une nouvelle recherche
+  (story 4 étendue) : il vide les résultats, garder une sélection invisible prêterait à erreur.
+- **Une quantité saisie sur une ligne NON cochée n'est pas retenue** ; elle est prise au moment de la
+  coche (story 13 : « quantité saisie sur une ligne cochée »).
+- **Un texte non numérique retenu revient en erreur** (bordure rouge, `aria-invalid`) au retour sur sa
+  page : un champ nombre ne peut le réafficher, et le montrer vide le ferait passer pour valide.
+- **Confirmation renforcée commune** : « Lancer l'import » déclenche l'import qui l'a ouverte ; chacun
+  ne la touche que s'il l'a ouverte ; « Vider la sélection » la referme.
+- **« Vider la sélection » et « Tout cocher » figés pendant un import** (story 32 : « ce qui part reste
+  ce que j'ai confirmé »).
+
 ## 2026-09-15 — Import d'une sélection, ticket 02 : choix d'implémentation
 
 Pris à l'implémentation, jugés défendables par la revue à deux axes (aucun n'a été soumis à

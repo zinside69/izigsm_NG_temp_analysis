@@ -655,17 +655,35 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
     bilan), comme l'aperçu d'une génération.
   - Case, « Qté en rayon » et « Importer » d'une ligne : **manager et admin de boutique seulement**
     (`peutImporterMobilax()`), le serveur gardant son refus. Technicien : aucun des trois.
-  - `lancerImportSelection()` valide chaque ligne cochée **avant** tout départ : entier ≥ 0 ou vide,
-    texte non numérique compris (`validity.badInput` — `value` d'un champ nombre le rend vide).
-  - `importerArticles()` rend le bilan : **`idsTraites`** (importés + déjà en stock) sert à décocher ;
-    échecs et restants restent cochés. `relance` accepte une **fonction**, lue au moment du bilan :
-    ⊥ affirmer « ils restent cochés » quand une recherche relancée a remplacé les lignes.
+  - `lancerImportSelection()` valide **toute la sélection** (pages non affichées comprises) **avant**
+    tout départ : entier ≥ 0 ou vide, texte non numérique compris (`validity.badInput` — `value` d'un
+    champ nombre le rend vide). Lignes affichées fautives signalées, toutes nommées dans le message.
+  - `importerArticles()` rend le bilan : **`idsTraites`** (importés + déjà en stock) sortent de la
+    sélection ; échecs et restants y restent. `relance` accepte une **fonction**, lue au moment du
+    bilan : ⊥ affirmer « ils restent cochés » quand une nouvelle recherche (ou un changement de mode)
+    a oublié la sélection pendant l'import — `numeroRecherche` le dit.
   - Pendant tout import, les lignes d'une nouvelle recherche **naissent figées** ; l'import unitaire
     est refusé (`importEnCours`). `basculerSaisieImport(true)` rend au bouton de la génération l'état
     de l'aperçu (`recalculerApercu()`), jamais un « actif » d'office.
   - E2E : la boutique neuve de `createTenantAdmin()` est tenue par un **manager** (`role_id` 2 à
     l'inscription), pas un admin — aucune fixture ne crée d'admin de boutique. `TECHNICIEN` et
     `MANAGER` du seed : `fixtures/comptes.ts`.
+- **Sélection sur plusieurs pages (ticket 03 `import-d-une-selection`, 2026-09-15, non déployé)** :
+  - **`selectionMobilax`** (identifiant → `{ nom, saisie, illisible }`) est la sélection : tenue par
+    l'écran, réappliquée à chaque rendu de `chercherMobilax()`, gardée par Précédente / Suivante,
+    **oubliée** par une nouvelle recherche **et** par un changement de mode (`oublierSelection()`,
+    qui incrémente `numeroRecherche`). ⊥ relire la sélection dans le DOM : il ne porte que la page.
+  - Texte non numérique retenu (`illisible`) : réaffiché **en erreur**, jamais comme un champ vide.
+  - **« Tout cocher »** = lignes de la page affichée seulement (⊥ toute la recherche : c'est l'import
+    en masse écarté le 2026-09-12). `hidden` sur son enveloppe `#mobilax-tout-cocher-zone`.
+  - **Un seul écrivain** de l'état de la barre (« Importer », « Vider ») et de « Tout cocher » :
+    `majAffichageSelection()`, qui lit `importEnCours` ; `basculerSaisieImport()` l'appelle.
+  - **Confirmation renforcée commune** : `importAConfirmer` = l'import que « Lancer l'import »
+    (`#btn-import-lancer`) déclenchera ; `afficherConfirmation(lancer | null)` ;
+    `suivreConfirmation(lancer, n)` — chaque import ne la touche que s'il l'a ouverte (⊥ un
+    `recalculerApercu()` qui refermerait celle de la sélection). `importerArticles()` la ferme au départ.
+  - Leçon de mutation : neutraliser une ligne sans faire rougir son test peut désigner du code en
+    **double** (la fermeture de la confirmation dans `viderSelection()`, déjà assurée par la barre).
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -906,6 +924,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-15 (checkpoint 114) : aucune migration en attente, dépôt EN AVANCE sur la
+production — chantier `import-d-une-selection` COMPLET, prêt à déployer.** Tickets 01-03 (jusqu'à
+`130c4d7`) commités et poussés, **non déployés**. `CACHE_VERSION` `izigsm-v3.05`. Déploiement par
+l'exploitant : `npm run deploy` (aucune migration), puis relire l'aperçu **avant** l'apex (`sw.js`
+`izigsm-v3.05`, asset hashé `stock.*.js` servi en JavaScript, `/api/health` 200).
 
 **État au 2026-09-15 (checkpoint 113) : aucune migration en attente, dépôt EN AVANCE sur la
 production — volontairement.** Tickets 01 et 02 `import-d-une-selection` (`ce9e780` pour le 02 :
