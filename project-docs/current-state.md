@@ -1,4 +1,27 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 116 — formulaires, page Stock, izigsm-v3.07 en production)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 117 — page Stock : recherche et compteurs, v3.08 à déployer)
+
+## Checkpoint 117 — Clôture du soir : page Stock, recherche et compteurs (2026-09-15)
+
+**Aucune migration en attente ; dépôt EN AVANCE sur la production** : `19988f2` et `c0935e2`
+(`CACHE_VERSION` `izigsm-v3.08`) commités, **non poussés, non déployés** — la production reste en
+`izigsm-v3.07`. Session suspendue par l'exploitant.
+
+- **Vu à l'écran en production (v3.07)** : capture de l'exploitant, « Références 587 » avec la famille
+  « Pièce » — le chargement de toutes les pages (`2fdc213`) fonctionne.
+- **Même capture, nouveau défaut** : « iphone 12 » dans la recherche, et la liste montrait des
+  batteries Samsung. Cause : la fin de `loadStock()` appelait `renderStock()` sans argument (recherche
+  vide) — chaque fin de chargement (ouverture, clic sur une famille) réaffichait tout. Corrigé
+  (`19988f2`, `applyFilters()`), E2E vus rouges 4/4 ; premier jet de test trop tôt (avant la fin du
+  rechargement), durci — `bugs.md`.
+- **Décision B de l'exploitant** (`c0935e2`) : « Références », « Valeur stock », « À commander »
+  comptent la liste affichée, recherche et filtres compris (`decisions.md`).
+- Onglet de l'extension Chrome resté en v3.06 (non rechargé) : ne pas s'y fier pour une mesure.
+
+**Gates** (`c0935e2`) : vitest 1108/1110 (baseline), E2E stock + Mobilax + balayage du menu 83/83.
+
+**Prochaine session** : déploiement de la v3.08 par l'exploitant (`npm run deploy`, aucune migration),
+relecture aperçu puis apex, contrôle à l'écran (« iphone 12 » puis « Pièce » → seuls les iPhone 12,
+« Références » = leur nombre) ; pousser ; puis 🔴 page Notifications.
 
 ## Checkpoint 116 — Formulaires à mot de passe, page Stock (795 produits), v3.07 en production (2026-09-15)
 

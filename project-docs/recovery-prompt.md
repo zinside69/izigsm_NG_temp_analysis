@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 116 — formulaires, page Stock, izigsm-v3.07 en production)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 117 — page Stock : recherche et compteurs, v3.08 à déployer)
+
+## Ce qui a changé au checkpoint 117
+
+**Aucune migration en attente ; dépôt EN AVANCE sur la production** : `19988f2` (recherche appliquée
+après chaque chargement) et `c0935e2` (compteurs = liste affichée, décision B), `CACHE_VERSION`
+`izigsm-v3.08` — commités, **NON POUSSÉS, NON DÉPLOYÉS**. Production en `izigsm-v3.07`. ⚠ Un `sync
+push` du workspace, lancé d'une autre fenêtre, les pousserait (CLAUDE.md § Dépôt git) : vérifier
+`git log origin/main..HEAD` avant de conclure quoi que ce soit.
+
+**Première action : le déploiement de la v3.08, par l'exploitant** :
+1. `git fetch` puis push (si l'exploitant le demande) ;
+2. `npm run deploy` depuis `izigsm/webapp` — aucune migration ;
+3. l'exploitant colle l'URL d'aperçu → relire l'aperçu **puis** l'apex : `sw.js` v3.08, asset hashé
+   `stock.*.js` du manifeste servi en JavaScript et contenant `renderKPIs(filtered)`, `/stock` qui le
+   référence, `/api/health` 200 ;
+4. contrôle à l'écran (Ctrl + Maj + R, deux fois si besoin) : « iphone 12 » puis « Pièce » → seuls les
+   iPhone 12, « Références » = leur nombre.
+
+**Ensuite : 🔴 P1 page Notifications** (ordre voulu par l'exploitant) — bloc 116 ci-dessous, `todo.md`
+en tête. La constater à l'écran d'abord — pas dans un onglet où tourne un import. L'onglet du groupe
+de l'extension Chrome tournait encore en v3.06 le soir du 2026-09-15 : le recharger (avec l'accord de
+l'exploitant) avant toute mesure.
 
 ## Ce qui a changé au checkpoint 116
 

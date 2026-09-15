@@ -745,6 +745,13 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   caché 695 produits sur 795 en production : recherche, filtres et compteurs de la page Stock
   travaillent côté navigateur sur ce qui est chargé (`bugs.md`). ⊥ juger d'un stock par les lignes
   affichées — lire `pagination.total`.
+- **Toute fin de chargement réapplique les filtres de l'écran** : `loadStock()` finit par
+  `applyFilters()`, seul lecteur de la recherche, de la catégorie et du filtre de stock. ⊥
+  `renderStock()` sans argument : il vaut « recherche vide, tout afficher » et effaçait la recherche
+  à chaque ouverture et à chaque clic de famille (vécu le 2026-09-15). Un E2E sur ce point juge
+  **après** le rechargement (`waitForLoadState('networkidle')`), sinon l'ancienne vue le fait passer.
+- **Les compteurs suivent la liste affichée** (décision B du 2026-09-15) : `renderStock()` appelle
+  `renderKPIs(filtered)` — un seul filtrage pour les lignes et les compteurs, liste vide → 0.
 
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
@@ -944,6 +951,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-15 (checkpoint 117) : aucune migration en attente, dépôt EN AVANCE sur la
+production.** `19988f2` (recherche appliquée après chaque chargement) et `c0935e2` (compteurs de la
+page Stock = liste affichée) commités, **non poussés, non déployés** ; `CACHE_VERSION`
+`izigsm-v3.08`. Production en v3.07 : chargement de toutes les pages vérifié à l'écran (587 pièces).
+Déploiement : `npm run deploy`, puis relire l'aperçu **avant** l'apex (`sw.js` v3.08, `stock.*.js` du
+manifeste en JavaScript).
 
 **État au 2026-09-15 (checkpoint 116) : aucune migration en attente — dépôt et production
 alignés** (`izigsm-v3.07`, `2fdc213`). Formulaires à mot de passe (`6143c04`, `d4c74ef`) et page Stock

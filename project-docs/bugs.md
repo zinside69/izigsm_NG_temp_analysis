@@ -48,8 +48,9 @@ rouge sur le symptôme exact (« Références » à 100 au lieu de 105). Au-del�
 produits, envisager recherche et pagination côté serveur.
 
 **Déployé le 2026-09-15** (`2fdc213`, aperçu `c6cd289c`) : relu sur l'aperçu puis l'apex —
-`stock.80a428c1.js` servi en JavaScript, avec le chargement de toutes les pages. Contrôle à l'écran
-par l'exploitant non encore rapporté.
+`stock.80a428c1.js` servi en JavaScript, avec le chargement de toutes les pages. **Vu à l'écran** le
+même soir (capture de l'exploitant) : « Références 587 » avec la famille « Pièce » — au lieu de 100.
+La même capture a révélé le défaut suivant (recherche effacée par la fin du chargement), ci-dessus.
 
 ## 🔴 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, 1 corrigé, 5 OUVERTS — déduit du code, NON vu à l'écran)
 
