@@ -1,5 +1,28 @@
 # iziGSM — Bugs connus
 
+## 🟡 Recherche Mobilax par article : la pagination ne se masque probablement jamais (trouvé le 2026-09-15, NON corrigé, NON vu à l'écran)
+
+**Symptôme attendu** : dans la fenêtre Mobilax de `/stock`, la barre « ← Précédente · page ·
+Suivante → » resterait affichée alors que le code la masque — avant toute recherche, pendant une
+recherche, après un échec, et en mode « Par génération ». **Déduit de la cascade CSS, pas encore
+observé** : le vérifier à l'écran avant de corriger.
+
+**Cause probable** : `<div id="mobilax-pagination" style="display:flex;…" hidden>`
+(`stock.html:341`). L'attribut `hidden` ne masque que par la feuille de style du navigateur
+(`[hidden] { display: none }`), que **tout** `display` d'auteur écrase — ici le style en ligne.
+`stock.js` ne fait que basculer `.hidden` (l. 702 et 803). Aucune règle `[hidden]` n'existe dans
+`public/` (mesuré).
+
+**Même famille, déjà rencontrée** : le bouton « Interrompre » (ticket 01 `import-d-une-selection`)
+restait affiché hors import — `display: inline-flex` de `.btn` (`main.css`). Contourné en posant
+`hidden` sur une enveloppe sans classe. Balayage des pages HTML le 2026-09-15 : aucun autre élément
+`hidden` avec un `display` en ligne, aucun `.btn` portant `hidden`.
+
+**Correctif possible** (à choisir) : sortir `display:flex` du style en ligne vers une règle qui
+respecte `hidden` ; ou ajouter `[hidden] { display: none !important; }` au socle (`main.css`) —
+plus large, supprime la classe de défaut, mais touche toutes les pages du socle. Test : un E2E qui
+assertionne `#mobilax-pagination` masquée avant toute recherche, vu rouge d'abord.
+
 ## 🟡 Recherche fournisseur : « Recherche en cours… » figé sur coupure réseau (trouvé en revue le 2026-09-14, corrigé en mode génération, OUVERT en mode article)
 
 **Symptôme** : réseau coupé pendant une recherche Mobilax depuis `/stock` → le message « Recherche
