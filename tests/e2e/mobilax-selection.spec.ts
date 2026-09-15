@@ -1,9 +1,12 @@
 /**
  * @file tests/e2e/mobilax-selection.spec.ts
- * @description Import d'une sélection depuis la recherche fournisseur (ticket 02, chantier
- * `import-d-une-selection`) : cases sur la page affichée, barre « N sélectionnés · durée »,
- * « Importer la sélection » par la boucle commune avec la « Qté en rayon » de chaque ligne,
- * bilan, saisie figée pendant l'import, échecs et restants restés cochés, rôles.
+ * @description Import d'une sélection depuis la recherche fournisseur (chantier
+ * `import-d-une-selection`). Ticket 02 : cases sur la page affichée, barre « N sélectionnés ·
+ * durée », « Importer la sélection » par la boucle commune avec la « Qté en rayon » de chaque
+ * ligne, bilan, saisie figée pendant l'import, échecs et restants restés cochés, rôles. Ticket 03 :
+ * sélection gardée d'une page à l'autre (cases et quantités), nouvelle recherche et changement de
+ * mode qui la vident, « Tout cocher » (page affichée), « Vider la sélection », confirmation
+ * renforcée au-delà de 200.
  *
  * Réponses d'iziGSM simulées (`page.route()`, spec § couture 1) et horloge simulée
  * (`page.clock`) : aucun appel réel au fournisseur. `serviceWorkers: 'block'`
@@ -14,9 +17,11 @@ import { createTenantAdmin } from './fixtures/tenant'
 import { seConnecter, MANAGER, TECHNICIEN } from './fixtures/comptes'
 
 /** Page de résultats simulée : articles `ids`, fiche fournisseur 3. */
+/** Articles simulés de la recherche, un par identifiant. */
+const produitsDe = (ids: number[]) =>
+  ids.map(id => ({ mobilax_id: id, nom: `Pièce ${id}`, ean13: null, prix_achat_ht: 10, stock: 5 }))
 const pageDe = (ids: number[]) => ({ success: true, data: {
-  fournisseur_id: 3, total: ids.length, page: 1, pages: 1,
-  produits: ids.map(id => ({ mobilax_id: id, nom: `Pièce ${id}`, ean13: null, prix_achat_ht: 10, stock: 5 })),
+  fournisseur_id: 3, total: ids.length, page: 1, pages: 1, produits: produitsDe(ids),
 } })
 
 type ReponseImport = { status: number; json: unknown }
@@ -39,8 +44,24 @@ const qteDe = (page: Page, id: number) =>
  * reçus par la route d'import, dans l'ordre.
  */
 async function rechercheSimulee(page: Page, request: any, ids: number[], reponses: Record<number, ReponseImport> = {}) {
+  return recherchePaginee(page, request, [ids], reponses)
+}
+
+/**
+ * Recherche simulée sur plusieurs pages (ticket 03) : `pages[n]` = identifiants de la page n + 1,
+ * rendue selon le paramètre `page=` de la requête — manager d'une boutique neuve, horloge figée une
+ * fois la page 1 affichée (`rechercheSimulee()` en est le cas à une page). Rend les corps reçus par
+ * la route d'import.
+ */
+async function recherchePaginee(page: Page, request: any, pages: number[][], reponses: Record<number, ReponseImport> = {}) {
   await page.clock.install()
-  await page.route('**/api/mobilax/produits?*', route => route.fulfill({ json: pageDe(ids) }))
+  await page.route('**/api/mobilax/produits?*', route => {
+    const n = Number(new URL(route.request().url()).searchParams.get('page') ?? '1')
+    return route.fulfill({ json: { success: true, data: {
+      fournisseur_id: 3, total: pages.flat().length, page: n, pages: pages.length,
+      produits: produitsDe(pages[n - 1] ?? []),
+    } } })
+  })
   const corps: Array<Record<string, unknown>> = []
   await page.route('**/api/mobilax/import*', async route => {
     const recu = route.request().postDataJSON()
@@ -54,9 +75,15 @@ async function rechercheSimulee(page: Page, request: any, ids: number[], reponse
   await page.click('#btn-mobilax')
   await page.fill('#mobilax-terme', 'ecran')
   await page.click('#btn-mobilax-chercher')
-  await expect(page.locator('#mobilax-resultats tr')).toHaveCount(ids.length)
+  await expect(page.locator('#mobilax-resultats tr')).toHaveCount(pages[0].length)
   await page.clock.pauseAt(Date.now() + 60_000)
   return corps
+}
+
+/** Précédente / Suivante, puis attente de la page annoncée. */
+async function allerPage(page: Page, sens: 'suivante' | 'precedente', attendue: string) {
+  await page.click(`#btn-mobilax-${sens}`)
+  await expect(page.locator('#mobilax-page')).toContainText(attendue)
 }
 
 test.describe('Mobilax — import d\'une sélection (page affichée)', () => {
@@ -262,5 +289,194 @@ test.describe('Mobilax — import d\'une sélection (page affichée)', () => {
     await expect(page.locator('#mobilax-resultats button[data-mobilax-id]')).toHaveCount(0)
     await expect(page.locator('#mobilax-resultats input.mobilax-qte')).toHaveCount(0)
     await expect(page.locator('#mobilax-selection')).toBeHidden()
+    await expect(page.locator('#mobilax-tout-cocher')).toBeHidden()
+  })
+})
+
+// ── Ticket 03 : sélection sur plusieurs pages, « Tout cocher », « Vider », confirmation > 200 ──
+
+test.describe('Mobilax — import d\'une sélection (plusieurs pages)', () => {
+  test('sélection gardée d\'une page à l\'autre : cases et quantités réaffichées, compteur sur toute la sélection', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    const barre = page.locator('#mobilax-selection')
+    await caseDe(page, 1).check()
+    await qteDe(page, 1).fill('7')
+
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await expect(caseDe(page, 3)).not.toBeChecked()
+    await expect(barre).toContainText('1 sélectionné')
+    await caseDe(page, 4).check()
+    await expect(barre).toContainText('2 sélectionnés')
+
+    await allerPage(page, 'precedente', 'Page 1 / 2')
+    await expect(caseDe(page, 1)).toBeChecked()
+    await expect(caseDe(page, 2)).not.toBeChecked()
+    await expect(qteDe(page, 1)).toHaveValue('7')
+
+    // Quantité retenue = dernière valeur vue sur la ligne
+    await qteDe(page, 1).fill('8')
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await expect(caseDe(page, 4)).toBeChecked()
+    await allerPage(page, 'precedente', 'Page 1 / 2')
+    await expect(qteDe(page, 1)).toHaveValue('8')
+    await expect(barre).toContainText('2 sélectionnés')
+  })
+
+  test('nouvelle recherche : la sélection est vidée', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    const barre = page.locator('#mobilax-selection')
+    await caseDe(page, 1).check()
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await caseDe(page, 3).check()
+    await expect(barre).toContainText('2 sélectionnés')
+
+    await page.fill('#mobilax-terme', 'batterie')
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-page')).toContainText('Page 1 / 2')
+    await expect(barre).toBeHidden()
+    await expect(caseDe(page, 1)).not.toBeChecked()
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await expect(caseDe(page, 3)).not.toBeChecked()
+  })
+
+  test('« Tout cocher » : coche et décoche la page affichée seulement', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    const barre = page.locator('#mobilax-selection')
+    const tout = page.locator('#mobilax-tout-cocher')
+    // Une ligne sur deux cochée : « Tout cocher » à l'état mixte, pas coché
+    await caseDe(page, 1).check()
+    await expect(tout).toHaveJSProperty('indeterminate', true)
+    await expect(tout).not.toBeChecked()
+    await tout.check()
+    await expect(caseDe(page, 1)).toBeChecked()
+    await expect(caseDe(page, 2)).toBeChecked()
+    await expect(barre).toContainText('2 sélectionnés')
+
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await expect(caseDe(page, 3)).not.toBeChecked()
+    await expect(caseDe(page, 4)).not.toBeChecked()
+    await expect(tout).not.toBeChecked()
+
+    await allerPage(page, 'precedente', 'Page 1 / 2')
+    await expect(tout).toBeChecked()
+    await tout.uncheck()
+    await expect(caseDe(page, 1)).not.toBeChecked()
+    await expect(caseDe(page, 2)).not.toBeChecked()
+    await expect(barre).toBeHidden()
+  })
+
+  test('« Vider la sélection » : plus rien de coché, sur aucune page', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    const barre = page.locator('#mobilax-selection')
+    await caseDe(page, 1).check()
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await caseDe(page, 3).check()
+    await expect(barre).toContainText('2 sélectionnés')
+
+    await page.click('#btn-selection-vider')
+    await expect(barre).toBeHidden()
+    await expect(caseDe(page, 3)).not.toBeChecked()
+    await allerPage(page, 'precedente', 'Page 1 / 2')
+    await expect(caseDe(page, 1)).not.toBeChecked()
+  })
+
+  test('import d\'une sélection répartie sur deux pages : quantités retenues envoyées, « Tout cocher » figé', async ({ page, request }) => {
+    const corps = await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    await caseDe(page, 1).check()
+    await qteDe(page, 1).fill('5')
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await caseDe(page, 4).check()
+    await qteDe(page, 4).fill('2')
+
+    await page.click('#btn-selection-importer')
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 2')
+    await expect(page.locator('#mobilax-tout-cocher')).toBeDisabled()
+    await expect(page.locator('#btn-selection-vider')).toBeDisabled()
+    await page.clock.runFor(3_000)
+
+    await expect(page.locator('#mobilax-bilan')).toContainText('2 importés')
+    // L'article de la page 1 part avec la quantité saisie là-bas, bien que la page 2 soit affichée
+    expect(corps).toEqual([{ mobilax_id: 1, quantite_en_rayon: 5 }, { mobilax_id: 4, quantite_en_rayon: 2 }])
+    await expect(caseDe(page, 4)).not.toBeChecked()
+    await expect(page.locator('#mobilax-selection')).toBeHidden()
+    await expect(page.locator('#mobilax-tout-cocher')).toBeEnabled()
+  })
+
+  test('au-delà de 200 articles : confirmation renforcée, rien ne part avant « Lancer l\'import »', async ({ page, request }) => {
+    const pages = [0, 1, 2].map(p => Array.from({ length: 100 }, (_, i) => p * 100 + i + 1))
+    const corps = await recherchePaginee(page, request, pages)
+    const tout = page.locator('#mobilax-tout-cocher')
+    await tout.check()
+    await allerPage(page, 'suivante', 'Page 2 / 3')
+    await tout.check()
+    await allerPage(page, 'suivante', 'Page 3 / 3')
+    await tout.check()
+    await expect(page.locator('#mobilax-selection')).toContainText('300 sélectionnés')
+
+    const confirmation = page.locator('#mobilax-confirmation')
+    await page.click('#btn-selection-importer')
+    await expect(confirmation).toBeVisible()
+    await expect(confirmation).toContainText('300 articles')
+    await expect(confirmation).toContainText('environ 15 min')
+    await page.clock.runFor(10_000)
+    expect(corps).toHaveLength(0)
+
+    await page.click('#btn-import-annuler')
+    await expect(confirmation).toBeHidden()
+    await page.click('#btn-selection-importer')
+    await page.click('#btn-import-lancer')
+    await expect(confirmation).toBeHidden()
+    await expect(page.locator('#mobilax-import-progression')).toContainText('1 / 300')
+    await expect.poll(() => corps.length).toBe(1)
+  })
+
+  test('confirmation renforcée ouverte : « Vider la sélection » la referme', async ({ page, request }) => {
+    const pages = [0, 1, 2].map(p => Array.from({ length: 100 }, (_, i) => p * 100 + i + 1))
+    const corps = await recherchePaginee(page, request, pages)
+    const tout = page.locator('#mobilax-tout-cocher')
+    await tout.check()
+    await allerPage(page, 'suivante', 'Page 2 / 3')
+    await tout.check()
+    await allerPage(page, 'suivante', 'Page 3 / 3')
+    await tout.check()
+    await page.click('#btn-selection-importer')
+    await expect(page.locator('#mobilax-confirmation')).toBeVisible()
+
+    await page.click('#btn-selection-vider')
+    await expect(page.locator('#mobilax-confirmation')).toBeHidden()
+    await expect(page.locator('#mobilax-selection')).toBeHidden()
+    expect(corps).toHaveLength(0)
+  })
+
+  test('changer de mode oublie la sélection', async ({ page, request }) => {
+    await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    await caseDe(page, 1).check()
+    await expect(page.locator('#mobilax-selection')).toContainText('1 sélectionné')
+
+    await page.check('#mobilax-mode-generation')
+    await page.check('#mobilax-mode-article')
+    await expect(page.locator('#mobilax-selection')).toBeHidden()
+    await page.fill('#mobilax-terme', 'ecran')
+    await page.click('#btn-mobilax-chercher')
+    await expect(page.locator('#mobilax-resultats tr')).toHaveCount(2)
+    await expect(caseDe(page, 1)).not.toBeChecked()
+  })
+
+  test('texte non numérique retenu : réaffiché en erreur au retour sur la page, import bloqué', async ({ page, request }) => {
+    const corps = await recherchePaginee(page, request, [[1, 2], [3, 4]])
+    await caseDe(page, 1).check()
+    // `value` d'un champ nombre rend vide un texte illisible : seul `validity.badInput` le voit
+    await qteDe(page, 1).fill('')
+    await qteDe(page, 1).pressSequentially('1e')
+    await allerPage(page, 'suivante', 'Page 2 / 2')
+    await allerPage(page, 'precedente', 'Page 1 / 2')
+
+    // Le texte ne peut être réaffiché : la ligne l'est en erreur, jamais comme un champ vide valide
+    await expect(qteDe(page, 1)).toHaveAttribute('aria-invalid', 'true')
+    await expect(qteDe(page, 1)).toHaveCSS('border-color', 'rgb(180, 35, 24)')
+    await page.click('#btn-selection-importer')
+    await expect(page.locator('#mobilax-message')).toContainText('Pièce 1')
+    await page.clock.runFor(10_000)
+    expect(corps).toHaveLength(0)
   })
 })

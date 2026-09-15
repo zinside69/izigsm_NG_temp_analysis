@@ -699,8 +699,8 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
   if (terme.length < 2) { messageMobilax('Saisissez au moins 2 caractères.', true); return; }
 
   tbody.innerHTML = '';
-  // Résultats vidés = sélection vidée (ticket 02 : sélection de la page affichée seulement)
-  majBarreSelection();
+  // Nouvelle recherche = sélection oubliée (story 4) ; Précédente / Suivante la gardent (story 2)
+  if (!depuisNavigation) oublierSelection();
   pagination.hidden = true;
   messageMobilax('Recherche en cours chez Mobilax…');
   bouton.disabled = true;
@@ -733,7 +733,8 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
       <tr>
         <td>${importer
           ? `<label style="display:flex;align-items:center;gap:8px;margin:0;">
-               <input type="checkbox" class="mobilax-case" value="${Number(p.mobilax_id)}"${fige}>
+               <input type="checkbox" class="mobilax-case" value="${Number(p.mobilax_id)}"${fige}${
+                 selectionMobilax.has(Number(p.mobilax_id)) ? ' checked' : ''}>
                <span class="mobilax-nom">${escHtml(p.nom)}</span></label>`
           : escHtml(p.nom)}</td>
         <td style="font-family:monospace;font-size:.82rem">${escHtml(p.ean13 ?? '—')}</td>
@@ -742,12 +743,19 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
         <td style="text-align:right">${Number(p.stock) || 0}</td>
         <td style="text-align:right;white-space:nowrap">${importer ? `
           <input type="number" min="0" step="1" class="mobilax-qte" aria-label="Qté en rayon"
-                 value="${stockInitialDefaut === null ? '' : Number(stockInitialDefaut)}" style="width:64px;margin-right:6px">
+                 value="${escHtml(qteDeLigne(Number(p.mobilax_id)))}"${
+                 // Texte illisible retenu : `value` ne peut le rendre, la ligne revient donc EN ERREUR
+                 // (même marque que le refus au lancement), jamais comme un champ vide valide
+                 selectionMobilax.get(Number(p.mobilax_id))?.illisible
+                   ? ' aria-invalid="true" style="width:64px;margin-right:6px;border-color:#b42318"'
+                   : ' style="width:64px;margin-right:6px"'}>
           <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}"${fige}>Importer</button>` : ''}
         </td>
       </tr>`).join('');
   } finally {
     bouton.disabled = false;
+    // « Tout cocher » suit les lignes affichées (aucune, page de résultats, échec de la recherche)
+    majToutCocher();
   }
 }
 
@@ -803,7 +811,8 @@ document.getElementById('mobilax-resultats')?.addEventListener('click', e => {
 // L'opérateur coche des articles de la page affichée ; « Importer la sélection » les passe à la
 // boucle commune (importerArticles), chacun avec la « Qté en rayon » de sa ligne. Après l'import,
 // importés et déjà en stock sont décochés : échecs et restants restent cochés, prêts à relancer.
-// La sélection garde d'une page à l'autre, « Tout cocher » et « Vider » viennent au ticket 03.
+// Ticket 03 : sélection tenue par l'écran, gardée d'une page à l'autre ; « Tout cocher » (page
+// affichée), « Vider la sélection », confirmation renforcée commune au-delà de 200 articles.
 
 /**
  * Manager ou admin de boutique : seuls rôles autorisés à importer (le serveur garde son propre
@@ -816,82 +825,181 @@ function peutImporterMobilax() {
 /** Cases des résultats affichés — une par article, pour un manager ou un admin de boutique. */
 const SELECTEUR_CASES = '#mobilax-resultats input.mobilax-case';
 
-/** Cases cochées des résultats affichés. */
-function casesCochees() {
-  return [...document.querySelectorAll(`${SELECTEUR_CASES}:checked`)];
+/**
+ * Sélection de la recherche en cours (ticket 03), tenue par l'écran : identifiant fournisseur →
+ * `{ nom, saisie, illisible }` — « Qté en rayon » retenue = dernière valeur vue sur la ligne
+ * (`illisible` : texte non numérique, que `value` d'un champ nombre rend vide). Gardée d'une page à
+ * l'autre, oubliée par une nouvelle recherche, vidée par « Vider la sélection ». Ordre = ordre des
+ * coches, qui est celui de l'import.
+ */
+const selectionMobilax = new Map();
+/** Numéro de la recherche en cours : le bilan d'un import sait si sa sélection existe encore. */
+let numeroRecherche = 0;
+
+/** Cases des lignes affichées. */
+function casesAffichees() {
+  return [...document.querySelectorAll(SELECTEUR_CASES)];
 }
 
-/** Barre de sélection : nombre et durée estimée (même règle que l'import par génération), masquée sans coche. */
+/** Case d'un article, s'il est sur la page affichée. */
+function caseAffichee(id) {
+  return document.querySelector(`${SELECTEUR_CASES}[value="${Number(id)}"]`);
+}
+
+/** « Qté en rayon » à afficher : la quantité retenue d'un article sélectionné, sinon le stock initial par défaut. */
+function qteDeLigne(id) {
+  const retenue = selectionMobilax.get(id);
+  if (retenue) return retenue.saisie;
+  return stockInitialDefaut === null ? '' : String(Number(stockInitialDefaut));
+}
+
+/** Retient (case cochée) ou oublie (décochée) l'article d'une ligne, avec la quantité de la ligne. */
+function retenirLigne(caseArticle) {
+  const id = Number(caseArticle.value);
+  if (!caseArticle.checked) { selectionMobilax.delete(id); return; }
+  const ligne = caseArticle.closest('tr');
+  const champ = ligne.querySelector('input.mobilax-qte');
+  selectionMobilax.set(id, {
+    nom: ligne.querySelector('.mobilax-nom')?.textContent ?? '',
+    saisie: champ?.value.trim() ?? '',
+    illisible: Boolean(champ?.validity.badInput),
+  });
+}
+
+/**
+ * Vide la sélection et décoche la page. Une confirmation renforcée ouverte pour elle se referme par
+ * la barre (`suivreConfirmation()` : 0 article, sous le seuil) — aucune fermeture en double ici.
+ */
+function viderSelection() {
+  selectionMobilax.clear();
+  casesAffichees().forEach(c => { c.checked = false; });
+  majAffichageSelection();
+}
+
+/** Nouvelle recherche ou changement de mode : la sélection de la recherche précédente est oubliée (story 4). */
+function oublierSelection() {
+  numeroRecherche++;
+  viderSelection();
+}
+
+/**
+ * Barre de sélection : nombre et durée estimée sur TOUTE la sélection (même règle que l'import par
+ * génération), masquée sans coche. Une confirmation renforcée ouverte pour elle suit le compte.
+ */
 function majBarreSelection() {
-  const n = casesCochees().length;
+  const n = selectionMobilax.size;
   document.getElementById('mobilax-selection').hidden = n === 0;
   document.getElementById('mobilax-selection-texte').textContent =
     `${compter(n, 'sélectionné')} · durée estimée : ${libelleDuree(n)}`;
   document.getElementById('btn-selection-importer').disabled = importEnCours;
+  document.getElementById('btn-selection-vider').disabled = importEnCours;
+  suivreConfirmation(lancerSelectionConfirmee, n);
 }
 
+/** « Tout cocher » reflète la page affichée : coché si toutes ses lignes le sont, mixte si certaines. */
+function majToutCocher() {
+  const cases = casesAffichees();
+  const cochees = cases.filter(c => c.checked).length;
+  const tout = document.getElementById('mobilax-tout-cocher');
+  document.getElementById('mobilax-tout-cocher-zone').hidden = cases.length === 0;
+  tout.checked = cases.length > 0 && cochees === cases.length;
+  tout.indeterminate = cochees > 0 && cochees < cases.length;
+  tout.disabled = importEnCours;
+}
+
+/** Barre de sélection et « Tout cocher » : seuls écrivains de leur état, ils lisent `importEnCours`. */
+function majAffichageSelection() { majBarreSelection(); majToutCocher(); }
+
 /**
- * « Importer la sélection » : quantités vérifiées AVANT tout départ — une ligne cochée invalide
- * (autre qu'un entier ≥ 0 ou vide) est signalée et rien ne part (story 15). Vide → quantité non
- * envoyée, le serveur applique le stock initial par défaut.
+ * « Importer la sélection » : quantités vérifiées AVANT tout départ, sur toute la sélection (pages
+ * non affichées comprises) — une quantité invalide (autre qu'un entier ≥ 0 ou vide) bloque tout et
+ * est signalée (story 15). Vide → quantité non envoyée, le serveur applique le stock initial par
+ * défaut. Au-delà de SEUIL_CONFIRMATION articles, ouvre d'abord la confirmation renforcée.
+ * @param confirme `true` depuis « Lancer l'import » de la confirmation : ne la redemande pas
  */
-async function lancerImportSelection() {
-  if (importEnCours) return;
-  const articles = [];
+async function lancerImportSelection(confirme = false) {
+  if (importEnCours || selectionMobilax.size === 0) return;
+  // Quantités vérifiées sur TOUTE la sélection, pages non affichées comprises : les lignes affichées
+  // fautives sont signalées, toutes sont nommées dans le message
   const invalides = [];
-  // Case de chaque article lancé : une recherche relancée pendant l'import remplace les lignes, et
-  // ces cases-là quittent alors la page — le bilan et le décochage le vérifient (vu en revue)
-  const casesLancees = new Map();
-  for (const caseArticle of casesCochees()) {
-    const ligne = caseArticle.closest('tr');
-    const nom = ligne.querySelector('.mobilax-nom')?.textContent ?? '';
-    const champ = ligne.querySelector('input.mobilax-qte');
-    const saisie = champ?.value.trim() ?? '';
-    // `badInput` : texte non numérique, que `value` d'un champ nombre rend vide
-    const valide = !champ?.validity.badInput && (saisie === '' || /^\d+$/.test(saisie));
+  for (const [id, article] of selectionMobilax) {
+    const valide = !article.illisible && (article.saisie === '' || /^\d+$/.test(article.saisie));
+    const champ = caseAffichee(id)?.closest('tr')?.querySelector('input.mobilax-qte');
     champ?.setAttribute('aria-invalid', valide ? 'false' : 'true');
     if (champ) champ.style.borderColor = valide ? '' : '#b42318';
-    if (!valide) { invalides.push(nom); continue; }
-    casesLancees.set(Number(caseArticle.value), caseArticle);
-    articles.push({ mobilax_id: Number(caseArticle.value), nom, ...(saisie !== '' ? { quantite: Number(saisie) } : {}) });
+    if (!valide) invalides.push(article.nom);
   }
   if (invalides.length) {
     messageMobilax(`Qté en rayon invalide pour ${invalides.join(', ')} : saisissez une quantité entière, `
       + 'positive ou nulle, ou laissez vide.', true);
+    // « Lancer l'import » refusé : la confirmation ne reste pas ouverte sur un import qui ne part pas
+    if (importAConfirmer === lancerSelectionConfirmee) afficherConfirmation(null);
+    return;
+  }
+  // Au-delà du seuil, confirmation renforcée d'abord (story 17) : « Lancer l'import » revient ici
+  if (!confirme && selectionMobilax.size > SEUIL_CONFIRMATION) {
+    remplirConfirmation(selectionMobilax.size);
+    afficherConfirmation(lancerSelectionConfirmee);
     return;
   }
   // Saisie corrigée : un signalement d'une tentative précédente ne doit pas rester à l'écran
   messageMobilax('');
-  const lignesToujoursAffichees = () => [...casesLancees.values()].every(c => c.isConnected);
+  const articles = [...selectionMobilax].map(([id, a]) =>
+    ({ mobilax_id: id, nom: a.nom, ...(a.saisie !== '' ? { quantite: Number(a.saisie) } : {}) }));
+  // Une nouvelle recherche pendant l'import oublie la sélection : bilan et décochage le vérifient
+  const recherche = numeroRecherche;
   const bilan = await importerArticles(articles, {
     deja: 0,   // « déjà en stock » connu à l'import seulement (`deja_importe`)
     fournisseurId: rechercheMobilax.fournisseurId,
-    // Lu au moment du bilan : les restants ne « restent cochés » que si leurs lignes sont encore là
-    relance: () => lignesToujoursAffichees()
+    // Lu au moment du bilan : les restants ne « restent cochés » que si la sélection existe encore
+    relance: () => numeroRecherche === recherche
       ? 'ils restent cochés, relancez « Importer la sélection ».'
       : 'relancez la recherche pour les cocher à nouveau.',
   });
   if (!bilan) return;
-  // Importés et déjà en stock décochés (story 31) ; échecs et restants restent cochés (story 30).
-  // Case déjà sortie de la page (recherche relancée) : rien à décocher
-  for (const id of bilan.idsTraites) {
-    const caseArticle = casesLancees.get(id);
-    if (caseArticle?.isConnected) caseArticle.checked = false;
+  // Importés et déjà en stock sortent de la sélection (story 31) ; échecs et restants y restent (story 30)
+  if (numeroRecherche === recherche) {
+    for (const id of bilan.idsTraites) {
+      selectionMobilax.delete(id);
+      const caseArticle = caseAffichee(id);
+      if (caseArticle) caseArticle.checked = false;
+    }
   }
-  majBarreSelection();
+  majAffichageSelection();
   await loadStock();
 }
 
+/** « Lancer l'import » de la confirmation renforcée ouverte pour la sélection. */
+function lancerSelectionConfirmee() {
+  return lancerImportSelection(true);
+}
+
 document.getElementById('mobilax-resultats')?.addEventListener('change', e => {
-  if (e.target.matches('input.mobilax-case')) majBarreSelection();
+  if (!e.target.matches('input.mobilax-case')) return;
+  retenirLigne(e.target);
+  majAffichageSelection();
 });
-// Quantité corrigée : le signalement de la ligne disparaît
 document.getElementById('mobilax-resultats')?.addEventListener('input', e => {
   if (!e.target.matches('input.mobilax-qte')) return;
+  // Quantité corrigée : le signalement de la ligne disparaît
   e.target.removeAttribute('aria-invalid');
   e.target.style.borderColor = '';
+  // Quantité retenue = dernière valeur vue sur la ligne, tant qu'elle est cochée (story 13)
+  const caseArticle = e.target.closest('tr')?.querySelector('input.mobilax-case');
+  if (caseArticle?.checked) retenirLigne(caseArticle);
 });
-document.getElementById('btn-selection-importer')?.addEventListener('click', lancerImportSelection);
+// « Tout cocher » : lignes de la page affichée seulement (story 6), jamais toute la recherche
+document.getElementById('mobilax-tout-cocher')?.addEventListener('change', e => {
+  for (const caseArticle of casesAffichees()) {
+    if (caseArticle.disabled) continue;
+    caseArticle.checked = e.target.checked;
+    retenirLigne(caseArticle);
+  }
+  majAffichageSelection();
+});
+// Enveloppé : un gestionnaire nu recevrait l'événement comme `confirme`
+document.getElementById('btn-selection-importer')?.addEventListener('click', () => lancerImportSelection());
+document.getElementById('btn-selection-vider')?.addEventListener('click', viderSelection);
 
 // ─── Mode « Par génération » (ticket 01, chantier import-par-generation) ─────
 // L'opérateur tape un nom de base (« iPhone 17 ») : les séries Mobilax de cette génération
@@ -910,7 +1018,8 @@ function basculerModeMobilax() {
   document.getElementById('mobilax-series').hidden = !generation;
   document.getElementById('mobilax-pagination').hidden = true;
   document.getElementById('mobilax-resultats').innerHTML = '';
-  majBarreSelection();
+  // Résultats vidés : la sélection de la recherche affichée est oubliée
+  oublierSelection();
   // Import en cours : chercher une pièce par article reste possible (story 14), mais séries,
   // aperçu et zone d'import (commune aux deux modes) sont gardés tels quels
   if (!importEnCours) {
@@ -1043,9 +1152,24 @@ function compter(n, mot) {
   return `${n} ${mot}${n > 1 ? 's' : ''}`;
 }
 
-/** Affiche ou masque la confirmation renforcée. */
-function afficherConfirmation(visible) {
-  document.getElementById('mobilax-confirmation').hidden = !visible;
+/**
+ * Import que « Lancer l'import » de la confirmation renforcée déclenchera — commune à la génération
+ * et à la sélection (ticket 03) —, `null` tant qu'elle est masquée. Chacun ne touche à la
+ * confirmation que s'il l'a ouverte.
+ */
+let importAConfirmer = null;
+
+/** Affiche la confirmation renforcée pour l'import `lancer`, ou la masque (`null`). */
+function afficherConfirmation(lancer) {
+  importAConfirmer = lancer || null;
+  document.getElementById('mobilax-confirmation').hidden = !lancer;
+}
+
+/** Confirmation ouverte pour `lancer` : elle suit le compte `n` — refermée sous le seuil, texte mis à jour au-delà. */
+function suivreConfirmation(lancer, n) {
+  if (importAConfirmer !== lancer) return;
+  if (n <= SEUIL_CONFIRMATION) afficherConfirmation(null);
+  else remplirConfirmation(n);
 }
 
 /** Durée estimée d'un import de `n` articles : `n` × 3 s, arrondie à la minute (spec). */
@@ -1063,7 +1187,7 @@ function recalculerApercu() {
     zone.textContent = '';
     bouton.disabled = true;
     bouton.textContent = 'Importer';
-    afficherConfirmation(false);
+    if (importAConfirmer === lancerImportGeneration) afficherConfirmation(null);
     return;
   }
   for (const s of apercuCourant.series) {
@@ -1076,9 +1200,8 @@ function recalculerApercu() {
     + `${deja} déjà dans votre stock · ${n} à importer · durée estimée : ${libelleDuree(n)}`;
   bouton.disabled = n === 0;
   bouton.textContent = n ? `Importer ${compter(n, 'article')}` : 'Importer';
-  // Sélection redescendue sous le seuil : la confirmation renforcée n'a plus lieu d'être
-  if (n <= SEUIL_CONFIRMATION) afficherConfirmation(false);
-  else if (!document.getElementById('mobilax-confirmation').hidden) remplirConfirmation(n);
+  // Confirmation ouverte pour la génération : elle suit le compte, et se referme sous le seuil
+  suivreConfirmation(lancerImportGeneration, n);
 }
 
 /** Texte de la confirmation renforcée pour `n` articles à importer. */
@@ -1093,7 +1216,7 @@ function demanderImportGeneration() {
   if (n === 0) return;
   if (n > SEUIL_CONFIRMATION) {
     remplirConfirmation(n);
-    afficherConfirmation(true);
+    afficherConfirmation(lancerImportGeneration);
     return;
   }
   lancerImportGeneration();
@@ -1182,7 +1305,9 @@ function basculerSaisieImport(actif) {
   // Import d'une sélection (ticket 02) : cases et « Importer » des lignes figés, barre inactive
   document.querySelectorAll(`${SELECTEUR_CASES}, #mobilax-resultats button[data-mobilax-id]`)
     .forEach(el => { el.disabled = !actif; });
-  document.getElementById('btn-selection-importer').disabled = !actif;
+  // Barre de sélection (« Importer », « Vider ») et « Tout cocher » : un seul écrivain, qui lit
+  // `importEnCours` — déjà basculé par l'appelant
+  majAffichageSelection();
 }
 
 /** Ajoute une ligne au journal de l'import (textContent : noms tiers jamais interprétés). */
@@ -1208,7 +1333,6 @@ function afficherProgression(fait, total) {
 async function lancerImportGeneration() {
   const { deja, aImporter } = selectionApercu();
   if (!aImporter.length) return;
-  afficherConfirmation(false);
   await importerArticles(aImporter.map(a => ({ mobilax_id: a.mobilax_id, nom: a.nom })), {
     deja,
     // Fiche fournisseur figée au lancement : le lien du bilan ne dépend pas de l'aperçu, oublié ensuite
@@ -1239,6 +1363,8 @@ async function lancerImportGeneration() {
 async function importerArticles(articles, { deja, fournisseurId, relance }) {
   // Un seul import à la fois : les deux modes partagent la même zone et le même quota
   if (importEnCours || !articles.length) return null;
+  // Confirmation renforcée, quel que soit l'import qui l'a ouverte : l'import part, elle n'a plus d'objet
+  afficherConfirmation(null);
   // `idsTraites` : identifiants importés ou déjà en stock — l'import d'une sélection les décoche
   const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance, idsTraites: [] };
 
@@ -1388,8 +1514,9 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relanc
 
 document.getElementById('mobilax-series-liste')?.addEventListener('change', recalculerApercu);
 document.getElementById('btn-generation-importer')?.addEventListener('click', demanderImportGeneration);
-document.getElementById('btn-generation-lancer')?.addEventListener('click', lancerImportGeneration);
-document.getElementById('btn-generation-annuler')?.addEventListener('click', () => afficherConfirmation(false));
+// Confirmation renforcée commune (ticket 03) : « Lancer l'import » déclenche l'import qui l'a ouverte
+document.getElementById('btn-import-lancer')?.addEventListener('click', () => importAConfirmer?.());
+document.getElementById('btn-import-annuler')?.addEventListener('click', () => afficherConfirmation(null));
 document.getElementById('btn-import-interrompre')?.addEventListener('click', interrompreImport);
 
 // ─── Utilitaires ────────────────────────────────────────────────────────────

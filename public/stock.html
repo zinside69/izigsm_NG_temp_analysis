@@ -314,8 +314,9 @@
           <div id="mobilax-confirmation" hidden
                style="margin-top:10px;padding:10px 12px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:.88rem;">
             <p id="mobilax-confirmation-texte" style="margin:0 0 8px;"></p>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-generation-lancer">Lancer l'import</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-generation-annuler">Annuler</button>
+            <!-- Commune aux deux imports (ticket 03) : « Lancer » déclenche celui qui l'a ouverte -->
+            <button type="button" class="btn btn-primary btn-sm" id="btn-import-lancer">Lancer l'import</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-import-annuler">Annuler</button>
           </div>
           <!-- Import en cours (ticket 03) : barre, progression, journal, « Interrompre » -->
           <div id="mobilax-import" hidden style="margin-top:12px;">
@@ -349,11 +350,16 @@
             <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#eef2ff;font-size:.88rem;">
               <span id="mobilax-selection-texte"></span>
               <button type="button" class="btn btn-primary btn-sm" id="btn-selection-importer">Importer la sélection</button>
+              <!-- Ticket 03 : repartir de zéro sans décocher page par page -->
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-selection-vider">Vider la sélection</button>
             </div>
           </div>
           <div style="max-height:50vh;overflow-y:auto;">
             <table>
-              <thead><tr><th>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
+              <!-- « Tout cocher » (ticket 03) : page affichée seulement — majToutCocher(). `hidden` sur
+                   l'enveloppe : masquée tant qu'aucune ligne ne porte de case (technicien, aucun résultat) -->
+              <thead><tr><th><span id="mobilax-tout-cocher-zone" hidden><input type="checkbox" id="mobilax-tout-cocher"
+                     aria-label="Tout cocher — page affichée" style="margin:0 8px 0 0;vertical-align:middle;"></span>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
               <tbody id="mobilax-resultats"></tbody>
             </table>
           </div>

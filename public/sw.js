@@ -10,7 +10,7 @@
  * Versioning : incrémenter CACHE_VERSION à chaque déploiement majeur
  */
 
-const CACHE_VERSION  = 'izigsm-v3.04'
+const CACHE_VERSION  = 'izigsm-v3.05'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`
