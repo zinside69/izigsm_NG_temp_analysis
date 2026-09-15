@@ -1,4 +1,33 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 112 — import d'une sélection : ticket 01 fait)
+# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 113 — import d'une sélection : ticket 02 fait)
+
+## Checkpoint 113 — Import d'une sélection : ticket 02, cocher et importer sur la page affichée (2026-09-15)
+
+**Dépôt en avance sur la production, volontairement, aucune migration** : `ce9e780` commité et poussé
+avec ce checkpoint, **non déployé** — le chantier part en un bloc après le ticket 03.
+`CACHE_VERSION` inchangé (`izigsm-v3.04`), à incrémenter au 03.
+
+Livré (ticket 02, `.scratch/import-d-une-selection/issues/02-…`, `done`) :
+- une case par article de la page affichée (manager / admin de boutique ; technicien : ni case, ni
+  « Qté en rayon », ni « Importer ») ; barre « N sélectionnés · durée estimée » + « Importer la
+  sélection », masquée sans coche ;
+- `lancerImportSelection()` : quantité de chaque ligne (vide → non envoyée ; invalide, `badInput`
+  compris → rien ne part, lignes signalées), boucle commune `importerArticles()` qui rend désormais
+  `bilan.idsTraites` : importés et déjà en stock décochés, échecs et restants restés cochés ;
+- pendant l'import : cases, « Importer » des lignes, import unitaire, barre et génération figés — y
+  compris les lignes d'une recherche relancée ;
+- `GET /api/mobilax/produits` renvoie `fournisseur_id` (lien du bilan).
+
+Revue à deux axes : aucune violation dure. Corrigés avant commit, puis vus rouges par mutation : bilan
+qui affirmait « restent cochés » après une recherche relancée pendant l'import, message « quantité
+invalide » figé, tests manquants (manager, génération refusée, `-1`, `badInput`). **Confirmation
+> 200 reportée au ticket 03** (inatteignable sur une page de 100 — case ajoutée au 03). Admin de
+boutique sans E2E (aucune fixture ; l'inscription crée un manager, `role_id` 2).
+
+**Gates** : vitest 1105/1107 (baseline), tsc 32, E2E Mobilax + balayage du menu 56/56.
+
+**Prochaine session** : `/mattpocock-skills:implement
+.scratch/import-d-une-selection/issues/03-selection-multi-pages-tout-cocher-vider.md` (tapé par
+l'exploitant, session neuve), puis déploiement du chantier en un bloc.
 
 ## Checkpoint 112 — Import d'une sélection : ticket 01, boucle commune et « Interrompre » (2026-09-15)
 

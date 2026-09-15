@@ -650,6 +650,22 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   - E2E « article en vol » : une `page.route()` enregistrée **après** celle du scénario passe en
     premier ; elle attend une promesse puis `route.fallback()`. Le départ se lit dans cette route —
     ce que le scénario enregistre ne l'est qu'au `fallback`.
+- **Import d'une sélection (ticket 02 `import-d-une-selection`, 2026-09-15, non déployé)** :
+  - **`GET /api/mobilax/produits` renvoie `fournisseur_id`** (fiche de la boutique du jeton, lien du
+    bilan), comme l'aperçu d'une génération.
+  - Case, « Qté en rayon » et « Importer » d'une ligne : **manager et admin de boutique seulement**
+    (`peutImporterMobilax()`), le serveur gardant son refus. Technicien : aucun des trois.
+  - `lancerImportSelection()` valide chaque ligne cochée **avant** tout départ : entier ≥ 0 ou vide,
+    texte non numérique compris (`validity.badInput` — `value` d'un champ nombre le rend vide).
+  - `importerArticles()` rend le bilan : **`idsTraites`** (importés + déjà en stock) sert à décocher ;
+    échecs et restants restent cochés. `relance` accepte une **fonction**, lue au moment du bilan :
+    ⊥ affirmer « ils restent cochés » quand une recherche relancée a remplacé les lignes.
+  - Pendant tout import, les lignes d'une nouvelle recherche **naissent figées** ; l'import unitaire
+    est refusé (`importEnCours`). `basculerSaisieImport(true)` rend au bouton de la génération l'état
+    de l'aperçu (`recalculerApercu()`), jamais un « actif » d'office.
+  - E2E : la boutique neuve de `createTenantAdmin()` est tenue par un **manager** (`role_id` 2 à
+    l'inscription), pas un admin — aucune fixture ne crée d'admin de boutique. `TECHNICIEN` et
+    `MANAGER` du seed : `fixtures/comptes.ts`.
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -890,6 +906,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-15 (checkpoint 113) : aucune migration en attente, dépôt EN AVANCE sur la
+production — volontairement.** Tickets 01 et 02 `import-d-une-selection` (`ce9e780` pour le 02 :
+sélection sur la page affichée, `fournisseur_id` dans la recherche) commités et poussés, **non
+déployés** : le chantier part en un bloc après le ticket 03, sans migration. `CACHE_VERSION` reste
+`izigsm-v3.04`, à incrémenter au 03.
 
 **État au 2026-09-15 (checkpoint 112) : aucune migration en attente, dépôt EN AVANCE sur la
 production — volontairement.** Ticket 01 `import-d-une-selection` (boucle commune, « Interrompre »,

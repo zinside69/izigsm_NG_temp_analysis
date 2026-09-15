@@ -1,4 +1,40 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 112 — import d'une sélection : ticket 01 fait)
+# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 113 — import d'une sélection : ticket 02 fait)
+
+## Ce qui a changé au checkpoint 113
+
+**Aucune migration en attente ; dépôt EN AVANCE sur la production, volontairement** : tickets 01 et
+02 faits et poussés, **non déployés** — le chantier part en un bloc après le 03. Le « première
+action : ticket 02 » du bloc 112 ci-dessous est **dépassé**.
+
+**Première action : ticket 03** (dernier du chantier), tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/import-d-une-selection/issues/03-selection-multi-pages-tout-cocher-vider.md`
+
+À savoir avant de coder le 03 :
+- **La sélection est aujourd'hui lue dans le DOM** : `casesCochees()` = cases cochées de
+  `#mobilax-resultats`. Le 03 la fait tenir par l'écran (identifiant → nom, quantité retenue),
+  réappliquée à chaque rendu de `chercherMobilax()`, vidée par une **nouvelle** recherche
+  (`depuisNavigation = false`) mais **pas** par Précédente/Suivante — aujourd'hui tout appel à
+  `chercherMobilax()` vide la barre (`majBarreSelection()` après le vidage du tableau).
+- `lancerImportSelection()` garde `casesLancees` (nœuds DOM) pour décocher et pour dire au bilan si
+  les restants « restent cochés » (`relance` = fonction lue au moment du bilan). Avec une sélection
+  tenue par l'écran, décocher dans elle, et la relance devient vraie tant que la recherche n'a pas
+  changé.
+- **Confirmation > 200 : à rendre commune** (case ajoutée au 03). `#mobilax-confirmation` est dans
+  la zone commune, mais `btn-generation-lancer`/`-annuler`, `remplirConfirmation()` et
+  `recalculerApercu()` ne servent que la génération.
+- **`CACHE_VERSION` à incrémenter** (`public/sw.js`, `izigsm-v3.04` → `v3.05`) : dernier ticket
+  d'écran du chantier.
+- E2E : `tests/e2e/mobilax-selection.spec.ts` — `rechercheSimulee()` rend une seule page
+  (`pageDe()`, `pages: 1`) : pour plusieurs pages, router sur le paramètre `page=`. La boutique neuve
+  de `createTenantAdmin()` est tenue par un **manager** (`role_id` 2), pas un admin. `TECHNICIEN` et
+  `MANAGER` (seed) sont dans `fixtures/comptes.ts`.
+- ⚠ `#mobilax-pagination` ne se masque probablement jamais (`bugs.md`, `hidden` écrasé par le
+  `display:flex` en ligne) : le 03 travaille sur la pagination, le constater à l'écran au passage.
+- Revue d'un ticket : un correctif de revue écrit après le code se prouve **par mutation** (défaut
+  réintroduit, test rouge, défaut retiré) — un défaut par test visé et par tour, sinon un premier
+  échec en masque un autre (vécu au 02 : la mutation du rôle retirait aussi les cases du manager).
+- Déploiement du chantier après le 03 : aucune migration ; `npm run deploy`, puis relire l'aperçu
+  puis l'apex (asset hashé `stock.*.js`, `sw.js` `izigsm-v3.05`).
 
 ## Ce qui a changé au checkpoint 112
 

@@ -1,5 +1,20 @@
 # iziGSM — Décisions
 
+## 2026-09-15 — Import d'une sélection, ticket 02 : choix d'implémentation
+
+Pris à l'implémentation, jugés défendables par la revue à deux axes (aucun n'a été soumis à
+l'exploitant — à rouvrir s'il le souhaite) :
+- **Confirmation > 200 reportée au ticket 03** : une page compte au plus 100 articles, le seuil n'est
+  atteignable qu'avec la sélection sur plusieurs pages. Case ajoutée au 03, pour qu'elle ne tombe pas
+  entre deux tickets.
+- **Technicien : ni case, ni « Qté en rayon », ni « Importer »** — une quantité sans import n'aurait
+  pas de sens (story 38 : un geste proposé ne doit pas échouer à coup sûr).
+- **« Qté en rayon » pré-remplie avec le stock initial par défaut** (précédent de l'import unitaire) :
+  une ligne n'est « vide », donc non envoyée, que si l'opérateur l'efface.
+- **Le bilan ne dit « ils restent cochés » que si c'est vrai** : une recherche relancée pendant
+  l'import remplace les lignes ; le bilan dit alors « relancez la recherche ». `relance` de la boucle
+  commune accepte une fonction, lue au moment du bilan.
+
 ## 2026-09-15 — Import d'une sélection, ticket 01 : « Interrompre » pendant le dernier article
 
 - **Le bilan dit « Import interrompu »**, suivi de « rien ne reste à importer » — jamais « Import
