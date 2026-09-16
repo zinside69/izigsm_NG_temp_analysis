@@ -1,5 +1,67 @@
 # iziGSM — Décisions
 
+## 2026-09-16 — Tarification par boutique : ni pourcentage unique, ni coefficient unique
+
+Grilling avec l'exploitant, parti de sa remarque : « dans la téléphonie, on applique plus des
+coefficients que des % ». Matière complète et mesures :
+`.scratch/tarification-boutique/matiere-grilling.md`. **Rien n'est implémenté.**
+
+- **Les Réglages › Marges d'aujourd'hui ne décrivent pas le métier.** Mesuré chez Mobilax contre
+  les prix réels de l'exploitant : housse achetée 3,80 € vendue 34,90 € TTC (×7,7 HT), coque
+  silicone 1,46 € vendue 29,90 € (×17), verre trempé 1,08 € vendu 20-25 € (×15 à ×19). **Aucun
+  coefficient unique ne reproduit ces prix** — ce qui est stable, c'est le prix de sortie.
+- **Accessoires** : prix de vente par défaut **saisi** (prix rond : 34,90 ; housse de luxe
+  39,90), coefficient en **repli** hors grille, et **prix plancher** = prix minimal de vente,
+  équivalent d'une **remise maximale** exprimée en pourcentage. **Aucun plafond** : on doit
+  pouvoir vendre plus cher.
+- **Réparations** : les **trois méthodes** doivent coexister au choix de la boutique — pièce +
+  forfait de main d'œuvre (50 à 120 € HT selon modèle et technicité) · (pièce × coefficient) + MO
+  horaire, méthode relevée chez monatelier (coef **2,5 à 4**, exemples : écran iPhone 13 à 151 €
+  HT, batterie S21 à 71 € HT) · forfait tout compris. « Chaque magasin a sa propre politique de
+  vente. »
+- **Prix saisis en TTC** ; une boutique en franchise saisit ses prix avec un taux à 0.
+- **Nouvelles familles** à créer : l'arbre Mobilax compte 1 570 catégories et **743 tombent dans
+  `consommable`** (Équipement 372, E-Mobility 265, Informatique 106) faute de mieux.
+- **Grille ancrée sur la catégorie**, l'intitulé du produit choisissant la variante tarifaire.
+- Dérogation au plancher : **manager et admin seulement**.
+- Les 5 colonnes de taux de `0042` deviennent un **sous-cas** du nouveau modèle.
+
+**Prérequis découvert, qui a fait passer ce chantier en second** : `resoudreTauxMarge()` n'a
+**qu'un seul appelant** (l'import Mobilax), et **la caisse comme les devis ignorent totalement le
+catalogue** — chaque ligne est retapée à la main. Un prix calculé n'atteindrait donc jamais le
+comptoir.
+
+## 2026-09-16 — La vente doit lire le catalogue (chantier prioritaire)
+
+Décision de l'exploitant : « la vente doit lire le catalogue, on commence par ça. » Matière :
+`.scratch/vente-lit-catalogue/matiere-grilling.md`. **Rien n'est implémenté.**
+
+- **Sélecteur produit/service** en caisse puis en devis, la saisie libre restant possible. Une
+  **seule recherche** rendant les deux natures.
+- **Douchette code-barres utilisée au comptoir** : le scan fait partie du chantier. Routage par la
+  **longueur** — 13 chiffres → EAN produit, 15 → IMEI. La recherche produits devra couvrir
+  `code_barre`, ce qu'elle ne fait pas.
+- **Étiquettes maison** — capacité permanente, pas un rattrapage : tout produit **créé hors import
+  grossiste** reçoit un code, préfixe **`2`** (plage GS1 « circulation restreinte »), format
+  `2` + type (1 produit, 2 service) + identifiant sur 10 chiffres + clé. **Stocké**, jamais déduit.
+  Un article qui porte déjà un EAN fournisseur n'est **jamais** réétiqueté.
+- **Impression** depuis le navigateur, rouleau thermique **35 × 25 mm à deux pistes** : impression
+  **par paires**, via une **file d'étiquettes en base, par boutique**. Libellé raccourci
+  saisissable, prix **coché à l'impression**.
+- **Occasion : scannée par son IMEI**, pas par un code maison — l'IMEI devient une **colonne de
+  `produits`** (« un appareil d'occasion en vente **est** un produit ; son identifiant doit être
+  sur lui »).
+- **Parcours IMEI** : ticket en cours → on l'ouvre ; nouvelle panne hors garantie → nouveau
+  ticket, l'ancien historisé ; garantie → **dossier SAV** ; inconnu → résolution du modèle puis
+  proposition de prise en charge. **Validation locale par la clé de Luhn avant tout appel
+  réseau**, puis API de base d'IMEI **en option par boutique** (patron `api_plateforme` + clé
+  chiffrée).
+- **Lot fournisseur ×10 scanné = 1 unité vendue.** Le conditionnement est une réalité d'achat.
+
+**Un EAN identifie un et un seul produit dans une boutique** — invariant ajouté à `CONTEXT.md`,
+et rendu vrai par la migration `0048` (index uniques partiels sur `code_barre` et `sku`). Mesuré
+avant écriture sur la base de production : 804 produits, **0 doublon**.
+
 ## 2026-09-15 (soir) — Page Stock : les compteurs suivent la liste affichée (option B)
 
 - **« Références », « Valeur stock » et « À commander » comptent la liste AFFICHÉE** — recherche,

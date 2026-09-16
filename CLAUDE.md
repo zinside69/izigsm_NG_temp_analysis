@@ -977,6 +977,17 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-16 (checkpoint 121) : migration `0048` EN ATTENTE — dépôt en avance sur la
+production.** `0048_produits_ean_sku_unique.sql` (index uniques partiels sur
+`(boutique_id, code_barre)` et `(boutique_id, sku)`) est appliquée **en local seulement**.
+Prérequis vérifié sur la production avant écriture : 804 produits, **0 doublon** sur l'un comme
+sur l'autre — elle passera. Aucun code applicatif n'en dépend encore : la production reste saine
+en `izigsm-v3.11` tant qu'elle n'est pas appliquée. Le moment venu :
+`npx wrangler d1 migrations apply DB --remote`, relire `d1_migrations` distant, **puis** déployer
+s'il y a du code. ⚠ À traiter avec elle : une violation de ces index remonte une erreur SQL brute
+à la création manuelle et à l'import CSV — seul `importerProduitMobilax()` sait convertir celle de
+`0046` en message.
+
 **État au 2026-09-16 (checkpoint 120) : aucune migration en attente — dépôt et production
 alignés** (`izigsm-v3.11`, `2a81c88`). Deux correctifs de la page Notifications déployés par
 l'exploitant, sans migration : v3.10 (trois états du bandeau, aperçu `17681ccf`) puis v3.11

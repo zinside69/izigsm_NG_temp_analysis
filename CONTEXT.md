@@ -89,6 +89,16 @@ la continuité légale. Table `sequences`.
 
 **Produit** — article vendable ou pièce détachée, rangé en `categories`.
 
+**Code-barres (EAN13)** — identifie **un et un seul** produit dans une boutique. Scanné au
+comptoir, il désigne l'article sans ambiguïté (tranché par l'exploitant le 2026-09-16).
+`produits.code_barre` — ⚠ **la base ne fait pas encore respecter cette règle** : aucune
+contrainte ni index d'unicité.
+
+**SKU** — code article interne à la boutique. **Distinct du code-barres**, même quand les deux
+portent la même valeur : l'import fournisseur renseigne aujourd'hui le SKU avec l'EAN de la
+pièce, ce qui est une commodité, pas une identité. `produits.sku` — ⚠ annoncé « unique par
+boutique » par un commentaire de migration, sans index unique pour le tenir.
+
 **Mouvement de stock** — entrée ou sortie de quantité. Toute variation de la quantité d'un
 produit en passe par un ; la quantité courante est tenue à jour sur le produit à chaque
 mouvement (tranché le 2026-09-12 d'après le code).

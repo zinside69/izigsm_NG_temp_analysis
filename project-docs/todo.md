@@ -1,5 +1,52 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 — La vente lit le catalogue (cadré le 2026-09-16, rien d'implémenté)
+
+Chantier ouvert par une mesure : **la caisse et les devis ignorent le catalogue** — chaque ligne
+est retapée à la main, aucune ne porte de `produit_id`, donc le stock ne bouge pas à la vente et
+aucune statistique par article n'est possible. Décision de l'exploitant : « on commence par ça. »
+
+Matière, faits mesurés et frontière : `.scratch/vente-lit-catalogue/matiere-grilling.md`.
+Décisions : `decisions.md` § 2026-09-16.
+
+- [ ] **Grilling à terminer** — 8 questions ouvertes, dont : rupture de stock en caisse, ligne
+      modifiable après sélection, premier écran, `service_id` sur `lignes_document`, « la
+      validation doit aller jusqu'au bout » (deux lectures possibles), IMEI obligatoire sur un
+      ticket
+- [ ] Sélecteur produit + service en caisse, saisie libre conservée
+- [ ] Recherche produits étendue à `code_barre` (aujourd'hui : nom, SKU, marque seulement)
+- [ ] Scan : routage par longueur (13 → EAN, 15 → IMEI), validation Luhn avant tout appel
+- [ ] Colonne `imei` sur `produits` (+ index) — migration
+- [ ] Étiquettes maison : code `2` + type + identifiant, file d'étiquettes en base, impression
+      par paires sur rouleau 35 × 25 deux pistes
+- [ ] Colonne `code_barre` sur `services` — migration
+- [ ] **Migration `0048` à appliquer en production** (voir ci-dessous)
+
+## 🟠 P2 — Migration `0048` appliquée en local seulement (2026-09-16)
+
+`migrations/0048_produits_ean_sku_unique.sql` — index uniques partiels sur
+`(boutique_id, code_barre)` et `(boutique_id, sku)`. Prérequis vérifié sur la **production** :
+804 produits, **0 doublon** sur l'un comme sur l'autre. Appliquée en local, **pas en distant**.
+
+- [ ] `npx wrangler d1 migrations apply DB --remote`, relire `d1_migrations` distant
+- [ ] **Convertir la violation d'index en message** : `importerProduitMobilax()` sait le faire pour
+      `0046` (`deja_importe`) ; la création manuelle et l'import CSV remonteraient une erreur SQL
+      brute à l'écran
+
+## 🟠 P2 — Tarification par boutique (cadré le 2026-09-16, en attente derrière le catalogue)
+
+Les Réglages › Marges (5 taux en %) ne décrivent pas le métier : mesuré chez Mobilax contre les
+prix réels, les coefficients vont de ×7,7 à ×19 selon l'article, et ce qui est stable est le prix
+de sortie, pas le rapport au coût. Matière : `.scratch/tarification-boutique/matiere-grilling.md`.
+
+- [ ] **Grilling à terminer** — 5 questions ouvertes (vocabulaire `Service` vs réparation,
+      périmètre, mode de tarification, mécanique de variante, ancrage de la grille)
+- [ ] 3 nouvelles familles (outillage, mobilité électrique, informatique) — migration avec
+      recréation de table (CHECK sur `produits.famille`, patron `0040`)
+- [ ] Prix saisis en TTC, stockés HT
+- [ ] Prix plancher = remise maximale en %, dérogation manager/admin
+
+
 ## 🔴 P1 — Page Notifications : 5 appels lisent l'enveloppe API au mauvais niveau (trouvé en revue le 2026-09-15)
 
 Détail et cause : `bugs.md` § « Page Notifications ». Statistiques et journal des envois jamais

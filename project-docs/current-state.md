@@ -1,4 +1,56 @@
-# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 120 — page Notifications dite vraie de bout en bout, v3.11 en production)
+# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 121 — grilling tarification et « la vente lit le catalogue », migration 0048 locale)
+
+## Checkpoint 121 — Deux chantiers cadrés, rien d'implémenté (2026-09-16)
+
+**Migration `0048` EN ATTENTE en production** (appliquée en local seulement) ; aucun code
+applicatif nouveau ; production inchangée en `izigsm-v3.11`.
+
+Session de **grilling** (`/mattpocock-skills:grill-with-docs`), partie d'une remarque de
+l'exploitant sur les Réglages › Marges : « dans la téléphonie, on applique plus des coefficients
+que des % ». Elle a produit deux chantiers cadrés et **aucune ligne de code applicatif**.
+
+### Ce qui a été mesuré, et qui a tout réorienté
+
+- **Les prix réels contre le catalogue Mobilax** (préproduction) : housse achetée 3,80 € vendue
+  34,90 € TTC (**×7,7** HT), coque silicone 1,46 € → 29,90 € (**×17**), verre trempé 1,08 € →
+  20-25 € (**×15 à ×19**). **Aucun coefficient unique ne reproduit ces prix.**
+- **La méthode de monatelier.net**, relevée dans leur bundle applicatif :
+  `Prix HT = (coût pièce × coef 2,5-4) + main d'œuvre`. Sur l'écran iPhone 12 Pro mesuré à
+  37,78 € HT, elle donne 131 € — dans la fourchette « pièce + 50 à 120 € » de l'exploitant.
+- **L'arbre Mobilax** : 1 570 catégories, 9 racines, **743 catégories tombent dans `consommable`**
+  (Équipement, trottinettes, informatique) faute d'une famille adaptée.
+- **Le prix calculé n'atteint jamais le comptoir** : `resoudreTauxMarge()` n'a qu'un seul appelant
+  (l'import Mobilax), et **la caisse comme les devis ignorent le catalogue** — chaque ligne est
+  retapée, aucune ne porte de `produit_id`, donc **le stock ne bouge pas à la vente**. C'est ce
+  fait qui a fait passer la tarification en second : l'exploitant a tranché « la vente doit lire
+  le catalogue, on commence par ça ».
+- **Le catalogue de production** : 804 produits (2 boutiques), **0 doublon** d'EAN ni de SKU ; les
+  9 produits sans code-barres sont **tous des pièces**, famille jamais scannée.
+- **Autres défauts relevés, non corrigés** : `lignes_document` ne peut pas porter de `service_id`
+  (la route l'accepte et l'ignore) ; la remise de caisse est perdue à l'écriture ; les cases à
+  cocher de services dans `tickets.html` ne sont jamais relues ; `hasPermission()` et `requirePin`
+  ne sont branchés nulle part.
+
+### Écrit
+
+- `migrations/0048_produits_ean_sku_unique.sql` — index uniques **partiels** sur
+  `(boutique_id, code_barre)` et `(boutique_id, sku)`. **Locale uniquement.** Prérequis mesuré sur
+  la production avant écriture (0 doublon), conformément à la leçon `0040`.
+- `CONTEXT.md` — deux termes : **Code-barres (EAN13)**, qui identifie un et un seul produit, et
+  **SKU**, distinct même quand l'import leur donne la même valeur. Chacun dit ce que la base **ne**
+  garantit pas.
+- `.scratch/tarification-boutique/matiere-grilling.md` et
+  `.scratch/vente-lit-catalogue/matiere-grilling.md` — mesures, décisions, frontières.
+- `decisions.md` et `todo.md` — deux chantiers, 🔴 P1 pour le catalogue.
+
+**Gates** : sans objet, aucun code applicatif touché. `0048` appliquée en local sans erreur.
+
+**Prochaine session** : terminer le grilling du catalogue (8 questions ouvertes, dont la lecture
+de « la validation doit aller jusqu'au bout »), puis `/mattpocock-skills:to-spec`. La migration
+`0048` part en production quand l'exploitant le décide — sans elle, aucun invariant ne protège
+l'unicité des codes-barres.
+
+## Checkpoint 120
 
 ## Checkpoint 120 — La page Notifications dit enfin la vérité (2026-09-16)
 
