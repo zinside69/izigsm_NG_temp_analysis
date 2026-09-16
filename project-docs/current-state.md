@@ -1,4 +1,30 @@
-# iziGSM — État courant (MàJ : 2026-09-15, checkpoint 117 — page Stock : recherche et compteurs, v3.08 à déployer)
+# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 118 — v3.08 en production, page Stock validée à l'écran)
+
+## Checkpoint 118 — v3.08 en production : recherche et compteurs de la page Stock (2026-09-16)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.08`, aperçu `36e72c73`).
+Chantier de la page Stock **clos** : le checkpoint 117 le laissait commité mais ni poussé ni déployé.
+
+- **Rien à pousser** : les trois commits du 117 (`19988f2`, `c0935e2`, `93cf829`) étaient **déjà sur
+  `origin`** au premier `git fetch` de la session — poussés par un `sync push` lancé depuis une autre
+  fenêtre. Le piège du § « Dépôt git » s'est donc rejoué une troisième fois ; la seule parade reste de
+  **mesurer** (`git log origin/main..HEAD`) au lieu de croire l'état écrit au checkpoint précédent.
+- Arbre rattrapé en fast-forward sur `087eb01` (`chore: backup D1 automatique 2026-09-16`, un fichier
+  SQL de sauvegarde, aucun code) **avant** le déploiement — celui-ci part de l'arbre local.
+- **Déployé par l'exploitant** (`npm run deploy`, aucune migration : les deux commits ne touchent que
+  `public/static/js/stock.js` et `public/sw.js`, et `0047` est en production depuis le 2026-09-12).
+- **Relu sur l'aperçu puis l'apex**, jamais l'inverse : `sw.js` `izigsm-v3.08`, `/stock` référence
+  `stock.899786d5.js` = le nom du manifeste local, servi en `application/javascript`
+  (`cf-cache-status: MISS`, donc pas de catch-all HTML figé), `applyFilters` ×6 et
+  `renderKPIs(filtered)` présents dans l'asset servi, `/api/health` 200.
+- **Contrôle à l'écran par l'exploitant, 3/3** (après rechargement forcé, sans quoi le service worker
+  v3.07 aurait servi l'ancien fichier et n'aurait rien prouvé) : « iphone 12 » ne montre que des
+  iPhone 12 ; le clic sur la famille « Pièce » **garde** la recherche appliquée ; « Références » vaut
+  le nombre de lignes affichées, plus 587.
+
+**Prochaine session** : 🔴 P1 page Notifications — 5 appels lisent l'enveloppe au mauvais niveau
+(statistiques et journal jamais affichés, actions annoncées « Erreur »). La constater à l'écran
+d'abord, jamais dans l'onglet où tourne un import.
 
 ## Checkpoint 117 — Clôture du soir : page Stock, recherche et compteurs (2026-09-15)
 

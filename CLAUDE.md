@@ -952,6 +952,15 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-16 (checkpoint 118) : aucune migration en attente — dépôt et production
+alignés** (`izigsm-v3.08`, `087eb01`). Recherche et compteurs de la page Stock (`19988f2`, `c0935e2`)
+déployés par l'exploitant (aperçu `36e72c73`), sans migration. Relu sur l'aperçu **puis** l'apex :
+`sw.js` v3.08, `stock.899786d5.js` = nom du manifeste local, servi en `application/javascript`
+(`cf-cache-status: MISS`), `applyFilters` et `renderKPIs(filtered)` dans l'asset servi,
+`/api/health` 200 ; validé à l'écran (recherche « iphone 12 » conservée au clic sur une famille,
+« Références » = lignes affichées). ⚠ Les commits étaient **déjà sur `origin`** avant tout push de la
+session — un `sync push` d'une autre fenêtre, troisième occurrence du piège du § « Dépôt git ».
+
 **État au 2026-09-15 (checkpoint 117) : aucune migration en attente, dépôt EN AVANCE sur la
 production.** `19988f2` (recherche appliquée après chaque chargement) et `c0935e2` (compteurs de la
 page Stock = liste affichée) commités, **non poussés, non déployés** ; `CACHE_VERSION`
