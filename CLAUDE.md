@@ -796,6 +796,13 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   boutique** » ne signifie plus « rien ne part » depuis le repli plateforme du 2026-07-10. ⊥
   reconstruire cette notion chez un appelant : un booléen de plus y redeviendrait ambigu.
   Une clé de repli vide ou blanche ne compte pas comme une clé.
+- **L'expéditeur employé n'est pas l'expéditeur configuré.** `from` est **calculé** dès que la
+  boutique n'a pas sa propre clé ; `from_configure` est ce qu'elle a saisi (`null` sinon). ⊥
+  **réinjecter `from` dans un champ de saisie** : un « Enregistrer » y inscrirait l'adresse de la
+  plateforme comme étant la sienne, et cette boutique — sa vraie clé posée — enverrait depuis un
+  domaine qu'elle ne possède pas, donc refusée par Resend (trouvé le 2026-09-16, `bugs.md`). La
+  règle vaut pour tout écran futur affichant un expéditeur : **montrer** `from`, **saisir**
+  `from_configure`.
 - **Toute sortie de l'envoi écrit une ligne dans `email_logs`** — envoyé, erreur, simulé,
   *y compris* notification désactivée (`simule`, motif dans `erreur`). Un `return` ou un
   `.catch(() => {})` sans ligne rend un envoi raté indiscernable d'un envoi jamais tenté :

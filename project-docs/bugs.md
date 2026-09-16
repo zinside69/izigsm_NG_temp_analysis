@@ -1,6 +1,35 @@
 # iziGSM — Bugs connus
 
-## 🟢 Page Notifications : « Mode simulé — aucune clé API » annoncé pendant que de vrais emails partent (trouvé ET CORRIGÉ le 2026-09-16, non déployé)
+## 🟢 Page Notifications : le champ « Expéditeur » pré-rempli avec l'adresse de la plateforme (trouvé ET CORRIGÉ le 2026-09-16, non déployé — déduit du code, jamais vu à l'écran)
+
+**Défaut** : `notifications.html` remplissait `#cfg-from` avec `config.from`, l'expéditeur
+**employé** — valeur *calculée* (`<nom> via iziGSM <noreply@mail.repairdesk.fr>`) dès que la
+boutique n'a pas sa propre clé. `saveConfig()` envoie `email_from` dès que le champ est non vide :
+un simple « Enregistrer » — pour poser sa clé Resend, précisément — écrivait donc l'adresse de la
+**plateforme** dans `email_from` de la boutique.
+
+**Ce qui se serait passé ensuite** : `hasOwnKey` devenant vrai, `getEmailConfig()` préfère
+`email_from` — la boutique aurait envoyé avec **sa** clé depuis `mail.repairdesk.fr`, domaine que
+son compte Resend ne possède pas. Resend refuse : tous ses emails en erreur, juste après avoir
+« bien » configuré sa clé.
+
+**Trouvé en relisant la capture de validation de la v3.10**, pas par un test — le champ y était
+visiblement pré-rempli avec l'adresse de la plateforme. **Jamais reproduit à l'écran** : aucune
+boutique n'a encore ajouté de clé Resend. Le correctif du même jour (bandeau « Ajoutez votre clé
+Resend ») rendait ce piège nettement plus probable, puisqu'il invite à ce geste exact.
+
+**Corrigé le 2026-09-16** (`izigsm-v3.11`, non déployé) : `EmailConfig.from_configure`
+(`email_from` brut, `null` si rien de saisi) à côté de `from` (employé) ; la route expose les deux ;
+le champ ne reçoit que `from_configure`, son `placeholder` guidant quand rien n'est saisi. Vu rouge
+sur le build antérieur (le `dist` d'avant correctif servait encore) ; le test de l'état « boutique »
+est un **garde**, les deux valeurs y étant identiques.
+
+⚠ **Au passage, sur la méthode** : trois `workerd.exe` d'anciens runs survivaient à l'arrêt de leur
+tâche et répondaient encore sur le port 3000. Un E2E peut donc juger un build qui n'est plus celui
+du dépôt, sans rien signaler. Contrôler la page **servie** (`curl … | grep <marqueur du correctif>`)
+avant de conclure d'un vert, et `taskkill /F /IM workerd.exe` entre deux campagnes.
+
+## 🟢 Page Notifications : « Mode simulé — aucune clé API » annoncé pendant que de vrais emails partent (trouvé ET CORRIGÉ le 2026-09-16, DÉPLOYÉ en v3.10 et vu à l'écran)
 
 **Symptôme** (exploitant, deux captures, production `izigsm-v3.09`) : le bandeau « Connexion Resend »
 affiche « Mode simulé — aucune clé API » — et un email de test envoyé depuis cette même page **arrive

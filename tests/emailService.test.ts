@@ -136,6 +136,28 @@ describe('getEmailConfig()', () => {
     expect(config.api_key).toBeNull()
   })
 
+  // ── Expéditeur configuré vs expéditeur effectif ─────────────────────────────
+  // Ajouté le 2026-09-16 : `from` est une valeur **calculée** dès que la boutique n'a pas
+  // sa propre clé (domaine vérifié de la plateforme). La page la réinjectait dans le champ
+  // de saisie, si bien qu'un simple « Enregistrer » écrivait l'adresse de la plateforme
+  // dans `email_from` de la boutique — qui, une fois sa vraie clé posée, enverrait depuis
+  // un domaine qu'elle ne possède pas (`bugs.md`).
+
+  it('from_configure rend ce que la boutique a saisi, jamais la valeur calculée', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)
+    const config = await getEmailConfig(db, 1)
+    expect(config.from_configure).toBe('iziGSM <noreply@izigsm.fr>')
+  })
+
+  it('from_configure est null quand la boutique n\'a rien saisi, même si `from` est rempli', async () => {
+    db.__setResponse(SQL_CONFIG, { ...SETTINGS_SANS_CLE, email_from: null })
+    const config = await getEmailConfig(db, 1, 're_cle_plateforme')
+
+    expect(config.from_configure).toBeNull()
+    // `from` reste renseigné : c'est l'expéditeur réellement employé
+    expect(config.from).toContain('via iziGSM')
+  })
+
   it('une clé de repli vide ou blanche ne compte pas comme une clé', async () => {
     db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
     expect((await getEmailConfig(db, 1, '')).api_key_source).toBeNull()

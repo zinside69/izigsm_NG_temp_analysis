@@ -39,7 +39,20 @@ export interface EmailConfig {
    * simulé — aucune clé API » pendant que de vrais emails partaient (`bugs.md`, 2026-09-16).
    */
   api_key_source: 'boutique' | 'plateforme' | null
+  /**
+   * Expéditeur **réellement employé**. Calculé dès que la boutique n'a pas sa propre clé :
+   * l'envoi passe alors par le domaine vérifié de la plateforme.
+   */
   from:        string
+  /**
+   * Expéditeur **saisi par la boutique**, `null` si elle n'a rien saisi.
+   *
+   * Distinct de `from` exprès : réinjecter `from` dans un champ de saisie faisait écrire
+   * l'adresse de la plateforme dans `email_from` de la boutique au premier « Enregistrer »
+   * — et cette boutique, une fois sa vraie clé posée, aurait envoyé depuis un domaine
+   * qu'elle ne possède pas (`bugs.md`, 2026-09-16).
+   */
+  from_configure: string | null
   notif_ticket_cree:    boolean
   notif_ticket_termine: boolean
   notif_sav_ouvert:     boolean
@@ -106,6 +119,7 @@ export async function getEmailConfig(
     api_key:              s?.email_api_key  ?? repli ?? null,
     api_key_source:       hasOwnKey ? 'boutique' : (repli ? 'plateforme' : null),
     from:                 hasOwnKey ? (s?.email_from ?? `${nom} <${email}>`) : `${nom} via iziGSM <noreply@mail.repairdesk.fr>`,
+    from_configure:       s?.email_from ?? null,
     notif_ticket_cree:    (s?.email_notif_ticket_cree    ?? 1) === 1,
     notif_ticket_termine: (s?.email_notif_ticket_termine ?? 1) === 1,
     notif_sav_ouvert:     (s?.email_notif_sav_ouvert     ?? 1) === 1,

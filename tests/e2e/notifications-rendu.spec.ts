@@ -38,6 +38,8 @@ function stats(source: 'boutique' | 'plateforme' | null = 'boutique') {
         from: source === 'boutique'
           ? 'Atelier Test <contact@atelier-test.fr>'
           : 'Atelier Test via iziGSM <noreply@mail.repairdesk.fr>',
+        // Saisi par la boutique — nul tant qu'elle n'a rien configuré, même si `from` est rempli
+        from_configure: source === 'boutique' ? 'Atelier Test <contact@atelier-test.fr>' : null,
       },
     },
   }
@@ -112,6 +114,26 @@ test.describe('Page Notifications — l\'écran rend ce que l\'API renvoie', () 
     await expect(page.locator('#status-dot')).toHaveClass(/bg-yellow-400/)
     // Aucun expéditeur annoncé : rien ne part, il n'y en a pas
     await expect(page.locator('#status-detail')).not.toContainText('Expéditeur')
+  })
+
+  test('le champ Expéditeur reste vide tant que la boutique n\'a rien saisi', async ({ page, request }) => {
+    // Sinon un simple « Enregistrer » — pour poser sa clé, par exemple — écrirait l'adresse
+    // de la plateforme dans `email_from` de la boutique, qui enverrait ensuite depuis un
+    // domaine qu'elle ne possède pas (`bugs.md`, 2026-09-16).
+    await ouvrirNotifications(page, request, stats('plateforme'))
+
+    await expect(page.locator('#cfg-from')).toHaveValue('')
+    // …alors que cette même adresse est bien annoncée comme expéditeur employé
+    await expect(page.locator('#status-detail')).toContainText('noreply@mail.repairdesk.fr')
+  })
+
+  // GARDE, jamais vu rouge : dans cet état, `from` et `from_configure` portent la même
+  // valeur, donc l'ancien code le passait déjà. Il verrouille que le correctif n'a pas vidé
+  // le champ des boutiques qui, elles, ont bien configuré un expéditeur.
+  test('le champ Expéditeur porte ce que la boutique a saisi, quand elle a saisi', async ({ page, request }) => {
+    await ouvrirNotifications(page, request, stats('boutique'))
+
+    await expect(page.locator('#cfg-from')).toHaveValue('Atelier Test <contact@atelier-test.fr>')
   })
 
   test('le journal des envois affiche ses lignes et son compteur', async ({ page, request }) => {

@@ -24,6 +24,7 @@ interface ConfigRendue {
   api_key_set:    boolean
   api_key_source: 'boutique' | 'plateforme' | null
   from:           string
+  from_configure: string | null
 }
 
 /** Manager de la boutique 1, qui n'a pas de clé Resend propre (base simulée vide). */
@@ -62,6 +63,15 @@ describe('GET /api/notifications/stats — origine de la clé employée', () => 
 
     expect(config.api_key_source).toBeNull()
     expect(config.api_key_set).toBe(false)
+  })
+
+  it('distingue l\'expéditeur configuré de l\'expéditeur employé', async () => {
+    // La base simulée est vide : la boutique n'a rien configuré. `from` est donc calculé,
+    // et le champ de saisie de la page ne doit pas s'en remplir (`bugs.md`, 2026-09-16).
+    const { config } = await lireStats({ RESEND_API_KEY: CLE_PLATEFORME })
+
+    expect(config.from_configure, 'rien n\'a été saisi par la boutique').toBeNull()
+    expect(config.from, 'l\'expéditeur employé, lui, existe').toContain('via iziGSM')
   })
 
   it('ne renvoie jamais la clé elle-même, sous aucune forme', async () => {

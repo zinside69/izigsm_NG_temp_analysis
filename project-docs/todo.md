@@ -44,7 +44,14 @@ que rien ne part — et acheter une clé Resend pour rien.
       vient d'un **envoi réel** et vaut donc `false` dès que la clé plateforme existe. Ce libellé-là
       ne ment pas.
 
-**Non déployé** : `CACHE_VERSION` `izigsm-v3.10`.
+**Déployé en `izigsm-v3.10`** et vu à l'écran : bandeau vert « Envois actifs via iziGSM »,
+expéditeur réel, conseil. Compteurs et journal cohérents (5 envoyés + 2 simulés = 7 entrées).
+
+- [x] **Piège trouvé en validant cette v3.10** : le champ « Expéditeur » était pré-rempli avec
+      l'adresse **de la plateforme**, qu'un « Enregistrer » aurait inscrite comme celle de la
+      boutique — laquelle, sa vraie clé posée, aurait vu tous ses emails refusés par Resend
+      (`bugs.md`). Corrigé le même jour : `from_configure` distinct de `from`.
+      **Non déployé** : `CACHE_VERSION` `izigsm-v3.11`.
 
 ## 🟡 P3 — Page Notifications : `saveNotif()` annonce un succès sans lire la réponse (trouvé le 2026-09-16)
 

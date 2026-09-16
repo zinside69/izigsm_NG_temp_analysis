@@ -68,6 +68,9 @@ notifications.get('/notifications/stats', async (c) => {
           from:         config.from,
           api_key_set:    !!config.api_key,    // ne jamais retourner la clé
           api_key_source: config.api_key_source,  // 'boutique' | 'plateforme' | null
+          // `from` = employé (affiché), `from_configure` = saisi (à remettre dans le champ).
+          // Les confondre fait enregistrer l'adresse de la plateforme chez la boutique.
+          from_configure: config.from_configure,
           notifs:       {
             ticket_cree:    config.notif_ticket_cree,
             ticket_termine: config.notif_ticket_termine,

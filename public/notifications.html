@@ -373,9 +373,13 @@
         document.getElementById('notif-relance').checked        = !!s.config.notifs.relance
       }
 
-      // From
-      if (s.config?.from)
-        document.getElementById('cfg-from').value = s.config.from
+      // Expéditeur : le champ ne reçoit que ce que la boutique a **saisi**, jamais la valeur
+      // calculée (`from`), qui est l'adresse du domaine de la plateforme quand la boutique
+      // n'a pas sa propre clé. La réinjecter faisait l'enregistrer comme sienne au premier
+      // « Enregistrer » — et une fois sa vraie clé posée, elle aurait envoyé depuis un
+      // domaine qu'elle ne possède pas, donc refusée par Resend (`bugs.md`, 2026-09-16).
+      // Le placeholder du champ reste le guide quand rien n'est saisi.
+      document.getElementById('cfg-from').value = s.config?.from_configure ?? ''
     } catch (e) { console.error(e) }
   }
 
