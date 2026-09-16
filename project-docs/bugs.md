@@ -1,6 +1,27 @@
 # iziGSM — Bugs connus
 
-## 🔴 Page Stock : la recherche effacée par la fin de chaque chargement (vécu en production le 2026-09-15 sur la v3.07, CORRIGÉ le même jour, non déployé)
+## 🟡 Page Notifications : « Mode simulé — aucune clé API » annoncé pendant que de vrais emails partent (trouvé le 2026-09-16, OUVERT)
+
+**Symptôme** (exploitant, deux captures, production `izigsm-v3.09`) : le bandeau « Connexion Resend »
+affiche « Mode simulé — aucune clé API » — et un email de test envoyé depuis cette même page **arrive
+réellement**, expéditeur `SOTELI via iziGSM <noreply@mail.repairdesk.fr>`. Le journal de la page le
+dit aussi : les envois du 11/09 à 12:07 et 12:30 sont « ✓ Envoyé » alors que la boutique n'a aucune
+clé, quand ceux de 08:23 et 08:33 — antérieurs au correctif du repli plateforme — sont « Simulé ».
+
+**Cause** : `loadStats()` choisit le libellé sur `config.api_key_set`, qui ne décrit que la clé **de
+la boutique**. Depuis le 2026-09-11 (CLAUDE.md § Envoi d'email), une boutique sans clé envoie par la
+clé **plateforme** (`RESEND_API_KEY`, expéditeur forcé) : l'absence de clé boutique ne signifie donc
+plus « mode simulé ». L'exploitant lit « aucun email ne part » sur une page qui montre des emails
+partis — et pourrait aller acheter une clé Resend pour un problème qui n'existe pas.
+
+**Pas un défaut de rendu** : la page affiche fidèlement ce que l'API lui donne. Le correctif suppose
+que `GET /api/notifications/stats` dise aussi si la plateforme a une clé de repli — information
+qu'aucune réponse ne porte aujourd'hui. `todo.md` 🟡.
+
+**Trouvé en validant la v3.09**, pas par un test : aucune suite ne compare un libellé d'écran à ce
+que le serveur fait réellement.
+
+## 🟢 Page Stock : la recherche effacée par la fin de chaque chargement (vécu en production le 2026-09-15 sur la v3.07, CORRIGÉ le même jour, DÉPLOYÉ et vérifié à l'écran le 2026-09-16 en v3.08)
 
 **Symptôme** (exploitant, capture, `izigsm-v3.07`) : « iphone 12 » dans la recherche, famille
 « Pièce » active, et la liste montre des batteries Samsung — la recherche n'est pas appliquée.

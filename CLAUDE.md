@@ -960,6 +960,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-16 (checkpoint 119) : aucune migration en attente — dépôt et production
+alignés** (`izigsm-v3.09`, `2ef297d`). Page Notifications réparée (les 5 appels restants déballés)
+déployée par l'exploitant (aperçu `22891747`), sans migration. Relu sur l'aperçu **puis** l'apex :
+`sw.js` v3.09, `/notifications` servie avec 6 déballages et **zéro** `data.success` nu,
+`app.d39189aa.js` = manifeste local en `application/javascript`, `/api/health` 200 ; validé à
+l'écran (tuiles chiffrées, journal de 6 lignes, email de test réellement reçu).
+
 **État au 2026-09-16 (checkpoint 118) : aucune migration en attente — dépôt et production
 alignés** (`izigsm-v3.08`, `087eb01`). Recherche et compteurs de la page Stock (`19988f2`, `c0935e2`)
 déployés par l'exploitant (aperçu `36e72c73`), sans migration. Relu sur l'aperçu **puis** l'apex :

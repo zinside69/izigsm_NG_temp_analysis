@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 118 — v3.08 en production, page Stock validée à l'écran)
+# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 119 — v3.09 en production, page Notifications réparée)
+
+## Checkpoint 119 — Page Notifications : les six appels rendent enfin (2026-09-16)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.09`, `2ef297d`, aperçu
+`22891747`). Le 🔴 P1 ouvert depuis le 2026-09-15 est **clos**.
+
+- **Constaté à l'écran avant de corriger** (règle « cause après mesure ») : tuiles sur `—`, journal
+  **et** « Connexion Resend » figés sur « Chargement… ». Le journal bloqué sur « Chargement… » plutôt
+  que sur « Aucun email dans le journal » situait le défaut **avant** `renderLogs()`.
+- **Correctif** : les 5 appels restants déballés au point d'appel (`(await apiX(…)).data`, puis
+  `data?.success`), branches d'erreur en `data?.error` — après déballage, `data` vaut `null` sur une
+  réponse non JSON.
+- **Deux filets, vus rouges d'abord** : le garde-fou d'enveloppe **étendu aux scripts inline** des
+  pages HTML (`scriptsInline()` blanchit tout le reste au lieu de le supprimer, pour garder les
+  numéros de ligne du fichier — plus un test de mutation de l'extraction), rouge sur les 5 lignes ;
+  et `tests/e2e/notifications-rendu.spec.ts`, 6 tests de rendu, 6/6 rouges puis 6/6 verts.
+- **Validé à l'écran en production** : tuiles `4 / 2 / 2 / 0`, journal de 6 lignes avec « 6 entrées —
+  page 1/1 » (les compteurs et le journal lisent bien la même donnée), et un email de test
+  **réellement reçu** à 10:30.
+- **Deux défauts trouvés en chemin, laissés ouverts** (`bugs.md`, `todo.md`) : 🟡 P2 le libellé « Mode
+  simulé — aucune clé API » affiché pendant que de vrais emails partent par la clé plateforme —
+  prouvé par l'email reçu ; 🟡 P3 `saveNotif()`, qui annonce « Préférences mises à jour » sans jamais
+  lire la réponse (`api()` ne lève pas sur une erreur HTTP, le `catch` ne couvre que le rejet de
+  `fetch`). Aucun garde-fou ne voit cette seconde classe : un résultat **jamais lu**.
+
+**Gates** (`2ef297d`) : vitest 1110/1112 (les 2 = baseline `agendaService`), tsc 32 = baseline,
+E2E notifications 6/6, balayage du menu + config email + formulaires 21/21.
+
+**Prochaine session** : 🟡 P2 le libellé « Mode simulé » (trois états, la réponse de `stats` devant
+porter un booléen de repli plateforme), puis 🟡 P3 `saveNotif()`.
+
+## Checkpoint 118
 
 ## Checkpoint 118 — v3.08 en production : recherche et compteurs de la page Stock (2026-09-16)
 

@@ -23,6 +23,18 @@ affichés ; relances tickets, relances devis et email de test annoncés « Erreu
 
 **Non déployé** : `CACHE_VERSION` `izigsm-v3.09`.
 
+## 🟡 P2 — Page Notifications : « Mode simulé » annoncé pendant que de vrais emails partent (trouvé le 2026-09-16)
+
+Détail et preuves : `bugs.md` § « Mode simulé ». Le libellé ne regarde que la clé **de la boutique**
+et ignore le repli par la clé plateforme, en place depuis le 2026-09-11. Un exploitant peut conclure
+que rien ne part — et acheter une clé Resend pour rien.
+
+- [ ] Faire dire à `GET /api/notifications/stats` si la plateforme a une clé de repli
+      (`!!c.env.RESEND_API_KEY`, un booléen — **jamais** la clé ni un fragment)
+- [ ] Trois états à l'écran au lieu de deux : clé de la boutique · repli plateforme (expéditeur
+      forcé, à nommer) · réellement simulé. Test de rendu par état, vu rouge
+- [ ] Vérifier le même libellé dans Réglages › Email, qui lit la même notion
+
 ## 🟡 P3 — Page Notifications : `saveNotif()` annonce un succès sans lire la réponse (trouvé le 2026-09-16)
 
 Détail : `bugs.md` § « Préférences mises à jour ». Symptôme **inverse** des 6 appels ci-dessus — un
