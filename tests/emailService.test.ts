@@ -106,6 +106,41 @@ describe('getEmailConfig()', () => {
     const config = await getEmailConfig(db, 1)
     expect(config.from).toBe('Test Shop <shop@test.fr>')
   })
+
+  // ── Origine de la clé employée ──────────────────────────────────────────────
+  // Ajouté le 2026-09-16 : `api_key` seul ne dit pas *qui* fournit la clé, et la page
+  // Notifications en a besoin pour ne pas annoncer « Mode simulé » pendant que de vrais
+  // emails partent par la clé plateforme (`bugs.md`).
+
+  it('api_key_source vaut « boutique » quand la boutique a sa propre clé', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_ACTIF)
+    const config = await getEmailConfig(db, 1, 're_cle_plateforme')
+    expect(config.api_key_source).toBe('boutique')
+    // La clé de la boutique l'emporte sur le repli
+    expect(config.api_key).toBe('re_test_key_123')
+  })
+
+  it('api_key_source vaut « plateforme » quand seule la clé de repli existe', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    const config = await getEmailConfig(db, 1, 're_cle_plateforme')
+    expect(config.api_key_source).toBe('plateforme')
+    expect(config.api_key).toBe('re_cle_plateforme')
+    // L'expéditeur reste celui du domaine vérifié de la plateforme
+    expect(config.from).toContain('via iziGSM')
+  })
+
+  it('api_key_source vaut null quand aucune clé n\'est disponible — le seul vrai mode simulé', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    const config = await getEmailConfig(db, 1)
+    expect(config.api_key_source).toBeNull()
+    expect(config.api_key).toBeNull()
+  })
+
+  it('une clé de repli vide ou blanche ne compte pas comme une clé', async () => {
+    db.__setResponse(SQL_CONFIG, SETTINGS_SANS_CLE)
+    expect((await getEmailConfig(db, 1, '')).api_key_source).toBeNull()
+    expect((await getEmailConfig(db, 1, '   ')).api_key_source).toBeNull()
+  })
 })
 
 // ─── sendEmail — mode simulé ──────────────────────────────────────────────────

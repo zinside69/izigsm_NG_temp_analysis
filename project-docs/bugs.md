@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🟡 Page Notifications : « Mode simulé — aucune clé API » annoncé pendant que de vrais emails partent (trouvé le 2026-09-16, OUVERT)
+## 🟢 Page Notifications : « Mode simulé — aucune clé API » annoncé pendant que de vrais emails partent (trouvé ET CORRIGÉ le 2026-09-16, non déployé)
 
 **Symptôme** (exploitant, deux captures, production `izigsm-v3.09`) : le bandeau « Connexion Resend »
 affiche « Mode simulé — aucune clé API » — et un email de test envoyé depuis cette même page **arrive
@@ -18,8 +18,27 @@ partis — et pourrait aller acheter une clé Resend pour un problème qui n'exi
 que `GET /api/notifications/stats` dise aussi si la plateforme a une clé de repli — information
 qu'aucune réponse ne porte aujourd'hui. `todo.md` 🟡.
 
-**Trouvé en validant la v3.09**, pas par un test : aucune suite ne compare un libellé d'écran à ce
+**Trouvé en validant la v3.09**, pas par un test : aucune suite ne comparait un libellé d'écran à ce
 que le serveur fait réellement.
+
+**Corrigé le 2026-09-16** (`izigsm-v3.10`, non déployé) — la cause était en un point, pas à
+l'écran : `src/routes/notifications.ts` appelait `getEmailConfig(db, boutiqueId)` **sans** la clé de
+repli, alors que la fonction accepte ce 3ᵉ argument depuis toujours et résout
+`api_key = clé boutique ?? repli`. **Exactement l'oubli corrigé le 2026-09-11 sur `POST
+/notifications/test`** : la règle avait été écrite pour `sendEmail()` seul, jamais étendue à
+`getEmailConfig()` — elle l'est désormais (CLAUDE.md § Envoi d'email).
+
+- `EmailConfig.api_key_source` (`'boutique'` | `'plateforme'` | `null`) : `!!api_key` ne pouvait pas
+  porter trois états. Une clé de repli vide ou blanche ne compte pas comme une clé.
+- La route expose `api_key_source` **à côté** de `api_key_set`, jamais la clé elle-même (un test le
+  vérifie sur la réponse entière, pas sur les champs attendus).
+- L'écran lit `api_key_source ?? (api_key_set ? 'boutique' : null)` — un cache peut encore servir
+  une réponse d'avant ce correctif.
+- Tests vus rouges d'abord : 4 unitaires sur `getEmailConfig()`, 2 sur la route, 1 E2E de rendu
+  (état plateforme). Le second E2E (« sans aucune clé ») est un **garde assumé, jamais vu rouge** :
+  c'est le seul état que l'ancien code décrivait juste, et une mutation ne le fait pas rougir — un
+  `#status-detail` vidé de son texte est de hauteur nulle, donc « masqué » pour Playwright. Mesuré,
+  pas supposé.
 
 ## 🟢 Page Stock : la recherche effacée par la fin de chaque chargement (vécu en production le 2026-09-15 sur la v3.07, CORRIGÉ le même jour, DÉPLOYÉ et vérifié à l'écran le 2026-09-16 en v3.08)
 

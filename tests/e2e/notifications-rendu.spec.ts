@@ -19,16 +19,31 @@ import { createTenantAdmin } from './fixtures/tenant'
 import { seConnecter } from './fixtures/comptes'
 
 /** Corps de réponse du serveur, forme réelle de `src/routes/notifications.ts`. */
-const STATS = {
-  success: true,
-  data: {
-    envoyes_total: 42,
-    envoyes_mois:  7,
-    simules_mois:  3,
-    erreurs_mois:  1,
-    config: { api_key_set: true },
-  },
+/**
+ * @param source  Qui fournit la clé : la boutique, la plateforme (repli), ou personne.
+ *                `from` suit la même règle que le serveur — l'expéditeur du domaine
+ *                vérifié dès que la boutique n'a pas sa propre clé.
+ */
+function stats(source: 'boutique' | 'plateforme' | null = 'boutique') {
+  return {
+    success: true,
+    data: {
+      envoyes_total: 42,
+      envoyes_mois:  7,
+      simules_mois:  3,
+      erreurs_mois:  1,
+      config: {
+        api_key_set:    source !== null,
+        api_key_source: source,
+        from: source === 'boutique'
+          ? 'Atelier Test <contact@atelier-test.fr>'
+          : 'Atelier Test via iziGSM <noreply@mail.repairdesk.fr>',
+      },
+    },
+  }
 }
+
+const STATS = stats('boutique')
 
 const LOGS = {
   success: true,
@@ -43,13 +58,17 @@ const LOGS = {
 }
 
 /** Connexion d'un tenant neuf, stubs posés avant tout chargement de la page. */
-async function ouvrirNotifications(page: Page, request: Parameters<typeof createTenantAdmin>[0]) {
+async function ouvrirNotifications(
+  page: Page,
+  request: Parameters<typeof createTenantAdmin>[0],
+  corpsStats: unknown = STATS,
+) {
   const tenant = await createTenantAdmin(request)
   await seConnecter(page, tenant)
   await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
 
   await page.route('**/api/notifications/stats*', route =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STATS) }))
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(corpsStats) }))
   await page.route('**/api/notifications/logs*', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(LOGS) }))
 
@@ -65,6 +84,34 @@ test.describe('Page Notifications — l\'écran rend ce que l\'API renvoie', () 
     await expect(page.locator('#kpi-simules')).toHaveText('3')
     await expect(page.locator('#kpi-erreurs')).toHaveText('1')
     await expect(page.locator('#status-label')).toContainText('Clé API configurée')
+  })
+
+  test('la clé de la plateforme est annoncée comme un envoi actif, pas comme un mode simulé', async ({ page, request }) => {
+    // Défaut du 2026-09-16, vu en production : « Mode simulé — aucune clé API » affiché
+    // pendant qu'un email de test arrivait réellement (`bugs.md`).
+    await ouvrirNotifications(page, request, stats('plateforme'))
+
+    await expect(page.locator('#status-label')).toHaveText('Envois actifs via iziGSM')
+    await expect(page.locator('#status-label')).not.toContainText('simulé')
+    // L'exploitant doit lire l'expéditeur que verront ses clients
+    await expect(page.locator('#status-detail')).toContainText('noreply@mail.repairdesk.fr')
+    await expect(page.locator('#status-detail')).toContainText('votre domaine')
+  })
+
+  // GARDE, jamais vu rouge — et c'est mesuré : avant le correctif, ce cas s'affichait déjà
+  // correctement (c'est le seul que l'ancien code décrivait juste). Une mutation qui rend
+  // `#status-detail` visible dans cette branche ne le fait pas rougir non plus : le détail
+  // y est vidé de son texte, donc de hauteur nulle, donc « masqué » pour Playwright. Ce test
+  // verrouille que le correctif n'a pas déplacé le mensonge dans l'autre sens — il ne
+  // contraint pas la visibilité du détail.
+  test('sans aucune clé, le mode simulé est annoncé — et lui seul', async ({ page, request }) => {
+    await ouvrirNotifications(page, request, stats(null))
+
+    await expect(page.locator('#status-label')).toContainText('Mode simulé')
+    await expect(page.locator('#status-label')).not.toContainText('actifs')
+    await expect(page.locator('#status-dot')).toHaveClass(/bg-yellow-400/)
+    // Aucun expéditeur annoncé : rien ne part, il n'y en a pas
+    await expect(page.locator('#status-detail')).not.toContainText('Expéditeur')
   })
 
   test('le journal des envois affiche ses lignes et son compteur', async ({ page, request }) => {

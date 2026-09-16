@@ -784,8 +784,18 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 
 - **Clé** : une boutique sans `email_api_key` envoie par la clé plateforme (`RESEND_API_KEY`,
   expéditeur forcé `<nom> via iziGSM <noreply@mail.repairdesk.fr>`, domaine vérifié). **Toute
-  route qui appelle `sendEmail()` passe `apiKeyFallback: c.env.RESEND_API_KEY`** — la route de
-  test l'oubliait et affichait « Mode simulé » à tort (corrigé le 2026-09-11).
+  route qui appelle `sendEmail()` **ou `getEmailConfig()`** passe
+  `apiKeyFallback: c.env.RESEND_API_KEY`** — la route de test l'oubliait et affichait « Mode
+  simulé » à tort (corrigé le 2026-09-11), `GET /notifications/stats` le répétait sur
+  `getEmailConfig()` et faisait mentir le bandeau de la page entière (corrigé le 2026-09-16).
+  La règle ne vaut pas que pour l'envoi : **elle vaut pour toute lecture qui décrit l'état des
+  envois**.
+- **Ce que la clé employée permet de dire : trois états, jamais deux.** `getEmailConfig()` rend
+  `api_key_source` — `'boutique'` | `'plateforme'` | `null`, ce dernier étant le **seul** vrai
+  mode simulé. `!!api_key` ne distingue pas les deux premiers, et « aucune clé **de la
+  boutique** » ne signifie plus « rien ne part » depuis le repli plateforme du 2026-07-10. ⊥
+  reconstruire cette notion chez un appelant : un booléen de plus y redeviendrait ambigu.
+  Une clé de repli vide ou blanche ne compte pas comme une clé.
 - **Toute sortie de l'envoi écrit une ligne dans `email_logs`** — envoyé, erreur, simulé,
   *y compris* notification désactivée (`simule`, motif dans `erreur`). Un `return` ou un
   `.catch(() => {})` sans ligne rend un envoi raté indiscernable d'un envoi jamais tenté :

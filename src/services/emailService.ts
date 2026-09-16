@@ -31,6 +31,14 @@ export type EmailType = 'ticket_cree' | 'ticket_termine' | 'ticket_livre' | 'sav
 export interface EmailConfig {
   provider:    string
   api_key:     string | null
+  /**
+   * Qui fournit la clé employée : la boutique, la plateforme (repli `RESEND_API_KEY`), ou
+   * personne — seul cas où l'envoi est réellement simulé.
+   *
+   * `api_key` non nul ne suffit pas à le dire, et la page Notifications annonçait « Mode
+   * simulé — aucune clé API » pendant que de vrais emails partaient (`bugs.md`, 2026-09-16).
+   */
+  api_key_source: 'boutique' | 'plateforme' | null
   from:        string
   notif_ticket_cree:    boolean
   notif_ticket_termine: boolean
@@ -89,10 +97,14 @@ export async function getEmailConfig(
   const nom       = s?.boutique_nom   ?? 'iziGSM'
   const email     = s?.boutique_email ?? 'noreply@izigsm.fr'
   const hasOwnKey = !!s?.email_api_key
+  // Une clé vide ou blanche n'est pas une clé : la traiter comme telle ferait annoncer des
+  // envois actifs alors que rien ne partirait.
+  const repli     = apiKeyFallback?.trim() ? apiKeyFallback : null
 
   return {
     provider:             s?.email_provider ?? 'resend',
-    api_key:              s?.email_api_key  ?? apiKeyFallback ?? null,
+    api_key:              s?.email_api_key  ?? repli ?? null,
+    api_key_source:       hasOwnKey ? 'boutique' : (repli ? 'plateforme' : null),
     from:                 hasOwnKey ? (s?.email_from ?? `${nom} <${email}>`) : `${nom} via iziGSM <noreply@mail.repairdesk.fr>`,
     notif_ticket_cree:    (s?.email_notif_ticket_cree    ?? 1) === 1,
     notif_ticket_termine: (s?.email_notif_ticket_termine ?? 1) === 1,

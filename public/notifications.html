@@ -104,6 +104,13 @@
               <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
               <span id="status-label" class="text-gray-500">Chargement…</span>
             </div>
+            <!-- Détail du statut : n'est rempli que lorsque les envois passent par la clé
+                 de la plateforme — l'exploitant doit alors savoir quel expéditeur verront
+                 ses clients, et ce qu'apporterait sa propre clé. -->
+            <div id="status-detail" class="hidden mt-1 ml-4 text-xs text-gray-500 leading-relaxed">
+              <div id="status-from"></div>
+              <div id="status-conseil"></div>
+            </div>
           </div>
           <!-- Clé API en type="password" : jamais de soumission native (CLAUDE.md § Formulaires avec mot
                de passe). `onsubmit="saveConfig(event)"` échouait tant que le script de fin de page
@@ -326,17 +333,36 @@
       document.getElementById('kpi-simules').textContent  = s.simules_mois   ?? 0
       document.getElementById('kpi-erreurs').textContent  = s.erreurs_mois   ?? 0
 
-      // Statut connexion
-      const dot   = document.getElementById('status-dot')
-      const label = document.getElementById('status-label')
-      if (s.config?.api_key_set) {
-        dot.className   = 'w-2.5 h-2.5 rounded-full bg-green-500'
+      // Statut connexion — trois états, pas deux. Une boutique sans clé propre envoie
+      // réellement par la clé de la plateforme : annoncer « Mode simulé » dans ce cas est
+      // faux, et poussait l'exploitant à acheter une clé pour rien (`bugs.md`, 2026-09-16).
+      const dot     = document.getElementById('status-dot')
+      const label   = document.getElementById('status-label')
+      const detail  = document.getElementById('status-detail')
+      // Repli sur l'ancien champ : un cache peut encore servir une réponse sans `api_key_source`.
+      const source  = s.config?.api_key_source ?? (s.config?.api_key_set ? 'boutique' : null)
+
+      detail.classList.add('hidden')
+      document.getElementById('status-from').textContent    = ''
+      document.getElementById('status-conseil').textContent = ''
+
+      if (source === 'boutique') {
+        dot.className     = 'w-2.5 h-2.5 rounded-full bg-green-500'
         label.textContent = 'Clé API configurée — envois réels actifs'
-        label.className = 'text-green-600 text-sm font-medium'
+        label.className   = 'text-green-600 text-sm font-medium'
+      } else if (source === 'plateforme') {
+        dot.className     = 'w-2.5 h-2.5 rounded-full bg-green-500'
+        label.textContent = 'Envois actifs via iziGSM'
+        label.className   = 'text-green-600 text-sm font-medium'
+        // `textContent` et non `innerHTML` : `from` porte le nom de la boutique, saisi par
+        // l'utilisateur (CLAUDE.md § Gabarits et XSS stockée).
+        document.getElementById('status-from').textContent    = `Expéditeur : ${s.config?.from ?? '—'}`
+        document.getElementById('status-conseil').textContent = 'Ajoutez votre clé Resend pour envoyer depuis votre domaine.'
+        detail.classList.remove('hidden')
       } else {
-        dot.className   = 'w-2.5 h-2.5 rounded-full bg-yellow-400'
+        dot.className     = 'w-2.5 h-2.5 rounded-full bg-yellow-400'
         label.textContent = 'Mode simulé — aucune clé API'
-        label.className = 'text-yellow-600 text-sm'
+        label.className   = 'text-yellow-600 text-sm'
       }
 
       // Notifs toggles

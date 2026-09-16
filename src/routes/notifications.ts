@@ -52,7 +52,11 @@ notifications.get('/notifications/stats', async (c) => {
 
     const [stats, config] = await Promise.all([
       getEmailStats(c.get('db'), boutiqueId),
-      getEmailConfig(c.get('db'), boutiqueId),
+      // La clé de repli fait partie de l'état à décrire : sans elle, `api_key_set` ne parle
+      // que de la clé de la boutique, et l'écran annonce « Mode simulé » pendant que de
+      // vrais emails partent (défaut du 2026-09-16, `bugs.md`). Même oubli que sur
+      // `POST /notifications/test` le 2026-09-11.
+      getEmailConfig(c.get('db'), boutiqueId, c.env.RESEND_API_KEY),
     ])
 
     return c.json({
@@ -62,7 +66,8 @@ notifications.get('/notifications/stats', async (c) => {
         config: {
           provider:     config.provider,
           from:         config.from,
-          api_key_set:  !!config.api_key,    // ne jamais retourner la clé
+          api_key_set:    !!config.api_key,    // ne jamais retourner la clé
+          api_key_source: config.api_key_source,  // 'boutique' | 'plateforme' | null
           notifs:       {
             ticket_cree:    config.notif_ticket_cree,
             ticket_termine: config.notif_ticket_termine,

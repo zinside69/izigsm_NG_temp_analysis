@@ -29,11 +29,22 @@ Détail et preuves : `bugs.md` § « Mode simulé ». Le libellé ne regarde que
 et ignore le repli par la clé plateforme, en place depuis le 2026-09-11. Un exploitant peut conclure
 que rien ne part — et acheter une clé Resend pour rien.
 
-- [ ] Faire dire à `GET /api/notifications/stats` si la plateforme a une clé de repli
+- [x] Faire dire à `GET /api/notifications/stats` si la plateforme a une clé de repli
       (`!!c.env.RESEND_API_KEY`, un booléen — **jamais** la clé ni un fragment)
-- [ ] Trois états à l'écran au lieu de deux : clé de la boutique · repli plateforme (expéditeur
+      — **fait le 2026-09-16**, autrement et mieux : la route passe simplement la clé de repli à
+      `getEmailConfig()` (3ᵉ argument qu'elle acceptait déjà, jamais transmis ici) et expose
+      `api_key_source`. Aucun booléen de plus : c'est `!!api_key` à deux états qui était la cause.
+- [x] Trois états à l'écran au lieu de deux : clé de la boutique · repli plateforme (expéditeur
       forcé, à nommer) · réellement simulé. Test de rendu par état, vu rouge
-- [ ] Vérifier le même libellé dans Réglages › Email, qui lit la même notion
+      — **fait le 2026-09-16**. « Envois actifs via iziGSM » + expéditeur réel + ce qu'apporterait
+      sa propre clé (libellé choisi par l'exploitant). Le test de l'état plateforme a été vu rouge ;
+      celui de l'état simulé est un **garde**, et ne rougit sous aucune mutation (mesuré, `bugs.md`).
+- [x] Vérifier le même libellé dans Réglages › Email, qui lit la même notion
+      — **fait le 2026-09-16 : rien à corriger.** `settings.html:859` lit `r.data.simulated`, qui
+      vient d'un **envoi réel** et vaut donc `false` dès que la clé plateforme existe. Ce libellé-là
+      ne ment pas.
+
+**Non déployé** : `CACHE_VERSION` `izigsm-v3.10`.
 
 ## 🟡 P3 — Page Notifications : `saveNotif()` annonce un succès sans lire la réponse (trouvé le 2026-09-16)
 
