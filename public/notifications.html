@@ -316,8 +316,10 @@
   async function loadStats() {
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
-      const data = await apiGet(`/api/notifications/stats${params}`)
-      if (!data.success) return
+      // Déballage au point d'appel : les helpers rendent l'enveloppe { ok, status, data, error },
+      // dont `success` vaut toujours undefined (CLAUDE.md § Enveloppe des réponses API).
+      const data = (await apiGet(`/api/notifications/stats${params}`)).data
+      if (!data?.success) return
       const s = data.data
       document.getElementById('kpi-total').textContent    = s.envoyes_total  ?? 0
       document.getElementById('kpi-mois').textContent     = s.envoyes_mois   ?? 0
@@ -406,13 +408,13 @@
     if (!_boutiqueId) return
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
-      const data = await apiPost(`/api/notifications/relances${params}`, {})
-      if (data.success) {
+      const data = (await apiPost(`/api/notifications/relances${params}`, {})).data
+      if (data?.success) {
         showToast(`${data.data?.relances_envoyees ?? 0} relance(s) tickets envoyée(s)`, 'green')
         loadStats()
         loadLogs()
       } else {
-        showToast(data.error || 'Erreur relances', 'red')
+        showToast(data?.error || 'Erreur relances', 'red')
       }
     } catch (e) { showToast('Erreur réseau', 'red') }
   }
@@ -421,13 +423,13 @@
     if (!_boutiqueId) return
     try {
       const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
-      const data = await apiPost(`/api/notifications/relances-devis${params}`, {})
-      if (data.success) {
+      const data = (await apiPost(`/api/notifications/relances-devis${params}`, {})).data
+      if (data?.success) {
         showToast(`${data.data?.relances_envoyees ?? 0} relance(s) devis envoyée(s)`, 'green')
         loadStats()
         loadLogs()
       } else {
-        showToast(data.error || 'Erreur relances devis', 'red')
+        showToast(data?.error || 'Erreur relances devis', 'red')
       }
     } catch (e) { showToast('Erreur réseau', 'red') }
   }
@@ -451,8 +453,8 @@
     if (statut) qs.set('statut', statut)
 
     try {
-      const data = await apiGet(`/api/notifications/logs?${qs}`)
-      if (!data.success) return
+      const data = (await apiGet(`/api/notifications/logs?${qs}`)).data
+      if (!data?.success) return
 
       _totalPages = data.pagination?.pages ?? 1
       renderLogs(data.data)
@@ -513,13 +515,13 @@
 
     const params = _boutiqueId ? `?boutique_id=${_boutiqueId}` : ''
     try {
-      const data = await apiPost(`/api/notifications/test${params}`, { to })
-      if (data.success) {
+      const data = (await apiPost(`/api/notifications/test${params}`, { to })).data
+      if (data?.success) {
         showResult(data.message || (data.simulated ? 'Envoi simulé (pas de clé API).' : 'Email envoyé !'), data.simulated ? 'yellow' : 'green')
         loadStats()
         setTimeout(() => loadLogs(), 500)
       } else {
-        showResult(data.error || 'Erreur', 'red')
+        showResult(data?.error || 'Erreur', 'red')
       }
     } catch (e) {
       showResult('Erreur réseau.', 'red')

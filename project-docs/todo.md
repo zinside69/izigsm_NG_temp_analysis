@@ -6,11 +6,34 @@ Détail et cause : `bugs.md` § « Page Notifications ». Statistiques et journa
 affichés ; relances tickets, relances devis et email de test annoncés « Erreur » même réussis.
 **Déduit du code, à constater à l'écran d'abord.** `saveConfig()` déjà corrigé (même jour).
 
-- [ ] Constater à l'écran (page `/notifications`, compte de boutique) : stats et journal vides ?
-- [ ] Déballer les 5 appels au point d'appel (`(await apiX(…)).data`) — un test de **rendu** par
+- [x] Constater à l'écran (page `/notifications`, compte de boutique) : stats et journal vides ?
+      — **fait le 2026-09-16**, capture de l'exploitant en production (v3.08) : les 4 tuiles sur
+      `—`, le journal **et** « Connexion Resend » figés sur « Chargement… ». Déduction confirmée.
+- [x] Déballer les 5 appels au point d'appel (`(await apiX(…)).data`) — un test de **rendu** par
       appel, vu rouge (précédent : les 5 fichiers corrigés le 2026-08-02)
-- [ ] Étendre `tests/frontend-enveloppe-api-conformite.test.ts` aux scripts inline de
+      — **fait le 2026-09-16** : `tests/e2e/notifications-rendu.spec.ts`, 6 tests (tuiles, journal +
+      compteur, relances tickets, relances devis, envoi réel, envoi simulé), 6/6 rouges avant,
+      6/6 verts après. Réponses simulées par `page.route()` : le défaut est dans la lecture, et des
+      données réelles feraient dépendre l'assertion du contenu de la base.
+- [x] Étendre `tests/frontend-enveloppe-api-conformite.test.ts` aux scripts inline de
       `public/*.html` — vu rouge sur `notifications.html` avant correctif
+      — **fait le 2026-09-16** : `scriptsInline()` blanchit tout hors des `<script>` sans `src`, les
+      numéros de ligne restent ceux du HTML ; rouge sur les 5 lignes, plus un test de mutation de
+      l'extraction elle-même.
+
+**Non déployé** : `CACHE_VERSION` `izigsm-v3.09`.
+
+## 🟡 P3 — Page Notifications : `saveNotif()` annonce un succès sans lire la réponse (trouvé le 2026-09-16)
+
+Détail : `bugs.md` § « Préférences mises à jour ». Symptôme **inverse** des 6 appels ci-dessus — un
+401/422/500 sur `PUT …/settings` affiche quand même « Préférences mises à jour », et les bascules
+restent à l'écran dans un état que la base n'a pas. Trouvé en corrigeant les cinq autres appels,
+laissé hors périmètre de ce ticket-là.
+
+- [ ] Lire l'enveloppe (`res.ok` / `res.error`) et n'annoncer le succès qu'ensuite — test de rendu
+      vu rouge sur une réponse en erreur (`page.route()` qui renvoie 500)
+- [ ] Chercher la même écriture ailleurs : un `await apiX(…)` dont le résultat n'est jamais lu n'est
+      attrapé par **aucun** garde-fou actuel — décider s'il en faut un
 
 ## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
 

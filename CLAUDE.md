@@ -298,9 +298,17 @@ Ce que le garde-fou **ne** couvre pas : `res.data` au lieu de `res.data.data`. I
 sans faux positifs — `res.data` est aussi l'écriture correcte pour atteindre le corps
 (`decisions.md`). Ce cas reste du ressort de la revue et des tests de rendu.
 
-Autre angle mort, trouvé le 2026-09-15 : le garde-fou ne lit que `public/static/js/*.js`, **jamais
-les scripts inline des pages HTML**. `notifications.html` en porte six (statistiques et journal jamais
-affichés, actions annoncées « Erreur ») — un corrigé, cinq ouverts (`todo.md` 🔴, `bugs.md`).
+~~Autre angle mort, trouvé le 2026-09-15 : le garde-fou ne lit que `public/static/js/*.js`, **jamais
+les scripts inline des pages HTML**.~~ — **fermé le 2026-09-16** : le garde-fou lit désormais aussi
+les `<script>` sans `src` de `public/*.html` (`scriptsInline()`, qui **blanchit** tout le reste au
+lieu de le supprimer, pour que les lignes rendues soient celles du fichier HTML). Les six appels de
+`notifications.html` sont corrigés (statistiques, journal, 2 relances, email de test, config), vus
+rouges d'abord par ce garde-fou **et** par `tests/e2e/notifications-rendu.spec.ts`.
+
+**Ce que ce garde-fou ne voit toujours pas** : un `await apiX(…)` dont le résultat n'est **jamais
+lu**. `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
+`saveNotif()` (`notifications.html`) est dans ce cas (`bugs.md` 🟡, `todo.md` 🟡 P3). Un `catch` ne
+protège de rien ici : il ne se déclenche que si `fetch` lui-même est rejeté.
 
 `services.js` garde **deux conventions, délibérément** : `res.ok` sur les chemins Catégories
 et Services (corrects), déballage sur Marques/Modèles/Liaisons. Ne pas uniformiser.

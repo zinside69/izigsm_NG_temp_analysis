@@ -52,7 +52,7 @@ produits, envisager recherche et pagination côté serveur.
 même soir (capture de l'exploitant) : « Références 587 » avec la famille « Pièce » — au lieu de 100.
 La même capture a révélé le défaut suivant (recherche effacée par la fin du chargement), ci-dessus.
 
-## 🔴 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, 1 corrigé, 5 OUVERTS — déduit du code, NON vu à l'écran)
+## 🟢 Page Notifications : l'enveloppe API lue au mauvais niveau, 6 appels (trouvé en revue le 2026-09-15, VU À L'ÉCRAN et CORRIGÉ le 2026-09-16 — non déployé)
 
 **Défaut** : `notifications.html` (script inline) écrit `const data = await apiGet|apiPut|apiPost(…)`
 puis `data.success` — or ces helpers rendent l'**enveloppe** `{ ok, status, data, error }`, dont
@@ -67,8 +67,42 @@ lit que `public/static/js/*.js` — jamais les scripts inline des pages HTML ; e
 ne capte que les `>= 400` et les exceptions, pas une page muette.
 
 **Corrigé le 2026-09-15** : `saveConfig()` seul (déballage au point d'appel), vu rouge par
-`tests/e2e/config-email-enregistrement.spec.ts` — déployé en `izigsm-v3.07`. **Restent ouverts** : les 5 autres appels, et
-l'extension du garde-fou d'enveloppe aux scripts inline (`todo.md` 🔴).
+`tests/e2e/config-email-enregistrement.spec.ts` — déployé en `izigsm-v3.07`. **Restaient ouverts** :
+les 5 autres appels, et l'extension du garde-fou d'enveloppe aux scripts inline.
+
+**Constaté à l'écran le 2026-09-16**, en production (v3.08), capture de l'exploitant — la déduction
+du 15 était juste, et l'écran a dit plus que le code : les quatre tuiles restaient sur `—`, le
+journal restait sur **« Chargement… »** (et non « Aucun email dans le journal », preuve que le
+`return` silencieux sortait **avant** `renderLogs()`), et « Connexion Resend » restait sur
+« Chargement… », ce même appel `loadStats()` portant aussi le statut de la clé.
+
+**Corrigé le 2026-09-16** (`izigsm-v3.09`, non déployé) : les 5 appels déballés au point d'appel
+(`(await apiX(…)).data` puis `data?.success`), branches d'erreur passées en `data?.error` — après
+déballage, `data` peut être `null` sur une réponse non JSON. Vus rouges d'abord, des deux côtés :
+- **garde-fou statique étendu aux scripts inline** — `scriptsInline()` ne garde que le corps des
+  `<script>` sans `src`, le reste **blanchi** caractère par caractère pour que les numéros de ligne
+  rendus restent ceux du fichier HTML. Rouge sur `notifications.html:319, 409, 424, 454, 516`, plus
+  un test de mutation de l'extraction (une extraction qui rendrait du vide ferait passer le garde-fou
+  pour vert sans rien lire).
+- **`tests/e2e/notifications-rendu.spec.ts`** — 6 tests de rendu, réponses simulées par
+  `page.route()` : tuiles, journal + compteur, relances tickets, relances devis, email de test réel,
+  email simulé. 6/6 rouges avant correctif, 6/6 verts après.
+
+**Reste de la même famille, non corrigé** : `saveNotif()` (l. ~396) — voir l'entrée ci-dessous.
+
+## 🟡 Page Notifications : « Préférences mises à jour » annoncé sans lire la réponse (trouvé le 2026-09-16, OUVERT)
+
+**Défaut** : `saveNotif()` (`notifications.html`) fait `await apiPut(…/settings, payload)` puis
+annonce le succès **sans regarder le résultat**. `api()` ne lève jamais sur une erreur HTTP — elle
+rend `{ ok: false, … }` — donc le `catch` ne couvre que le rejet de `fetch` (réseau coupé). Un 401,
+un 422 ou un 500 affichent « Préférences mises à jour » et les bascules restent à l'écran dans un
+état que la base n'a pas.
+
+C'est le symptôme **inverse** des six appels ci-dessus (qui annonçaient « Erreur » sur un succès),
+et il n'est attrapé par aucun garde-fou : celui de l'enveloppe ne voit que les lectures de
+`.success`, pas les réponses jamais lues.
+
+**Trouvé en corrigeant les cinq autres appels, laissé hors du périmètre de ce ticket** (`todo.md`).
 
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 

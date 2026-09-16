@@ -38,6 +38,16 @@ import { join } from 'node:path'
 // @ts-ignore process types not available without @types/node
 const JS_DIR = join(process.cwd(), 'public', 'static', 'js')
 
+/**
+ * Les pages HTML elles-mêmes : plusieurs portent leur logique dans un `<script>` inline
+ * plutôt que dans un fichier de `static/js/`. Angle mort trouvé le 2026-09-15 —
+ * `notifications.html` y cachait six appels lus au mauvais niveau (statistiques et journal
+ * jamais affichés, actions réussies annoncées « Erreur »), invisibles pour ce garde-fou qui
+ * ne lisait que `JS_DIR`.
+ */
+// @ts-ignore process types not available without @types/node
+const HTML_DIR = join(process.cwd(), 'public')
+
 const HELPERS = ['apiGet', 'apiPost', 'apiPut', 'apiPatch', 'apiDelete']
 
 /** Fichiers dispensés du contrôle, avec motif — jamais un contournement silencieux. */
@@ -122,6 +132,38 @@ function violations(fichier: string, source: string): Violation[] {
   return trouvees
 }
 
+/** Remplace chaque caractère par une espace, en gardant les sauts de ligne. */
+function blanchir(texte: string): string {
+  return texte.replace(/[^\n]/g, ' ')
+}
+
+/**
+ * Ne garde d'une page HTML que le corps de ses `<script>` **inline**, tout le reste
+ * blanchi.
+ *
+ * Le balisage est effacé plutôt que supprimé : les numéros de ligne rendus par
+ * `violations()` restent ceux du fichier HTML, seuls exploitables pour aller corriger.
+ * Un `<script src=…>` est blanchi comme le reste — son contenu est déjà couvert par le
+ * contrôle de `JS_DIR`.
+ */
+function scriptsInline(html: string): string {
+  const balise = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi
+  let sortie  = ''
+  let curseur = 0
+
+  let m: RegExpExecArray | null
+  while ((m = balise.exec(html)) !== null) {
+    const [entier, attributs, corps] = m
+    const debutCorps = m.index + entier.indexOf('>', attributs.length) + 1
+
+    sortie += blanchir(html.slice(curseur, debutCorps))
+    sortie += /\bsrc\s*=/i.test(attributs) ? blanchir(corps) : corps
+    curseur = debutCorps + corps.length
+  }
+
+  return sortie + blanchir(html.slice(curseur))
+}
+
 describe('Conformité du niveau d\'enveloppe des réponses API (frontend)', () => {
   it('aucun fichier de page ne lit `.success` sur le résultat brut d\'un api*()', () => {
     const fichiers = readdirSync(JS_DIR).filter((f: string) => f.endsWith('.js'))
@@ -135,6 +177,48 @@ describe('Conformité du niveau d\'enveloppe des réponses API (frontend)', () =
         + `(déballer : \`const ${v.variable} = (await api…).data\`, ou tester \`${v.variable}.ok\`)`)
 
     expect(anomalies, 'lectures de `.success` au mauvais niveau d\'enveloppe').toEqual([])
+  })
+
+  it('aucun script inline de page HTML ne lit `.success` sur le résultat brut d\'un api*()', () => {
+    const fichiers = readdirSync(HTML_DIR).filter((f: string) => f.endsWith('.html'))
+    expect(fichiers.length).toBeGreaterThan(0)
+
+    const anomalies = fichiers
+      .filter((f: string) => !(f in EXEMPTIONS))
+      .flatMap((f: string) => violations(f, scriptsInline(readFileSync(join(HTML_DIR, f), 'utf8'))))
+      .map((v: Violation) => `${v.fichier}:${v.ligne} — \`${v.variable}\` porte l'enveloppe, `
+        + `\`${v.variable}.success\` vaut toujours undefined `
+        + `(déballer : \`const ${v.variable} = (await api…).data\`, ou tester \`${v.variable}.ok\`)`)
+
+    expect(anomalies, 'lectures de `.success` au mauvais niveau d\'enveloppe (scripts inline)').toEqual([])
+  })
+
+  it('l\'extraction des scripts inline garde le code, les lignes, et ignore le reste', () => {
+    // Preuve par mutation : une extraction qui rendrait du vide ferait passer le test
+    // ci-dessus pour un garde-fou alors qu'il ne lirait rien.
+    const page = [
+      '<html>',
+      '<body>',
+      '<p>const res = await apiGet("/x"); if (!res.success) return</p>',  // texte, pas du code
+      '<script src="/static/js/app.js"></script>',
+      '<script>',
+      '  async function charge() {',
+      '    const res = await apiGet("/api/notifications/stats")',
+      '    if (!res.success) return',
+      '  }',
+      '</script>',
+      '</body>',
+    ].join('\n')
+
+    const extrait = scriptsInline(page)
+    // Le paragraphe est blanchi : seul le script inline subsiste comme code
+    expect(extrait).not.toContain('<p>')
+    expect(extrait).toContain('apiGet("/api/notifications/stats")')
+
+    const trouvees = violations('page.html', extrait)
+    expect(trouvees).toHaveLength(1)
+    // Numérotation conservée : l'affectation est à la 7e ligne de la page
+    expect(trouvees[0].ligne).toBe(7)
   })
 
   it('le détecteur voit bien le défaut qu\'il est censé empêcher', () => {
