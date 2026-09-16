@@ -1,4 +1,41 @@
-# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 119 — v3.09 en production, page Notifications réparée)
+# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 120 — page Notifications dite vraie de bout en bout, v3.11 en production)
+
+## Checkpoint 120 — La page Notifications dit enfin la vérité (2026-09-16)
+
+**Dépôt et production alignés, aucune migration en attente** (`izigsm-v3.11`, `2a81c88`, aperçu
+`22a33464`). Trois déploiements dans la journée, chacun validé à l'écran avant le suivant.
+
+| Version | Ce qui était faux | Corrigé |
+|---|---|---|
+| v3.09 | 5 appels lus au mauvais niveau d'enveloppe : tuiles et journal muets, actions « Erreur » sur un succès | déballage au point d'appel, garde-fou étendu aux scripts inline |
+| v3.10 | « Mode simulé — aucune clé API » pendant que de vrais emails partaient | `api_key_source` à trois états, bandeau « Envois actifs via iziGSM » |
+| v3.11 | champ « Expéditeur » pré-rempli de l'adresse **plateforme** | `from_configure` (saisi) distinct de `from` (employé) |
+
+- **Chaque défaut a été trouvé en validant le précédent**, jamais par une suite : le bandeau menteur
+  est apparu sur la capture qui prouvait la v3.09 ; le champ pré-rempli, sur celle qui prouvait la
+  v3.10. Aucun test ne compare un libellé d'écran à ce que le serveur fait réellement — et la v3.10,
+  qui invite à poser une clé Resend, rendait le piège de la v3.11 nettement plus probable.
+- **Une même cause, trois fois** : une valeur calculée prise pour une valeur mesurée. `data.success`
+  sur l'enveloppe, `!!api_key` pour « des emails partent », `from` pour « ce que la boutique a
+  saisi ». La règle du `CLAUDE.md` sur `apiKeyFallback`, écrite le 2026-09-11 pour `sendEmail()`
+  seul, couvre désormais **toute lecture décrivant l'état des envois**.
+- **Validé à l'écran** (exploitant, 3 captures + 1 email reçu) : tuiles `5 / 3 / 2 / 0` cohérentes
+  avec les 7 lignes du journal, email de test réellement reçu à 10:30, bandeau vert avec l'expéditeur
+  réel, champ de saisie vide.
+- **Restent ouverts** (`todo.md`) : 🟡 P3 `saveNotif()`, qui annonce « Préférences mises à jour » sans
+  lire la réponse — aucun garde-fou ne voit un résultat **jamais lu**.
+
+**Gates** (`2a81c88`) : vitest 1120/1122 (les 2 = baseline `agendaService`), tsc 32 = baseline,
+E2E page Notifications 12/12, balayage du menu + formulaires 21/21.
+
+⚠ **Incident de méthode à ne pas rejouer** : trois `workerd.exe` d'anciens runs survivaient à
+l'arrêt de leur tâche et répondaient encore sur le port 3000 — un E2E peut juger un build qui n'est
+plus celui du dépôt, sans rien signaler. Contrôler la page **servie** avant de conclure d'un vert.
+
+**Prochaine session** : 🟡 P3 `saveNotif()`, puis décider s'il faut un garde-fou pour la classe
+« résultat d'un `apiX()` jamais lu ».
+
+## Checkpoint 119
 
 ## Checkpoint 119 — Page Notifications : les six appels rendent enfin (2026-09-16)
 

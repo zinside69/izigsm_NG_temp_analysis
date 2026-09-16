@@ -51,7 +51,8 @@ expéditeur réel, conseil. Compteurs et journal cohérents (5 envoyés + 2 simu
       l'adresse **de la plateforme**, qu'un « Enregistrer » aurait inscrite comme celle de la
       boutique — laquelle, sa vraie clé posée, aurait vu tous ses emails refusés par Resend
       (`bugs.md`). Corrigé le même jour : `from_configure` distinct de `from`.
-      **Non déployé** : `CACHE_VERSION` `izigsm-v3.11`.
+      **Déployé en `izigsm-v3.11`** et vu à l'écran : champ vide avec son placeholder, bandeau
+      affichant toujours l'expéditeur réel.
 
 ## 🟡 P3 — Page Notifications : `saveNotif()` annonce un succès sans lire la réponse (trouvé le 2026-09-16)
 

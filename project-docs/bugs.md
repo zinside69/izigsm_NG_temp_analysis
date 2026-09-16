@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## 🟢 Page Notifications : le champ « Expéditeur » pré-rempli avec l'adresse de la plateforme (trouvé ET CORRIGÉ le 2026-09-16, non déployé — déduit du code, jamais vu à l'écran)
+## 🟢 Page Notifications : le champ « Expéditeur » pré-rempli avec l'adresse de la plateforme (trouvé ET CORRIGÉ le 2026-09-16, DÉPLOYÉ en v3.11, correctif vu à l'écran — le défaut, lui, n'a jamais été reproduit)
 
 **Défaut** : `notifications.html` remplissait `#cfg-from` avec `config.from`, l'expéditeur
 **employé** — valeur *calculée* (`<nom> via iziGSM <noreply@mail.repairdesk.fr>`) dès que la
