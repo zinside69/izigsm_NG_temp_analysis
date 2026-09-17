@@ -1,4 +1,41 @@
-# iziGSM — État courant (MàJ : 2026-09-16, checkpoint 121 — grilling tarification et « la vente lit le catalogue », migration 0048 locale)
+# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 122 — « la vente lit le catalogue » : spec et 17 tickets prêts)
+
+## Checkpoint 122 — Grilling clos, spec et tickets publiés (2026-09-17)
+
+**Production inchangée et saine en `izigsm-v3.11` ; migration `0048` toujours en local seulement ;
+aucun code applicatif écrit.** Le chantier 🔴 P1 est prêt à coder.
+
+- **Grilling repris et clos** (`/mattpocock-skills:grill-with-docs`). Le chantier s'est **élargi** :
+  en plus de la caisse, il couvre désormais les **lignes de ticket**, la **pose** des pièces, le
+  trajet **ticket → devis → facture**, l'**identité de l'appareil figée** et les **garanties par
+  ligne de service** (politique de l'exploitant : écran 6 mois, autres 3 mois, hors casse et
+  oxydation). Décisions : `decisions.md` § 2026-09-17.
+- **Mesures qui ont compté** : la garantie n'a aujourd'hui qu'**une durée par boutique** et qu'**une
+  instance par ticket**, `services.garantie_jours` n'est lu par aucun code ; le devis a déjà une page
+  publique d'acceptation (signature « simulée ») ; la prise en charge capture déjà une signature ;
+  une facture émise fige vendeur et acheteur, **pas l'appareil**.
+- **Une décision a été corrigée en cours de route** : « IMEI obligatoire à la création d'un ticket »
+  est devenu « **IMEI ou numéro de série exigé avant toute facturation** », un appareil cassé ne
+  permettant pas toujours de le lire.
+- **Spec** : `.scratch/vente-lit-catalogue/spec.md` — 79 récits, quatre niveaux de test validés
+  avec l'exploitant (écran sur la vraie base locale, API, fonctions pures, migrations sur un vrai
+  SQLite). Cinq choix de mise en œuvre y ont été faits sans question (le skill l'interdisait) et
+  signalés à l'exploitant : IMEI unique par boutique, 0 € bloqué à l'écran seulement, rupture
+  signalée par la réponse de vente, requalification tracée, état de validation technique.
+- **Tickets** : `.scratch/vente-lit-catalogue/issues/01` à `17`. Lot 1 caisse (01-10), lot 2
+  tickets (11-17), chacun déployé en bloc. **10 est `ready-for-human`** (prestataire de base d'IMEI
+  et clé de test). Prenables : **01**, **02**.
+- `CONTEXT.md` : Ligne de ticket, Pose, Code maison, File d'étiquettes, Garantie, Nouvelle panne
+  hors garantie, identification de l'Appareil. `recovery-prompt.md` rattrapé (il était resté au
+  checkpoint 117).
+
+**Gates** : sans objet, aucun code applicatif.
+
+**Prochaine session** : `/mattpocock-skills:implement
+.scratch/vente-lit-catalogue/issues/01-doublon-code-barres-sku-signale.md` (ou `02`), **dans une
+session neuve**, un ticket par session. Le 01 embarque la migration `0048`.
+
+## Checkpoint 121
 
 ## Checkpoint 121 — Deux chantiers cadrés, rien d'implémenté (2026-09-16)
 

@@ -1,5 +1,40 @@
 # iziGSM — Décisions
 
+## 2026-09-17 — La vente lit le catalogue : grilling clos, chantier élargi aux tickets
+
+Suite et fin du grilling du 2026-09-16. Matière : `.scratch/vente-lit-catalogue/matiere-grilling.md` ;
+spec : `.scratch/vente-lit-catalogue/spec.md` ; tickets `issues/01` à `17`. **Rien n'est implémenté.**
+
+- **Prise en charge depuis le comptoir** : créée **complète**, le client repart avec son document ;
+  un technicien la **valide ensuite**. Un technicien indisponible ne retient jamais un client.
+- **Identifiant de l'appareil** : **pas** exigé à la création d'un ticket — un appareil hors
+  d'usage ne le laisse pas toujours lire — mais **exigé avant tout devis ou toute facture**, car il
+  est **inscrit sur le document**. **IMEI ou numéro de série**, l'un suffit. Décision précisée par
+  l'exploitant après un premier « oui, obligatoire à la création ».
+- **Caisse** : stock **écrêté à 0 avec avertissement** (pas de stock négatif) ; ligne venue du
+  catalogue **entièrement modifiable** ; ligne à 0 € bloquée à l'écran ; une seule recherche pour
+  **produits, services et dossiers SAV** (un SAV trouvé s'ouvre, rien n'entre au panier) ;
+  `service_id` conservé sur les lignes. Premier écran livré : la caisse.
+- **Les services cochés à la prise en charge sont branchés maintenant** → **lignes de ticket**
+  (service, pièce, libre). Élargissement assumé du chantier ; ordre de livraison : caisse, puis
+  tickets.
+- **La pièce sort du stock à la pose**, marquée par tout technicien, jamais deux fois ; pièce en
+  rupture → « à commander » avec le ticket. **Prix du ticket = somme des lignes.**
+- **Ticket → devis (accepté au comptoir ou en ligne) → facture**, sans ressaisie ; devis refusé →
+  ticket clos, forfait de diagnostic au cas par cas.
+- **Identité de l'appareil figée à l'émission** de la facture, et sur le ticket de caisse d'une
+  vente d'occasion — aux deux sites de figeage existants, jamais un troisième.
+- **Garanties** : politique de l'exploitant **écran 6 mois, autres réparations 3 mois, hors casse,
+  hors oxydation** → **une garantie par ligne de service**, durée portée par le service du
+  catalogue. Mesuré : aujourd'hui une seule durée par boutique et une garantie par ticket,
+  `services.garantie_jours` jamais lu.
+- **Garantie active à l'IMEI** : le **vendeur** tranche au comptoir (« même panne ? »), un refus
+  porte un **motif** (autre panne, casse, oxydation, garantie expirée), le technicien peut
+  **requalifier**.
+- **Dossiers SAV** : lignes facturées 0 €, coût conservé — pour connaître le coût des garanties.
+- **Tests** : quatre niveaux validés — écran sur la vraie base locale (principal), API, fonctions
+  pures, migrations sur un vrai SQLite.
+
 ## 2026-09-16 — Tarification par boutique : ni pourcentage unique, ni coefficient unique
 
 Grilling avec l'exploitant, parti de sa remarque : « dans la téléphonie, on applique plus des

@@ -977,6 +977,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-17 (checkpoint 122) : inchangé depuis le 121 — `0048` toujours EN ATTENTE,
+production saine en `izigsm-v3.11`, aucun code applicatif nouveau.** Le chantier « la vente lit le
+catalogue » est cadré (spec + 17 tickets) ; `0048` partira avec son **ticket 01**, qui convertit la
+violation d'index en message. Chaque lot du chantier (caisse 01-10, tickets 11-17) se déploie en
+bloc, ses migrations appliquées à distance d'abord.
+
 **État au 2026-09-16 (checkpoint 121) : migration `0048` EN ATTENTE — dépôt en avance sur la
 production.** `0048_produits_ean_sku_unique.sql` (index uniques partiels sur
 `(boutique_id, code_barre)` et `(boutique_id, sku)`) est appliquée **en local seulement**.

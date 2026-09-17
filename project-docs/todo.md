@@ -9,10 +9,22 @@ aucune statistique par article n'est possible. Décision de l'exploitant : « on
 Matière, faits mesurés et frontière : `.scratch/vente-lit-catalogue/matiere-grilling.md`.
 Décisions : `decisions.md` § 2026-09-16.
 
-- [ ] **Grilling à terminer** — 8 questions ouvertes, dont : rupture de stock en caisse, ligne
+- [x] **Grilling à terminer** — 8 questions ouvertes, dont : rupture de stock en caisse, ligne
       modifiable après sélection, premier écran, `service_id` sur `lignes_document`, « la
       validation doit aller jusqu'au bout » (deux lectures possibles), IMEI obligatoire sur un
       ticket
+      — **fait le 2026-09-17**, frontière close. Le chantier s'est **élargi** en cours de route
+      (lignes de ticket, garanties par ligne, identité de l'appareil figée) : voir
+      `decisions.md` § 2026-09-17.
+- [x] **Spec** — `.scratch/vente-lit-catalogue/spec.md`, 79 récits, 4 niveaux de test validés
+      (2026-09-17)
+- [x] **Tickets** — `.scratch/vente-lit-catalogue/issues/01` à `17`, en deux lots (caisse 01-10,
+      tickets 11-17). **10 est `ready-for-human`** : prestataire de base d'IMEI et clé de test à
+      fournir. Prenables tout de suite : **01** et **02**. Un ticket = une session neuve :
+      `/mattpocock-skills:implement .scratch/vente-lit-catalogue/issues/<NN>-….md`
+
+Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
+
 - [ ] Sélecteur produit + service en caisse, saisie libre conservée
 - [ ] Recherche produits étendue à `code_barre` (aujourd'hui : nom, SKU, marque seulement)
 - [ ] Scan : routage par longueur (13 → EAN, 15 → IMEI), validation Luhn avant tout appel

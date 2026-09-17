@@ -1,4 +1,30 @@
-# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 121 — grilling « la vente lit le catalogue » en cours, migration 0048 locale)
+# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 122 — « la vente lit le catalogue » : 17 tickets prêts)
+
+## Ce qui a changé au checkpoint 122
+
+**Production saine en `izigsm-v3.11`, rien à déployer ; `0048` en local seulement (elle part avec le
+ticket 01).** Le bloc « première action : reprendre le grilling » ci-dessous est **dépassé** : le
+grilling est clos, la spec et les tickets sont publiés.
+
+**Première action : le ticket 01 ou le 02**, dans une **session neuve**, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/vente-lit-catalogue/issues/01-doublon-code-barres-sku-signale.md`
+(ou `02-selecteur-produits-en-caisse.md`). Un ticket = une session ; vider le contexte entre deux.
+
+Chaîne des tickets (`issues/`, champ **Blocked by**) : 01, 02 libres → 03 et 04 (← 02) → 05 (← 01,
+03) → 06 → 07 (← 04) → 08 (← 03, 07) → 09 → 10 (`ready-for-human`). Lot 2 : 11 (← 03) → 12, 13 →
+14 ; 15 (← 07, 12, 13) ; 16 (← 08, 11) → 17 (← 12, 16). Lot 1 déployé en bloc, puis lot 2.
+
+**À savoir avant de coder** (détail : `spec.md`, § Implementation Decisions) :
+- **Quatre niveaux de test, validés** : l'écran sur la **vraie base locale** porte les preuves
+  métier ; API, fonctions pures et migrations (vrai SQLite) couvrent le reste. Une règle SQL ne se
+  prouve jamais sur les bases simulées du dépôt.
+- **Deux sites de figeage, pas trois** : la vente et l'émission. L'identité de l'appareil s'y
+  ajoute **après** l'écriture au journal NF525.
+- **La pièce sort du stock à la pose, jamais à la conversion devis → facture.**
+- **Écrêtage à 0** en caisse et à la pose ; pas de stock négatif.
+- L'IMEI (ou le numéro de série) est exigé **avant facturation**, jamais à la création du ticket.
+- Contrôler la **page servie** avant de conclure d'un E2E vert ; `taskkill /F /IM workerd.exe`
+  entre deux campagnes.
 
 ## Ce qui a changé aux checkpoints 118 à 121 (2026-09-16)
 
