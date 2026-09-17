@@ -729,6 +729,16 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   `trouverProduitImporte()`). Un futur import (masse, autre grossiste) doit rattraper la
   violation comme `importerProduitMobilax()` : `deja_importe` avec le produit existant, toute
   autre erreur relevée telle quelle.
+- **Un code-barres, un produit ; un SKU, un produit** (migration `0048`, ticket 01
+  `vente-lit-catalogue`, 2026-09-17) : index uniques partiels par boutique, produits actifs, code
+  non vide. **Toute écriture qui pose un code-barres ou un SKU convertit la violation** en
+  `ErreurCodeEnDoublon` (`stockService.ts`), qui **nomme** le produit porteur ; les routes
+  répondent 409 (`champ`, `produit_id`). `champEnDoublon()` lit la colonne dans le message du
+  moteur — la **dernière** de la liste, pour ne pas confondre avec la contrainte fournisseur `0046`.
+  ⊥ un nouveau chemin d'écriture de code (code maison, IMEI, CSV) sans cette conversion : la base
+  répond sinon une erreur brute, voire un 500 (mesuré). L'import fournisseur rend `deja_importe`,
+  **SKU compris** (décision de l'exploitant : l'EAN est tapé comme SKU dans la fiche, faute de champ
+  code-barres), et n'ajoute jamais la quantité saisie.
 - **Valeurs par défaut de stock par boutique** (ticket 01 `reglages-stock-boutique`) :
   `stock_seuil_defaut`/`stock_initial_defaut` sur `boutique_settings` (migration `0047`),
   **`NULL` = jamais réglé**, distinct de 0 (le rappel de la page Stock en dépend). Écrites par

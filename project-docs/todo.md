@@ -23,6 +23,13 @@ Décisions : `decisions.md` § 2026-09-16.
       fournir. Prenables tout de suite : **01** et **02**. Un ticket = une session neuve :
       `/mattpocock-skills:implement .scratch/vente-lit-catalogue/issues/<NN>-….md`
 
+- [x] **Ticket 01 fait le 2026-09-17** (unicité des codes, message nommant le produit), non
+      déployé — `0048` partira avec le lot 1. Revue à deux axes passée. Il a produit le **ticket
+      18** (pièce déjà en stock : ajout en un clic, description si vide, rattachement fournisseur),
+      bloqué par 01, et un défaut CSV consigné ci-dessous.
+- [ ] 🟡 **Import CSV : `code_barre` ignoré** (`bugs.md`) — colonne documentée, jamais écrite ;
+      à corriger avec la conversion du doublon par ligne
+
 Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
 
 - [ ] Sélecteur produit + service en caisse, saisie libre conservée

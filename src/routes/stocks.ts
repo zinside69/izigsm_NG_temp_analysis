@@ -24,6 +24,7 @@ import {
   importCatalogueCsv,
   ERREUR_PRIX_ACHAT_NEGATIF,
   ERREUR_QUANTITE_DEPART_INVALIDE,
+  ErreurCodeEnDoublon,
   type MouvementData,
   type FamilleProduit,
 } from '../services/stockService'
@@ -135,9 +136,18 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
   } catch (err: any) {
     if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
       return c.json({ success: false, error: err.message }, 422)
+    if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
     throw err
   }
 })
+
+/**
+ * 409 d'un code-barres ou d'un SKU déjà porté : le message nomme le produit, et son identifiant
+ * permet à l'écran d'y renvoyer l'opérateur (ticket 01 `vente-lit-catalogue`).
+ */
+function reponseDoublon(c: any, err: ErreurCodeEnDoublon) {
+  return c.json({ success: false, error: err.message, champ: err.champ, produit_id: err.produit.id }, 409)
+}
 
 // ── POST /api/produits/import-csv ────────────────────────────────────────────
 /**
@@ -198,6 +208,7 @@ stocks.put('/produits/:id', requireRole('admin', 'manager'), async (c) => {
     await updateProduit(db, id, user.sub, body)
     return c.json({ success: true, message: 'Produit mis à jour.' })
   } catch (err: any) {
+    if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
     const status = err.message.includes('introuvable') ? 404 : 422
     return c.json({ success: false, error: err.message }, status)
   }

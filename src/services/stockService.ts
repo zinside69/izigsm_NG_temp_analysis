@@ -286,6 +286,81 @@ export function prixAchatNegatif(prix: unknown): boolean {
   return prix != null && Number(prix) < 0
 }
 
+/** Champ d'un produit dont l'unicité par boutique est tenue en base (migration 0048). */
+export type ChampCodeUnique = 'code_barre' | 'sku'
+
+/**
+ * Lit, dans une erreur de la base, un doublon de code-barres ou de SKU.
+ *
+ * S'appuie sur le message du moteur, qui cite les colonnes de l'index violé
+ * (« UNIQUE constraint failed: produits.boutique_id, produits.code_barre ») — mesuré contre un vrai
+ * SQLite (`produits-unicite-codes-migration.test.ts`). La colonne doit **terminer** la liste : la
+ * contrainte de l'import fournisseur (0046, `…, produits.reference_fournisseur`) n'est pas un doublon
+ * de code et rend `null`.
+ *
+ * @param err  Erreur levée par une écriture (ou n'importe quoi d'autre)
+ * @returns    Le champ en doublon, ou `null` si l'erreur est d'une autre nature
+ */
+export function champEnDoublon(err: unknown): ChampCodeUnique | null {
+  const message = String((err as Error)?.message ?? '')
+  const liste = /UNIQUE constraint failed: ([\w., ]+)/.exec(message)?.[1] ?? ''
+  const derniere = liste.split(',').pop()?.trim()
+  if (derniere === 'produits.code_barre') return 'code_barre'
+  if (derniere === 'produits.sku') return 'sku'
+  return null
+}
+
+/**
+ * Message du refus d'un code déjà porté — il **nomme** le produit, pour que l'opérateur corrige le
+ * doublon au lieu de subir une erreur de base de données (ticket 01 `vente-lit-catalogue`).
+ */
+export function messageCodeEnDoublon(champ: ChampCodeUnique, existant: { id: number; nom: string }): string {
+  const libelle = champ === 'code_barre' ? 'Ce code-barres' : 'Ce SKU'
+  return `${libelle} est déjà utilisé par « ${existant.nom} » (produit n° ${existant.id}).`
+}
+
+/** Refus d'une écriture qui donnerait à un produit le code-barres ou le SKU d'un autre. */
+export class ErreurCodeEnDoublon extends Error {
+  constructor(
+    readonly champ: ChampCodeUnique,
+    readonly produit: { id: number; nom: string },
+  ) {
+    super(messageCodeEnDoublon(champ, produit))
+    this.name = 'ErreurCodeEnDoublon'
+  }
+}
+
+/**
+ * Convertit une violation d'unicité de code en `ErreurCodeEnDoublon`, en cherchant le produit qui
+ * porte déjà la valeur. Toute autre erreur — et un porteur introuvable (supprimé entre-temps) — est
+ * laissée à l'appelant, qui la relève telle quelle : rien n'est inventé.
+ *
+ * @param cible  Boutique du produit créé, ou produit modifié (exclu de la recherche du porteur)
+ */
+async function leverSiCodeEnDoublon(
+  db: D1Database,
+  err: unknown,
+  valeurs: { code_barre?: string | null; sku?: string | null },
+  cible: { boutiqueId: number } | { produitId: number },
+): Promise<void> {
+  const champ = champEnDoublon(err)
+  const valeur = champ ? valeurs[champ] : null
+  if (!champ || valeur == null) return
+
+  // Colonne interpolée : `champ` ne vaut jamais que 'code_barre' ou 'sku' (type fermé)
+  const porteur = 'boutiqueId' in cible
+    ? await db.prepare(
+        `SELECT id, nom FROM produits WHERE boutique_id = ? AND ${champ} = ? AND actif = 1 LIMIT 1`,
+      ).bind(cible.boutiqueId, valeur).first<{ id: number; nom: string }>()
+    : await db.prepare(
+        `SELECT id, nom FROM produits
+         WHERE boutique_id = (SELECT boutique_id FROM produits WHERE id = ?)
+           AND ${champ} = ? AND actif = 1 AND id <> ? LIMIT 1`,
+      ).bind(cible.produitId, valeur, cible.produitId).first<{ id: number; nom: string }>()
+
+  if (porteur) throw new ErreurCodeEnDoublon(champ, porteur)
+}
+
 /**
  * Coût moyen d'un produit à sa création (règle « sur tous les chemins », `decisions.md`) : des
  * pièces déjà en rayon valent leur prix d'achat ; sans pièce, 0 (`DEFAULT` de la colonne).
@@ -380,6 +455,8 @@ export async function createProduit(
   // `reglages-stock-boutique`) : des pièces déjà en rayon valent leur prix d'achat au coût moyen
   // dès la création, au lieu de 0 € jusqu'à la première réception. Sans stock, 0 est écrit
   // explicitement — la même valeur que le `DEFAULT 0` de la colonne (migration 0014).
+  // Un code-barres ou un SKU déjà porté est refusé par la base (migration 0048) : la violation
+  // devient un refus qui nomme le produit existant (ticket 01 `vente-lit-catalogue`)
   const result = await db.prepare(`
     INSERT INTO produits
       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
@@ -405,7 +482,10 @@ export async function createProduit(
     data.description           ?? null,
     options.fournisseur_id     ?? null,
     coutMoyenInitial(stockInitial, data.prix_achat_ht ?? 0),
-  ).first<{ id: number }>()
+  ).first<{ id: number }>().catch(async (err) => {
+    await leverSiCodeEnDoublon(db, err, data, { boutiqueId })
+    throw err
+  })
 
   const produitId = result!.id
 
@@ -547,7 +627,11 @@ export async function updateProduit(
     // « Notes » de la fiche : même COALESCE que le reste (absent = conservé)
     data.description  ?? null,
     id,
-  ).run()
+  ).run().catch(async (err) => {
+    // Code-barres ou SKU déjà porté par un autre produit (migration 0048) → refus nommant ce produit
+    await leverSiCodeEnDoublon(db, err, data, { produitId: id })
+    throw err
+  })
 
   await auditLog(db, {
     user_id:     userId,

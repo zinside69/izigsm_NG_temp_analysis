@@ -1,5 +1,33 @@
 # iziGSM — Bugs connus
 
+## 🟡 Import CSV : la colonne `code_barre` est documentée mais jamais enregistrée (trouvé le 2026-09-17, OUVERT)
+
+**Défaut** : la route d'import CSV annonce les colonnes attendues, dont `code_barre`, mais
+l'`INSERT` d'`importCatalogueCsv()` n'écrit pas cette colonne — pas plus que la mise à jour d'un
+SKU existant. Un catalogue importé avec ses codes-barres les perd **sans rien signaler** : ses
+produits ne seront pas scannables à la douchette.
+
+**Trouvé** en réalisant le ticket 01 `vente-lit-catalogue` (unicité des codes) : c'est ce qui rend
+son critère « doublon rapporté dans le bilan CSV » sans objet — un code jamais écrit ne peut pas
+être en doublon. Laissé hors du ticket.
+
+**À la correction** : lire la colonne, puis appliquer à chaque ligne la conversion du doublon déjà
+écrite pour la création manuelle (`ErreurCodeEnDoublon`), le bilan nommant le produit existant.
+Sans cette conversion, la migration `0048` ferait remonter l'erreur SQL brute dans le bilan.
+
+## 🟢 Doublon de code-barres ou de SKU : erreur de base de données, voire 500 (trouvé et CORRIGÉ le 2026-09-17, ticket 01 `vente-lit-catalogue`, non déployé)
+
+**Mesuré sur la vraie base locale**, migration `0048` appliquée et conversion désactivée : la
+création d'un produit au code-barres déjà pris répondait **500** ; l'import fournisseur d'une pièce
+dont l'EAN existait déjà sous une autre référence, **500** aussi (son `catch` relançait toute
+violation qu'il ne retrouvait pas par la référence). La migration seule aurait donc cassé ces deux
+chemins en production.
+
+**Corrigé** : `champEnDoublon()` lit la colonne en cause dans le message du moteur (mesuré contre un
+vrai SQLite) ; la création **et** la modification lèvent une `ErreurCodeEnDoublon` qui nomme le
+produit ; les routes répondent 409 ; l'import fournisseur répond `deja_importe` — SKU compris, par
+décision de l'exploitant. À déployer avec `0048`, **migration d'abord**.
+
 ## 🟢 Page Notifications : le champ « Expéditeur » pré-rempli avec l'adresse de la plateforme (trouvé ET CORRIGÉ le 2026-09-16, DÉPLOYÉ en v3.11, correctif vu à l'écran — le défaut, lui, n'a jamais été reproduit)
 
 **Défaut** : `notifications.html` remplissait `#cfg-from` avec `config.from`, l'expéditeur

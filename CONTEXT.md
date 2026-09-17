@@ -118,13 +118,15 @@ la continuité légale. Table `sequences`.
 
 **Code-barres (EAN13)** — identifie **un et un seul** produit dans une boutique. Scanné au
 comptoir, il désigne l'article sans ambiguïté (tranché par l'exploitant le 2026-09-16).
-`produits.code_barre` — ⚠ **la base ne fait pas encore respecter cette règle** : aucune
-contrainte ni index d'unicité.
+`produits.code_barre` — règle tenue par la base (migration `0048`, produits actifs, code non
+vide) ; un doublon est refusé en **nommant** le produit qui porte déjà le code.
 
 **SKU** — code article interne à la boutique. **Distinct du code-barres**, même quand les deux
 portent la même valeur : l'import fournisseur renseigne aujourd'hui le SKU avec l'EAN de la
-pièce, ce qui est une commodité, pas une identité. `produits.sku` — ⚠ annoncé « unique par
-boutique » par un commentaire de migration, sans index unique pour le tenir.
+pièce, ce qui est une commodité, pas une identité. `produits.sku` — **unique par boutique**
+(migration `0048`, même périmètre). En pratique, la fiche produit n'ayant pas de champ
+code-barres, un vendeur y tape souvent l'EAN comme SKU : à l'import d'une pièce fournisseur, un
+SKU déjà porté compte donc comme **« déjà en stock »** (tranché le 2026-09-17).
 
 **Code maison** — code-barres créé par la boutique pour ce qui n'a pas de code fournisseur :
 tout produit **créé hors import grossiste**, et les **services** (imprimés sur une planche de

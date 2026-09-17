@@ -786,6 +786,9 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
  * dit. Après l'import, la quantité ne se règle plus dans la fiche (`updateProduit()` ignore le
  * stock) : elle passe par « Ajuster le stock », qui trace le mouvement.
  */
+/** Message du serveur pour une pièce fournisseur déjà importée (même fiche, même référence). */
+const MESSAGE_PIECE_DEJA_IMPORTEE = 'Cette pièce est déjà dans votre stock.';
+
 async function importerMobilax(mobilaxId, bouton) {
   // Un seul import à la fois : l'import unitaire fermerait la fenêtre sous l'import en cours
   if (importEnCours) return;
@@ -807,10 +810,15 @@ async function importerMobilax(mobilaxId, bouton) {
     return;
   }
   // Le message dit ce qui est réellement arrivé à la quantité saisie : entrée en stock, ou —
-  // pièce déjà importée — ignorée (le doublon ne touche jamais au stock existant)
+  // pièce déjà importée — ignorée (le doublon ne touche jamais au stock existant, règle du
+  // 2026-09-12 confirmée le 2026-09-17). Un EAN ou un SKU déjà porté (migration 0048) : le
+  // serveur nomme le produit trouvé, repris tel quel — une information, jamais un échec.
   const quantite = corps.quantite_en_rayon ?? 0;
+  const motif = res?.error && res.error !== MESSAGE_PIECE_DEJA_IMPORTEE
+    ? 'Déjà en stock : ' + res.error.charAt(0).toLowerCase() + res.error.slice(1).replace(/\.$/, '')
+    : MESSAGE_PIECE_DEJA_IMPORTEE.replace(/\.$/, '');
   showFlash(dejaImporte
-    ? 'Cette pièce est déjà dans votre stock — voici sa fiche.'
+    ? `${motif} — voici sa fiche.`
       + (quantite > 0 ? ` La quantité saisie (${quantite}) n'a pas été ajoutée : passez par « Ajuster le stock ».` : '')
     : quantite > 0
       ? `Pièce importée avec ${quantite} en stock — ajustez le prix de vente ici.`

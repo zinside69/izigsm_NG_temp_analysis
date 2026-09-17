@@ -260,13 +260,14 @@ const SQL_DOUBLON = 'SELECT id FROM produits WHERE boutique_id = ? AND fournisse
 async function importer(
   compte: { role: string; boutique_id: number | null },
   corps: unknown,
-  { doublon = false }: { doublon?: boolean } = {},
+  { doublon = false, preparer }: { doublon?: boolean; preparer?: (d1: ReturnType<typeof createMockD1>) => void } = {},
 ) {
   const d1 = createMockD1()
   d1.__setListResponse(SQL_FOURNISSEUR_API, [{ id: 3, nom: 'MOBILAX', a_cle: 1 }])
   d1.__setResponse(SQL_CLE_API, { api_key_chiffree: await chiffrer('cle-boutique-1', CLE_CHIFFREMENT) })
   d1.__setResponse(SQL_INSERT_PRODUIT, { id: 88 })
   if (doublon) d1.__setResponse(SQL_DOUBLON, { id: 41 })
+  preparer?.(d1)
   const { accessToken } = await generateTokenPair(
     { id: 7, email: 'x@boutique.fr', prenom: 'X', nom: 'Test', ...compte } as any, SECRET,
   )
@@ -305,6 +306,52 @@ describe('POST /api/mobilax/import', () => {
     expect(res.status).toBe(409)
     // Enveloppe du dépôt : la charge utile sous `data`, en échec comme en succès (CLAUDE.md)
     expect(await res.json()).toMatchObject({ success: false, code: 'deja_importe', data: { produit_id: 41 } })
+  })
+
+  it('EAN déjà porté par un autre produit : 409 « déjà en stock » nommant ce produit, jamais un 500', async () => {
+    // Migration 0048 (ticket 01 `vente-lit-catalogue`) : l'import écrit l'EAN dans le SKU et le
+    // code-barres ; une pièce dont l'EAN existe déjà — saisie à la main, ou sous une autre
+    // référence fournisseur — est refusée par la base. Même article : `deja_importe`, pas un échec.
+    mobilaxRenvoieLaFiche()
+    const d1Violation = (d1: ReturnType<typeof createMockD1>) => {
+      d1.__setResponseFn(SQL_INSERT_PRODUIT, () => {
+        throw new Error('D1_ERROR: UNIQUE constraint failed: produits.boutique_id, produits.code_barre: SQLITE_CONSTRAINT')
+      })
+      d1.__setResponse(
+        'SELECT id, nom FROM produits WHERE boutique_id = ? AND code_barre = ? AND actif = 1 LIMIT 1',
+        { id: 55, nom: 'Batterie saisie à la main' },
+      )
+    }
+    const { res } = await importer({ role: 'manager', boutique_id: 1 }, { mobilax_id: 17 }, { preparer: d1Violation })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({
+      success: false,
+      code:    'deja_importe',
+      error:   'Ce code-barres est déjà utilisé par « Batterie saisie à la main » (produit n° 55).',
+      data:    { produit_id: 55 },
+    })
+  })
+
+  it('SKU déjà porté (EAN tapé comme référence à la main) : 409 « déjà en stock » qui le précise', async () => {
+    // Décision de l'exploitant du 2026-09-17 : la fiche produit n'a pas de champ code-barres, un
+    // vendeur y tape l'EAN comme SKU — c'est le même article, jamais un échec d'import.
+    mobilaxRenvoieLaFiche()
+    const preparer = (d1: ReturnType<typeof createMockD1>) => {
+      d1.__setResponseFn(SQL_INSERT_PRODUIT, () => {
+        throw new Error('D1_ERROR: UNIQUE constraint failed: produits.boutique_id, produits.sku: SQLITE_CONSTRAINT')
+      })
+      d1.__setResponse(
+        'SELECT id, nom FROM produits WHERE boutique_id = ? AND sku = ? AND actif = 1 LIMIT 1',
+        { id: 56, nom: 'Batterie tapée à la main' },
+      )
+    }
+    const { res } = await importer({ role: 'manager', boutique_id: 1 }, { mobilax_id: 17 }, { preparer })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({
+      code:  'deja_importe',
+      error: 'Ce SKU est déjà utilisé par « Batterie tapée à la main » (produit n° 56).',
+      data:  { produit_id: 56 },
+    })
   })
 
   it('admin plateforme : refusé, rien créé, Mobilax jamais appelé', async () => {

@@ -16,7 +16,7 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, type FamilleProduit } from './stockService'
+import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -380,6 +380,11 @@ export async function importerProduitMobilax(
       code_barre:            fiche.ean13,
     }, { fournisseur_id: cle.fiche.id }))
   } catch (err) {
+    // L'EAN de la pièce est déjà porté par un autre produit de la boutique — saisi à la main, ou
+    // importé sous une autre référence (migration 0048). Même article : « déjà en stock », avec le
+    // produit qui le porte ; le bilan d'un import en lot ne le compte pas comme un échec.
+    if (err instanceof ErreurCodeEnDoublon)
+      return echec('deja_importe', err.message, { produit_id: err.produit.id })
     // Deux imports simultanés passent tous deux la vérification ci-dessus : l'index unique
     // `idx_produits_source_fournisseur` (migration 0046) refuse le second. Même réponse qu'un
     // doublon vu à la vérification, avec le produit du premier. Toute autre erreur remonte.
