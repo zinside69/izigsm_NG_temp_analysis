@@ -1,4 +1,40 @@
-# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 122 — « la vente lit le catalogue » : spec et 17 tickets prêts)
+# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 123 — ticket 01 fait : un code-barres, un produit)
+
+## Checkpoint 123 — Ticket 01 fait, ticket 18 né de sa revue (2026-09-17)
+
+**Production inchangée en `izigsm-v3.11`. Dépôt en avance : ticket 01 (`b80677d`) commité et
+poussé, NON déployé ; `0048` toujours appliquée en local seulement.** Le lot 1 se déploiera en bloc.
+
+- **Ticket 01 — un code-barres, un produit.** Mesuré sur la vraie base locale : **`0048` seule
+  cassait deux chemins en 500** (création d'un produit au code déjà pris, import fournisseur d'une
+  pièce dont l'EAN existait sous une autre référence). Corrigé : `champEnDoublon()` +
+  `ErreurCodeEnDoublon` (création **et** modification) → 409 nommant le produit ; l'import
+  fournisseur rend `deja_importe`, **SKU compris** (décision de l'exploitant) ; l'écran nomme le
+  produit trouvé, en information.
+- **Revue à deux axes** : aucune violation dure. Défaut réel trouvé : le SKU assimilé à « déjà en
+  stock » — **tranché par l'exploitant** : c'est voulu (l'EAN est tapé comme SKU dans la fiche, qui
+  n'a pas de champ code-barres). Une affirmation d'un relecteur (doublon d'EAN par CSV) vérifiée
+  **fausse** et écartée.
+- **Règle du 2026-09-12 confirmée** : une pièce déjà en stock n'ajoute jamais sa quantité — la
+  « Qté en rayon » est préremplie dans les imports en lot, l'ajout automatique gonflerait le stock à
+  chaque relance.
+- **Ticket 18 créé** (bloqué par 01, donc prenable) : bouton « Ajouter N au stock » tracé,
+  description reprise **seulement si vide**, rattachement du produit trouvé à la fiche fournisseur.
+- **Défaut consigné** (`bugs.md` 🟡) : l'import CSV **n'écrit jamais `code_barre`**, colonne pourtant
+  documentée. C'est aussi ce qui rend sans objet le critère CSV du ticket 01.
+- `CONTEXT.md` (Code-barres, SKU) et `CLAUDE.md` § Stock mis à jour : tout nouveau chemin
+  d'écriture de code doit convertir la violation.
+
+**Gates** (`b80677d`) : vitest 1143/1145 (2 permanents), tsc 32, E2E stock + fournisseur 67/67,
+balayage du menu 17/17. Tests vus rouges : migration (mutation), route et service, E2E.
+
+**⚠ Ordre de mise en production** : `0048` **ne doit jamais partir sans ce code** — seule, elle
+rend les 500. Le code, lui, est sans effet tant que `0048` n'est pas appliquée.
+
+**Prochaine session** (le contexte de celle-ci est saturé) : ticket **02** (sélecteur de produits en
+caisse) ou **18**, chacun dans une session neuve.
+
+## Checkpoint 122
 
 ## Checkpoint 122 — Grilling clos, spec et tickets publiés (2026-09-17)
 

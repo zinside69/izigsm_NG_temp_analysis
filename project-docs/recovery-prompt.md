@@ -1,4 +1,26 @@
-# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 122 — « la vente lit le catalogue » : 17 tickets prêts)
+# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 123 — ticket 01 fait, 02 et 18 prenables)
+
+## Ce qui a changé au checkpoint 123
+
+**Ticket 01 fait** (`b80677d`, poussé, **non déployé**). La « première action : ticket 01 » du
+bloc 122 ci-dessous est **dépassée**.
+
+**Première action : ticket 02 ou 18**, dans une **session neuve**, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/vente-lit-catalogue/issues/02-selecteur-produits-en-caisse.md`
+(ou `18-piece-deja-en-stock-ajout-et-description.md`, créé à la revue du 01, bloqué par 01 donc
+prenable). Chaîne mise à jour : 01 ✓ · 02, 18 libres → 03, 04 (← 02) → …
+
+**À savoir, issu du ticket 01** :
+- **`0048` ne part jamais seule** : sans la conversion du ticket 01, elle donne des 500 (mesuré).
+  Elle partira avec le lot 1, appliquée à distance **avant** le déploiement du code.
+- Toute écriture d'un code-barres ou d'un SKU convertit la violation en `ErreurCodeEnDoublon`
+  (`CLAUDE.md` § Stock) — les tickets 05 (codes maison) et 07 (IMEI) devront s'y conformer.
+- La fiche produit **n'a pas de champ code-barres** : l'EAN y est tapé comme SKU. Pour l'import
+  fournisseur, un SKU déjà porté vaut donc « déjà en stock ».
+- Une pièce déjà en stock **n'ajoute jamais** sa quantité automatiquement (règle confirmée).
+- 🟡 L'import CSV n'écrit pas `code_barre` (`bugs.md`).
+- Réflexe confirmé : contrôler la **page ou le worker servi** avant de conclure d'un E2E ; tuer
+  `workerd` entre deux campagnes ; mutation pour prouver un test écrit sur du code existant.
 
 ## Ce qui a changé au checkpoint 122
 

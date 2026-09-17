@@ -987,6 +987,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-17 (checkpoint 123) : `0048` EN ATTENTE, dépôt EN AVANCE sur la production.**
+Ticket 01 du lot 1 (`b80677d`) commité et poussé, **non déployé** ; production saine en
+`izigsm-v3.11`. **Ordre impératif** : `0048` ne part **jamais sans ce code** — seule, elle rend un
+500 à la création d'un produit et à l'import fournisseur (mesuré sur la vraie base locale). Le lot 1
+se déploie en bloc : migrations à distance, `d1_migrations` relu, **puis** `npm run deploy`.
+
 **État au 2026-09-17 (checkpoint 122) : inchangé depuis le 121 — `0048` toujours EN ATTENTE,
 production saine en `izigsm-v3.11`, aucun code applicatif nouveau.** Le chantier « la vente lit le
 catalogue » est cadré (spec + 17 tickets) ; `0048` partira avec son **ticket 01**, qui convertit la
