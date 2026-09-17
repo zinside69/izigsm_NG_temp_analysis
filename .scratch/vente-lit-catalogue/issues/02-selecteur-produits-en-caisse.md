@@ -12,23 +12,23 @@ Spec : `.scratch/vente-lit-catalogue/spec.md` (stories 2, 4, 5, 6, 16, 17, 18, 1
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done (2026-09-17)
 
-- [ ] Une route de recherche catalogue, limitée à la boutique consultée et plafonnée en nombre de
+- [x] Une route de recherche catalogue, limitée à la boutique consultée et plafonnée en nombre de
       résultats, trouve un produit par nom, SKU **et code-barres** (ce dernier n'est pas couvert
       aujourd'hui) ; refus sans jeton ; résultats typés `produit`
-- [ ] La caisse propose la recherche ; choisir un produit ajoute une ligne préremplie (désignation,
+- [x] La caisse propose la recherche ; choisir un produit ajoute une ligne préremplie (désignation,
       prix, TVA) dont chaque champ reste modifiable
-- [ ] La vente transmet l'identifiant du produit ; le stock baisse d'autant, un mouvement « Vente
+- [x] La vente transmet l'identifiant du produit ; le stock baisse d'autant, un mouvement « Vente
       POS » est écrit — prouvé sur la vraie base locale, pas sur une base simulée
-- [ ] Stock insuffisant : la vente passe, le stock est ramené à 0 (jamais négatif), la réponse
+- [x] Stock insuffisant : la vente passe, le stock est ramené à 0 (jamais négatif), la réponse
       signale la ligne concernée et l'écran affiche un avertissement
-- [ ] Ligne à 0 € venue du catalogue : le prix est mis en évidence et la validation est bloquée à
+- [x] Ligne à 0 € venue du catalogue : le prix est mis en évidence et la validation est bloquée à
       l'écran tant qu'un prix n'est pas saisi ; le serveur garde sa règle (prix ≥ 0)
-- [ ] Une ligne saisie entièrement à la main reste possible et se vend comme avant
-- [ ] Données rendues échappées (un nom de produit est une saisie utilisateur) ; enveloppe de réponse
+- [x] Une ligne saisie entièrement à la main reste possible et se vend comme avant
+- [x] Données rendues échappées (un nom de produit est une saisie utilisateur) ; enveloppe de réponse
       déballée au point d'appel
-- [ ] E2E sur le vrai serveur local : chercher, ajouter, modifier le prix, encaisser, relire le stock ;
+- [x] E2E sur le vrai serveur local : chercher, ajouter, modifier le prix, encaisser, relire le stock ;
       chaque test vu rouge d'abord
-- [ ] Balayage du menu de gauche vert ; `npx vitest run` vert (hors les 2 échecs permanents) ;
+- [x] Balayage du menu de gauche vert ; `npx vitest run` vert (hors les 2 échecs permanents) ;
       erreurs tsc inchangées

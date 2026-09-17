@@ -63,6 +63,18 @@ export interface VentePOSData {
   note?:           string
 }
 
+/**
+ * Ligne vendue alors que le stock affiché ne la couvrait pas (ticket 02 `vente-lit-catalogue`).
+ * Le stock a été ramené à 0 ; `ligne` est le rang de la ligne dans la vente, à partir de 1.
+ */
+export interface StockInsuffisant {
+  ligne:       number
+  produit_id:  number
+  designation: string
+  stock_avant: number
+  quantite:    number
+}
+
 /** Entrée du journal fiscal NF525 (une ligne par transaction). */
 export interface JournalEntry {
   id:                number
@@ -282,6 +294,7 @@ export async function createVente(
   facture:      any
   journal:      JournalEntry
   rendu_monnaie?: number
+  stock_insuffisant: StockInsuffisant[]
 }> {
   if (!data.lignes || data.lignes.length === 0) {
     throw new Error('La vente doit contenir au moins une ligne.')
@@ -349,7 +362,11 @@ export async function createVente(
   if (!facture) throw new Error('Échec création facture POS.')
 
   // ── 4. Créer les lignes de facture ────────────────────────────────────────
-  for (const l of data.lignes) {
+  // Lignes dont le stock affiché ne couvrait pas la quantité vendue : la vente passe
+  // (écrêtage à 0, jamais de stock négatif) mais l'écran doit pouvoir le dire.
+  const stockInsuffisant: StockInsuffisant[] = []
+
+  for (const [index, l] of data.lignes.entries()) {
     const prixApresRemise = l.prix_unitaire_ht * (1 - (l.remise_pct ?? 0) / 100)
     const ligneHt  = Math.round(l.quantite * prixApresRemise * 100) / 100
     const ligneTva = Math.round(ligneHt * (l.tva_taux / 100) * 100) / 100
@@ -383,6 +400,15 @@ export async function createVente(
       if (produit) {
         const stockAvant = produit.stock_actuel
         const stockApres = Math.max(0, stockAvant - l.quantite)
+        if (stockAvant < l.quantite) {
+          stockInsuffisant.push({
+            ligne:       index + 1,
+            produit_id:  l.produit_id,
+            designation: l.designation,
+            stock_avant: stockAvant,
+            quantite:    l.quantite,
+          })
+        }
 
         await db.prepare(`
           UPDATE produits
@@ -515,7 +541,7 @@ export async function createVente(
     facture.id,
   ).run()
 
-  return { facture, journal, rendu_monnaie: renduMonnaie }
+  return { facture, journal, rendu_monnaie: renduMonnaie, stock_insuffisant: stockInsuffisant }
 }
 
 // ─── Encaissement sur facture existante ──────────────────────────────────────

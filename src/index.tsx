@@ -14,6 +14,7 @@ import usersRoutes      from './routes/users'
 import servicesRoutes      from './routes/services'
 import fournisseursRoutes  from './routes/fournisseurs'
 import mobilaxRoutes       from './routes/mobilax'
+import catalogueRoutes     from './routes/catalogue'
 import agendaRoutes        from './routes/agenda'
 import publicRoutes        from './routes/public'
 import savRoutes           from './routes/sav'
@@ -180,6 +181,7 @@ app.route('/api',            facturationRoutes) // /api/devis/* + /api/factures/
 app.route('/api',            rachatsRoutes)        // /api/rachats/*
 app.route('/api',            fournisseursRoutes)   // /api/fournisseurs/* + /api/bons-commande/*
 app.route('/api',            mobilaxRoutes)        // /api/mobilax/* (recherche de pièces, ticket 03)
+app.route('/api',            catalogueRoutes)      // /api/catalogue/* (recherche catalogue unifiée, vente-lit-catalogue 02)
 app.route('/api',            agendaRoutes)         // /api/agenda/* + /api/calendar/*.ics
 app.route('/api',            usersRoutes)       // /api/users/* (PIN + permissions)
 app.route('/api',            servicesRoutes)    // /api/services/* + /api/services/categories/*

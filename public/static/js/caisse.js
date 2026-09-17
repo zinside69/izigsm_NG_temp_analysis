@@ -27,6 +27,7 @@
  *   selectMode(mode)       → sélectionne le mode paiement
  *   submitVente()          → soumet la vente à l'API
  *   debouncedSearchClient()→ cherche un client
+ *   debouncedSearchProduit()→ cherche un produit du catalogue (ticket 02 `vente-lit-catalogue`)
  *   clearClient()          → efface la sélection client
  *   cloturerJournee()      → POST /api/caisse/cloture
  *   verifierIntegrite()    → GET /api/caisse/integrite
@@ -41,19 +42,21 @@
 
   const state = {
     tab:          'journal',
-    lignes:       [],              // [{designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
+    lignes:       [],              // [{produit_id?, designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
     mode:         'especes',
     clientId:     null,
     clientNom:    '',
     factureId:    null,            // pour modal encaissement
     clientTimer:  null,
     factureTimer: null,
+    produitTimer: null,
+    produits:     new Map(),       // id → produit des derniers résultats de recherche catalogue
     ligneIdx:     0,
   }
 
   // ── Toast ───────────────────────────────────────────────────────────────────
 
-  function toast(msg, type = 'success') {
+  function toast(msg, type = 'success', dureeMs = 3500) {
     const el = document.getElementById('toast')
     const inner = document.getElementById('toast-inner')
     if (!el || !inner) return
@@ -68,7 +71,7 @@
     inner.innerHTML = `<span>${icons[type] || ''}</span><span>${msg}</span>`
     el.classList.remove('hidden')
     clearTimeout(el._t)
-    el._t = setTimeout(() => el.classList.add('hidden'), 3500)
+    el._t = setTimeout(() => el.classList.add('hidden'), dureeMs)
   }
 
   // ── Format monnaie ──────────────────────────────────────────────────────────
@@ -112,6 +115,14 @@
     const if2 = document.getElementById('integrite-fin')
     if (id) id.value = today
     if (if2) if2.value = today
+
+    // Résultats de recherche produit : un seul écouteur, l'identifiant est lu sur le bouton.
+    // Pas d'arguments dans un `onclick` en ligne : un nom de produit est une saisie utilisateur.
+    document.getElementById('vente-produit-results')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-produit-id]')
+      const produit = btn && state.produits.get(Number(btn.dataset.produitId))
+      if (produit) ajouterProduit(produit)
+    })
 
     refreshKpis()
     refreshJournal()
@@ -337,6 +348,8 @@
     state.ligneIdx = 0
 
     clearEl('vente-client-search')
+    clearEl('vente-produit-search')
+    hideEl('vente-produit-results')
     clearEl('vente-note')
     clearEl('montant-remis')
     hideEl('vente-client-results')
@@ -392,6 +405,12 @@
     } else {
       ligne[field] = value
     }
+    // Prix d'une ligne du catalogue : la mise en évidence suit la saisie, sans re-rendu
+    // (un re-rendu ferait perdre le focus du champ en cours de frappe)
+    if (field === 'prix_unitaire_ht') {
+      const champ = document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${idx}"]`)
+      if (champ) champ.dataset.prixManquant = prixManquant(ligne) ? '1' : '0'
+    }
     // Mettre à jour le total de la ligne en temps réel
     updateLigneTotaux(idx)
     updateTotaux()
@@ -429,16 +448,21 @@
                value="${esc(l.designation)}" placeholder="Désignation…"
                oninput="CaisseApp._updateLigne(${l.idx},'designation',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-center"
+               data-field="quantite" data-idx="${l.idx}"
                type="number" min="0.01" step="0.01" value="${l.quantite}"
                oninput="CaisseApp._updateLigne(${l.idx},'quantite',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-right"
+               data-field="prix_unitaire_ht" data-idx="${l.idx}"
+               data-prix-manquant="${prixManquant(l) ? '1' : '0'}"
                type="number" min="0" step="0.01" value="${l.prix_unitaire_ht}"
                oninput="CaisseApp._updateLigne(${l.idx},'prix_unitaire_ht',this.value)">
         <select class="col-span-1 input-field text-xs py-1.5 px-1"
+                data-field="tva_taux" data-idx="${l.idx}"
                 onchange="CaisseApp._updateLigne(${l.idx},'tva_taux',this.value)">
           ${[0,5.5,10,20].map(t => `<option value="${t}" ${t===l.tva_taux?'selected':''}>${t}%</option>`).join('')}
         </select>
         <input class="col-span-1 input-field text-xs py-1.5 px-1 text-center"
+               data-field="remise_pct" data-idx="${l.idx}"
                type="number" min="0" max="100" step="1" value="${l.remise_pct}"
                oninput="CaisseApp._updateLigne(${l.idx},'remise_pct',this.value)">
         <span class="col-span-1 text-right text-xs font-semibold text-gray-700 tabular-nums"
@@ -506,6 +530,73 @@
     if (el) el.className = `ml-2 text-xl font-bold ${rendu > 0 ? 'text-green-600' : 'text-gray-400'}`
   }
 
+  // ── Recherche produit (catalogue) ────────────────────────────────────────────
+
+  /**
+   * Vrai pour une ligne venue du catalogue dont le prix est encore à 0 € : la validation est
+   * bloquée à l'écran tant qu'un prix n'est pas saisi. Le serveur, lui, garde « prix ≥ 0 » —
+   * une ligne gratuite reste légitime ailleurs (spec, décision « Vente en caisse »).
+   */
+  function prixManquant(ligne) {
+    return !!ligne.produit_id && !(ligne.prix_unitaire_ht > 0)
+  }
+
+  function debouncedSearchProduit() {
+    clearTimeout(state.produitTimer)
+    state.produitTimer = setTimeout(searchProduit, 250)
+  }
+
+  async function searchProduit() {
+    const q = document.getElementById('vente-produit-search')?.value?.trim()
+    const results = document.getElementById('vente-produit-results')
+    if (!results) return
+    if (!q || q.length < 2) { results.classList.add('hidden'); return }
+
+    try {
+      const res = (await apiGet(`/api/catalogue/recherche?q=${encodeURIComponent(q)}`)).data
+      // Une saisie plus récente a pu partir entre-temps : ne pas afficher une réponse périmée
+      if (document.getElementById('vente-produit-search')?.value?.trim() !== q) return
+      if (!res?.success) { results.classList.add('hidden'); return }
+
+      state.produits = new Map(res.data.map(p => [p.id, p]))
+      results.classList.remove('hidden')
+      results.innerHTML = res.data.length === 0
+        ? `<div class="px-3 py-2 text-sm text-gray-500">Aucun produit trouvé.</div>`
+        : res.data.map(p => `
+          <button type="button" data-produit-id="${Number(p.id)}"
+                  class="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-0 flex justify-between gap-2">
+            <span>
+              <span class="font-medium">${esc(p.nom)}</span>
+              ${p.sku ? `<span class="text-gray-500 ml-2 text-xs">${esc(p.sku)}</span>` : ''}
+            </span>
+            <span class="text-xs text-gray-600 whitespace-nowrap">
+              ${eur(p.prix_vente_ht)} HT · stock ${Number(p.stock_actuel)}
+            </span>
+          </button>`).join('')
+    } catch {
+      // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (`CLAUDE.md` § Enveloppe)
+      results.classList.remove('hidden')
+      results.innerHTML = `<div class="px-3 py-2 text-sm text-red-600">Recherche impossible (connexion).</div>`
+    }
+  }
+
+  /** Ajoute une ligne préremplie depuis un produit du catalogue ; chaque champ reste modifiable. */
+  function ajouterProduit(p) {
+    state.lignes.push({
+      idx:              state.ligneIdx++,
+      produit_id:       p.id,
+      designation:      p.nom,
+      quantite:         1,
+      prix_unitaire_ht: Number(p.prix_vente_ht) || 0,
+      tva_taux:         Number(p.tva_taux),
+      remise_pct:       0,
+    })
+    clearEl('vente-produit-search')
+    hideEl('vente-produit-results')
+    renderLignes()
+    updateTotaux()
+  }
+
   // ── Recherche client ─────────────────────────────────────────────────────────
 
   function debouncedSearchClient() {
@@ -560,6 +651,11 @@
     for (const l of state.lignes) {
       if (!l.designation.trim()) { toast('Chaque ligne doit avoir une désignation.', 'warn'); return }
       if (l.quantite <= 0)        { toast('Quantité invalide (doit être > 0).', 'warn'); return }
+      if (prixManquant(l)) {
+        toast(`Saisissez le prix de « ${esc(l.designation)} » avant de valider.`, 'warn')
+        document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${l.idx}"]`)?.focus()
+        return
+      }
     }
 
     const btn = document.getElementById('btn-submit-vente')
@@ -571,6 +667,7 @@
     const payload = {
       client_id:      state.clientId || undefined,
       lignes:         state.lignes.map(l => ({
+        produit_id:        l.produit_id || undefined,
         designation:       l.designation,
         quantite:          l.quantite,
         prix_unitaire_ht:  l.prix_unitaire_ht,
@@ -588,7 +685,16 @@
         const rendu = data.data.rendu_monnaie
         let msg = `Vente ${data.data.facture.numero} enregistrée.`
         if (rendu && rendu > 0) msg += ` Rendu : ${eur(rendu)}`
-        toast(msg, 'success')
+        // Stock insuffisant : la vente est passée, le stock a été ramené à 0 — le dire
+        const manques = data.data.stock_insuffisant || []
+        if (manques.length) {
+          const detail = manques
+            .map(m => `« ${esc(m.designation)} » (stock ${Number(m.stock_avant)}, vendu ${Number(m.quantite)})`)
+            .join(', ')
+          toast(`${esc(msg)} Stock insuffisant : ${detail} — stock ramené à 0.`, 'warn', 10000)
+        } else {
+          toast(msg, 'success')
+        }
         closeModal()
         refreshKpis()
         refreshJournal()
@@ -700,6 +806,7 @@
     selectMode,
     submitVente,
     debouncedSearchClient,
+    debouncedSearchProduit,
     clearClient,
     debouncedSearchFacture,
     submitEncaissement,

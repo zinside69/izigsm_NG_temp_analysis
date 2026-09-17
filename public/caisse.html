@@ -19,6 +19,8 @@
   <style>
     /* ── Caisse POS styles ── */
     .ligne-row:hover { background: #f0f9ff; }
+    /* Prix d'une ligne venue du catalogue à 0 € : à saisir avant de valider */
+    [data-prix-manquant="1"] { border-color: #dc2626 !important; box-shadow: 0 0 0 2px #fecaca; }
     .btn-mode { transition: all .15s; }
     .btn-mode.active { @apply ring-2 ring-blue-500 bg-blue-50; }
     .kpi-card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1; }
@@ -244,6 +246,15 @@
           <button onclick="CaisseApp.ajouterLigne()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
             <i class="fas fa-plus mr-1"></i>Ajouter une ligne
           </button>
+        </div>
+
+        <!-- Recherche catalogue (ticket 02 `vente-lit-catalogue`) : nom, SKU ou code-barres.
+             Un résultat choisi ajoute une ligne préremplie, qui reste modifiable. -->
+        <div class="relative mb-2">
+          <input type="text" id="vente-produit-search" autocomplete="off"
+                 placeholder="Chercher un produit (nom, SKU, code-barres)…"
+                 class="input-field w-full text-sm" oninput="CaisseApp.debouncedSearchProduit()">
+          <div id="vente-produit-results" class="hidden mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto"></div>
         </div>
 
         <!-- En-têtes colonnes lignes -->
