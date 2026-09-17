@@ -252,9 +252,139 @@ obligatoire à la création d'un ticket ?
   unique par la longueur** : 13 chiffres → produit, 15 → IMEI. Le vendeur ne choisit pas l'écran
   avant de scanner ; ce que le système trouve décide de la suite.
 
-### Ouvert — le parcours IMEI
+### Tranché le 2026-09-17 (reprise du grilling)
 
-1. **« La validation doit aller jusqu'au bout »** — deux lectures possibles de la consigne de
+- **Validation du technicien — lecture A** : la prise en charge est **créée complète au comptoir**,
+  le client repart avec son document ; la validation technique vient ensuite, sans bloquer
+  personne. Un technicien indisponible ne retient donc jamais un client.
+- ~~**IMEI obligatoire à la création d'un ticket : oui**~~ — **précisé le même jour** : l'IMEI est
+  essentiel pour le SAV, mais **un appareil cassé ne permet pas toujours de le lire** à la prise en
+  charge. Règle retenue :
+  - un ticket **peut être créé sans IMEI ni numéro de série** ;
+  - l'identifiant doit être **saisi avant toute facturation** — devis **ou** facture — car **il est
+    inscrit sur le document**. La garde est donc à la génération du devis / de la facture, pas à la
+    création du ticket ;
+  - les tickets existants sans identifiant tombent sous la même garde : on les complète le jour où
+    on les facture, sans rattrapage en lot.
+- **Rupture en caisse** : stock **écrêté à 0 avec un avertissement** au vendeur, la vente passe. Le
+  stock négatif n'est pas retenu.
+- **Une seule recherche**, qui rend **produits, services et dossiers SAV**. (Le SAV n'était pas dans
+  la question : ce qu'on fait d'un dossier SAV trouvé depuis la caisse reste à préciser.)
+- **Premier écran : la caisse.**
+- **Ligne choisie dans le catalogue : tout reste modifiable** (désignation, quantité, prix). Le
+  prix plancher du chantier tarification viendra borner la remise, plus tard.
+- **`service_id` sur `lignes_document` : oui**, pour compter les prestations vendues même après
+  renommage d'un service. Migration (`ALTER TABLE ADD COLUMN`) sur une table de la chaîne NF525.
+- **Dossier SAV trouvé par la recherche : on l'ouvre**, rien n'est ajouté au panier — même logique
+  que l'IMEI qui ouvre le ticket en cours.
+- **Les services suggérés de la prise en charge : les brancher MAINTENANT.** Les cases cochées
+  deviennent des **lignes de ticket**, reprises à la facturation. **Élargissement majeur du
+  chantier** : une table de lignes de ticket n'existe pas (mesuré). C'est aussi là que les trois
+  méthodes de tarification des réparations (chantier tarification) trouveront leur support.
+
+### Tranché — les lignes de ticket (2026-09-17)
+
+- **Ordre de livraison : la caisse d'abord**, puis les lignes de ticket, qui réutilisent le même
+  sélecteur déjà éprouvé au comptoir.
+- **Une ligne de ticket est l'une de trois choses** : un **service** du catalogue (main d'œuvre),
+  une **pièce** du stock, ou une ligne **libre**. C'est ce qui porte « pièce + forfait », la méthode
+  actuelle de l'exploitant.
+- **Une pièce sort du stock à la pose** : le technicien la marque posée, le stock baisse à cet
+  instant. Un devis refusé ne fait rien bouger.
+- **Le prix du ticket est calculé depuis ses lignes** : fin de la double saisie
+  `prix_estime`/`prix_final`. Les tickets **existants** gardent leur prix saisi.
+- **Ticket → devis → facture** : les lignes du ticket forment un **devis** que le client accepte,
+  puis le devis devient la facture, sans ressaisie. Pas de facture directe depuis le ticket.
+  ⚠ Contrainte : la pièce sort du stock **à la pose** — la conversion devis → facture
+  (`convertirDevis()`, qui recopie `produit_id`) ne doit **jamais** la décrémenter une seconde fois.
+- **Pièce en rupture ajoutée au ticket** : elle passe **« à commander » avec le numéro du ticket**
+  qui l'attend, et le ticket affiche « pièce en attente ».
+- **Dossiers SAV : ils portent des lignes, facturées 0 €**, la pièce sortant du stock et son **coût
+  étant tracé** — pour connaître enfin le coût des garanties.
+
+### Tranché — l'appareil sur les documents, le devis (2026-09-17)
+
+Faits mesurés d'abord : le devis a déjà un cycle `draft → envoye → accepte | refuse | expire |
+annule` (`devisService.ts`) et une **page publique d'acceptation** par lien (`0023`,
+`public_token`, `signature_client` « simulé, eIDAS non implémenté ») ; la prise en charge capture
+déjà une signature (`0033`) ; une facture émise fige vendeur et acheteur (`0037`), **pas
+l'appareil**.
+
+- **L'identité de l'appareil est figée à l'émission** de la facture (marque, modèle, IMEI ou
+  numéro de série), sur le modèle de `vendeur_snapshot`/`acheteur_snapshot`. Corriger la fiche
+  appareil ensuite ne touche jamais une facture émise. ⚠ Aux **deux** sites de figeage existants
+  (`emettreFacture()`, `createVente()`), jamais un troisième (`CLAUDE.md` § Factures) — et
+  **après** l'écriture au journal NF525, comme les autres marques.
+- **Identifiant exigé avant facturation : IMEI _ou_ numéro de série**, l'un suffit (tablettes,
+  ordinateurs, consoles n'ont pas d'IMEI). `appareils` porte déjà les deux colonnes.
+- **Acceptation du devis : au comptoir (signature) et en ligne (lien)** — les deux briques
+  existent déjà.
+- **Devis refusé** : le ticket se clôt en « devis refusé », et un **forfait de diagnostic** est
+  facturé **au cas par cas**, pris dans le catalogue de services.
+
+### Tranché — derniers points (2026-09-17)
+
+- **Téléphone d'occasion vendu en caisse : son IMEI est figé sur le ticket de caisse** —
+  la vente d'occasion ouvre une garantie légale. Même mécanisme que la facture de réparation
+  (`createVente()`, second site de figeage existant).
+- **La pose est marquable par tout technicien** de la boutique ; son auteur est conservé.
+- **Produit à 0 € choisi en caisse** : la ligne s'ajoute, le prix est mis en évidence, et **la
+  vente ne se valide pas à 0 €** tant qu'un prix n'est pas saisi. (Cas réel : un article importé
+  sans taux de marge réglé vaut 0 €.)
+- **Glossaire** : `CONTEXT.md` reçoit **Ligne de ticket**, **Pose**, **Code maison**, **File
+  d'étiquettes**, et la règle d'identification de l'**Appareil** (IMEI ou numéro de série, avant
+  facturation).
+
+### Garanties — règle de l'exploitant et ce qu'elle impose (2026-09-17)
+
+**Règle** : écran **6 mois**, toute autre réparation **3 mois**, **hors casse, hors oxydation**.
+
+**Mesuré** (`garantiesService.ts:97-135`) : la garantie est créée quand le ticket passe à
+« terminé », avec **une seule durée par boutique** (`boutique_settings.garantie_defaut_jours`,
+repli 90 jours) et **une seule garantie active par ticket** (index unique `0019`).
+`services.garantie_jours` existe **mais n'est lu par aucun code**. Ce qu'elle couvre n'est décrit
+qu'en texte (`description_reparation`), et elle ne porte pas l'IMEI.
+
+⇒ **La règle est inapplicable aujourd'hui** : un ticket « écran + batterie » ne peut pas porter
+6 mois et 3 mois. Les lignes de ticket la rendent possible — la durée vient du **service** de
+chaque ligne. Les durées sont une **politique de boutique** : saisies dans le catalogue de
+services, jamais codées en dur.
+
+**« Nouvelle panne hors garantie »**, défini :
+- la panne ne concerne **aucune** réparation encore garantie ;
+- ou la garantie de la réparation concernée est **terminée** ;
+- ou la panne vient d'une **casse** ou d'une **oxydation**, même en période de garantie.
+
+**G1 — tranché : une garantie par ligne de service.** Sur un même ticket, l'écran est garanti
+6 mois et la batterie 3 mois. L'index unique « une garantie active par ticket » (`0019`) tombe —
+migration ; les garanties existantes, créées par ticket avec la durée de la boutique, restent
+valables telles quelles.
+
+**G2 — tranché : le vendeur tranche au comptoir, le technicien peut requalifier.** L'écran
+affiche les réparations encore garanties et leur date de fin, puis demande « même panne ? ».
+« Non » exige un **motif** dans une liste courte — autre panne, casse, oxydation, garantie
+expirée — conservé sur le ticket (utile en cas de contestation). Le technicien peut changer la
+qualification après examen, sans que le client ait attendu.
+
+Parcours à l'IMEI : ticket non rendu → on l'ouvre ; sinon, garantie active → **quelqu'un tranche**
+(même panne ? casse ? oxydation ?) → SAV ou nouveau ticket ; sinon → nouveau ticket. Le système ne
+peut pas trancher seul : il ne sait pas ce qui est cassé.
+
+### Frontière au 2026-09-17 — close
+
+Toutes les branches ouvertes ont été parcourues. Restent des points **de mise en œuvre**, pas de
+décision, à porter dans la spec :
+- `0048` (unicité EAN/SKU) part avec le code qui convertit sa violation en message ;
+- l'API de base d'IMEI : choix du prestataire au moment de l'implémenter (option par boutique,
+  patron `api_plateforme`) ;
+- la signature du devis est « simulée, eIDAS non implémenté » (`0023`) — acceptable pour un devis,
+  à ne pas présenter comme une signature électronique qualifiée ;
+- le chantier **tarification** reste en attente, et ses trois méthodes trouveront leur support dans
+  les lignes de ticket.
+
+### Ouvert — le parcours IMEI (état d'avant la reprise)
+
+1. **« La validation doit aller jusqu'au bout »** _(tranché : lecture A, ci-dessus)_ — deux lectures possibles de la consigne de
    l'exploitant, à lever avant d'implémenter :
    - (A) la prise en charge est **créée complète au comptoir**, le client repart avec son
      document signé ; la validation technique se fait ensuite, sans bloquer personne ;

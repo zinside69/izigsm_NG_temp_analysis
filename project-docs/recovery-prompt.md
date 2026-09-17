@@ -1,4 +1,50 @@
-# Recovery Prompt — iziGSM — 2026-09-15 (checkpoint 117 — page Stock : recherche et compteurs, v3.08 à déployer)
+# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 121 — grilling « la vente lit le catalogue » en cours, migration 0048 locale)
+
+## Ce qui a changé aux checkpoints 118 à 121 (2026-09-16)
+
+_Ce fichier n'avait pas été tenu à jour de 118 à 121 : il annonçait encore la v3.08 « non poussée,
+non déployée ». Rattrapé le 2026-09-17. Les blocs 117 et plus anciens ci-dessous sont **dépassés**
+sur l'état de la production._
+
+**État : production saine en `izigsm-v3.11`, dépôt aligné sur `origin`, rien à déployer.**
+**Migration `0048` appliquée EN LOCAL seulement, gardée volontairement** : index uniques partiels
+sur `(boutique_id, code_barre)` et `(boutique_id, sku)`, prérequis mesuré en production (804
+produits, 0 doublon). Elle part **avec** le code qui convertit sa violation en message — sans lui,
+une création manuelle ou un import CSV en doublon afficherait une erreur SQL brute
+(`CLAUDE.md` § Déploiement, état 121). ⊥ lancer `npm run deploy` : aucun fichier de `public/` ni
+`src/` n'a changé depuis la v3.11 (mesuré), le geste n'apporterait que le risque de propagation.
+
+**Faits du 2026-09-16, dans l'ordre** :
+- **118** — v3.08 (page Stock) déployée, relue, validée à l'écran. Les commits étaient déjà sur
+  `origin` avant tout push : un `sync push` d'une autre fenêtre.
+- **119** — page Notifications : 5 appels lisaient l'enveloppe au mauvais niveau ; garde-fou
+  d'enveloppe **étendu aux scripts inline** (`scriptsInline()`). v3.09 validée à l'écran.
+- **120** — v3.10 (bandeau « Mode simulé » faux : `api_key_source` à trois états) et v3.11
+  (champ Expéditeur pré-rempli de l'adresse plateforme : `from_configure` ≠ `from`). Chaque défaut
+  trouvé **en validant le précédent**, jamais par une suite. Reste 🟡 P3 `saveNotif()`.
+- **121** — **grilling**, aucun code applicatif. Deux chantiers cadrés : **la vente lit le
+  catalogue** (🔴 P1, devant) et **tarification par boutique** (🟠 P2, derrière). Migration `0048`,
+  `CONTEXT.md` (Code-barres, SKU), `decisions.md`, `todo.md`.
+
+**Première action : reprendre le grilling du catalogue.** Matière complète, faits mesurés et
+frontière : `.scratch/vente-lit-catalogue/matiere-grilling.md` (§ 6 à 8). Le skill se relance par
+l'exploitant (`/mattpocock-skills:grill-with-docs`) ; il charge `grilling` et `domain-modeling`.
+Ne pas compacter avant `/mattpocock-skills:to-tickets`.
+
+**À savoir avant de reprendre** :
+- **La caisse et les devis ignorent le catalogue** : lignes retapées, aucun `produit_id` envoyé,
+  donc **le stock ne bouge jamais à la vente** — le chemin de décrément existe dans
+  `createVente()` mais n'a jamais servi, et il **écrête à 0** en silence.
+- `lignes_document` **n'a pas de `service_id`** (la route l'accepte et l'ignore) ; un ticket **n'a
+  aucune ligne** en base ; `tickets.appareil_id` est nullable, l'IMEI vit sur `appareils`.
+- La recherche produits **ne couvre pas `code_barre`**. JsBarcode est **déjà** chargé
+  (`tickets.js:653`, étiquette technicien) mais sa convention zéro-padée ne convient pas aux
+  produits : codes maison en préfixe **`2`**.
+- **Aucun appel d'IA côté serveur** dans le dépôt ; une API tierce se range comme Mobilax
+  (`api_plateforme` + clé chiffrée).
+- Méthode : **trois `workerd.exe` survivaient** à l'arrêt de leurs tâches et répondaient sur :3000
+  — contrôler la page **servie** avant de conclure d'un vert ; `taskkill /F /IM workerd.exe` entre
+  deux campagnes.
 
 ## Ce qui a changé au checkpoint 117
 

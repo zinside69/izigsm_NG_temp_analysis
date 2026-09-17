@@ -42,10 +42,37 @@ le borne à sa propre boutique.
 prise en charge à la restitution. Table `tickets`, historique de statuts dans
 `tickets_statuts_historique`, photos dans `tickets_photos`.
 
-**Appareil** — le matériel confié, rattaché à un client. Table `appareils`.
+**Appareil** — le matériel confié, rattaché à un client. Table `appareils`. Identifié par son
+**IMEI** (téléphone) **ou** son **numéro de série** (tablette, ordinateur, console) : l'un des
+deux doit être connu **avant toute facturation**, pas à la prise en charge — un appareil hors
+d'usage ne le laisse pas toujours lire (tranché le 2026-09-17).
+
+**Ligne de ticket** — ce qu'une réparation comporte : un **service** du catalogue (main
+d'œuvre), une **pièce** du stock, ou une ligne **libre**. Le prix du ticket est la somme de ses
+lignes ; elles forment le devis, puis la facture. Un dossier SAV en porte aussi, facturées 0 €,
+pour tracer le coût des garanties. _Aucune table ne les porte encore (chantier « la vente lit le
+catalogue »)._
+_À éviter_ : prestation (mot de conversation, sans définition ici), intervention.
+
+**Pose** — le geste qui marque une pièce d'une ligne de ticket comme montée sur l'appareil. C'est
+**la pose, et elle seule, qui sort la pièce du stock** : un devis refusé ne fait rien bouger, et
+la conversion du devis en facture ne décrémente jamais une seconde fois. Tout technicien de la
+boutique peut la marquer ; son auteur est conservé.
 
 **Prise en charge** — le document remis au client à l'ouverture du ticket, valant
 reconnaissance de dépôt.
+
+**Garantie** — couverture d'une réparation, **par ligne de service** : sa durée vient du service
+du catalogue, politique de la boutique (ex. écran 6 mois, autres réparations 3 mois). **Hors
+casse, hors oxydation.** Face à une garantie active, le **vendeur** tranche au comptoir si la
+nouvelle panne est couverte ; un refus porte un **motif** (autre panne, casse, oxydation,
+garantie expirée) ; le technicien peut requalifier après examen (tranché le 2026-09-17).
+`garanties` — ⚠ aujourd'hui **une par ticket**, à la durée de la boutique
+(`garantie_defaut_jours`) : `services.garantie_jours` existe mais n'est lu par aucun code.
+
+**Nouvelle panne hors garantie** — panne qui ne concerne aucune réparation encore garantie, ou
+dont la garantie est terminée, ou due à une casse ou une oxydation. Elle ouvre un **nouveau
+ticket**, les précédents restant dans l'historique de l'appareil. Son contraire ouvre un **SAV**.
 
 **SAV** — retour après réparation. `sav_dossiers`, adossé à `garanties`.
 
@@ -98,6 +125,19 @@ contrainte ni index d'unicité.
 portent la même valeur : l'import fournisseur renseigne aujourd'hui le SKU avec l'EAN de la
 pièce, ce qui est une commodité, pas une identité. `produits.sku` — ⚠ annoncé « unique par
 boutique » par un commentaire de migration, sans index unique pour le tenir.
+
+**Code maison** — code-barres créé par la boutique pour ce qui n'a pas de code fournisseur :
+tout produit **créé hors import grossiste**, et les **services** (imprimés sur une planche de
+codes au comptoir). Préfixe **`2`** (plage GS1 à circulation restreinte), puis le **type**
+(1 produit, 2 service), puis l'identifiant. Un article qui porte déjà l'EAN de son fournisseur
+n'en reçoit **jamais** : on scanne l'étiquette d'origine. Un appareil d'occasion n'en reçoit pas
+non plus : il se scanne par son **IMEI**.
+_À éviter_ : code interne, EAN interne.
+
+**File d'étiquettes** — les étiquettes en attente d'impression, accumulées au fil des créations de
+produits, puis imprimées **en lot** sur le rouleau — par paires, le rouleau ayant deux pistes.
+Tenue **par boutique** : qui déballe en réserve n'est pas qui imprime au comptoir.
+_À éviter_ : panier d'étiquettes, planche.
 
 **Mouvement de stock** — entrée ou sortie de quantité. Toute variation de la quantité d'un
 produit en passe par un ; la quantité courante est tenue à jour sur le produit à chaque
