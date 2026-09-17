@@ -1,5 +1,22 @@
 # iziGSM — Décisions
 
+## 2026-09-17 — Résolveur de boutique : correction commune, chantier à part (checkpoint 124)
+
+La revue du ticket 02 `vente-lit-catalogue` a montré qu'un admin **de boutique** lit le catalogue
+d'une autre boutique par `?boutique_id=` sur `GET /api/catalogue/recherche` — parce que
+`getBoutiqueId()` honore ce paramètre pour tout `role === 'admin'`. Trois options présentées :
+statu quo, exception sur cette seule route (comme la recherche Mobilax), correction du résolveur
+commun. **Décision de l'exploitant : corriger le résolveur commun pour toutes les routes, dans un
+chantier à part** (`todo.md` 🟠 P2). La route de recherche reste alignée sur les autres listes en
+attendant — ⊥ y ajouter une exception locale.
+
+Ticket 02 : trois choix de mise en œuvre faits sans question, conformes à la spec :
+- le stock insuffisant est signalé **après** l'encaissement (`stock_insuffisant` dans la réponse,
+  avertissement de 10 s), pas au moment du choix — la liste de résultats affiche le stock ;
+- une ligne du catalogue à 0 € ne peut **pas** être vendue à 0 € à l'écran, même volontairement ;
+  une ligne libre le peut, et le serveur garde « prix ≥ 0 » ;
+- plafond de recherche = **20** résultats.
+
 ## 2026-09-17 — La vente lit le catalogue : grilling clos, chantier élargi aux tickets
 
 Suite et fin du grilling du 2026-09-16. Matière : `.scratch/vente-lit-catalogue/matiere-grilling.md` ;

@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟠 Résolveur de boutique : un admin de boutique vise une autre boutique par `?boutique_id=` (relevé le 2026-09-17, OUVERT)
+
+**Défaut** : `getBoutiqueId()` (`src/lib/middleware.ts:208`) rend le paramètre dès que
+`role === 'admin'`, sans vérifier que l'appelant est admin **plateforme** (`boutique_id` NULL). Un
+admin de boutique qui ajoute `?boutique_id=<autre>` lit donc les listes de cette boutique — mesuré
+à la lecture du code sur `GET /api/catalogue/recherche` (noms, prix, stock), même mécanisme que
+`GET /api/produits`. Les routes d'écriture qui s'y fient : **non mesuré**.
+
+**Pourquoi les tests ne le voient pas** : aucune fixture ne crée d'admin de boutique —
+`createTenantAdmin()` inscrit un manager, dont le paramètre est ignoré.
+
+**Décision** : corriger le résolveur commun, dans un chantier à part (`decisions.md` 2026-09-17,
+`todo.md` 🟠 P2).
+
 ## 🟡 Import CSV : la colonne `code_barre` est documentée mais jamais enregistrée (trouvé le 2026-09-17, OUVERT)
 
 **Défaut** : la route d'import CSV annonce les colonnes attendues, dont `code_barre`, mais

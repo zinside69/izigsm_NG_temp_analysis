@@ -29,6 +29,10 @@ Décisions : `decisions.md` § 2026-09-16.
       bloqué par 01, et un défaut CSV consigné ci-dessous.
 - [ ] 🟡 **Import CSV : `code_barre` ignoré** (`bugs.md`) — colonne documentée, jamais écrite ;
       à corriger avec la conversion du doublon par ligne
+- [x] **Ticket 02 fait le 2026-09-17** (`353d71b`, non poussé, non déployé) — sélecteur de
+      produits en caisse, `GET /api/catalogue/recherche`, le stock baisse à la vente, stock
+      insuffisant signalé. Sa revue a relevé la faille du résolveur de boutique : chantier à part,
+      section 🟠 P2 ci-dessous.
 
 Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
 
@@ -51,6 +55,28 @@ Les cases ci-dessous sont désormais portées par les tickets — elles restent 
 - [ ] **Convertir la violation d'index en message** : `importerProduitMobilax()` sait le faire pour
       `0046` (`deja_importe`) ; la création manuelle et l'import CSV remonteraient une erreur SQL
       brute à l'écran
+
+## 🟠 P2 — Résolveur de boutique : un admin *de boutique* peut viser une autre boutique (relevé le 2026-09-17)
+
+`getBoutiqueId()` (`src/lib/middleware.ts:208`) honore `?boutique_id=` dès que `role === 'admin'`,
+**sans distinguer l'admin plateforme (`boutique_id` NULL) de l'admin de boutique**. Un admin de
+boutique lit donc les listes d'une autre boutique en ajoutant ce paramètre — et les routes
+d'écriture qui s'y fient sont probablement exposées aussi (**non mesuré**). Déjà documenté comme « pas une garantie serveur »
+(`CLAUDE.md` § checkpoint 73), jamais corrigé.
+
+Relevé par la revue du ticket 02 `vente-lit-catalogue` sur `GET /api/catalogue/recherche` (noms,
+prix, stock d'une autre boutique). **Décision de l'exploitant (2026-09-17) : corriger le résolveur
+commun pour toutes les routes, dans un chantier à part** — ni exception locale sur la route de
+recherche, ni statu quo.
+
+- [ ] Cadrer : le paramètre ne vaut que pour l'admin plateforme (`isAdminPlateforme` côté serveur :
+      `role === 'admin'` **et** `boutique_id` NULL) ; un admin de boutique retombe sur sa boutique
+- [ ] Recenser les appelants de `getBoutiqueId()` et les routes qui résolvent la boutique depuis le
+      corps (liste dans le JSDoc de `_avecBoutique()`, `app.js`) — même faille possible
+- [ ] Test vu rouge d'abord, sur la vraie base locale : un admin de boutique qui passe
+      `?boutique_id=<autre>` ne voit que sa boutique (aucune fixture ne crée d'admin de boutique
+      aujourd'hui : `createTenantAdmin()` crée un manager)
+- [ ] Vérifier que la console plateforme et le balayage du menu restent verts
 
 ## 🟠 P2 — Tarification par boutique (cadré le 2026-09-16, en attente derrière le catalogue)
 

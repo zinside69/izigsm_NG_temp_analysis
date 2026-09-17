@@ -739,6 +739,13 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   répond sinon une erreur brute, voire un 500 (mesuré). L'import fournisseur rend `deja_importe`,
   **SKU compris** (décision de l'exploitant : l'EAN est tapé comme SKU dans la fiche, faute de champ
   code-barres), et n'ajoute jamais la quantité saisie.
+- **La vente lit le catalogue** (ticket 02 `vente-lit-catalogue`, 2026-09-17) : toute recherche
+  d'un sélecteur de vente passe par **`GET /api/catalogue/recherche`** → `rechercherCatalogue()`
+  (`catalogueService.ts`), résultats typés par `type` (⊥ un second point de recherche pour les
+  services ou le SAV : les ajouter à cette union), plafond 20, motif LIKE échappé. Une ligne de
+  vente venue du catalogue envoie `produit_id` ; `createVente()` décrémente, écrit « Vente POS »,
+  écrête à 0 et rend **`stock_insuffisant`**, que l'écran doit afficher. Ligne du catalogue à 0 € :
+  bloquée **à l'écran** seulement (`prixManquant()`), le serveur garde « prix ≥ 0 ».
 - **Valeurs par défaut de stock par boutique** (ticket 01 `reglages-stock-boutique`) :
   `stock_seuil_defaut`/`stock_initial_defaut` sur `boutique_settings` (migration `0047`),
   **`NULL` = jamais réglé**, distinct de 0 (le rappel de la page Stock en dépend). Écrites par
@@ -986,6 +993,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-17 (checkpoint 124) : `0048` EN ATTENTE, dépôt EN AVANCE sur la production.**
+Tickets 01 (`b80677d`) et 02 (`353d71b`, route `/api/catalogue/recherche`, sélecteur en caisse)
+poussés, **non déployés** ; production saine en `izigsm-v3.11`. Aucune migration nouvelle au 02.
+Même ordre impératif qu'au 123 : lot 1 en bloc, `0048` à distance **avant** le code.
 
 **État au 2026-09-17 (checkpoint 123) : `0048` EN ATTENTE, dépôt EN AVANCE sur la production.**
 Ticket 01 du lot 1 (`b80677d`) commité et poussé, **non déployé** ; production saine en

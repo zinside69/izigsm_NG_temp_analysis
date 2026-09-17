@@ -1,4 +1,32 @@
-# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 123 — ticket 01 fait, 02 et 18 prenables)
+# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 124 — ticket 02 fait, 03, 04 et 18 prenables)
+
+## Ce qui a changé au checkpoint 124
+
+**Ticket 02 fait** (`353d71b`, poussé, **non déployé**). La « première action : ticket 02 ou 18 »
+du bloc 123 ci-dessous est **dépassée** pour le 02.
+
+**Première action : ticket 03, 04 ou 18**, dans une **session neuve**, tapé par l'exploitant :
+`/mattpocock-skills:implement .scratch/vente-lit-catalogue/issues/<NN>-….md`. Chaîne : 01 ✓ · 02 ✓
+· 03, 04, 18 libres → 05 (← 01, 03) → 06 → 07 (← 04) → …
+
+**À savoir, issu du ticket 02** :
+- **La recherche unifiée existe** : `GET /api/catalogue/recherche?q=` →
+  `rechercherCatalogue()` (`catalogueService.ts`), union `ResultatCatalogue` typée par `type`.
+  Le ticket 03 y ajoute services (et dossiers SAV) **sans changer le contrat** ; plafond 20,
+  motif LIKE échappé.
+- **Caisse** (`caisse.js`) : `ajouterProduit()`, `prixManquant()`, résultats cliqués par
+  délégation (`data-produit-id`, jamais d'argument en `onclick`) ; chaque champ de ligne porte
+  `data-field` + `data-idx`. Le balayage lit encore `.linha-row input[type="number"]` nth(1) = prix :
+  ⊥ réordonner les champs d'une ligne.
+- `createVente()` rend `stock_insuffisant` ; E2E : `tests/e2e/caisse-catalogue-{api,ecran}.spec.ts`.
+- **Mouvements d'une même seconde** : `GET /api/produits/:id` ne garantit pas leur ordre — un test
+  filtre par motif, jamais `mouvements[0]`.
+- **Ne pas toucher au résolveur de boutique dans ce chantier** : sa correction est un chantier à
+  part (décision du 2026-09-17, `todo.md` 🟠 P2).
+- **Python sous Windows** : mode texte = CRLF à l'écriture. Écrire en binaire ; contrôler par
+  `git ls-files --eol` avant de commiter.
+- Méthode qui a servi : script de relance (tuer `workerd`, build, wrangler en fond, attendre
+  `/api/health`) et script de mutations qui restaure le fichier dans un `finally`.
 
 ## Ce qui a changé au checkpoint 123
 

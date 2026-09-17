@@ -1,4 +1,37 @@
-# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 123 — ticket 01 fait : un code-barres, un produit)
+# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 124 — ticket 02 fait : la caisse lit le catalogue)
+
+## Checkpoint 124 — Ticket 02 fait, faille du résolveur de boutique consignée (2026-09-17)
+
+**Production inchangée en `izigsm-v3.11`. Dépôt en avance : tickets 01 et 02 poussés, NON
+déployés ; `0048` toujours en local seulement.** Le lot 1 se déploiera en bloc.
+
+- **Ticket 02 — sélecteur de produits en caisse** (`353d71b`) :
+  - `GET /api/catalogue/recherche?q=` (`routes/catalogue.ts`, `services/catalogueService.ts`) :
+    produits de la boutique consultée par nom, SKU **et code-barres**, résultats typés
+    `produit`, plafond 20, jokers `%`/`_` neutralisés (`ESCAPE`) ;
+  - fenêtre « Nouvelle vente » : recherche `#vente-produit-search`, ligne préremplie (désignation,
+    prix, TVA) et modifiable ; la vente envoie `produit_id` → **le stock baisse enfin**, mouvement
+    « Vente POS » ;
+  - `createVente()` rend `stock_insuffisant` (rang de ligne, produit, stock avant, quantité) ;
+    l'écran l'affiche 10 s ; stock écrêté à 0 ;
+  - ligne du catalogue à 0 € : `data-prix-manquant="1"`, validation bloquée à l'écran seulement.
+- **Revue à deux axes** : aucune violation dure. Corrigés : jokers LIKE (test vu rouge), JSDoc.
+  Non traités (notés `decisions.md`) : avertissement de stock après encaissement seulement ; TVA
+  hors des quatre taux mal affichée (la création les refuse).
+- **Faille relevée, décision prise** : `getBoutiqueId()` honore `?boutique_id=` pour un admin
+  **de boutique** — il lit le catalogue d'autrui. L'exploitant : **corriger le résolveur commun,
+  chantier à part** (`todo.md` 🟠 P2, `bugs.md`, `decisions.md`).
+- **Piège de la session** : un script Python en mode texte sous Windows réécrit le fichier en
+  **CRLF** — `caisse.js` et `routes/caisse.ts` l'ont été, repérés par la revue (`git ls-files
+  --eol`), remis en LF avant commit. Écrire en binaire (`'rb'`/`'wb'`).
+
+**Gates** (`353d71b`) : vitest 1143/1145 (2 permanents), tsc 32, E2E `caisse-catalogue-api` +
+`caisse-catalogue-ecran` 9/9 ; avec balayage du menu, plateforme-ne-vend-pas, xss-gabarits 30/30.
+Tests vus rouges ; 4 mutations rouges (`produit_id` non envoyé / ignoré par la route, nom non
+échappé, prix 0 non bloquant). Page servie contrôlée (`caisse.80e29aef.js` contient le code).
+
+**Prochaine session** : ticket **03**, **04** ou **18**, chacun dans une session neuve.
+`CACHE_VERSION` (`izigsm-v3.11`) à incrémenter au dernier ticket d'écran du lot 1.
 
 ## Checkpoint 123 — Ticket 01 fait, ticket 18 né de sa revue (2026-09-17)
 
