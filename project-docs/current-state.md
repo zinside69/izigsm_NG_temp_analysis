@@ -1,4 +1,44 @@
-# iziGSM — État courant (MàJ : 2026-09-17, checkpoint 124 — ticket 02 fait : la caisse lit le catalogue)
+# iziGSM — État courant (MàJ : 2026-09-18, checkpoint 125 — ticket 03 codé sur le Mac, E2E à jouer sur Windows)
+
+## Checkpoint 125 — Ticket 03 codé, E2E non joués (2026-09-18)
+
+**Production inchangée en `izigsm-v3.11`. Dépôt en avance : tickets 01, 02 et 03 (`c8c16c7`)
+poussés, NON déployés ; `0048` en local Windows seulement, `0049` appliquée nulle part.**
+
+- **Ticket 03 — services et dossiers SAV dans la recherche** (`c8c16c7`) :
+  - `rechercherCatalogue()` rend aussi `service` (nom, référence) et `sav` (numéro, client par
+    prénom/nom) ; le plafond de 20 est **réparti à tour de rôle** entre les types
+    (`repartirPlafond()`), rendu groupé : produits, services par nom ; SAV du plus récent ;
+  - migration **`0049`** : `lignes_document.service_id`, ajout de colonne, **sans FK** (comme
+    `produit_id`), index partiel ; testée sur un vrai SQLite, avec témoin sans migration ;
+  - `createVente()` écrit `service_id` et refuse **avant toute écriture** un service d'une autre
+    boutique ou un identifiant non entier ;
+  - caisse : nature affichée par résultat (`data-nature`), `ajouterLigneCatalogue(lien, …)` commun
+    aux produits et services, dossier SAV → `/sav?dossier=<id>` (lu par `sav.js`, qui ouvre le
+    modal) ; une ligne de **service** à 0 € bloque aussi la validation à l'écran (question ouverte
+    à l'exploitant : le récit 19 ne parle que des produits).
+- **Revue à deux axes** : un défaut réel trouvé et corrigé — `filter(Boolean)` laissait un
+  `service_id` `NaN` échapper au contrôle d'appartenance (test vu rouge). Corrigés aussi : doublon
+  des deux fonctions d'ajout, JSDoc de tri faux, statut SAV affiché brut. Laissés (jugements) :
+  `searchProduit` couvre désormais services et SAV, aiguillage par type à trois endroits de
+  `caisse.js`, aides E2E dupliquées entre les deux specs.
+- **Session sur le Mac (MacBook Air 2015, macOS 12.7.6)** : `workerd` exige macOS 13.5 → ni
+  `wrangler pages dev`, ni D1 locale, ni `wrangler types`. Donc pas de `worker-configuration.d.ts` :
+  **tsc ≈ 492 erreurs d'environnement**, jugé par **différentiel** HEAD/diff (+0 dans `src/`, +2
+  `TS7006` dans les tests, même écriture que les tests voisins). `node_modules` installé par
+  `npm ci`. Node 22 porte `node:sqlite` : les tests de migration tournent.
+
+**Gates** (`c8c16c7`) : vitest 1155/1157 (2 permanents), +12 tests, tous vus rouges d'abord.
+**E2E écrits, NON JOUÉS** : 6 scénarios dans `caisse-catalogue-api.spec.ts`, 3 dans
+`caisse-catalogue-ecran.spec.ts`.
+
+**Prochaine session — sur Windows** : `migrations apply DB --local` (0049), relancer le serveur,
+jouer les deux specs `caisse-catalogue-*` + balayage du menu + `xss-gabarits`, prouver le rouge par
+mutation (neutraliser l'écriture de `service_id`, le rendu des services, l'ouverture SAV), relire
+`tsc` (baseline 32), contrôler la page servie ; puis cocher le ticket 03. Ensuite ticket 04 ou 18.
+
+**⚠ Ordre de mise en production du lot 1** : `0048` **et** `0049` à distance, `d1_migrations`
+relu, **puis** le code. Sans `0049`, toute vente en caisse échoue (`no such column: service_id`).
 
 ## Checkpoint 124 — Ticket 02 fait, faille du résolveur de boutique consignée (2026-09-17)
 

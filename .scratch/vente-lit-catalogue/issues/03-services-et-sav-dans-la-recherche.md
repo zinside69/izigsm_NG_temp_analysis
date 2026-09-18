@@ -12,15 +12,21 @@ scan », « Vente en caisse »).
 
 **Status:** ready-for-agent
 
-- [ ] Nouvelle colonne `service_id` sur les lignes de document (ajout de colonne, sans recréation) —
+- [x] Nouvelle colonne `service_id` sur les lignes de document (ajout de colonne, sans recréation) —
       migration testée contre un vrai SQLite
 - [ ] La vente écrit le `service_id` de chaque ligne venue d'un service (la route l'acceptait déjà
       sans l'écrire) — prouvé sur la vraie base locale
-- [ ] La recherche unifiée rend des résultats typés `produit`, `service`, `sav` : services par nom,
+- [x] La recherche unifiée rend des résultats typés `produit`, `service`, `sav` : services par nom,
       référence ; dossiers SAV par nom du client et par numéro de dossier
 - [ ] À l'écran, chaque résultat affiche sa nature ; un service ajoute une ligne préremplie et
       modifiable ; un dossier SAV s'ouvre, le panier reste inchangé
 - [ ] Isolation : un service ou un dossier d'une autre boutique n'est jamais rendu (test de route)
 - [ ] E2E : vendre un service et relire le lien sur la ligne de facture ; ouvrir un dossier SAV depuis
       la recherche ; tests vus rouges d'abord
-- [ ] `npx vitest run` vert (hors les 2 échecs permanents) ; erreurs tsc inchangées
+- [x] `npx vitest run` vert (hors les 2 échecs permanents) ; erreurs tsc inchangées — tsc jugé par différentiel sur le Mac (+0 dans `src/`), baseline 32 à relire sur Windows
+
+**Avancement (2026-09-18, checkpoint 125, `c8c16c7`)** : code, migration `0049` et E2E écrits sur le
+Mac, où `workerd` ne tourne pas (macOS 12). Restent **non cochées** les cases qui exigent la vraie
+base locale : écriture de `service_id` prouvée sur D1, écran, isolation par route, E2E vus rouges
+puis verts. À jouer sur Windows (`caisse-catalogue-api`, `caisse-catalogue-ecran`, balayage du
+menu), le « vu rouge » par mutation puisque le code existe déjà. Le ticket reste ouvert jusque-là.

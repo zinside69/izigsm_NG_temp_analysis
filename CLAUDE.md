@@ -994,6 +994,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-18 (checkpoint 125) : `0048` ET `0049` EN ATTENTE, dépôt EN AVANCE sur la
+production.** Ticket 03 (`c8c16c7`) poussé, **non déployé**, E2E pas encore joués ; production saine
+en `izigsm-v3.11`. `0049` (`lignes_document.service_id`) : `createVente()` écrit cette colonne —
+déployer le code sans elle fait échouer **toute vente en caisse**. Lot 1 en bloc : `0048` et `0049`
+à distance, `d1_migrations` relu, **puis** `npm run deploy`.
+
 **État au 2026-09-17 (checkpoint 124) : `0048` EN ATTENTE, dépôt EN AVANCE sur la production.**
 Tickets 01 (`b80677d`) et 02 (`353d71b`, route `/api/catalogue/recherche`, sélecteur en caisse)
 poussés, **non déployés** ; production saine en `izigsm-v3.11`. Aucune migration nouvelle au 02.

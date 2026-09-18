@@ -1,4 +1,31 @@
-# Recovery Prompt — iziGSM — 2026-09-17 (checkpoint 124 — ticket 02 fait, 03, 04 et 18 prenables)
+# Recovery Prompt — iziGSM — 2026-09-18 (checkpoint 125 — ticket 03 codé, E2E à jouer sur Windows)
+
+## Ce qui a changé au checkpoint 125
+
+**Ticket 03 codé** (`c8c16c7`, poussé, **non déployé**) **mais pas clos** : ses E2E sont écrits et
+n'ont jamais tourné. La session s'est faite sur le Mac, où `workerd` ne tourne pas (macOS 12.7.6 <
+13.5 requis) : ni serveur local, ni D1 locale, ni `wrangler types`.
+
+**Première action — sur Windows** : `npx wrangler d1 migrations apply DB --local` (applique `0049`),
+relancer le serveur, jouer `tests/e2e/caisse-catalogue-api.spec.ts`,
+`caisse-catalogue-ecran.spec.ts`, le balayage du menu et `xss-gabarits` ; prouver le rouge **par
+mutation** (le code existe déjà) ; relire `tsc` (baseline 32) ; cocher les 4 cases restantes du
+ticket 03. Puis ticket **04** ou **18**, en session neuve.
+
+**À savoir, issu du ticket 03** :
+- **`0049` part avec le lot 1, avant le code** : `createVente()` écrit `service_id` ; sans la colonne,
+  **toute** vente en caisse échoue.
+- Recherche unifiée : types `produit` | `service` | `sav`, plafond **réparti** entre types
+  (`repartirPlafond()`). Un nouveau type (ticket, IMEI) s'ajoute à l'union et à la liste passée à
+  `repartirPlafond()`, jamais comme second point de recherche.
+- Caisse : `ajouterLigneCatalogue({ produit_id | service_id }, nom, prix, tva)` ; résultats par
+  délégation sur `data-produit-id` / `data-service-id` / `data-sav-id` ; `data-nature` porte le libellé.
+- `createVente()` : un `service_id` présent est toujours contrôlé (`!== undefined`, ⊥
+  `filter(Boolean)` qui laisse passer `NaN`).
+- **Question ouverte** : une ligne de *service* à 0 € bloque la validation à l'écran, comme un
+  produit ; le récit 19 ne nomme que les produits — à trancher par l'exploitant.
+- **Sur le Mac** : `tsc` n'est lisible que par différentiel (HEAD contre le diff, même
+  environnement) ; `npm ci` nécessaire ; `node:sqlite` disponible (Node 22).
 
 ## Ce qui a changé au checkpoint 124
 
