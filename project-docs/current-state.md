@@ -15,8 +15,9 @@ poussés, NON déployés ; `0048` en local Windows seulement, `0049` appliquée 
     boutique ou un identifiant non entier ;
   - caisse : nature affichée par résultat (`data-nature`), `ajouterLigneCatalogue(lien, …)` commun
     aux produits et services, dossier SAV → `/sav?dossier=<id>` (lu par `sav.js`, qui ouvre le
-    modal) ; une ligne de **service** à 0 € bloque aussi la validation à l'écran (question ouverte
-    à l'exploitant : le récit 19 ne parle que des produits).
+    modal) ; une ligne de **service** à 0 € bloque aussi la validation à l'écran (~~question ouverte
+    à l'exploitant : le récit 19 ne parle que des produits~~ — **tranché le 2026-09-18 : bloquer**,
+    `decisions.md`).
 - **Revue à deux axes** : un défaut réel trouvé et corrigé — `filter(Boolean)` laissait un
   `service_id` `NaN` échapper au contrôle d'appartenance (test vu rouge). Corrigés aussi : doublon
   des deux fonctions d'ajout, JSDoc de tri faux, statut SAV affiché brut. Laissés (jugements) :

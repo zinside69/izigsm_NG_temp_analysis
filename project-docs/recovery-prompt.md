@@ -22,8 +22,9 @@ ticket 03. Puis ticket **04** ou **18**, en session neuve.
   délégation sur `data-produit-id` / `data-service-id` / `data-sav-id` ; `data-nature` porte le libellé.
 - `createVente()` : un `service_id` présent est toujours contrôlé (`!== undefined`, ⊥
   `filter(Boolean)` qui laisse passer `NaN`).
-- **Question ouverte** : une ligne de *service* à 0 € bloque la validation à l'écran, comme un
-  produit ; le récit 19 ne nomme que les produits — à trancher par l'exploitant.
+- ~~**Question ouverte** : une ligne de *service* à 0 € bloque la validation à l'écran, comme un
+  produit ; le récit 19 ne nomme que les produits — à trancher par l'exploitant.~~ **Tranché le
+  2026-09-18 : on bloque** (`decisions.md`). ⊥ assouplir `prixManquant()` pour les services.
 - **Sur le Mac** : `tsc` n'est lisible que par différentiel (HEAD contre le diff, même
   environnement) ; `npm ci` nécessaire ; `node:sqlite` disponible (Node 22).
 

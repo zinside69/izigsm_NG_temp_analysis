@@ -1,5 +1,14 @@
 # iziGSM — Décisions
 
+## 2026-09-18 — Service à 0 € en caisse : bloqué comme un produit (checkpoint 125)
+
+Le ticket 03 `vente-lit-catalogue` étend aux **services** le blocage à l'écran d'une ligne du
+catalogue à 0 € (`prixManquant()`, `caisse.js`). La spec le couvre (« ligne à 0 € venue du
+catalogue »), mais le récit 19 ne nomme que les produits. Trois options présentées : bloquer,
+produits seuls, avertir sans bloquer. **Décision de l'exploitant : bloquer.** Conséquence acceptée :
+une prestation gratuite ne passe en caisse qu'avec un prix saisi, ou en ligne libre, qui perd le lien
+au catalogue. Le serveur garde « prix ≥ 0 », inchangé.
+
 ## 2026-09-17 — Résolveur de boutique : correction commune, chantier à part (checkpoint 124)
 
 La revue du ticket 02 `vente-lit-catalogue` a montré qu'un admin **de boutique** lit le catalogue
