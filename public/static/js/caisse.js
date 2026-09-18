@@ -27,7 +27,7 @@
  *   selectMode(mode)       → sélectionne le mode paiement
  *   submitVente()          → soumet la vente à l'API
  *   debouncedSearchClient()→ cherche un client
- *   debouncedSearchProduit()→ cherche un produit du catalogue (ticket 02 `vente-lit-catalogue`)
+ *   debouncedSearchProduit()→ cherche produits, services, dossiers SAV (tickets 02-03 `vente-lit-catalogue`)
  *   clearClient()          → efface la sélection client
  *   cloturerJournee()      → POST /api/caisse/cloture
  *   verifierIntegrite()    → GET /api/caisse/integrite
@@ -42,7 +42,7 @@
 
   const state = {
     tab:          'journal',
-    lignes:       [],              // [{produit_id?, designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
+    lignes:       [],              // [{produit_id?, service_id?, designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
     mode:         'especes',
     clientId:     null,
     clientNom:    '',
@@ -51,6 +51,7 @@
     factureTimer: null,
     produitTimer: null,
     produits:     new Map(),       // id → produit des derniers résultats de recherche catalogue
+    services:     new Map(),       // id → service des derniers résultats de recherche catalogue
     ligneIdx:     0,
   }
 
@@ -116,12 +117,21 @@
     if (id) id.value = today
     if (if2) if2.value = today
 
-    // Résultats de recherche produit : un seul écouteur, l'identifiant est lu sur le bouton.
+    // Résultats de recherche catalogue : un seul écouteur, l'identifiant est lu sur le bouton.
     // Pas d'arguments dans un `onclick` en ligne : un nom de produit est une saisie utilisateur.
     document.getElementById('vente-produit-results')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-produit-id]')
-      const produit = btn && state.produits.get(Number(btn.dataset.produitId))
-      if (produit) ajouterProduit(produit)
+      const btn = e.target.closest('[data-produit-id], [data-service-id], [data-sav-id]')
+      if (!btn) return
+      if (btn.dataset.produitId) {
+        const p = state.produits.get(Number(btn.dataset.produitId))
+        if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, p.prix_vente_ht, p.tva_taux)
+      } else if (btn.dataset.serviceId) {
+        const s = state.services.get(Number(btn.dataset.serviceId))
+        if (s) ajouterLigneCatalogue({ service_id: s.id }, s.nom, s.prix_ht, s.tva_taux)
+      } else {
+        // Un dossier SAV s'ouvre dans sa page ; le panier n'est pas touché (récit 7)
+        window.location.href = `/sav?dossier=${Number(btn.dataset.savId)}`
+      }
     })
 
     refreshKpis()
@@ -538,7 +548,7 @@
    * une ligne gratuite reste légitime ailleurs (spec, décision « Vente en caisse »).
    */
   function prixManquant(ligne) {
-    return !!ligne.produit_id && !(ligne.prix_unitaire_ht > 0)
+    return !!(ligne.produit_id || ligne.service_id) && !(ligne.prix_unitaire_ht > 0)
   }
 
   function debouncedSearchProduit() {
@@ -558,21 +568,13 @@
       if (document.getElementById('vente-produit-search')?.value?.trim() !== q) return
       if (!res?.success) { results.classList.add('hidden'); return }
 
-      state.produits = new Map(res.data.map(p => [p.id, p]))
+      const parType = (type) => new Map(res.data.filter(r => r.type === type).map(r => [r.id, r]))
+      state.produits = parType('produit')
+      state.services = parType('service')
       results.classList.remove('hidden')
       results.innerHTML = res.data.length === 0
-        ? `<div class="px-3 py-2 text-sm text-gray-500">Aucun produit trouvé.</div>`
-        : res.data.map(p => `
-          <button type="button" data-produit-id="${Number(p.id)}"
-                  class="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-0 flex justify-between gap-2">
-            <span>
-              <span class="font-medium">${esc(p.nom)}</span>
-              ${p.sku ? `<span class="text-gray-500 ml-2 text-xs">${esc(p.sku)}</span>` : ''}
-            </span>
-            <span class="text-xs text-gray-600 whitespace-nowrap">
-              ${eur(p.prix_vente_ht)} HT · stock ${Number(p.stock_actuel)}
-            </span>
-          </button>`).join('')
+        ? `<div class="px-3 py-2 text-sm text-gray-500">Aucun résultat.</div>`
+        : res.data.map(renderResultatCatalogue).join('')
     } catch {
       // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (`CLAUDE.md` § Enveloppe)
       results.classList.remove('hidden')
@@ -580,15 +582,50 @@
     }
   }
 
-  /** Ajoute une ligne préremplie depuis un produit du catalogue ; chaque champ reste modifiable. */
-  function ajouterProduit(p) {
+  /** Nature de chaque résultat, affichée : une coque et une pose de film peuvent porter le même mot. */
+  const NATURE_RESULTAT = {
+    produit: { libelle: 'Produit', classe: 'bg-blue-100 text-blue-700' },
+    service: { libelle: 'Service', classe: 'bg-green-100 text-green-700' },
+    sav:     { libelle: 'Dossier SAV', classe: 'bg-orange-100 text-orange-700' },
+  }
+
+  /** Libellés des statuts de dossier SAV (mêmes que `labelStatutSav()` de `sav.js`). */
+  const STATUT_SAV = {
+    ouvert: 'Ouvert', en_traitement: 'En traitement', resolu: 'Résolu', refuse: 'Refusé', clos: 'Clos',
+  }
+
+  /** Un résultat de `/api/catalogue/recherche` en bouton ; toute donnée d'API est échappée. */
+  function renderResultatCatalogue(r) {
+    const nature = NATURE_RESULTAT[r.type]
+    if (!nature) return ''
+    const badge = `<span class="text-xs px-1.5 py-0.5 rounded ${nature.classe} mr-2" data-nature="${r.type}">${nature.libelle}</span>`
+    const [attribut, titre, detail, droite] =
+      r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(r.prix_vente_ht)} HT · stock ${Number(r.stock_actuel)}`]
+      : r.type === 'service' ? ['data-service-id', r.nom, r.reference, `${eur(r.prix_ht)} HT`]
+      : ['data-sav-id', r.numero, r.client, `${esc(STATUT_SAV[r.statut] ?? r.statut)} · ouvrir`]
+    return `
+          <button type="button" ${attribut}="${Number(r.id)}"
+                  class="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-gray-100 last:border-0 flex justify-between gap-2">
+            <span>
+              ${badge}<span class="font-medium">${esc(titre)}</span>
+              ${detail ? `<span class="text-gray-500 ml-2 text-xs">${esc(detail)}</span>` : ''}
+            </span>
+            <span class="text-xs text-gray-600 whitespace-nowrap">${droite}</span>
+          </button>`
+  }
+
+  /**
+   * Ajoute une ligne préremplie depuis le catalogue ; chaque champ reste modifiable.
+   * `lien` porte `produit_id` ou `service_id` : il part avec la vente (récit 20).
+   */
+  function ajouterLigneCatalogue(lien, nom, prixHt, tvaTaux) {
     state.lignes.push({
       idx:              state.ligneIdx++,
-      produit_id:       p.id,
-      designation:      p.nom,
+      ...lien,
+      designation:      nom,
       quantite:         1,
-      prix_unitaire_ht: Number(p.prix_vente_ht) || 0,
-      tva_taux:         Number(p.tva_taux),
+      prix_unitaire_ht: Number(prixHt) || 0,
+      tva_taux:         Number(tvaTaux),
       remise_pct:       0,
     })
     clearEl('vente-produit-search')
@@ -668,6 +705,7 @@
       client_id:      state.clientId || undefined,
       lignes:         state.lignes.map(l => ({
         produit_id:        l.produit_id || undefined,
+        service_id:        l.service_id || undefined,
         designation:       l.designation,
         quantite:          l.quantite,
         prix_unitaire_ht:  l.prix_unitaire_ht,

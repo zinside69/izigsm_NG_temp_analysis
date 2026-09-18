@@ -136,3 +136,92 @@ test('caisse : un nom de produit piégé est affiché comme du texte', async ({ 
   // Aucun élément n'a été créé par la charge, ni dans les résultats ni dans la ligne
   await expect(page.locator('[data-xss="caisse"]')).toHaveCount(0)
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Services et dossiers SAV (ticket 03 `vente-lit-catalogue`, récits 1, 3, 7, 20)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Crée un service dans la boutique du tenant et rend son identifiant. */
+async function creerService(request: APIRequestContext, tenant: TenantAdmin, data: Record<string, unknown>) {
+  const res = await request.post('/api/services', {
+    headers: { Authorization: `Bearer ${tenant.accessToken}` },
+    data:    { tva_taux: 20, ...data },
+  })
+  expect(res.status(), await res.text()).toBe(201)
+  return (await res.json()).id as number
+}
+
+/** Crée un client et un dossier SAV pour lui ; rend `{ id, numero }`. */
+async function creerDossierSav(request: APIRequestContext, tenant: TenantAdmin, nomClient: string) {
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const client = await request.post('/api/clients', { headers, data: { prenom: 'Lina', nom: nomClient, telephone: '0600000000' } })
+  expect(client.status(), await client.text()).toBe(201)
+  const res = await request.post('/api/sav', { headers, data: { client_id: (await client.json()).id, motif: 'E2E écran qui scintille' } })
+  expect(res.status(), await res.text()).toBe(201)
+  return (await res.json()).data as { id: number; numero: string }
+}
+
+test('caisse : vendre un service du catalogue, la facture garde le lien vers le service', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  const id = await creerService(request, tenant, { nom: 'E2E Pose de film écran', prix_ht: 12.5 })
+  await ouvrirVente(page, tenant)
+
+  await page.fill('#vente-produit-search', 'Pose de film')
+  const resultat = page.locator('#vente-produit-results [data-service-id]').first()
+  await expect(resultat).toBeVisible({ timeout: 10_000 })
+  await expect(resultat.locator('[data-nature]')).toHaveText('Service')
+  await resultat.click()
+
+  const ligne = page.locator('#lignes-container .linha-row')
+  await expect(ligne).toHaveCount(1)
+  await expect(ligne.locator('[data-field="designation"]')).toHaveValue('E2E Pose de film écran')
+  await expect(ligne.locator('[data-field="prix_unitaire_ht"]')).toHaveValue('12.5')
+  // Renommée à la main : le lien, lui, reste celui du catalogue
+  await ligne.locator('[data-field="designation"]').fill('Film posé en boutique')
+
+  await page.fill('#montant-remis', '20')
+  const reponse = page.waitForResponse(r => r.url().includes('/api/caisse/vente') && r.request().method() === 'POST')
+  await page.click('#btn-submit-vente')
+  const factureId = (await (await reponse).json()).data.facture.id
+  await expect(page.locator('#toast-inner')).toContainText(/enregistrée/i, { timeout: 15_000 })
+
+  const facture = await request.get(`/api/factures/${factureId}`, { headers: { Authorization: `Bearer ${tenant.accessToken}` } })
+  expect((await facture.json()).data.lignes).toEqual([
+    expect.objectContaining({ description: 'Film posé en boutique', service_id: id, produit_id: null }),
+  ])
+})
+
+test('caisse : choisir un dossier SAV l\'ouvre dans sa page, sans rien ajouter au panier', async ({ page, request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const dossier = await creerDossierSav(request, tenant, 'E2EDurandsav')
+  await ouvrirVente(page, tenant)
+
+  let ventesEnvoyees = 0
+  page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/api/caisse/vente')) ventesEnvoyees++ })
+
+  await page.fill('#vente-produit-search', 'E2EDurandsav')
+  const resultat = page.locator('#vente-produit-results [data-sav-id]').first()
+  await expect(resultat).toBeVisible({ timeout: 10_000 })
+  await expect(resultat.locator('[data-nature]')).toHaveText('Dossier SAV')
+  await expect(resultat).toContainText(dossier.numero)
+  await expect(page.locator('#lignes-container .linha-row')).toHaveCount(0)
+
+  await resultat.click()
+  await page.waitForURL(`**/sav?dossier=${dossier.id}`, { timeout: 15_000 })
+  await expect(page.locator('#modal-sav-detail')).not.toHaveClass(/hidden/)
+  await expect(page.locator('#detail-titre')).toHaveText(`Dossier ${dossier.numero}`, { timeout: 15_000 })
+  expect(ventesEnvoyees).toBe(0)
+})
+
+test('caisse : un service ou un client SAV au nom piégé est affiché comme du texte', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  const piege  = 'E2Epiege <img src=x data-xss="caisse-03"> fin'
+  await creerService(request, tenant, { nom: piege, prix_ht: 5 })
+  await creerDossierSav(request, tenant, piege)
+  await ouvrirVente(page, tenant)
+
+  await page.fill('#vente-produit-search', 'E2Epiege')
+  await expect(page.locator('#vente-produit-results [data-service-id]')).toContainText(piege, { timeout: 10_000 })
+  await expect(page.locator('#vente-produit-results [data-sav-id]')).toContainText(piege)
+  await expect(page.locator('[data-xss="caisse-03"]')).toHaveCount(0)
+})

@@ -157,3 +157,102 @@ test('vente : stock insuffisant ramené à 0, ligne signalée ; une ligne libre 
   expect(produit.stock_actuel).toBe(0)
   expect(ventesPos(produit)).toEqual([expect.objectContaining({ quantite: 3, stock_avant: 1, stock_apres: 0 })])
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Services et dossiers SAV dans la recherche (ticket 03 `vente-lit-catalogue`, récits 1, 3, 7, 20)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Crée un service dans la boutique du jeton et rend son identifiant. */
+async function creerService(request: APIRequestContext, headers: Record<string, string>, data: Record<string, unknown>) {
+  const res = await request.post('/api/services', { headers, data: { tva_taux: 20, ...data } })
+  expect(res.status(), await res.text()).toBe(201)
+  return (await res.json()).id as number
+}
+
+/** Crée un client puis un dossier SAV pour lui ; rend `{ id, numero }` du dossier. */
+async function creerDossierSav(request: APIRequestContext, headers: Record<string, string>, nom: string) {
+  const client = await request.post('/api/clients', { headers, data: { prenom: 'Lina', nom, telephone: '0600000000' } })
+  expect(client.status(), await client.text()).toBe(201)
+  const res = await request.post('/api/sav', {
+    headers, data: { client_id: (await client.json()).id, motif: 'E2E écran qui scintille' },
+  })
+  expect(res.status(), await res.text()).toBe(201)
+  const { id, numero } = (await res.json()).data
+  return { id: id as number, numero: numero as string }
+}
+
+test('recherche catalogue : un service se trouve par nom et par référence, typé « service »', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const id = await creerService(request, headers, { nom: 'E2E Pose de film hydrogel', reference: 'E2E-POSE-HG', prix_ht: 12.5 })
+
+  for (const q of ['hydrogel', 'E2E-POSE-HG']) {
+    expect((await chercher(request, headers, q)).data, q).toEqual([{
+      type: 'service', id, nom: 'E2E Pose de film hydrogel', reference: 'E2E-POSE-HG', prix_ht: 12.5, tva_taux: 20,
+    }])
+  }
+})
+
+test('recherche catalogue : le service reste visible quand vingt produits portent le même mot', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  for (let i = 0; i < 22; i++) await creerProduit(request, headers, { nom: `E2E Filmrepart ${i}` })
+  await creerService(request, headers, { nom: 'E2E Pose Filmrepart', prix_ht: 10 })
+
+  const data = (await chercher(request, headers, 'Filmrepart')).data
+  expect(data).toHaveLength(20)
+  expect(data.filter((r: { type: string }) => r.type === 'service')).toHaveLength(1)
+})
+
+test('recherche catalogue : un dossier SAV se trouve par nom du client et par numéro, typé « sav »', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const dossier = await creerDossierSav(request, headers, 'E2EMartinsav')
+
+  for (const q of ['E2EMartinsav', dossier.numero]) {
+    expect((await chercher(request, headers, q)).data, q).toEqual([{
+      type: 'sav', id: dossier.id, numero: dossier.numero, client: 'Lina E2EMartinsav',
+      statut: 'ouvert', motif: 'E2E écran qui scintille',
+    }])
+  }
+})
+
+test('recherche catalogue : ni service ni dossier SAV d\'une autre boutique', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const autre   = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const voisin  = { Authorization: `Bearer ${autre.accessToken}` }
+  await creerService(request, voisin, { nom: 'E2E Service voisin unique', prix_ht: 5 })
+  await creerDossierSav(request, voisin, 'E2EVoisinsav')
+
+  expect((await chercher(request, headers, 'Service voisin unique')).data).toEqual([])
+  expect((await chercher(request, headers, 'E2EVoisinsav')).data).toEqual([])
+})
+
+test('vente : la ligne d\'un service garde le lien vers le catalogue, relu sur la facture', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const id = await creerService(request, headers, { nom: 'E2E Pose de film lien', prix_ht: 12.5 })
+
+  const corps = await vendre(request, headers, [
+    { service_id: id, designation: 'Pose renommée à la main', quantite: 1, prix_unitaire_ht: 12.5, tva_taux: 20 },
+    { designation: 'E2E Ligne libre', quantite: 1, prix_unitaire_ht: 3, tva_taux: 20 },
+  ])
+
+  const facture = (await (await request.get(`/api/factures/${corps.data.facture.id}`, { headers })).json()).data
+  const liens = Object.fromEntries(facture.lignes.map((l: { description: string; service_id: number | null }) => [l.description, l.service_id]))
+  expect(liens).toEqual({ 'Pose renommée à la main': id, 'E2E Ligne libre': null })
+})
+
+test('vente : un service d\'une autre boutique est refusé, aucune facture créée', async ({ request }) => {
+  const tenant  = await createTenantAdmin(request)
+  const autre   = await createTenantAdmin(request)
+  const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+  const idVoisin = await creerService(request, { Authorization: `Bearer ${autre.accessToken}` }, { nom: 'E2E Service voisin vente', prix_ht: 5 })
+
+  const res = await request.post('/api/caisse/vente', { headers, data: { mode_paiement: 'especes', lignes: [
+    { service_id: idVoisin, designation: 'Détournement', quantite: 1, prix_unitaire_ht: 5, tva_taux: 20 },
+  ] } })
+  expect(res.status()).toBe(400)
+  expect((await res.json()).error).toMatch(/service/i)
+})

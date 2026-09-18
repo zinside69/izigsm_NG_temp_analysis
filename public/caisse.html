@@ -248,11 +248,12 @@
           </button>
         </div>
 
-        <!-- Recherche catalogue (ticket 02 `vente-lit-catalogue`) : nom, SKU ou code-barres.
-             Un résultat choisi ajoute une ligne préremplie, qui reste modifiable. -->
+        <!-- Recherche catalogue (tickets 02-03 `vente-lit-catalogue`) : produits, services, dossiers SAV.
+             Un produit ou un service choisi ajoute une ligne préremplie, qui reste modifiable ;
+             un dossier SAV s'ouvre dans sa page, sans toucher au panier. -->
         <div class="relative mb-2">
           <input type="text" id="vente-produit-search" autocomplete="off"
-                 placeholder="Chercher un produit (nom, SKU, code-barres)…"
+                 placeholder="Chercher un produit, un service ou un dossier SAV…"
                  class="input-field w-full text-sm" oninput="CaisseApp.debouncedSearchProduit()">
           <div id="vente-produit-results" class="hidden mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto"></div>
         </div>

@@ -433,6 +433,52 @@ describe('createVente()', () => {
     expect(calls.find(c => c.sql.includes('INSERT INTO mouvements_stock'))).toBeUndefined()
   })
 
+  // ── Lien vers le service du catalogue (ticket 03 `vente-lit-catalogue`, récit 20) ──
+  const SQL_SELECT_SERVICE = 'SELECT id FROM services WHERE id = ? AND boutique_id = ?'
+
+  it('écrit le service_id sur la ligne de facture d\'un service de la boutique', async () => {
+    const db = createMockD1()
+    avecSignataire(db)
+    setupHappyPath(db)
+    db.__setResponse(SQL_SELECT_SERVICE, { id: 7 })
+
+    await createVente(db, 1, 5, {
+      lignes: [{ ...LIGNE, service_id: 7 }, LIGNE], mode_paiement: 'cb',
+    })
+
+    const lignes = db.__getCalls().filter(c => c.sql.includes('INSERT INTO lignes_document'))
+    expect(lignes).toHaveLength(2)
+    expect(lignes[0].sql).toContain('service_id')
+    expect(lignes[0].params[2]).toBe(7)    // [facture, produit, service, …]
+    expect(lignes[1].params[2]).toBeNull() // ligne saisie à la main : aucun lien
+  })
+
+  it('refuse un service d\'une autre boutique avant toute écriture', async () => {
+    const db = createMockD1()
+    avecSignataire(db)
+    setupHappyPath(db)
+    // Pas de réponse pour SQL_SELECT_SERVICE → service absent de la boutique 1
+
+    await expect(createVente(db, 1, 5, {
+      lignes: [{ ...LIGNE, service_id: 99 }], mode_paiement: 'cb',
+    })).rejects.toThrow(/service/i)
+
+    expect(db.__getCalls().find(c => c.sql.includes('INSERT INTO factures'))).toBeUndefined()
+  })
+
+  it('refuse un service_id qui n\'est pas un identifiant, sans l\'écrire', async () => {
+    const db = createMockD1()
+    avecSignataire(db)
+    setupHappyPath(db)
+
+    // `Number('abc')` → NaN : falsy, il échappait au contrôle d'appartenance
+    await expect(createVente(db, 1, 5, {
+      lignes: [{ ...LIGNE, service_id: Number('abc') }], mode_paiement: 'cb',
+    })).rejects.toThrow(/service/i)
+
+    expect(db.__getCalls().find(c => c.sql.includes('INSERT INTO factures'))).toBeUndefined()
+  })
+
   it('calcule le rendu monnaie si espèces > montant dû', async () => {
     const db = createMockD1()
     avecSignataire(db)

@@ -420,6 +420,13 @@ const SavApp = (() => {
     // Charger KPIs + données initiales
     loadKpis()
     refreshGaranties()
+
+    // Ouverture directe d'un dossier, depuis la recherche de la caisse (`/sav?dossier=<id>`)
+    const dossier = Number(new URLSearchParams(window.location.search).get('dossier'))
+    if (Number.isInteger(dossier) && dossier > 0) {
+      switchTab('sav')
+      openSavDetail(dossier)
+    }
   }
 
   // Démarrage après DOM ready

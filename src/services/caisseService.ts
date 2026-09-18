@@ -304,6 +304,17 @@ export async function createVente(
   // (ticket 004, ADR 0002). Contrôlé avant tout calcul : rien ne doit être écrit.
   await assertPeutEcrireAuRegistre(db, userId)
 
+  // Le lien d'une ligne vers le catalogue est écrit sur une facture immuable : un service
+  // d'une autre boutique fausserait ses comptes pour toujours. Refusé avant toute écriture.
+  // `!== undefined`, jamais `filter(Boolean)` : un NaN est falsy et échapperait au contrôle.
+  for (const serviceId of new Set(data.lignes.map(l => l.service_id).filter(id => id !== undefined))) {
+    if (!Number.isInteger(serviceId) || serviceId! <= 0) throw new Error('Identifiant de service invalide.')
+    const service = await db.prepare(
+      'SELECT id FROM services WHERE id = ? AND boutique_id = ?'
+    ).bind(serviceId, boutiqueId).first<{ id: number }>()
+    if (!service) throw new Error(`Service ${serviceId} introuvable dans cette boutique.`)
+  }
+
   // ── 1. Calcul totaux ──────────────────────────────────────────────────────
   // Appliquer remises ligne par ligne
   const lignesCalculees = data.lignes.map(l => ({
@@ -373,13 +384,14 @@ export async function createVente(
 
     await db.prepare(`
       INSERT INTO lignes_document
-        (document_type, document_id, produit_id, description,
+        (document_type, document_id, produit_id, service_id, description,
          quantite, prix_unitaire_ht, tva_taux,
          total_ht, total_tva, total_ttc)
-      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       facture.id,
       l.produit_id  ?? null,
+      l.service_id  ?? null,
       l.designation,
       l.quantite,
       l.prix_unitaire_ht,
