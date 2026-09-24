@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-09-24 — Ticket 18 : zéro appel Mobilax par `mobilax_id` stocké
+
+Relancé sous la doctrine d'écriture du socle (ADR 0002, bac à sable, T-002), l'agent s'est **arrêté à
+raison** sur le mécanisme non tranché et a exposé deux voies : `mobilax_id` stocké (migration) ou
+donnée envoyée par l'écran — cette seconde voie contredit la règle « tout est relu chez Mobilax,
+jamais pris à l'écran » (`CLAUDE.md` § Service Mobilax). **Décision de l'exploitant : `mobilax_id`
+stocké sur `produits`**, index unique partiel par boutique ; reconnaissance par `mobilax_id` avant
+tout appel ; le rattachement le pose. La migration et la mise à jour de `CLAUDE.md` sont soumises
+par l'agent en **demandes d'écriture** et approuvées par l'exploitant (ADR 0002). Ticket 18 amendé.
+
 ## 2026-09-24 — Ticket 18 : « sans appel au fournisseur » = zéro appel Mobilax
 
 Première marche réelle du socle d'orchestration sur iziGSM (bac à sable, T-001 = ticket 18). L'agent

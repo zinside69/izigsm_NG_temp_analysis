@@ -43,3 +43,12 @@ Mobilax n'étant que sur la fiche complète, la reconnaissance doit passer par u
 (bac à sable `~/bac-a-sable/izigsm-t18`, branche `agent/T-001`) a gardé l'appel et redéfini
 l'exigence dans `CLAUDE.md` : non reporté ; le reste de son travail (bouton d'ajout tracé,
 description reprise si vide, rattachement, route gardée) est réutilisable après relecture.
+
+**Amendement 2 (2026-09-24, décision de l'exploitant, `decisions.md`)** — mécanisme tranché :
+**`mobilax_id` stocké sur `produits`** (colonne nullable + index unique partiel par boutique, produits
+actifs, `mobilax_id` non nul). Un import reconnaît d'abord la pièce par `mobilax_id` **avant tout
+appel Mobilax** ; le rattachement (produit trouvé par code-barres ou SKU) pose aussi `mobilax_id`.
+La migration est un fichier critique pour un agent (ADR 0002 du socle) : elle se **soumet en
+demande d'écriture** (diff exact), approuvée puis appliquée par le harnais — de même que la mise à
+jour de `CLAUDE.md` § Service Mobilax. En production, la migration part **avant** le code, comme
+toujours (`CLAUDE.md` § Déploiement).
