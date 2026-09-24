@@ -191,6 +191,36 @@ test('caisse : vendre un service du catalogue, la facture garde le lien vers le 
   ])
 })
 
+// Décision de l'exploitant du 2026-09-18 (`decisions.md`) : un service à 0 € bloque comme un
+// produit. Ajouté le 2026-09-24 — la mutation « prixManquant() ignore service_id » restait verte.
+test('caisse : un service à 0 € bloque la validation tant qu\'aucun prix n\'est saisi', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  await creerService(request, tenant, { nom: 'E2E Diagnostic offert', prix_ht: 0 })
+  await ouvrirVente(page, tenant)
+
+  let ventesEnvoyees = 0
+  page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/api/caisse/vente')) ventesEnvoyees++ })
+
+  await page.fill('#vente-produit-search', 'Diagnostic offert')
+  const resultat = page.locator('#vente-produit-results [data-service-id]').first()
+  await expect(resultat).toBeVisible({ timeout: 10_000 })
+  await resultat.click()
+  const prix = page.locator('#lignes-container [data-field="prix_unitaire_ht"]')
+  await expect(prix).toHaveAttribute('data-prix-manquant', '1')
+
+  await page.click('#btn-submit-vente')
+  await expect(page.locator('#toast-inner')).toContainText('prix', { timeout: 5_000 })
+  expect(ventesEnvoyees).toBe(0)
+
+  // Un prix saisi lève le blocage
+  await prix.fill('15')
+  await expect(prix).not.toHaveAttribute('data-prix-manquant', '1')
+  await page.fill('#montant-remis', '20')
+  await page.click('#btn-submit-vente')
+  await expect(page.locator('#toast-inner')).toContainText(/enregistrée/i, { timeout: 15_000 })
+  expect(ventesEnvoyees).toBe(1)
+})
+
 test('caisse : choisir un dossier SAV l\'ouvre dans sa page, sans rien ajouter au panier', async ({ page, request }) => {
   const tenant  = await createTenantAdmin(request)
   const dossier = await creerDossierSav(request, tenant, 'E2EDurandsav')
