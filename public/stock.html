@@ -202,6 +202,12 @@
           <!-- Lien vers la pièce Mobilax source, en lecture seule (rempli par editStock() quand le
                produit a été importé) : l'EAN est dans le SKU, la référence Mobilax ici. -->
           <p id="stock-ref-mobilax" style="grid-column:1/-1;margin:0;font-size:.82rem;color:var(--text-muted);" hidden></p>
+          <!-- Pièce déjà en stock à l'import avec une quantité saisie (ticket 18) : rien ne s'ajoute
+               sans ce clic. `hidden` sur des enveloppes sans `display` — jamais sur le .btn. -->
+          <div id="stock-ajout-import" style="grid-column:1/-1;" hidden>
+            <p id="stock-ajout-import-texte" style="margin:0 0 6px;font-size:.85rem;"></p>
+            <span id="stock-ajout-import-action"><button type="button" class="btn btn-sm btn-primary" id="btn-stock-ajout-import"></button></span>
+          </div>
           <div class="form-field" style="grid-column:1/-1;">
             <label>Notes</label>
             <!-- Enregistrées dans `produits.description` : aucune colonne `notes` n'a jamais existé,

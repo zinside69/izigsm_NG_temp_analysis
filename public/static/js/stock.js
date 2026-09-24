@@ -394,6 +394,8 @@ function editStock(id) {
     if (catEl2 && item.categorie_id) catEl2.value = item.categorie_id;
   });
 
+  // Une offre d'ajout ne vaut que pour la fiche ouverte juste après l'import qui l'a faite
+  masquerAjoutImport();
   openModal('modal-stock');
 }
 
@@ -416,7 +418,66 @@ function resetStockForm() {
   if (qtyEl) qtyEl.readOnly = false;
   const btnAjuster = document.getElementById('btn-stock-ajuster');
   if (btnAjuster) btnAjuster.style.display = 'none';
+  masquerAjoutImport();
 }
+
+/**
+ * Offre « Ajouter N au stock » en cours (ticket 18) : `{ produitId, quantite }`, ou `null`.
+ * Posée par un import unitaire qui a trouvé la pièce déjà en stock avec une quantité saisie ;
+ * consommée par UN clic — le serveur n'ajoute jamais rien sans lui (règle du 2026-09-12).
+ */
+let ajoutImportEnAttente = null;
+
+/** Referme la zone d'offre de la fiche produit. */
+function masquerAjoutImport() {
+  ajoutImportEnAttente = null;
+  const zone = document.getElementById('stock-ajout-import');
+  if (zone) zone.hidden = true;
+}
+
+/** Affiche l'offre dans la fiche du produit déjà en stock, à côté du message d'import. */
+function proposerAjoutImport(produitId, quantite) {
+  ajoutImportEnAttente = { produitId, quantite };
+  document.getElementById('stock-ajout-import-texte').textContent =
+    `La quantité saisie (${quantite}) n'a pas été ajoutée au stock de cette pièce.`;
+  const bouton = document.getElementById('btn-stock-ajout-import');
+  bouton.textContent = `Ajouter ${quantite} au stock`;
+  bouton.disabled = false;
+  document.getElementById('stock-ajout-import-action').hidden = false;
+  document.getElementById('stock-ajout-import').hidden = false;
+}
+
+/**
+ * Clic sur « Ajouter N au stock » : une entrée de stock tracée côté serveur, puis l'ancien et le
+ * nouveau stock affichés. L'offre est consommée — le bouton disparaît, un second clic est
+ * impossible. Un échec (réseau compris) laisse l'offre en place, message à l'appui.
+ */
+async function ajouterAuStockDepuisImport() {
+  const offre = ajoutImportEnAttente;
+  if (!offre) return;
+  const bouton = document.getElementById('btn-stock-ajout-import');
+  const texte = document.getElementById('stock-ajout-import-texte');
+  bouton.disabled = true;
+  try {
+    // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+    const res = (await apiPost(`/api/mobilax/produits/${offre.produitId}/ajout-stock`, { quantite: offre.quantite })).data;
+    if (!res?.success) {
+      texte.textContent = res?.error || 'Ajout au stock impossible.';
+      bouton.disabled = false;
+      return;
+    }
+    ajoutImportEnAttente = null;
+    document.getElementById('stock-ajout-import-action').hidden = true;
+    texte.textContent = `${offre.quantite} ajouté${offre.quantite > 1 ? 's' : ''} au stock : ${res.data.stock_avant} → ${res.data.stock_apres}.`;
+    document.getElementById('stock-qty').value = res.data.stock_apres;
+    await loadStock();
+  } catch (e) {
+    // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` — l'offre reste, on peut réessayer
+    texte.textContent = 'Connexion perdue : l\'ajout n\'a pas pu être vérifié — consultez le stock avant de réessayer.';
+    bouton.disabled = false;
+  }
+}
+document.getElementById('btn-stock-ajout-import')?.addEventListener('click', ajouterAuStockDepuisImport);
 
 /** Depuis la fiche d'un produit : la ferme et ouvre « Ajuster le stock » sur ce produit. */
 function ajusterDepuisFiche() {
@@ -827,6 +888,9 @@ async function importerMobilax(mobilaxId, bouton) {
   await loadStock();
   closeModal('modal-mobilax');
   editStock(produitId);
+  // Pièce déjà en stock avec une quantité saisie : l'ajout se propose dans la fiche, il ne se
+  // fait jamais tout seul (ticket 18). Après editStock(), qui referme toute offre précédente.
+  if (dejaImporte && quantite > 0) proposerAjoutImport(produitId, quantite);
 }
 
 // Un seul écouteur pour tous les boutons « Importer » : aucune donnée Mobilax dans un onclick

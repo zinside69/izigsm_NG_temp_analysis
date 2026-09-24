@@ -706,6 +706,29 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
     `recalculerApercu()` qui refermerait celle de la sélection). `importerArticles()` la ferme au départ.
   - Leçon de mutation : neutraliser une ligne sans faire rougir son test peut désigner du code en
     **double** (la fermeture de la confirmation dans `viderSelection()`, déjà assurée par la barre).
+- **Pièce déjà en stock à l'import (ticket 18 `vente-lit-catalogue`, 2026-09-24)** :
+  - **`produits.mobilax_id`** (migration `0050`, index unique partiel par boutique, produits actifs,
+    identifiant non nul) : la pièce est **reconnue AVANT tout appel Mobilax**.
+    `importerProduitMobilax()` cherche d'abord par cet identifiant (`trouverProduitParMobilaxId()`)
+    et répond `deja_importe` sans connexion, sans fiche complète, sans même exiger une clé
+    exploitable : zéro appel, quota épargné (`decisions.md` 2026-09-24). ⊥ réintroduire un appel
+    « pour lire la référence » avant cette reconnaissance : c'est ce que la décision écarte.
+  - **Rattachement** : un produit reconnu autrement (référence, code-barres, SKU) est rattaché par
+    `rattacherProduitMobilax()` — fiche fournisseur, référence, `mobilax_id` — sans rien écraser :
+    colonne déjà remplie conservée, produit lié à une autre pièce laissé tel quel, aucun rattachement
+    si la référence est déjà portée par un autre produit (contrainte `0046`, testé dans la même
+    requête). Un produit créé par l'import reçoit son `mobilax_id` par la même fonction, après
+    l'`INSERT` : `createProduit()` ignore la colonne, la création ordinaire ne dépend pas de `0050`.
+  - **Description** : reprise du fournisseur seulement si celle du produit est vide
+    (`completerDescriptionSiVide()`, texte brut) — jamais les notes saisies. Seulement là où la fiche
+    complète a été lue : la reconnaissance par `mobilax_id` n'appelle pas Mobilax, elle ne complète rien.
+  - **« Ajouter N au stock »** : `POST /api/mobilax/produits/:id/ajout-stock { quantite }` (manager et
+    admin de boutique ; admin plateforme 403 ; produit d'une autre boutique 404), une entrée « Import
+    fournisseur — déjà en stock » (`ajouterStockPieceImportee()`), ancien et nouveau stock rendus.
+    Proposé dans la fiche ouverte après un import unitaire `deja_importe` avec une quantité saisie > 0
+    (`#stock-ajout-import`), bouton retiré au clic. **Rien ne s'ajoute sans ce clic**, ni à l'import
+    unitaire ni en lot (règle du 2026-09-12 inchangée). Pas de jeton d'idempotence côté serveur : le
+    second clic n'est empêché que par l'écran.
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
