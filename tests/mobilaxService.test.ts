@@ -386,7 +386,8 @@ describe('importerProduitMobilax()', () => {
     expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
     expect(insertProduit(d1)).toBeUndefined()
     // Le doublon se cherche sur la boutique, la fiche Mobilax et la VRAIE référence
-    const recherche = db.__getCalls().find(c => c.sql.startsWith('SELECT id FROM produits'))!
+    // AVANT (2026-09-24, ticket 18, agent T-002 du socle d'orchestration) : const recherche = db.__getCalls().find(c => c.sql.startsWith('SELECT id FROM produits'))!
+    const recherche = db.__getCalls().find(c => c.sql === SQL_DOUBLON)!
     expect(recherche.params).toEqual([BOUTIQUE, 3, 'ECRTAREAPPIPHNE12MNO'])
   })
 
@@ -440,6 +441,88 @@ describe('importerProduitMobilax()', () => {
     const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
     expect(r).toMatchObject({ ok: false, erreur: 'sans_fournisseur' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // ─── Pièce déjà en stock : zéro appel Mobilax, rattachement, description (ticket 18) ───
+  describe('pièce déjà en stock (ticket 18 vente-lit-catalogue)', () => {
+    const SQL_PAR_MOBILAX_ID = 'SELECT id FROM produits WHERE boutique_id = ? AND mobilax_id = ? AND actif = 1 LIMIT 1'
+    /** Écritures de rattachement / description passées par le port. */
+    const rattachements = () => db.__getCalls().filter(c => c.sql.startsWith('UPDATE produits SET fournisseur_id'))
+    const descriptions = () => db.__getCalls().filter(c => c.sql.startsWith('UPDATE produits SET description'))
+
+    it('pièce déjà rattachée (mobilax_id connu) : « déjà en stock » sans AUCUN appel Mobilax', async () => {
+      db.__setResponse(SQL_PAR_MOBILAX_ID, { id: 41 })
+      mobilaxRenvoieLaFiche()
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+      expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
+      // Ni /products/:id/full, ni /auth, ni aucun autre : le quota n'est pas touché
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(insertProduit(d1)).toBeUndefined()
+      // Reconnue sur la boutique appelante et l'identifiant demandé
+      const recherche = db.__getCalls().find(c => c.sql === SQL_PAR_MOBILAX_ID)!
+      expect(recherche.params).toEqual([BOUTIQUE, 10242])
+    })
+
+    it('reconnue par son identifiant même si la clé API n\'est plus exploitable', async () => {
+      db.__setResponse(SQL_PAR_MOBILAX_ID, { id: 41 })
+      db.__setListResponse(SQL_FOURNISSEUR_API, [])
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+      expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
+    })
+
+    it('quantité invalide : toujours refusée avant la reconnaissance', async () => {
+      db.__setResponse(SQL_PAR_MOBILAX_ID, { id: 41 })
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242, -1 as any)
+      expect(r).toMatchObject({ ok: false, erreur: 'quantite_invalide' })
+    })
+
+    it('pièce importée avant 0050 (référence connue, pas d\'identifiant) : l\'identifiant est posé, la description complétée si vide', async () => {
+      db.__setResponse(SQL_DOUBLON, { id: 41 })
+      mobilaxRenvoieLaFiche()
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+      expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 41 })
+      expect(rattachements()).toHaveLength(1)
+      expect(rattachements()[0].params).toContain(10242)
+      // Même nettoyage qu'à l'import : texte brut, jamais le HTML du fournisseur
+      expect(descriptions()).toHaveLength(1)
+      expect(descriptions()[0].params.slice(0, 3)).toEqual(['Écran Tactile iPhone 12 Mini\nQualité origine & testé.', 41, BOUTIQUE])
+    })
+
+    it('EAN déjà porté sans lien fournisseur : rattaché à la fiche et à la référence, toujours « déjà en stock »', async () => {
+      d1.__setResponseFn(SQL_INSERT_PRODUIT, () => {
+        throw new Error('D1_ERROR: UNIQUE constraint failed: produits.boutique_id, produits.code_barre: SQLITE_CONSTRAINT')
+      })
+      d1.__setResponse(
+        'SELECT id, nom FROM produits WHERE boutique_id = ? AND code_barre = ? AND actif = 1 LIMIT 1',
+        { id: 55, nom: 'Batterie saisie à la main' },
+      )
+      mobilaxRenvoieLaFiche()
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+      expect(r).toMatchObject({ ok: false, erreur: 'deja_importe', produit_id: 55 })
+      expect(rattachements()).toHaveLength(1)
+      // fiche 3, vraie référence, nom du fournisseur, identifiant Mobilax, produit 55 de la boutique
+      expect(rattachements()[0].params).toEqual([
+        3, 'ECRTAREAPPIPHNE12MNO', 'MOBILAX', 10242, 55, BOUTIQUE,
+        3, 'ECRTAREAPPIPHNE12MNO',
+        BOUTIQUE, 3, 'ECRTAREAPPIPHNE12MNO', 55,
+      ])
+      expect(descriptions()).toHaveLength(1)
+      expect(descriptions()[0].params[1]).toBe(55)
+    })
+
+    it('produit créé : l\'identifiant Mobilax est posé pour que l\'import suivant le reconnaisse', async () => {
+      mobilaxRenvoieLaFiche()
+      const r = await importerProduitMobilax(depsImport(), BOUTIQUE, 5, 10242)
+
+      expect(r).toMatchObject({ ok: true, produit_id: 77 })
+      expect(rattachements()).toHaveLength(1)
+      expect(rattachements()[0].params.slice(3, 6)).toEqual([10242, 77, BOUTIQUE])
+      // Un produit neuf porte déjà la description du fournisseur : rien à compléter
+      expect(descriptions()).toHaveLength(0)
+    })
   })
 
   // ─── « Qté en rayon » et réglages de stock (ticket 05 reglages-stock-boutique) ───

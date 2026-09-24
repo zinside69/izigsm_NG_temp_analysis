@@ -9,6 +9,8 @@
  *   GET  /api/mobilax/apercu?series= — aperçu des séries cochées (ticket 02)
  *   POST /api/mobilax/import       — importe une pièce dans le stock (`{ mobilax_id }`, ticket 04 ;
  *                                    `quantite_en_rayon?` facultative, ticket 05 réglages de stock)
+ *   POST /api/mobilax/produits/:id/ajout-stock — « Ajouter N au stock » d'une pièce déjà en stock
+ *                                    (`{ quantite }`, ticket 18 `vente-lit-catalogue`)
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
  * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
@@ -21,6 +23,7 @@ import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middlewar
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, type ErreurMobilax } from '../services/mobilaxService'
+import { ajouterStockPieceImportee } from '../services/stockService'
 
 // MOBILAX_API_BASE : préproduction ou production (`wrangler.jsonc` › vars), jamais en dur.
 type Bindings  = { DB: D1Database; KV: D1KVNamespace; JWT_SECRET: string; FOURNISSEUR_CRYPTO_KEY: string; MOBILAX_API_BASE: string }
@@ -152,6 +155,30 @@ mobilax.post('/mobilax/import', requireRole('admin', 'manager'), async (c) => {
     success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s,
     ...(r.produit_id === undefined ? {} : { data: { produit_id: r.produit_id } }),
   }, STATUT_PAR_ERREUR[r.erreur])
+})
+
+// ── POST /api/mobilax/produits/:id/ajout-stock ────────────────────────────────
+// Ticket 18 `vente-lit-catalogue` : « Ajouter N au stock » sur une pièce déjà en stock — le geste
+// explicite que l'import n'accomplit jamais tout seul (règle du 2026-09-12). Une entrée de stock
+// tracée, sans aucun appel à Mobilax. Mêmes rôles et mêmes refus que l'import ; le produit doit
+// être de la boutique du jeton (filtre porté par la requête du service), sinon 404 — l'existence
+// d'un produit d'une autre boutique n'est pas confirmée.
+mobilax.post('/mobilax/produits/:id/ajout-stock', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  if (isAdminPlateforme(user) || !user.boutique_id)
+    return c.json({ success: false, error: 'L\'ajout au stock est réservé aux utilisateurs de la boutique.' }, 403)
+
+  const produitId = Number(c.req.param('id'))
+  if (!Number.isInteger(produitId) || produitId <= 0)
+    return c.json({ success: false, error: 'Produit invalide.' }, 400)
+
+  const body = await c.req.json().catch(() => ({})) as { quantite?: unknown }
+  if (typeof body.quantite !== 'number' || !Number.isInteger(body.quantite) || body.quantite < 1)
+    return c.json({ success: false, error: 'La quantité à ajouter doit être un entier supérieur ou égal à 1.' }, 400)
+
+  const r = await ajouterStockPieceImportee(c.get('db'), user.boutique_id, user.sub, produitId, body.quantite)
+  if (!r) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
+  return c.json({ success: true, data: r })
 })
 
 export default mobilax

@@ -552,6 +552,138 @@ export async function referencesImportees(
 }
 
 /**
+ * Retrouve le produit d'une boutique rattaché à une pièce Mobilax par son identifiant — la
+ * reconnaissance d'un import qui ne doit **pas** rappeler le fournisseur (ticket 18
+ * `vente-lit-catalogue`, décision du 2026-09-24) : la référence Mobilax n'est que sur la fiche
+ * complète, l'identifiant est ce que l'écran envoie déjà. Colonne posée par la migration 0050.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique — filtre d'isolation porté par la requête elle-même
+ * @param mobilaxId   Identifiant de la pièce chez Mobilax
+ * @returns           `{ id }` du produit actif rattaché, ou `null`
+ */
+export async function trouverProduitParMobilaxId(
+  db: Database, boutiqueId: number, mobilaxId: number
+): Promise<{ id: number } | null> {
+  return db.get<{ id: number }>(
+    'SELECT id FROM produits WHERE boutique_id = ? AND mobilax_id = ? AND actif = 1 LIMIT 1',
+    [boutiqueId, mobilaxId]
+  )
+}
+
+/** Ce qu'un produit reçoit quand il est reconnu comme une pièce Mobilax. */
+export interface RattachementMobilax {
+  fournisseur_id:  number
+  fournisseur_nom: string
+  /** Vraie référence Mobilax (`reference_fournisseur`). */
+  reference:       string
+  mobilax_id:      number
+}
+
+/**
+ * Rattache un produit existant à sa pièce Mobilax : fiche fournisseur, référence et identifiant,
+ * pour que les imports suivants le reconnaissent sans appel au fournisseur (ticket 18).
+ *
+ * Jamais d'écrasement : une colonne déjà remplie n'est pas réécrite (le nom de fournisseur saisi à
+ * la main reste), et un produit déjà lié à une **autre** pièce ou déjà porteur d'un identifiant
+ * Mobilax est laissé tel quel. Pas de rattachement non plus si la référence est déjà portée par un
+ * autre produit de la boutique (contrainte 0046) — vérifié dans la même requête, sans course.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique — le produit doit lui appartenir
+ * @param produitId   Produit à rattacher
+ * @param source      Fiche fournisseur, référence et identifiant Mobilax de la pièce
+ * @returns           `true` si le produit a été rattaché, `false` s'il est resté tel quel
+ */
+export async function rattacherProduitMobilax(
+  db: Database, boutiqueId: number, produitId: number, source: RattachementMobilax
+): Promise<boolean> {
+  try {
+    const r = await db.run(
+      `UPDATE produits SET
+         fournisseur_id        = COALESCE(fournisseur_id, ?),
+         reference_fournisseur = COALESCE(reference_fournisseur, ?),
+         fournisseur           = COALESCE(fournisseur, ?),
+         mobilax_id            = ?,
+         updated_at            = CURRENT_TIMESTAMP
+       WHERE id = ? AND boutique_id = ? AND actif = 1
+         AND mobilax_id IS NULL
+         AND (fournisseur_id IS NULL OR fournisseur_id = ?)
+         AND (reference_fournisseur IS NULL OR reference_fournisseur = ?)
+         AND NOT EXISTS (
+           SELECT 1 FROM produits autre
+           WHERE autre.boutique_id = ? AND autre.fournisseur_id = ? AND autre.reference_fournisseur = ?
+             AND autre.actif = 1 AND autre.id <> ?
+         )`,
+      [
+        source.fournisseur_id, source.reference, source.fournisseur_nom, source.mobilax_id,
+        produitId, boutiqueId,
+        source.fournisseur_id, source.reference,
+        boutiqueId, source.fournisseur_id, source.reference, produitId,
+      ]
+    )
+    return r.changes > 0
+  } catch (err) {
+    // Course : un autre import a posé cet identifiant Mobilax entre-temps (index 0050). Le
+    // produit reste tel quel ; toute autre erreur remonte.
+    if (/UNIQUE constraint failed/.test(String((err as Error)?.message))) return false
+    throw err
+  }
+}
+
+/**
+ * Reprend la description du fournisseur sur un produit existant **seulement si la sienne est
+ * vide** — les notes saisies à la main ne sont jamais écrasées (ticket 18).
+ *
+ * @param db           Port Database
+ * @param boutiqueId   Boutique — le produit doit lui appartenir
+ * @param produitId    Produit à compléter
+ * @param description  Description du fournisseur, déjà réduite en texte ; absente → rien à reprendre
+ * @returns            `true` si la description a été posée
+ */
+export async function completerDescriptionSiVide(
+  db: Database, boutiqueId: number, produitId: number, description: string | null
+): Promise<boolean> {
+  if (!description || !description.trim()) return false
+  const r = await db.run(
+    `UPDATE produits SET description = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND boutique_id = ? AND actif = 1 AND (description IS NULL OR TRIM(description) = '')`,
+    [description, produitId, boutiqueId]
+  )
+  return r.changes > 0
+}
+
+/** Motif de l'entrée de stock écrite par « Ajouter N au stock » (ticket 18). */
+export const MOTIF_AJOUT_PIECE_DEJA_EN_STOCK = 'Import fournisseur — déjà en stock'
+
+/**
+ * Ajoute une quantité à une pièce fournisseur déjà en stock, par **une** entrée tracée — le geste
+ * explicite que l'import n'accomplit jamais tout seul (règle du 2026-09-12).
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique appelante — le produit doit lui appartenir
+ * @param userId      Utilisateur qui ajoute (mouvement)
+ * @param produitId   Produit déjà en stock
+ * @param quantite    Entier ≥ 1
+ * @returns           Ancien et nouveau stock, ou `null` si le produit n'est pas de cette boutique
+ * @throws            Error si la quantité n'est pas un entier ≥ 1
+ */
+export async function ajouterStockPieceImportee(
+  db: Database, boutiqueId: number, userId: number, produitId: number, quantite: number
+): Promise<{ stock_avant: number; stock_apres: number } | null> {
+  if (!Number.isInteger(quantite) || quantite < 1)
+    throw new Error('La quantité à ajouter doit être un entier supérieur ou égal à 1.')
+  const produit = await db.get<{ id: number }>(
+    'SELECT id FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1',
+    [produitId, boutiqueId]
+  )
+  if (!produit) return null
+  return enregistrerMouvement(db, produitId, userId, {
+    type_mouvement: 'entree', quantite, motif: MOTIF_AJOUT_PIECE_DEJA_EN_STOCK,
+  })
+}
+
+/**
  * Catégorie de la boutique portant ce nom — créée si elle n'existe pas (import Mobilax : la
  * catégorie locale reçoit le nom de la catégorie Mobilax, décision du 2026-09-11).
  *

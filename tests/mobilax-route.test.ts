@@ -374,3 +374,70 @@ describe('POST /api/mobilax/import', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+// ── POST /api/mobilax/produits/:id/ajout-stock ────────────────────────────────
+// Ticket 18 `vente-lit-catalogue` : « Ajouter N au stock » sur une pièce déjà en stock. Rôles de
+// l'import (manager, admin de boutique), boutique du jeton seulement, et jamais d'appel Mobilax.
+
+const SQL_PRODUIT_DE_LA_BOUTIQUE = 'SELECT id FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1'
+const SQL_PRODUIT_STOCK = 'SELECT id, stock_actuel, boutique_id FROM produits WHERE id = ? AND actif = 1'
+
+async function ajouterAuStock(
+  compte: { role: string; boutique_id: number | null },
+  corps: unknown,
+  { produitDeLaBoutique = true }: { produitDeLaBoutique?: boolean } = {},
+) {
+  const d1 = createMockD1()
+  d1.__setResponse(SQL_PRODUIT_DE_LA_BOUTIQUE, produitDeLaBoutique ? { id: 41 } : null)
+  d1.__setResponse(SQL_PRODUIT_STOCK, { id: 41, stock_actuel: 4, boutique_id: 1 })
+  const { accessToken } = await generateTokenPair(
+    { id: 7, email: 'x@boutique.fr', prenom: 'X', nom: 'Test', ...compte } as any, SECRET,
+  )
+  const res = await app.request(
+    '/api/mobilax/produits/41/ajout-stock',
+    { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(corps) },
+    { DB: d1, JWT_SECRET: SECRET, FOURNISSEUR_CRYPTO_KEY: CLE_CHIFFREMENT, MOBILAX_API_BASE: BASE } as any,
+    { waitUntil: () => {}, passThroughOnException: () => {} } as any,
+  )
+  return { res, d1 }
+}
+const mouvements = (d1: ReturnType<typeof createMockD1>) => d1.__getCalls().filter(c => c.sql.startsWith('INSERT INTO mouvements_stock'))
+
+describe('POST /api/mobilax/produits/:id/ajout-stock', () => {
+  it('manager : une entrée tracée, l\'ancien et le nouveau stock rendus', async () => {
+    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { stock_avant: 4, stock_apres: 9 } })
+    expect(mouvements(d1)).toHaveLength(1)
+    expect(mouvements(d1)[0].params).toEqual([41, 1, 'entree', 5, 4, 9, null, 7, 'Import fournisseur — déjà en stock'])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('produit d\'une autre boutique : 404, aucun mouvement — le produit d\'autrui n\'est pas confirmé', async () => {
+    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 }, { produitDeLaBoutique: false })
+    expect(res.status).toBe(404)
+    expect(mouvements(d1)).toHaveLength(0)
+    // La boutique interrogée est celle du jeton
+    const lecture = d1.__getCalls().find(c => c.sql === SQL_PRODUIT_DE_LA_BOUTIQUE)!
+    expect(lecture.params).toEqual([41, 1])
+  })
+
+  it('technicien : refusé, comme l\'import', async () => {
+    const { res, d1 } = await ajouterAuStock({ role: 'technicien', boutique_id: 1 }, { quantite: 5 })
+    expect(res.status).toBe(403)
+    expect(mouvements(d1)).toHaveLength(0)
+  })
+
+  it('admin plateforme : refusé, aucun mouvement', async () => {
+    const { res, d1 } = await ajouterAuStock({ role: 'admin', boutique_id: null }, { quantite: 5 })
+    expect(res.status).toBe(403)
+    expect(mouvements(d1)).toHaveLength(0)
+  })
+
+  it.each([{}, { quantite: 0 }, { quantite: -2 }, { quantite: 1.5 }, { quantite: '5' }])(
+    'quantité invalide (%j) : 400, aucun mouvement', async (corps) => {
+      const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, corps)
+      expect(res.status).toBe(400)
+      expect(mouvements(d1)).toHaveLength(0)
+    })
+})

@@ -16,7 +16,8 @@ import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
-import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
+// AVANT (2026-09-24, ticket 18, agent T-002 du socle d'orchestration) : import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
+import { createProduit, trouverProduitImporte, trouverProduitParMobilaxId, rattacherProduitMobilax, completerDescriptionSiVide, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -326,6 +327,12 @@ export async function importerProduitMobilax(
   if (quantiteFournie && !(typeof quantiteEnRayon === 'number' && estEntierPositifOuNul(quantiteEnRayon)))
     return echec('quantite_invalide', 'La quantité en rayon doit être un entier positif ou nul.')
 
+  // Pièce déjà rattachée par son identifiant Mobilax (ticket 18) : reconnue AVANT tout appel au
+  // fournisseur — ni connexion, ni fiche complète, aucun quota brûlé. Elle passe même par une clé
+  // devenue inexploitable : rien n'est demandé à Mobilax pour répondre « déjà en stock ».
+  const rattache = await trouverProduitParMobilaxId(deps.db, boutiqueId, mobilaxId)
+  if (rattache) return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: rattache.id })
+
   const cle = await resoudreCle(deps, boutiqueId)
   if (!cle.ok) return cle.echec
 
@@ -344,7 +351,11 @@ export async function importerProduitMobilax(
   if (!fiche) return indisponible()
 
   const existant = await trouverProduitImporte(deps.db, boutiqueId, cle.fiche.id, fiche.reference)
-  if (existant) return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: existant.id })
+  // AVANT (2026-09-24, ticket 18, agent T-002 du socle d'orchestration) : if (existant) return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: existant.id })
+  if (existant) {
+    await reconnaitrePieceEnStock(deps, boutiqueId, existant.id, cle.fiche, mobilaxId, fiche)
+    return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: existant.id })
+  }
 
   // Famille déduite de la branche Mobilax, puis marge résolue sur CETTE famille (un accessoire
   // prend le taux des accessoires, pas celui des pièces) — décisions du 2026-09-11
@@ -379,12 +390,19 @@ export async function importerProduitMobilax(
       reference_fournisseur: fiche.reference,
       code_barre:            fiche.ean13,
     }, { fournisseur_id: cle.fiche.id }))
+    // Identifiant Mobilax posé pour que l'import suivant reconnaisse la pièce sans appel (ticket 18)
+    await rattacherProduitMobilax(deps.db, boutiqueId, id, {
+      fournisseur_id: cle.fiche.id, fournisseur_nom: cle.fiche.nom, reference: fiche.reference, mobilax_id: mobilaxId,
+    })
   } catch (err) {
     // L'EAN de la pièce est déjà porté par un autre produit de la boutique — saisi à la main, ou
     // importé sous une autre référence (migration 0048). Même article : « déjà en stock », avec le
     // produit qui le porte ; le bilan d'un import en lot ne le compte pas comme un échec.
-    if (err instanceof ErreurCodeEnDoublon)
+    // AVANT (2026-09-24, ticket 18, agent T-002 du socle d'orchestration) : if (err instanceof ErreurCodeEnDoublon)
+    if (err instanceof ErreurCodeEnDoublon) {
+      await reconnaitrePieceEnStock(deps, boutiqueId, err.produit.id, cle.fiche, mobilaxId, fiche)
       return echec('deja_importe', err.message, { produit_id: err.produit.id })
+    }
     // Deux imports simultanés passent tous deux la vérification ci-dessus : l'index unique
     // `idx_produits_source_fournisseur` (migration 0046) refuse le second. Même réponse qu'un
     // doublon vu à la vérification, avec le produit du premier. Toute autre erreur remonte.
@@ -394,6 +412,22 @@ export async function importerProduitMobilax(
     return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: gagnant.id })
   }
   return { ok: true, produit_id: id, famille }
+}
+
+/**
+ * Un produit déjà en stock est reconnu comme cette pièce (ticket 18) : rattaché à la fiche
+ * fournisseur, à la référence et à l'identifiant Mobilax — sauf si la référence est déjà portée
+ * ailleurs — et sa description est reprise du fournisseur **si elle est vide**. Ne touche jamais
+ * au stock : la quantité ne s'ajoute que par le geste explicite « Ajouter N au stock ».
+ */
+async function reconnaitrePieceEnStock(
+  deps: DepsMobilax, boutiqueId: number, produitId: number,
+  fournisseur: { id: number; nom: string }, mobilaxId: number, fiche: FicheMobilax
+): Promise<void> {
+  await rattacherProduitMobilax(deps.db, boutiqueId, produitId, {
+    fournisseur_id: fournisseur.id, fournisseur_nom: fournisseur.nom, reference: fiche.reference, mobilax_id: mobilaxId,
+  })
+  await completerDescriptionSiVide(deps.db, boutiqueId, produitId, fiche.description)
 }
 
 /** Fiche complète normalisée — ce que l'import retient de `/products/:id/full`. */
