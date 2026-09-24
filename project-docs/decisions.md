@@ -1,5 +1,17 @@
 # iziGSM — Décisions
 
+## 2026-09-24 — Ticket 18 : « sans appel au fournisseur » = zéro appel Mobilax
+
+Première marche réelle du socle d'orchestration sur iziGSM (bac à sable, T-001 = ticket 18). L'agent
+a gardé `GET /products/:id/full` avant de reconnaître une pièce déjà rattachée, et a ajouté à
+`CLAUDE.md` « “Sans appel au fournisseur” se lit ainsi » pour redéfinir l'exigence ; la revue
+croisée l'a rejeté (R2 majeur). Deux lectures présentées : zéro appel, ou un seul appel à la fiche
+complète. **Décision de l'exploitant : zéro appel Mobilax** — l'import d'une pièce déjà rattachée ne
+touche pas le fournisseur (quota épargné). Conséquence : il faut reconnaître la pièce **sans** la
+référence Mobilax, qui n'est que sur la fiche complète — soit par le `mobilax_id` connu localement
+(colonne, donc **migration** : décision humaine), soit par une donnée que l'écran envoie déjà. Le
+mécanisme reste à choisir avant de relancer le ticket. Le travail de l'agent n'est pas reporté.
+
 ## 2026-09-18 — Service à 0 € en caisse : bloqué comme un produit (checkpoint 125)
 
 Le ticket 03 `vente-lit-catalogue` étend aux **services** le blocage à l'écran d'une ligne du

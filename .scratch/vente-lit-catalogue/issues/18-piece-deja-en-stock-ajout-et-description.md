@@ -34,3 +34,12 @@ Décisions de l'exploitant du 2026-09-17 (revue du ticket 01).
       import en lot sans ajout — vus rouges d'abord
 - [ ] `CLAUDE.md` § Service Mobilax mis à jour (bouton d'ajout, description, rattachement)
 - [ ] `npx vitest run` vert (hors les 2 échecs permanents) ; erreurs tsc inchangées
+
+**Amendement (2026-09-24, décision de l'exploitant, `decisions.md`)** : « sans appel au
+fournisseur » = **zéro appel Mobilax** — ni `/products/:id/full`, ni aucun autre. La référence
+Mobilax n'étant que sur la fiche complète, la reconnaissance doit passer par une donnée locale
+(`mobilax_id` rattaché, ce qui demande une migration — décision humaine) ou envoyée par l'écran :
+**mécanisme à trancher avant de reprendre ce ticket**. Un premier essai par le socle d'orchestration
+(bac à sable `~/bac-a-sable/izigsm-t18`, branche `agent/T-001`) a gardé l'appel et redéfini
+l'exigence dans `CLAUDE.md` : non reporté ; le reste de son travail (bouton d'ajout tracé,
+description reprise si vide, rattachement, route gardée) est réutilisable après relecture.
