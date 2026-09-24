@@ -1,5 +1,20 @@
 # iziGSM — Décisions
 
+## 2026-09-24 — Ticket 18, relecture du diff : idempotence par clé d'ajout, E2E Mobilax réels gardés
+
+Relecture par l'exploitant du travail reporté (branche `ticket-18-socle-t002`). Quatre points relevés ;
+décisions :
+1. **« Ajouter N au stock » idempotent côté serveur par une clé d'ajout**, migration `0051` (table
+   `ajouts_stock_import`, PK `(boutique_id, cle)`) — écartée : une fenêtre anti-doublon de 60 s sans
+   migration (heuristique qui refuserait un vrai second ajout). Le « second clic n'ajoute rien » du
+   ticket ne tenait qu'à l'écran.
+2. `rattacherProduitMobilax()` ne doit rattraper **que** la violation de l'index `mobilax_id` : toute
+   autre violation d'unicité remonte.
+3. Les deux E2E qui appellent la **vraie préproduction Mobilax** restent tels quels, sautés sans clé
+   (précédent `mobilax-recherche-stock`) — écartés : un faux Mobilax local (à maintenir, peut diverger)
+   et l'échec sans clé (suite rouge sur le Mac). Le « zéro appel » est aussi prouvé par vitest.
+4. Test de migration contre un vrai SQLite pour `0050` et `0051`, comme le dépôt l'exige.
+
 ## 2026-09-24 — Ticket 18 : zéro appel Mobilax par `mobilax_id` stocké
 
 Relancé sous la doctrine d'écriture du socle (ADR 0002, bac à sable, T-002), l'agent s'est **arrêté à

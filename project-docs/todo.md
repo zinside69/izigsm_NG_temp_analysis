@@ -39,6 +39,55 @@ Décisions : `decisions.md` § 2026-09-16.
       (`decisions.md` 2026-09-24) : `mobilax_id` stocké sur le produit (migration) ou donnée envoyée
       par l'écran. Essai par le socle non reporté (branche `agent/T-001` du bac à sable
       `~/bac-a-sable/izigsm-t18`, réutilisable après relecture).
+      — **Tranché le 2026-09-24** (`mobilax_id` stocké, `da48354`) ; **codé et prouvé** sur la
+      branche locale `ticket-18-socle-t002` (`a8b12bd`, checkpoint 127). Reste avant fusion :
+- [ ] **Ticket 18 — avant fusion** (branche `ticket-18-socle-t002`, décisions du 2026-09-24) :
+      (1) idempotence serveur de « Ajouter N au stock » par **clé d'ajout**, migration `0051` ;
+      (2) `rattacherProduitMobilax()` ne rattrape que la violation de `produits.mobilax_id` ;
+      (4) tests des migrations `0050` et `0051` contre un vrai SQLite. Puis fusion, ticket coché.
+  - **Départ** : `git switch ticket-18-socle-t002` (`a8b12bd`). Chaque point : test **vu rouge**
+    d'abord ; toute ligne modifiée reste en `// AVANT (date, motif) :` au-dessus de la nouvelle.
+  - **(1) Idempotence serveur — clé d'ajout, migration `0051`** (décision `decisions.md` 2026-09-24) :
+    - `migrations/0051_ajouts_stock_import.sql` : table `ajouts_stock_import` (`boutique_id` INTEGER
+      NOT NULL, `cle` TEXT NOT NULL, `produit_id` INTEGER NOT NULL, `quantite` INTEGER NOT NULL,
+      `stock_avant` INTEGER, `stock_apres` INTEGER, `user_id` INTEGER NOT NULL, `created_at`
+      DATETIME DEFAULT CURRENT_TIMESTAMP), **PK `(boutique_id, cle)`**, **sans clé étrangère** ;
+    - `ajouterStockPieceImportee(db, boutique, user, produit, quantite, cle)` (`stockService.ts`) :
+      clé validée (`^[A-Za-z0-9-]{8,64}$`) ; produit de la boutique sinon `null` ; clé **réservée
+      avant d'écrire** (`INSERT`) ; mouvement « Import fournisseur — déjà en stock » ; résultat
+      enregistré (`UPDATE … stock_avant, stock_apres`). Clé déjà vue (ou violation d'unicité de la
+      réservation, course) ⇒ **même résultat**, `deja_applique: true`, rien d'ajouté. Même clé avec
+      un autre produit ou une autre quantité ⇒ erreur, **409**. Échec du mouvement ⇒ réservation
+      **supprimée** (sinon la clé bloquerait toute reprise) ;
+    - route `POST /api/mobilax/produits/:id/ajout-stock` : `cle` **obligatoire** (400 sinon), 409
+      sur clé réutilisée ; la réponse porte `deja_applique` ;
+    - écran (`stock.js`) : `ajoutImportEnAttente = { produitId, quantite, cle: crypto.randomUUID() }`
+      à la création de l'offre, clé envoyée avec la quantité ; un double clic renvoie la même clé ;
+    - tests : service sur vrai SQLite (même clé deux fois = **un** mouvement ; nouvelle clé = second
+      ajout ; clé réutilisée autrement = refus ; échec simulé du mouvement = clé libérée) ; route
+      (`tests/mobilax-route.test.ts` : `cle` absente ⇒ 400) ; **E2E API sur la vraie base**
+      (deux POST même clé ⇒ un seul mouvement). Mettre à jour les appels existants sans clé :
+      `tests/stock-import-deja-en-stock.test.ts` (appels à 5 arguments, `toEqual` sans
+      `deja_applique`), `tests/mobilax-route.test.ts` (l.408-437), E2E l.109 (`ajouts` capture
+      désormais `{ quantite, cle }`) et l.161.
+  - **(2) `rattacherProduitMobilax()`** (`stockService.ts`) : le `catch` rattrape tout
+    `UNIQUE constraint failed` — ne rattraper que le message qui nomme **`produits.mobilax_id`**
+    (course entre deux imports) ; toute autre violation **remonte**. Test (vrai SQLite) : ajouter dans
+    le test un index unique sur une autre colonne que le rattachement viole ⇒ l'erreur doit remonter
+    (rouge aujourd'hui : rend `false`).
+  - **(4) Tests de migration** contre `node:sqlite`, patron `tests/lignes-document-service-id-migration.test.ts`
+    (témoin **sans** la migration) : `0050` — colonne présente, lignes existantes conservées (NULL),
+    unicité par boutique sur produits actifs, doublon permis entre boutiques, sur produit inactif et
+    pour NULL ; `0051` — table présente, `(boutique_id, cle)` unique, même clé permise dans deux
+    boutiques, aucune clé étrangère.
+  - **(3) E2E dépendant de la préproduction Mobilax** : **ne rien faire** (décision) — sautés sans
+    clé, comme `mobilax-recherche-stock` ; le « zéro appel » est aussi prouvé par vitest.
+  - **Clôture** : vitest (1189 + nouveaux, 2 échecs permanents), tsc 32, `npm run build`,
+    **relancer wrangler** et contrôler l'asset servi, E2E du ticket + non-régression (Mobilax, stock,
+    `resolveur-boutique-pages`, `xss-gabarits`) ; appliquer `0051` en local ; fusion dans `main` sur
+    accord de l'exploitant ; cocher le ticket 18 ; mettre à jour `CLAUDE.md` § Service Mobilax
+    (idempotence par clé, `0051`) et § Déploiement (lot 1 : `0048` → `0051`). `CACHE_VERSION` au
+    dernier ticket d'écran du lot 1.
 
 Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
 

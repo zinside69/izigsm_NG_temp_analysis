@@ -1012,6 +1012,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-09-24 (checkpoint 127) : production inchangée (`izigsm-v3.11`) ; `0048`, `0049` EN
+ATTENTE sur `main` ; `0050` (et `0051` prévue) sur la branche LOCALE `ticket-18-socle-t002`,
+non fusionnée.** Le lot 1 se déploie en bloc quand il sera complet : `0048` → `0051` à distance,
+`d1_migrations` relu, **puis** le code. `0050` est appliquée sur la base locale Windows : une
+session sur `main` a donc une colonne `produits.mobilax_id` que le code de `main` n'utilise pas — sans
+effet (colonne nullable, index partiel).
+
 **État au 2026-09-24 (checkpoint 126) : inchangé depuis le 125 — `0048` ET `0049` EN ATTENTE,
 production saine en `izigsm-v3.11`.** Ticket 03 clos sur Windows (`9547332`, test seulement) : `0049`
 appliquée **en local**, E2E verts. Le lot 1 n'est pas complet (tickets 04 à 10) : ne pas déployer

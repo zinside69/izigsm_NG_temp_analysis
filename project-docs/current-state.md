@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-09-24, checkpoint 126 — ticket 03 clos, première marche du socle d'orchestration)
+# iziGSM — État courant (MàJ : 2026-09-24, checkpoint 127 — ticket 18 fait par le socle, sur une branche locale)
+
+## Checkpoint 127 — Ticket 18 : première chaîne complète du socle, travail reporté sur une branche (2026-09-24)
+
+**Production inchangée (`izigsm-v3.11`). `main` aligné sur `origin`. Le ticket 18 vit sur la branche
+LOCALE `ticket-18-socle-t002` (`a8b12bd`) — ni fusionnée, ni poussée, ni déployée.** Migrations en
+attente : `0048`, `0049` (sur `main`, appliquées en local), `0050` (sur la branche seulement, appliquée
+en local Windows) ; `0051` prévue (non écrite).
+
+- **Socle** (dépôt `orchestrateur-claude-code`, v3.30 → v3.36, 132 contrôles, 7 preuves vertes à
+  chaque version) : **ADR 0002 implémenté** — un agent n'écrit aucun fichier critique (`CLAUDE.md`,
+  migrations, configuration, socle, secrets) ni hors de son périmètre ; il le **demande**, l'humain
+  approuve, le harnais applique mot pour mot. Défauts 63-71 corrigés en route (fausse panne P10,
+  durées uutils, `acceptEdits` décoratif, périmètre jamais vérifié, arrêt motivé en P14, demande sans
+  diff, **consigne humaine jamais transmise à l'agent**, O29). Points ouverts O34-O38.
+- **Ticket 18 par le socle** (bac à sable `~/bac-a-sable/izigsm-t18`, T-002) : 1ʳᵉ passe, l'agent
+  **s'arrête à raison** (mécanisme non tranché) ; décision de l'exploitant (`mobilax_id` stocké) ;
+  2ᵉ passe : code, tests, migration `0050` et bloc `CLAUDE.md` **soumis en demandes d'écriture**,
+  approuvés et appliqués par le harnais ; revue croisée en **désaccord fondé** (E2E jamais joués).
+- **Reporté ici** sur la branche : E2E joués pour la 1ʳᵉ fois — 7/7 après **deux défauts du test**
+  (motif de route sans `?boutique_id=`, assertion « échec » impossible) ; **rouge prouvé par 5
+  mutations** ; non-régression Mobilax, stock, menu, XSS **93/93** (un 1ᵉʳ passage sur un build resté
+  muté, rejoué — mémoire) ; vitest 1189/1191, tsc 32 ; lignes modifiées en `AVANT :`.
+- **Relecture du diff par l'exploitant — trois points à traiter avant fusion** (décisions du jour) :
+  1. idempotence **serveur** de « Ajouter N au stock » : **clé d'ajout**, migration **`0051`**
+     (`ajouts_stock_import`, PK `(boutique_id, cle)`, sans FK) ; clé aléatoire par offre à l'écran ;
+  2. `rattacherProduitMobilax()` avale **toute** violation d'unicité : ne rattraper que celle de
+     `produits.mobilax_id` ;
+  4. **test de la migration `0050`** (et `0051`) contre un vrai SQLite (`node:sqlite`, patron `0049`).
+  Point 3 (deux E2E dépendant de la préproduction Mobilax) : **gardés tels quels**, saut visible.
+
+**Prochaine session** : sur la branche `ticket-18-socle-t002`, points 1, 2, 4 (tests vus rouges
+d'abord), puis fusion dans `main` et ticket 18 coché. `CACHE_VERSION` au dernier ticket d'écran du lot 1.
 
 ## Checkpoint 126 — Ticket 03 clos ; ticket 18 essayé par le socle d'orchestration (2026-09-24)
 

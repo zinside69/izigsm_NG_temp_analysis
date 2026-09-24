@@ -1,4 +1,39 @@
-# Recovery Prompt — iziGSM — 2026-09-24 (checkpoint 126 — ticket 03 clos, première marche du socle)
+# Recovery Prompt — iziGSM — 2026-09-24 (checkpoint 127 — ticket 18 sur une branche, 3 points avant fusion)
+
+## Ce qui a changé au checkpoint 127
+
+**Le ticket 18 est codé et prouvé, sur la branche LOCALE `ticket-18-socle-t002` (`a8b12bd`)** — ni
+fusionnée, ni poussée. Il vient du socle d'orchestration (chaîne complète, T-002 du bac à sable) et a
+été rejoué ici : E2E 7/7, 5 mutations rouges, non-régression 93/93. `main` est aligné sur `origin`.
+
+**Première action : `git switch ticket-18-socle-t002`, puis traiter les trois points décidés par
+l'exploitant, chacun avec un test vu rouge d'abord :**
+1. **Idempotence serveur** de `POST /api/mobilax/produits/:id/ajout-stock` : **clé d'ajout** envoyée
+   par l'écran (`crypto.randomUUID()` par offre, dans `ajoutImportEnAttente`), migration **`0051`** —
+   table `ajouts_stock_import` (`boutique_id`, `cle`, `produit_id`, `quantite`, `stock_avant`,
+   `stock_apres`, `user_id`, `created_at`), PK `(boutique_id, cle)`, sans FK. Service : clé réservée
+   **avant** d'écrire (INSERT), mouvement, puis résultat enregistré ; clé déjà vue ⇒ même résultat,
+   `deja_applique: true`, rien d'ajouté ; même clé, autre produit ou quantité ⇒ 409 ; échec du
+   mouvement ⇒ réservation supprimée. Route : `cle` obligatoire (400). Preuve sur la **vraie base**
+   (E2E API : même clé deux fois = un seul mouvement ; nouvelle clé = second ajout). Mettre à jour les
+   appels existants (`tests/stock-import-deja-en-stock.test.ts`, `tests/mobilax-route.test.ts`, E2E
+   l.109/161) — lignes modifiées en `AVANT :`.
+2. **`rattacherProduitMobilax()`** (`stockService.ts`) : le `catch` avale toute violation d'unicité —
+   ne rattraper que `UNIQUE constraint failed: … produits.mobilax_id` ; test : un autre index unique
+   violé doit **remonter** (vrai SQLite, index ajouté dans le test).
+3. **Tests de migration** `0050` et `0051` contre `node:sqlite`, patron
+   `tests/lignes-document-service-id-migration.test.ts` (témoin sans migration).
+
+Puis : vitest, tsc (32), build, **relancer wrangler**, E2E du ticket + non-régression ; fusion dans
+`main` sur accord ; cocher le ticket 18. Point 3 de la relecture (E2E Mobilax réels) : **ne rien faire**.
+
+**À savoir** :
+- Migrations en attente pour le lot 1 : `0048`, `0049`, `0050`, `0051` — toutes à distance **avant**
+  le code, `d1_migrations` relu entre les deux.
+- **Après une campagne de mutations, `npm run build` avant de relancer wrangler** : le script restaure
+  les sources, pas `dist/` (vécu : non-régression jouée sur le mutant M5 — mémoire).
+- Socle : les tickets iziGSM passent par lui **en bac à sable** tant que O34/O37/O38 sont ouverts ;
+  détail et doctrine dans `CLAUDE.md` § Socle d'orchestration et l'ADR 0002 du socle.
 
 ## Ce qui a changé au checkpoint 126
 
