@@ -1,4 +1,32 @@
-# Recovery Prompt — iziGSM — 2026-09-18 (checkpoint 125 — ticket 03 codé, E2E à jouer sur Windows)
+# Recovery Prompt — iziGSM — 2026-09-24 (checkpoint 126 — ticket 03 clos, première marche du socle)
+
+## Ce qui a changé au checkpoint 126
+
+**Ticket 03 clos** (`9547332`). La « première action — sur Windows » du bloc 125 ci-dessous est
+**faite**. Dépôt poussé et aligné ; production inchangée (`izigsm-v3.11`) ; `0048`/`0049` en local.
+
+**Le socle d'orchestration a fait sa première marche réelle** sur le ticket 18, dans un bac à sable
+(`~/bac-a-sable/izigsm-t18`, WSL, sans remote). Résultat : **non reporté** — l'agent gardait un
+appel Mobilax interdit et avait réécrit l'exigence dans `CLAUDE.md` ; la revue croisée l'a vu.
+Ticket 18 amendé : **zéro appel Mobilax** (`decisions.md` 2026-09-24).
+
+**Première question à poser : quel chantier ?**
+1. **Ticket 18** — trancher d'abord le mécanisme de reconnaissance sans appel : `mobilax_id` stocké
+   (migration, décision humaine) ou donnée envoyée par l'écran. Le travail de l'agent (branche
+   `agent/T-001` du bac à sable) est réutilisable pour le reste, après relecture.
+2. **Premier lot par le socle** (décidé au cp40 du workspace) : Mobilax 05, 06, 09.
+3. **Ticket 04** `vente-lit-catalogue`, à la main.
+4. Côté socle, dans sa propre session (`Orchestration-ClaudeCode/orchestrateur`, sous WSL) :
+   **O29** et **O31** d'abord (todo du workspace).
+
+**À savoir pour lancer le socle sur iziGSM** (`CLAUDE.md` § Socle d'orchestration) :
+- Toujours `wsl -d Ubuntu -e bash -lc '…'` — **`-l`** : sans profil, `npx` est celui de Windows et
+  typecheck passe vert sur zéro erreur (garde ajoutée au `gates.json` du bac à sable).
+- Périmètre d'agent **sans `CLAUDE.md`** ; les E2E ne sont joués par personne d'autre que moi.
+- Le dossier doit être **approuvé dans Claude Code** par l'exploitant (vraie fenêtre WSL,
+  `claude` puis accepter) — sinon arrêt en 31.
+- Les boutons ntfy n'ont d'écouteur que pour `essai-orchestrateur` : répondre en ligne de commande.
+- Surveiller l'**état de la fiche** (`etat=`), jamais un motif de processus.
 
 ## Ce qui a changé au checkpoint 125
 

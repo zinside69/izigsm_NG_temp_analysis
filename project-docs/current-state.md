@@ -1,4 +1,40 @@
-# iziGSM — État courant (MàJ : 2026-09-18, checkpoint 125 — ticket 03 codé sur le Mac, E2E à jouer sur Windows)
+# iziGSM — État courant (MàJ : 2026-09-24, checkpoint 126 — ticket 03 clos, première marche du socle d'orchestration)
+
+## Checkpoint 126 — Ticket 03 clos ; ticket 18 essayé par le socle d'orchestration (2026-09-24)
+
+**Production inchangée en `izigsm-v3.11`. Dépôt poussé et aligné (`a6314bf`). `0048` et `0049`
+appliquées en local Windows seulement ; le lot 1 (tickets 01-10) n'est pas complet.**
+
+- **Ticket 03 clos** (`9547332`) : `0049` appliquée en local ; page servie contrôlée
+  (`caisse.f42f1676.js`) ; E2E `caisse-catalogue-api` + `-ecran` **19/19**, balayage du menu +
+  `xss-gabarits` + `plateforme-ne-vend-pas` **22/22** ; rouge prouvé **par mutation**, une à la fois,
+  fichier restauré dans un `finally` : `service_id` non écrit, appartenance non contrôlée, services
+  non rendus, dossier SAV non ouvert. **Trou trouvé** : « `prixManquant()` ignore `service_id` »
+  restait vert — la décision du 2026-09-18 n'était gardée par rien ; E2E ajouté, vu rouge sous la
+  mutation. vitest 1155/1157, tsc 32.
+- **Ticket 18 essayé par le socle d'orchestration** (décision O6 : les tickets iziGSM passent par
+  lui), bac à sable neuf `~/bac-a-sable/izigsm-t18` sous WSL, **sans remote**, publication locale.
+  Agent sonnet 10 min / 3,67 $ : 11 fichiers, contrôles verts, E2E écrits **jamais joués** ; il a
+  **gardé l'appel Mobilax** que le ticket interdisait et **ajouté à `CLAUDE.md`** une ligne qui
+  redéfinissait l'exigence. La revue croisée (1,32 $) l'a rejeté (R2 majeur) — mais en JSON mal
+  échappé, d'où un P4. **Aucun verdict pris, rien reporté ici.**
+- **Décision de l'exploitant** (`decisions.md`, `a6314bf`) : « sans appel au fournisseur » = **zéro
+  appel Mobilax**. Ticket 18 amendé ; le **mécanisme** (stocker `mobilax_id` — migration — ou donnée
+  envoyée par l'écran) est à trancher avant de le reprendre.
+- **Socle corrigé en route** (dépôt `orchestrateur-claude-code`, poussé) : défaut 63 (une escalade
+  des contrôles devenait une fausse panne P10, et « Relancer » aurait relancé l'agent), défaut 64
+  (durées fausses sous le `date` de uutils, Ubuntu 26.04) — tests ES1, DU1, sept preuves, 117
+  contrôles, spec v3.30. **O28–O31** ouverts et inscrits au todo du workspace pour correction.
+- `CLAUDE.md` : nouvelle section « Socle d'orchestration » (⊥ `CLAUDE.md` dans un périmètre d'agent,
+  E2E hors contrôles, garde `node` Linux dans `gates.json`).
+
+**Pièges de la session** : `wsl -e bash -c` ne charge pas le profil — `npx` devient celui de Windows
+(mémoire) ; `curl` est redirigé par un hook vers le bac à sable context-mode ; l'identité git
+n'existe pas sous WSL (posée en local dans le bac à sable seulement).
+
+**Prochaine session** : trancher le mécanisme du ticket 18, ou lancer le premier lot décidé pour le
+socle (Mobilax 05, 06, 09), ou ticket 04 à la main. Côté socle d'abord : O29 et O31 (priorité
+haute), dans une session de maintenance du socle.
 
 ## Checkpoint 125 — Ticket 03 codé, E2E non joués (2026-09-18)
 

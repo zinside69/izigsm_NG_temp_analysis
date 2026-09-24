@@ -33,6 +33,12 @@ Décisions : `decisions.md` § 2026-09-16.
       produits en caisse, `GET /api/catalogue/recherche`, le stock baisse à la vente, stock
       insuffisant signalé. Sa revue a relevé la faille du résolveur de boutique : chantier à part,
       section 🟠 P2 ci-dessous.
+- [x] **Ticket 03 clos le 2026-09-24** (`9547332`) — E2E joués sur Windows (19/19, 22/22), rouge
+      prouvé par mutation, E2E ajouté pour le service à 0 € (trou trouvé par mutation).
+- [ ] **Ticket 18 — mécanisme « zéro appel Mobilax » à trancher** avant de le reprendre
+      (`decisions.md` 2026-09-24) : `mobilax_id` stocké sur le produit (migration) ou donnée envoyée
+      par l'écran. Essai par le socle non reporté (branche `agent/T-001` du bac à sable
+      `~/bac-a-sable/izigsm-t18`, réutilisable après relecture).
 
 Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
 

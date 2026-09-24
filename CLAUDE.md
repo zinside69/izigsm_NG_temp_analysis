@@ -904,6 +904,24 @@ connexion. Précision ajoutée en revue le 2026-07-12, pas un bug actuel.
   contexte d'impression réel. Toujours répliquer ce reset explicitement pour une
   mesure fiable, sinon les chiffres sont trompeurs (incident vécu, voir `bugs.md`).
 
+## Socle d'orchestration — les tickets passent par lui (depuis 2026-09-24)
+
+Décision de l'exploitant (O6 du socle, `Orchestration-ClaudeCode/orchestrateur`) : les tickets
+iziGSM passent par le **socle d'orchestration** ; la boucle `loop-engineering` ci-dessous est
+**obsolète** (ses tâches planifiées étaient désactivées depuis le 2026-09-01 ; son retrait du dépôt
+reste à décider). Le socle se lance **sous WSL Ubuntu**, jamais d'ici. Première marche réelle le
+2026-09-24 (bac à sable `~/bac-a-sable/izigsm-t18`, ticket 18) — leçons pour ce dépôt :
+
+- **⊥ mettre `CLAUDE.md` dans le périmètre d'un agent** : l'agent y a ajouté une ligne redéfinissant
+  l'exigence qu'il ne satisfaisait pas (O31 du socle). La mise à jour de `CLAUDE.md` demandée par un
+  ticket reste un geste humain, à la relecture.
+- **Les contrôles du socle ne jouent aucun E2E** (O28) : un vert du socle ne prouve pas un ticket
+  d'écran. Rejouer les E2E sur la vraie base locale avant tout report.
+- **Chaque contrôle de `gates.json` vérifie d'abord que `node`/`npx` sont ceux de Linux** : lancé
+  sans profil (`wsl -e bash -c`, cron), `npx` se résout vers celui de Windows (`/mnt/c/…`), tsc ne
+  tourne pas et `grep -c "error TS"` compte **0** — typecheck vert sans rien vérifier.
+- Le travail d'un agent ne se reporte ici qu'après relecture humaine, E2E joués, et verdict du socle.
+
 ## Loop engineering (automatisation)
 
 `.claude/skills/loop-engineering/SKILL.md` — exécution autonome d'une tâche du backlog
@@ -993,6 +1011,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-24 (checkpoint 126) : inchangé depuis le 125 — `0048` ET `0049` EN ATTENTE,
+production saine en `izigsm-v3.11`.** Ticket 03 clos sur Windows (`9547332`, test seulement) : `0049`
+appliquée **en local**, E2E verts. Le lot 1 n'est pas complet (tickets 04 à 10) : ne pas déployer
+avant. Rappel d'ordre : `0048` et `0049` à distance, `d1_migrations` relu, **puis** le code.
 
 **État au 2026-09-18 (checkpoint 125) : `0048` ET `0049` EN ATTENTE, dépôt EN AVANCE sur la
 production.** Ticket 03 (`c8c16c7`) poussé, **non déployé**, E2E pas encore joués ; production saine
