@@ -1,4 +1,27 @@
-# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 128 — ticket 18 clos et fusionné, mode opératoire de mise en production)
+# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 129 — leçon du ticket 18 pour le socle : brouillon d'ADR 0003)
+
+## Checkpoint 129 — Ce que le socle n'aurait pas rattrapé : brouillon d'ADR 0003 (2026-09-25)
+
+**Aucun code iziGSM depuis le 128. Production inchangée (`izigsm-v3.11`), `main` = `origin` (`dd2b003`
+avant ce checkpoint). `0048` → `0051` toujours en attente.**
+
+- **Question de l'exploitant** : les points 1, 2, 4 auraient-ils pu être faits par le socle ? Réponse :
+  environ les deux tiers du code (point 2 entier, tests du point 4, code du point 1 avec `0051` en
+  demande d'écriture), **mais** (a) le plan de `todo.md` prescrivait « clé libérée sur échec » avec
+  le test qui la valide : un agent l'aurait codé et les contrôles l'auraient passé ; (b) le socle ne
+  joue aucun E2E (O28), or la preuve décisive (`9 → 14`) en était un ; (c) les mutations de
+  migrations touchent des fichiers critiques (ADR 0002).
+- **Décisions de l'exploitant (socle)** : relecture de conception avant l'agent + arrêt motivé
+  `conception:` ; contrôle `e2e` déclarable + demande d'action ; mutation par l'agent, demande pour
+  les fichiers critiques. Rédigées en **brouillon d'ADR 0003** (+ O39-O41, bloc de doctrine) dans le
+  workspace : `claude-test/project-docs/brouillon-adr-0003-socle.md`, entrée HAUTE du `todo.md`
+  workspace (`f39e2ec`, poussé). **Rien d'écrit dans le dépôt du socle** : une autre session y a la
+  v3.39 en cours (10 fichiers non commités) — décision : attendre son commit.
+- `CLAUDE.md` § Socle : relire la **conception** d'un ticket avant de le confier au socle, tant que
+  l'ADR 0003 n'est pas appliquée.
+
+**Prochaine session** : inchangée — ticket 04 (douchette en caisse). S'il passe par le socle,
+conception relue d'abord, E2E rejoués ici après.
 
 ## Checkpoint 128 — Ticket 18 clos : clé d'ajout idempotente, fusion dans `main` (2026-09-25)
 

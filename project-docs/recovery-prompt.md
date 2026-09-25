@@ -1,4 +1,12 @@
-# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 128 — ticket 18 clos et fusionné)
+# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 129 — brouillon d'ADR 0003 pour le socle)
+
+## Ce qui a changé au checkpoint 129
+
+Aucun code. Leçon du ticket 18 tirée pour le socle : **brouillon d'ADR 0003 « conception et
+preuve »** dans le workspace (`claude-test/project-docs/brouillon-adr-0003-socle.md`), à appliquer
+dans le dépôt du socle **après le commit v3.39** d'une autre session — ⊥ y écrire avant.
+Conséquence ici (`CLAUDE.md` § Socle) : **relire la conception d'un ticket avant de le confier au
+socle**. Première action inchangée : ticket 04.
 
 ## Ce qui a changé au checkpoint 128
 

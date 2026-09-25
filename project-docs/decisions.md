@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-09-25 — Tickets confiés au socle : conception relue d'abord, ADR 0003 en attente
+
+Retour sur le ticket 18 : le plan écrit prescrivait « clé libérée sur échec », avec le test qui la
+valide. Le socle l'aurait exécuté fidèlement. **Décisions de l'exploitant, côté socle** : relecture de
+conception avant l'agent + arrêt motivé `conception:` ; contrôle `e2e` déclarable + demande d'action ;
+preuve par mutation par l'agent, demande d'action pour les fichiers critiques. Rédigées en brouillon
+d'**ADR 0003** (`claude-test/project-docs/brouillon-adr-0003-socle.md`), à appliquer dans le socle
+**après le commit v3.39** (décision : attendre, ⊥ écrire à côté d'une session en cours). D'ici là,
+côté iziGSM : la conception d'un ticket se relit à la main avant de le confier au socle.
+
 ## 2026-09-25 — Ticket 18 : clé d'ajout jamais libérée ; preuve en production sur la boutique 2
 
 **Clé d'ajout (point 1 de la relecture du checkpoint 127).** « Ajouter N au stock » est idempotent

@@ -954,6 +954,14 @@ reste à décider). Le socle se lance **sous WSL Ubuntu**, jamais d'ici. Premiè
   sans profil (`wsl -e bash -c`, cron), `npx` se résout vers celui de Windows (`/mnt/c/…`), tsc ne
   tourne pas et `grep -c "error TS"` compte **0** — typecheck vert sans rien vérifier.
 - Le travail d'un agent ne se reporte ici qu'après relecture humaine, E2E joués, et verdict du socle.
+- **Relire la CONCEPTION d'un ticket avant de le confier au socle** (leçon du ticket 18, 2026-09-25) :
+  le socle exécute fidèlement une prescription fausse. `todo.md` prescrivait « échec ⇒ clé d'ajout
+  libérée », avec le test qui la valide : un agent l'aurait codé, les contrôles l'auraient passé, et le
+  stock aurait pu être compté deux fois. Chercher dans le ticket une opération non atomique, une
+  course, une reprise après échec partiel, un double comptage, un test sur mock pour une règle SQL.
+  Tant que l'**ADR 0003 du socle** (relecture de conception, contrôle `e2e`, preuve par mutation) n'est
+  pas appliquée — brouillon `claude-test/project-docs/brouillon-adr-0003-socle.md`, en attente du
+  commit v3.39 — ce geste est humain.
 
 ## Loop engineering (automatisation)
 
