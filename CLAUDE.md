@@ -1032,6 +1032,9 @@ Détail et rattachement aux trois autres pièges de mesure : `project-docs/modop
 **Jamais automatique.** Toujours sur confirmation explicite de l'utilisateur, y compris
 pour la loop d'automatisation (voir `loop-policy.md`).
 
+**Mode opératoire pas à pas : `project-docs/modop-deploiement.md`** (9 étapes, critère d'arrêt par
+étape) — le suivre à chaque mise en production.
+
 **Obligation d'ordonnancement — migrations avant déploiement.** Si une tâche en cours a
 ajouté une migration D1 (`migrations/00NN_*.sql`) sur laquelle du code déployé s'appuie
 (nouvelle colonne lue/écrite par une route ou un service), cette migration **doit** être
