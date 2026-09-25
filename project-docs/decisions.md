@@ -1,5 +1,20 @@
 # iziGSM — Décisions
 
+## 2026-09-25 — Ticket 18 : clé d'ajout jamais libérée ; preuve en production sur la boutique 2
+
+**Clé d'ajout (point 1 de la relecture du checkpoint 127).** « Ajouter N au stock » est idempotent
+côté serveur : clé tirée par offre à l'écran, réservée dans `ajouts_stock_import` (migration `0051`)
+avant le mouvement. Question apparue à l'écriture : libérer la clé si l'ajout échoue, pour permettre
+de réessayer ? `enregistrerMouvement()` n'est pas atomique (stock écrit **avant** l'entrée du
+journal) : après un échec à mi-course, un nouvel essai ajouterait par-dessus un stock déjà bougé.
+**Décision de l'exploitant : la clé n'est jamais libérée.** Un ajout inachevé répond 409
+`cle_en_cours` (« vérifiez le stock »), l'écran retire le bouton ; l'opérateur rouvre l'import pour
+une nouvelle offre s'il le faut. La sûreté du stock passe avant le confort du nouvel essai.
+
+**Preuve en production.** Pas de boutique de recette dédiée : le geste se rejoue avec le compte
+**`telnet@bbox.fr`** (manager, boutique 2) — « Ajouter 1 au stock » sur une pièce de test
+identifiable, fournisseur Mobilax de **préproduction**. À reprendre dans `modop-deploiement.md`.
+
 ## 2026-09-24 — Ticket 18, relecture du diff : idempotence par clé d'ajout, E2E Mobilax réels gardés
 
 Relecture par l'exploitant du travail reporté (branche `ticket-18-socle-t002`). Quatre points relevés ;

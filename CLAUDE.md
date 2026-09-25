@@ -727,8 +727,15 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
     fournisseur — déjà en stock » (`ajouterStockPieceImportee()`), ancien et nouveau stock rendus.
     Proposé dans la fiche ouverte après un import unitaire `deja_importe` avec une quantité saisie > 0
     (`#stock-ajout-import`), bouton retiré au clic. **Rien ne s'ajoute sans ce clic**, ni à l'import
-    unitaire ni en lot (règle du 2026-09-12 inchangée). Pas de jeton d'idempotence côté serveur : le
-    second clic n'est empêché que par l'écran.
+    unitaire ni en lot (règle du 2026-09-12 inchangée). ~~Pas de jeton d'idempotence côté serveur : le
+    second clic n'est empêché que par l'écran.~~
+  - **Idempotence serveur (2026-09-25, `0051`)** : `POST …/ajout-stock` exige `cle`
+    (`MOTIF_CLE_AJOUT`), tirée par offre à l'écran et renvoyée à chaque essai.
+    `ajouterStockPieceImportee()` la réserve (`INSERT OR IGNORE`, PK `(boutique_id, cle)`) **avant**
+    le mouvement : même clé → premier résultat (`deja_applique`), autre produit ou quantité → 409
+    `cle_reutilisee`, ajout inachevé → 409 `cle_en_cours`. ⊥ **libérer une clé sur échec** : le
+    mouvement n'est pas atomique (stock écrit avant le journal). `rattacherProduitMobilax()` ne
+    rattrape que `produits.boutique_id, produits.mobilax_id`.
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 
@@ -1034,6 +1041,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-25 : production inchangée (`izigsm-v3.11`) ; `0048` → `0051` EN ATTENTE sur
+`main`** (ticket 18 fusionné). `0048` à `0051` appliquées sur la base locale Windows seulement, aucune
+à distance. Lot 1 en bloc : les quatre à distance, `d1_migrations` relu, **puis** le code — sans
+`0050`, tout import Mobilax échoue ; sans `0051`, « Ajouter N au stock » échoue.
 
 **État au 2026-09-24 (checkpoint 127) : production inchangée (`izigsm-v3.11`) ; `0048`, `0049` EN
 ATTENTE sur `main` ; `0050` (et `0051` prévue) sur la branche LOCALE `ticket-18-socle-t002`,
