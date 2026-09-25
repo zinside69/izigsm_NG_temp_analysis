@@ -23,7 +23,8 @@ import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middlewar
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
 import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, type ErreurMobilax } from '../services/mobilaxService'
-import { ajouterStockPieceImportee } from '../services/stockService'
+// AVANT (2026-09-25, point 1 : clé d'ajout) : import { ajouterStockPieceImportee } from '../services/stockService'
+import { ajouterStockPieceImportee, MOTIF_CLE_AJOUT } from '../services/stockService'
 
 // MOBILAX_API_BASE : préproduction ou production (`wrangler.jsonc` › vars), jamais en dur.
 type Bindings  = { DB: D1Database; KV: D1KVNamespace; JWT_SECRET: string; FOURNISSEUR_CRYPTO_KEY: string; MOBILAX_API_BASE: string }
@@ -172,12 +173,24 @@ mobilax.post('/mobilax/produits/:id/ajout-stock', requireRole('admin', 'manager'
   if (!Number.isInteger(produitId) || produitId <= 0)
     return c.json({ success: false, error: 'Produit invalide.' }, 400)
 
-  const body = await c.req.json().catch(() => ({})) as { quantite?: unknown }
+  // AVANT (2026-09-25, point 1 de la relecture : clé d'ajout) : const body = await c.req.json().catch(() => ({})) as { quantite?: unknown }
+  const body = await c.req.json().catch(() => ({})) as { quantite?: unknown; cle?: unknown }
   if (typeof body.quantite !== 'number' || !Number.isInteger(body.quantite) || body.quantite < 1)
     return c.json({ success: false, error: 'La quantité à ajouter doit être un entier supérieur ou égal à 1.' }, 400)
+  // Clé tirée par l'écran pour cette offre : sans elle, un second clic (réponse perdue) ne se
+  // reconnaîtrait pas — refus plutôt qu'un ajout à l'aveugle (point 1, migration 0051)
+  if (typeof body.cle !== 'string' || !MOTIF_CLE_AJOUT.test(body.cle))
+    return c.json({ success: false, error: 'Clé d\'ajout absente ou invalide : rouvrez la fiche depuis l\'import.' }, 400)
 
-  const r = await ajouterStockPieceImportee(c.get('db'), user.boutique_id, user.sub, produitId, body.quantite)
+  // AVANT (2026-09-25, point 1 : clé d'ajout) : const r = await ajouterStockPieceImportee(c.get('db'), user.boutique_id, user.sub, produitId, body.quantite)
+  const r = await ajouterStockPieceImportee(c.get('db'), user.boutique_id, user.sub, produitId, body.quantite, body.cle)
   if (!r) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
+  if ('erreur' in r) return c.json({
+    success: false, code: r.erreur,
+    error: r.erreur === 'cle_en_cours'
+      ? 'Cet ajout a été lancé mais son résultat n\'est pas confirmé : vérifiez le stock de la pièce avant tout nouvel ajout.'
+      : 'Cette clé d\'ajout a déjà servi pour un autre ajout.',
+  }, 409)
   return c.json({ success: true, data: r })
 })
 

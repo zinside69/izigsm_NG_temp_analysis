@@ -626,7 +626,9 @@ export async function rattacherProduitMobilax(
   } catch (err) {
     // Course : un autre import a posé cet identifiant Mobilax entre-temps (index 0050). Le
     // produit reste tel quel ; toute autre erreur remonte.
-    if (/UNIQUE constraint failed/.test(String((err as Error)?.message))) return false
+    // AVANT (2026-09-25, point 2 de la relecture : toute violation d'unicité passait pour la course — une violation 0046 aurait été tue) : if (/UNIQUE constraint failed/.test(String((err as Error)?.message))) return false
+    // Seules les colonnes de `idx_produits_mobilax_id` (0050), dans l'ordre où SQLite les nomme
+    if (/UNIQUE constraint failed: produits\.boutique_id, produits\.mobilax_id\b/.test(String((err as Error)?.message))) return false
     throw err
   }
 }
@@ -657,30 +659,80 @@ export async function completerDescriptionSiVide(
 export const MOTIF_AJOUT_PIECE_DEJA_EN_STOCK = 'Import fournisseur — déjà en stock'
 
 /**
+ * Clé d'ajout acceptée : ce que tire `crypto.randomUUID()` à l'écran, avec de la marge — lettres,
+ * chiffres et tirets, 8 à 64 caractères. Rien d'autre n'entre dans `ajouts_stock_import`.
+ */
+export const MOTIF_CLE_AJOUT = /^[A-Za-z0-9-]{8,64}$/
+
+/** Résultat de « Ajouter N au stock » : l'ajout (fait maintenant ou déjà fait) ou le refus d'une clé. */
+export type ResultatAjoutStock =
+  | { stock_avant: number; stock_apres: number; deja_applique: boolean }
+  | { erreur: 'cle_reutilisee' | 'cle_en_cours' }
+
+/**
  * Ajoute une quantité à une pièce fournisseur déjà en stock, par **une** entrée tracée — le geste
  * explicite que l'import n'accomplit jamais tout seul (règle du 2026-09-12).
+ *
+ * **Idempotent par clé** (migration 0051, point 1 de la relecture du 2026-09-24) : la clé tirée par
+ * l'écran est réservée dans `ajouts_stock_import` AVANT le mouvement. Rejouée (réponse perdue,
+ * second clic), elle rend le premier résultat sans rien rajouter. Une clé réservée dont l'ajout n'a
+ * pas abouti n'est jamais libérée : `enregistrerMouvement()` écrit le stock avant le journal, un
+ * nouvel essai pourrait doubler un stock déjà bougé — on répond `cle_en_cours`.
  *
  * @param db          Port Database
  * @param boutiqueId  Boutique appelante — le produit doit lui appartenir
  * @param userId      Utilisateur qui ajoute (mouvement)
  * @param produitId   Produit déjà en stock
  * @param quantite    Entier ≥ 1
- * @returns           Ancien et nouveau stock, ou `null` si le produit n'est pas de cette boutique
- * @throws            Error si la quantité n'est pas un entier ≥ 1
+ * @param cle         Clé d'ajout de l'offre (`MOTIF_CLE_AJOUT`)
+ * @returns           Ancien et nouveau stock (`deja_applique` si la clé avait déjà servi), un refus
+ *                    de clé, ou `null` si le produit n'est pas de cette boutique
+ * @throws            Error si la quantité n'est pas un entier ≥ 1 ou si la clé est mal formée
  */
+// AVANT (2026-09-25, point 1 : clé d'ajout) : export async function ajouterStockPieceImportee(
+// AVANT (2026-09-25, point 1 : clé d'ajout) :   db: Database, boutiqueId: number, userId: number, produitId: number, quantite: number
+// AVANT (2026-09-25, point 1 : clé d'ajout) : ): Promise<{ stock_avant: number; stock_apres: number } | null> {
 export async function ajouterStockPieceImportee(
-  db: Database, boutiqueId: number, userId: number, produitId: number, quantite: number
-): Promise<{ stock_avant: number; stock_apres: number } | null> {
+  db: Database, boutiqueId: number, userId: number, produitId: number, quantite: number, cle: string
+): Promise<ResultatAjoutStock | null> {
   if (!Number.isInteger(quantite) || quantite < 1)
     throw new Error('La quantité à ajouter doit être un entier supérieur ou égal à 1.')
+  if (typeof cle !== 'string' || !MOTIF_CLE_AJOUT.test(cle))
+    throw new Error('Clé d\'ajout invalide.')
   const produit = await db.get<{ id: number }>(
     'SELECT id FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1',
     [produitId, boutiqueId]
   )
   if (!produit) return null
-  return enregistrerMouvement(db, produitId, userId, {
+  // AVANT (2026-09-25, point 1 : le mouvement ne part qu'une fois la clé réservée) : return enregistrerMouvement(db, produitId, userId, {
+  // AVANT (2026-09-25, point 1) :   type_mouvement: 'entree', quantite, motif: MOTIF_AJOUT_PIECE_DEJA_EN_STOCK,
+  // AVANT (2026-09-25, point 1) : })
+
+  // Réservation : la clé primaire (boutique_id, cle) ne laisse passer qu'une requête, course comprise
+  const reservation = await db.run(
+    `INSERT OR IGNORE INTO ajouts_stock_import (boutique_id, cle, produit_id, quantite, user_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [boutiqueId, cle, produitId, quantite, userId]
+  )
+  if (reservation.changes === 0) {
+    const deja = await db.get<{ produit_id: number; quantite: number; stock_avant: number | null; stock_apres: number | null }>(
+      'SELECT produit_id, quantite, stock_avant, stock_apres FROM ajouts_stock_import WHERE boutique_id = ? AND cle = ?',
+      [boutiqueId, cle]
+    )
+    // Une clé ne vaut que pour l'offre qui l'a tirée : même produit, même quantité
+    if (!deja || deja.produit_id !== produitId || deja.quantite !== quantite) return { erreur: 'cle_reutilisee' }
+    if (deja.stock_avant === null || deja.stock_apres === null) return { erreur: 'cle_en_cours' }
+    return { stock_avant: deja.stock_avant, stock_apres: deja.stock_apres, deja_applique: true }
+  }
+
+  const r = await enregistrerMouvement(db, produitId, userId, {
     type_mouvement: 'entree', quantite, motif: MOTIF_AJOUT_PIECE_DEJA_EN_STOCK,
   })
+  await db.run(
+    'UPDATE ajouts_stock_import SET stock_avant = ?, stock_apres = ? WHERE boutique_id = ? AND cle = ?',
+    [r.stock_avant, r.stock_apres, boutiqueId, cle]
+  )
+  return { ...r, deja_applique: false }
 }
 
 /**

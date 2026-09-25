@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 // @ts-ignore node:sqlite types not available without @types/node — moteur SQLite intégré à Node 24
 import { DatabaseSync } from 'node:sqlite'
+// @ts-ignore node:fs types not available without @types/node
+import { readFileSync } from 'node:fs'
+// @ts-ignore node:path types not available without @types/node
+import { join } from 'node:path'
 import type { Database } from '../src/ports/database'
 import {
   trouverProduitParMobilaxId, rattacherProduitMobilax, completerDescriptionSiVide, ajouterStockPieceImportee,
@@ -86,9 +90,15 @@ function produit(p: Partial<{
 
 const ligne = (id: number): any => sqlite.prepare('SELECT * FROM produits WHERE id = ?').get(id)
 
+// Table des clés d'ajout : lue dans la VRAIE migration 0051, jamais recopiée ici (point 1 de la
+// relecture du 2026-09-24 — idempotence de « Ajouter N au stock » tenue par le serveur)
+// @ts-ignore process types not available without @types/node
+const MIGRATION_0051 = join(process.cwd(), 'migrations', '0051_ajouts_stock_import.sql')
+
 beforeEach(() => {
   sqlite = new DatabaseSync(':memory:')
   sqlite.exec(SCHEMA)
+  sqlite.exec(readFileSync(MIGRATION_0051, 'utf8'))
   db = portSur(sqlite)
 })
 
@@ -153,6 +163,26 @@ describe('rattacherProduitMobilax()', () => {
     expect(await rattacherProduitMobilax(db, 1, id, FOURNISSEUR)).toBe(false)
     expect(ligne(id).mobilax_id).toBeNull()
   })
+
+  // ── Point 2 de la relecture du 2026-09-24 : ne rattraper que la violation de mobilax_id ──────
+
+  it('course : l\'identifiant Mobilax est déjà posé sur un autre produit (index 0050) → false, rien d\'écrit', async () => {
+    produit({ nom: 'Premier import', mobilax_id: 17 })
+    const id = produit()
+    expect(await rattacherProduitMobilax(db, 1, id, FOURNISSEUR)).toBe(false)
+    expect(ligne(id)).toMatchObject({ fournisseur_id: null, reference_fournisseur: null, mobilax_id: null })
+  })
+
+  it('toute AUTRE violation d\'unicité remonte : elle ne doit pas passer pour « déjà rattaché »', async () => {
+    // Le message exact que SQLite rend sur l'index 0046 (source fournisseur)
+    const viole0046: Database = {
+      ...db,
+      async run() {
+        throw new Error('D1_ERROR: UNIQUE constraint failed: produits.boutique_id, produits.fournisseur_id, produits.reference_fournisseur: SQLITE_CONSTRAINT')
+      },
+    }
+    await expect(rattacherProduitMobilax(viole0046, 1, produit(), FOURNISSEUR)).rejects.toThrow(/reference_fournisseur/)
+  })
 })
 
 describe('completerDescriptionSiVide()', () => {
@@ -184,11 +214,17 @@ describe('completerDescriptionSiVide()', () => {
   })
 })
 
+/** Clé d'ajout telle que l'écran la tire (`crypto.randomUUID()`). */
+const CLE = '6f1c2a9e-4b7d-4e21-9a3f-0c5d8e7b1a42'
+const mouvementsDe = (id: number): any[] => sqlite.prepare('SELECT * FROM mouvements_stock WHERE produit_id = ?').all(id)
+
 describe('ajouterStockPieceImportee()', () => {
   it('ajoute la quantité par UNE entrée tracée, et rend l\'ancien et le nouveau stock', async () => {
     const id = produit({ stock_actuel: 4 })
-    const r = await ajouterStockPieceImportee(db, 1, 9, id, 5)
-    expect(r).toEqual({ stock_avant: 4, stock_apres: 9 })
+    // AVANT (2026-09-25, point 1 de la relecture : clé d'ajout obligatoire) : const r = await ajouterStockPieceImportee(db, 1, 9, id, 5)
+    const r = await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)
+    // AVANT (2026-09-25, point 1 : le résultat dit s'il rejoue un ajout déjà fait) : expect(r).toEqual({ stock_avant: 4, stock_apres: 9 })
+    expect(r).toEqual({ stock_avant: 4, stock_apres: 9, deja_applique: false })
     expect(ligne(id).stock_actuel).toBe(9)
     const mouvements = sqlite.prepare('SELECT * FROM mouvements_stock WHERE produit_id = ?').all(id)
     expect(mouvements).toHaveLength(1)
@@ -200,14 +236,90 @@ describe('ajouterStockPieceImportee()', () => {
 
   it('produit d\'une autre boutique : refusé, stock et journal intacts', async () => {
     const id = produit({ boutique_id: 2, stock_actuel: 4 })
-    expect(await ajouterStockPieceImportee(db, 1, 9, id, 5)).toBeNull()
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : expect(await ajouterStockPieceImportee(db, 1, 9, id, 5)).toBeNull()
+    expect(await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)).toBeNull()
     expect(ligne(id).stock_actuel).toBe(4)
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM mouvements_stock').get().n).toBe(0)
+    // Un refus ne réserve pas la clé
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM ajouts_stock_import').get().n).toBe(0)
   })
 
   it.each([0, -3, 1.5, NaN])('quantité %s : refusée, rien n\'est écrit', async (q) => {
     const id = produit({ stock_actuel: 4 })
-    await expect(ajouterStockPieceImportee(db, 1, 9, id, q)).rejects.toThrow(/entier/)
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : await expect(ajouterStockPieceImportee(db, 1, 9, id, q)).rejects.toThrow(/entier/)
+    await expect(ajouterStockPieceImportee(db, 1, 9, id, q, CLE)).rejects.toThrow(/entier/)
     expect(ligne(id).stock_actuel).toBe(4)
   })
+
+  // ── Idempotence (point 1 de la relecture du 2026-09-24) ──────────────────────
+  // Le cas réel : la réponse du premier clic se perd (réseau), l'écran rend le bouton, l'opérateur
+  // reclique. Sans clé, le serveur ajoutait une seconde fois : 4 → 9 → 14.
+
+  it('même clé rejouée : rien n\'est rajouté, le premier résultat est rendu', async () => {
+    const id = produit({ stock_actuel: 4 })
+    await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)
+    const rejeu = await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)
+    expect(rejeu).toEqual({ stock_avant: 4, stock_apres: 9, deja_applique: true })
+    expect(ligne(id).stock_actuel).toBe(9)
+    expect(mouvementsDe(id)).toHaveLength(1)
+  })
+
+  it('deux clés distinctes : deux ajouts voulus, deux entrées', async () => {
+    const id = produit({ stock_actuel: 4 })
+    await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)
+    await ajouterStockPieceImportee(db, 1, 9, id, 5, 'a0b1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d')
+    expect(ligne(id).stock_actuel).toBe(14)
+    expect(mouvementsDe(id)).toHaveLength(2)
+  })
+
+  it('clé réutilisée pour un autre produit ou une autre quantité : refusée, rien n\'est écrit', async () => {
+    const id = produit({ stock_actuel: 4 })
+    const autre = produit({ nom: 'Écran', stock_actuel: 2 })
+    await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)
+    expect(await ajouterStockPieceImportee(db, 1, 9, autre, 5, CLE)).toEqual({ erreur: 'cle_reutilisee' })
+    expect(await ajouterStockPieceImportee(db, 1, 9, id, 3, CLE)).toEqual({ erreur: 'cle_reutilisee' })
+    expect(ligne(id).stock_actuel).toBe(9)
+    expect(ligne(autre).stock_actuel).toBe(2)
+    expect(mouvementsDe(autre)).toHaveLength(0)
+  })
+
+  it('clé réservée par un ajout inachevé : refusée sans rien écrire — l\'opérateur vérifie le stock', async () => {
+    const id = produit({ stock_actuel: 4 })
+    sqlite.prepare(`INSERT INTO ajouts_stock_import (boutique_id, cle, produit_id, quantite, user_id) VALUES (1, ?, ?, 5, 9)`).run(CLE, id)
+    expect(await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)).toEqual({ erreur: 'cle_en_cours' })
+    expect(ligne(id).stock_actuel).toBe(4)
+    expect(mouvementsDe(id)).toHaveLength(0)
+  })
+
+  it('la clé est propre à la boutique : la même clé ailleurs ne bloque rien', async () => {
+    const ici = produit({ stock_actuel: 4 })
+    const labas = produit({ boutique_id: 2, stock_actuel: 1 })
+    await ajouterStockPieceImportee(db, 1, 9, ici, 5, CLE)
+    expect(await ajouterStockPieceImportee(db, 2, 8, labas, 5, CLE)).toEqual({ stock_avant: 1, stock_apres: 6, deja_applique: false })
+  })
+
+  it('mouvement en échec à mi-course : la clé RESTE réservée, un nouvel essai ne double pas le stock', async () => {
+    // enregistrerMouvement() n'est pas atomique : le stock est écrit AVANT l'entrée du journal.
+    // Libérer la clé sur échec laisserait un second essai ajouter par-dessus un stock déjà bougé.
+    const id = produit({ stock_actuel: 4 })
+    const enPanne: Database = {
+      ...db,
+      async run(sql: string, params: unknown[] = []) {
+        if (sql.includes('INSERT INTO mouvements_stock')) throw new Error('D1 indisponible')
+        return db.run(sql, params)
+      },
+    }
+    await expect(ajouterStockPieceImportee(enPanne, 1, 9, id, 5, CLE)).rejects.toThrow(/indisponible/)
+    expect(ligne(id).stock_actuel).toBe(9)
+    expect(await ajouterStockPieceImportee(db, 1, 9, id, 5, CLE)).toEqual({ erreur: 'cle_en_cours' })
+    expect(ligne(id).stock_actuel).toBe(9)
+  })
+
+  it.each(['', 'court', 'avec espace 123', 'x'.repeat(65), 42 as unknown as string])(
+    'clé invalide (%j) : refusée avant toute écriture', async (cle) => {
+      const id = produit({ stock_actuel: 4 })
+      await expect(ajouterStockPieceImportee(db, 1, 9, id, 5, cle)).rejects.toThrow(/clé/i)
+      expect(ligne(id).stock_actuel).toBe(4)
+      expect(sqlite.prepare('SELECT COUNT(*) AS n FROM ajouts_stock_import').get().n).toBe(0)
+    })
 })

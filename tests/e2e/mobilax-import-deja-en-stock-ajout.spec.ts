@@ -106,7 +106,42 @@ test.describe('Stock — pièce déjà en stock : « Ajouter N au stock »', () 
     expect(fiche.stock_actuel).toBe(9)
     const ajoutes = fiche.mouvements.filter((m: any) => m.motif === MOTIF_AJOUT)
     expect(ajoutes.map((m: any) => [m.type_mouvement, m.quantite, m.stock_avant, m.stock_apres])).toEqual([['entree', 5, 4, 9]])
-    expect(ajouts).toEqual([{ quantite: 5 }])
+    // AVANT (2026-09-25, point 1 de la relecture : l'offre envoie sa clé d'ajout) : expect(ajouts).toEqual([{ quantite: 5 }])
+    expect(ajouts).toEqual([{ quantite: 5, cle: expect.stringMatching(/^[0-9a-f-]{36}$/) }])
+  })
+
+  test('réponse perdue après l\'ajout : le second clic renvoie la MÊME clé, le stock n\'est compté qu\'une fois', async ({ page, request }) => {
+    const { headers, produitId, ajouts } = await pieceDejaEnStock(page, request)
+    // Le premier envoi atteint le vrai serveur (qui ajoute), puis sa réponse est coupée : c'est
+    // le cas qui doublait le stock quand seul l'écran empêchait le second clic.
+    let premier = true
+    await page.route(/\/api\/mobilax\/produits\/\d+\/ajout-stock(\?|$)/, async route => {
+      if (!premier) return route.fallback()
+      premier = false
+      // Servi ici sans `fallback()` : la route du harnais ne le verra pas, on le consigne nous-mêmes
+      ajouts.push(route.request().postDataJSON())
+      await route.fetch()
+      await route.abort('connectionreset')
+    })
+    await page.locator('#mobilax-resultats input.mobilax-qte').fill('5')
+    await page.locator('#mobilax-resultats button[data-mobilax-id="17"]').click()
+    await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1')
+
+    const bouton = page.locator('#btn-stock-ajout-import')
+    await bouton.click()
+    await expect(page.locator('#stock-ajout-import-texte')).toContainText('Connexion perdue')
+    // Le serveur a bien ajouté, l'écran ne le sait pas : le bouton reste proposé
+    expect((await ficheProduit(request, headers, produitId)).stock_actuel).toBe(9)
+    await expect(bouton).toBeEnabled()
+
+    await bouton.click()
+    await expect(page.locator('#stock-ajout-import-texte')).toContainText('4 → 9')
+    const fiche = await ficheProduit(request, headers, produitId)
+    expect(fiche.stock_actuel).toBe(9)
+    expect(fiche.mouvements.filter((m: any) => m.motif === MOTIF_AJOUT)).toHaveLength(1)
+    // Deux envois, une seule clé
+    expect(ajouts).toHaveLength(2)
+    expect((ajouts[1] as any).cle).toBe((ajouts[0] as any).cle)
   })
 
   test('sans quantité saisie : aucune offre', async ({ page, request }) => {
@@ -158,10 +193,32 @@ test.describe('Stock — pièce déjà en stock : « Ajouter N au stock »', () 
     const idAutrui = (await cree.json()).id
 
     const r = await request.post(`/api/mobilax/produits/${idAutrui}/ajout-stock`, {
-      headers: { Authorization: `Bearer ${chez.accessToken}` }, data: { quantite: 5 },
+      // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire — sans elle, 400 et non plus 404) : headers: { Authorization: `Bearer ${chez.accessToken}` }, data: { quantite: 5 },
+      headers: { Authorization: `Bearer ${chez.accessToken}` }, data: { quantite: 5, cle: 'e2e-cle-autrui-0001' },
     })
     expect(r.status()).toBe(404)
     expect((await ficheProduit(request, { Authorization: `Bearer ${autre.accessToken}` }, idAutrui)).stock_actuel).toBe(4)
+  })
+
+  test('route d\'ajout : même clé rejouée → premier résultat rendu, un seul mouvement ; clé réutilisée ailleurs → 409', async ({ request }) => {
+    const tenant = await createTenantAdmin(request)
+    const headers = { Authorization: `Bearer ${tenant.accessToken}` }
+    const cree = await request.post('/api/produits', { headers, data: { nom: 'E2E rejeu clé', stock_actuel: 4, stock_minimum: 0 } })
+    const id = (await cree.json()).id
+    const url = `/api/mobilax/produits/${id}/ajout-stock`
+    const cle = 'e2e-cle-rejeu-0001'
+
+    const un = await request.post(url, { headers, data: { quantite: 5, cle } })
+    expect(un.status(), await un.text()).toBe(200)
+    expect((await un.json()).data).toEqual({ stock_avant: 4, stock_apres: 9, deja_applique: false })
+    const deux = await request.post(url, { headers, data: { quantite: 5, cle } })
+    expect((await deux.json()).data).toEqual({ stock_avant: 4, stock_apres: 9, deja_applique: true })
+    const autreQuantite = await request.post(url, { headers, data: { quantite: 3, cle } })
+    expect(autreQuantite.status()).toBe(409)
+
+    const fiche = await ficheProduit(request, headers, id)
+    expect(fiche.stock_actuel).toBe(9)
+    expect(fiche.mouvements.filter((m: any) => m.motif === MOTIF_AJOUT)).toHaveLength(1)
   })
 })
 

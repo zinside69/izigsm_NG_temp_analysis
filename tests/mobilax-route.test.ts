@@ -402,19 +402,27 @@ async function ajouterAuStock(
   return { res, d1 }
 }
 const mouvements = (d1: ReturnType<typeof createMockD1>) => d1.__getCalls().filter(c => c.sql.startsWith('INSERT INTO mouvements_stock'))
+/** Clé d'ajout de l'offre, telle que l'écran la tire (`crypto.randomUUID()`) — point 1 de la relecture. */
+const CLE_AJOUT = '6f1c2a9e-4b7d-4e21-9a3f-0c5d8e7b1a42'
 
 describe('POST /api/mobilax/produits/:id/ajout-stock', () => {
   it('manager : une entrée tracée, l\'ancien et le nouveau stock rendus', async () => {
-    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 })
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 })
+    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5, cle: CLE_AJOUT })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { stock_avant: 4, stock_apres: 9 } })
+    // AVANT (2026-09-25, point 1 : `deja_applique` dit si la clé avait déjà servi) : expect(await res.json()).toEqual({ success: true, data: { stock_avant: 4, stock_apres: 9 } })
+    expect(await res.json()).toEqual({ success: true, data: { stock_avant: 4, stock_apres: 9, deja_applique: false } })
+    // La clé est réservée pour la boutique du jeton, avant le mouvement
+    const reservation = d1.__getCalls().find(c => c.sql.includes('INSERT OR IGNORE INTO ajouts_stock_import'))!
+    expect(reservation.params).toEqual([1, CLE_AJOUT, 41, 5, 7])
     expect(mouvements(d1)).toHaveLength(1)
     expect(mouvements(d1)[0].params).toEqual([41, 1, 'entree', 5, 4, 9, null, 7, 'Import fournisseur — déjà en stock'])
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('produit d\'une autre boutique : 404, aucun mouvement — le produit d\'autrui n\'est pas confirmé', async () => {
-    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 }, { produitDeLaBoutique: false })
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5 }, { produitDeLaBoutique: false })
+    const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, { quantite: 5, cle: CLE_AJOUT }, { produitDeLaBoutique: false })
     expect(res.status).toBe(404)
     expect(mouvements(d1)).toHaveLength(0)
     // La boutique interrogée est celle du jeton
@@ -423,21 +431,35 @@ describe('POST /api/mobilax/produits/:id/ajout-stock', () => {
   })
 
   it('technicien : refusé, comme l\'import', async () => {
-    const { res, d1 } = await ajouterAuStock({ role: 'technicien', boutique_id: 1 }, { quantite: 5 })
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : const { res, d1 } = await ajouterAuStock({ role: 'technicien', boutique_id: 1 }, { quantite: 5 })
+    const { res, d1 } = await ajouterAuStock({ role: 'technicien', boutique_id: 1 }, { quantite: 5, cle: CLE_AJOUT })
     expect(res.status).toBe(403)
     expect(mouvements(d1)).toHaveLength(0)
   })
 
   it('admin plateforme : refusé, aucun mouvement', async () => {
-    const { res, d1 } = await ajouterAuStock({ role: 'admin', boutique_id: null }, { quantite: 5 })
+    // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire) : const { res, d1 } = await ajouterAuStock({ role: 'admin', boutique_id: null }, { quantite: 5 })
+    const { res, d1 } = await ajouterAuStock({ role: 'admin', boutique_id: null }, { quantite: 5, cle: CLE_AJOUT })
     expect(res.status).toBe(403)
     expect(mouvements(d1)).toHaveLength(0)
   })
 
-  it.each([{}, { quantite: 0 }, { quantite: -2 }, { quantite: 1.5 }, { quantite: '5' }])(
+  // AVANT (2026-09-25, point 1 : clé d'ajout obligatoire — sans elle, ces corps échoueraient sur la clé et non plus sur la quantité) : it.each([{}, { quantite: 0 }, { quantite: -2 }, { quantite: 1.5 }, { quantite: '5' }])(
+  it.each([{ cle: CLE_AJOUT }, { quantite: 0, cle: CLE_AJOUT }, { quantite: -2, cle: CLE_AJOUT }, { quantite: 1.5, cle: CLE_AJOUT }, { quantite: '5', cle: CLE_AJOUT }])(
     'quantité invalide (%j) : 400, aucun mouvement', async (corps) => {
       const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, corps)
       expect(res.status).toBe(400)
       expect(mouvements(d1)).toHaveLength(0)
+    })
+
+  // Point 1 de la relecture du 2026-09-24 : sans clé, le serveur ne sait pas reconnaître un second
+  // clic — il refuse plutôt que d'ajouter à l'aveugle.
+  it.each([{ quantite: 5 }, { quantite: 5, cle: '' }, { quantite: 5, cle: 'court' }, { quantite: 5, cle: 12345678 }, { quantite: 5, cle: 'a b c d e f g h' }])(
+    'clé d\'ajout absente ou invalide (%j) : 400, rien de réservé, aucun mouvement', async (corps) => {
+      const { res, d1 } = await ajouterAuStock({ role: 'manager', boutique_id: 1 }, corps)
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as { error: string }).error).toMatch(/clé/i)
+      expect(mouvements(d1)).toHaveLength(0)
+      expect(d1.__getCalls().some(c => c.sql.includes('ajouts_stock_import'))).toBe(false)
     })
 })

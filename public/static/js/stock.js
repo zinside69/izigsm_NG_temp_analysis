@@ -435,9 +435,14 @@ function masquerAjoutImport() {
   if (zone) zone.hidden = true;
 }
 
-/** Affiche l'offre dans la fiche du produit déjà en stock, à côté du message d'import. */
+/**
+ * Affiche l'offre dans la fiche du produit déjà en stock, à côté du message d'import.
+ * L'offre porte sa clé d'ajout, tirée ICI une fois pour toutes : chaque nouvel essai de la même
+ * offre la renvoie, et le serveur ne l'applique qu'une fois (migration 0051, point 1 de la relecture).
+ */
 function proposerAjoutImport(produitId, quantite) {
-  ajoutImportEnAttente = { produitId, quantite };
+  // AVANT (2026-09-25, point 1 : clé d'ajout tirée par offre) : ajoutImportEnAttente = { produitId, quantite };
+  ajoutImportEnAttente = { produitId, quantite, cle: crypto.randomUUID() };
   document.getElementById('stock-ajout-import-texte').textContent =
     `La quantité saisie (${quantite}) n'a pas été ajoutée au stock de cette pièce.`;
   const bouton = document.getElementById('btn-stock-ajout-import');
@@ -451,6 +456,7 @@ function proposerAjoutImport(produitId, quantite) {
  * Clic sur « Ajouter N au stock » : une entrée de stock tracée côté serveur, puis l'ancien et le
  * nouveau stock affichés. L'offre est consommée — le bouton disparaît, un second clic est
  * impossible. Un échec (réseau compris) laisse l'offre en place, message à l'appui.
+ * Réessayer est sûr : la même clé part, le serveur rend le premier résultat sans rien rajouter.
  */
 async function ajouterAuStockDepuisImport() {
   const offre = ajoutImportEnAttente;
@@ -460,10 +466,18 @@ async function ajouterAuStockDepuisImport() {
   bouton.disabled = true;
   try {
     // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
-    const res = (await apiPost(`/api/mobilax/produits/${offre.produitId}/ajout-stock`, { quantite: offre.quantite })).data;
+    // AVANT (2026-09-25, point 1 : la clé de l'offre accompagne chaque essai) : const res = (await apiPost(`/api/mobilax/produits/${offre.produitId}/ajout-stock`, { quantite: offre.quantite })).data;
+    const res = (await apiPost(`/api/mobilax/produits/${offre.produitId}/ajout-stock`, { quantite: offre.quantite, cle: offre.cle })).data;
     if (!res?.success) {
       texte.textContent = res?.error || 'Ajout au stock impossible.';
-      bouton.disabled = false;
+      // AVANT (2026-09-25, point 1 : un ajout au résultat non confirmé ne se relance pas d'ici) : bouton.disabled = false;
+      if (res?.code === 'cle_en_cours') {
+        ajoutImportEnAttente = null;
+        document.getElementById('stock-ajout-import-action').hidden = true;
+        await loadStock();
+      } else {
+        bouton.disabled = false;
+      }
       return;
     }
     ajoutImportEnAttente = null;
@@ -473,7 +487,8 @@ async function ajouterAuStockDepuisImport() {
     await loadStock();
   } catch (e) {
     // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` — l'offre reste, on peut réessayer
-    texte.textContent = 'Connexion perdue : l\'ajout n\'a pas pu être vérifié — consultez le stock avant de réessayer.';
+    // AVANT (2026-09-25, point 1 : réessayer est désormais sûr, la clé de l'offre repart) : texte.textContent = 'Connexion perdue : l\'ajout n\'a pas pu être vérifié — consultez le stock avant de réessayer.';
+    texte.textContent = 'Connexion perdue : l\'ajout n\'a pas pu être confirmé. Vous pouvez réessayer — il ne sera jamais compté deux fois.';
     bouton.disabled = false;
   }
 }
