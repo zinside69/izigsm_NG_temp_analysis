@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 129 — leçon du ticket 18 pour le socle : brouillon d'ADR 0003)
+# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 130 — ménage des branches : il ne reste que `main`)
+
+## Checkpoint 130 — Ménage des branches (2026-09-25)
+
+**Aucun code. Production inchangée (`izigsm-v3.11`). `0048` → `0051` toujours en attente.**
+
+- **Aucun ticket en cours** (relevé des 53 tickets de `.scratch/`) : ouverts, non commencés —
+  `vente-lit-catalogue` 04-09, 11-17 (`ready-for-agent`), 10 (`ready-for-human`) ; `integration-mobilax`
+  05-09 ; `journal-plateforme-lecture` 001-003. Les autres chantiers sont clos (done ou wontfix).
+- **10 branches supprimées, toutes vérifiées avant** (fusionnées dans `main`, ou contenu repris sous une
+  autre empreinte — `git cherry` —, ou remplacées par une version fusionnée) :
+  - locales : `loop/rebrand-app-js-mydesk` (+ `-v2`), `loop/rebrand-login-html-mydesk`,
+    `loop/rebrand-register-js-mydesk`, `worktree-refonte-fiche-a4` ;
+  - distantes, **supprimées par l'exploitant** (`git push origin --delete` est refusé à l'assistant
+    par une règle `deny`) : `loop/rebrand-app-js-mydesk-v2`, `feat/loop-engineering`,
+    `fix/isolation-tickets-put-delete`, `loop/audit-impression-a4`,
+    `loop/rebrand-register-html-mydesk-v2`, `loop/rebrand-register-js-mydesk-v2`.
+  Relu après `fetch --prune` : `main` seule, en local et sur `origin`.
+- Serveur `wrangler` local arrêté (port 3000 libre).
+- Socle : **rien touché** ; il porte 4 commits non poussés d'une autre session (v3.39 en cours). Un
+  `sync push` Windows les pousserait — ⊥ en lancer un avant que cette session ait fini.
+
+**Prochaine session** : ticket 04 (douchette en caisse).
 
 ## Checkpoint 129 — Ce que le socle n'aurait pas rattrapé : brouillon d'ADR 0003 (2026-09-25)
 

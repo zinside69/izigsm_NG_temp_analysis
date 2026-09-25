@@ -1,4 +1,11 @@
-# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 129 — brouillon d'ADR 0003 pour le socle)
+# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 130 — ménage des branches)
+
+## Ce qui a changé au checkpoint 130
+
+Aucun code. **Il ne reste que la branche `main`**, en local et sur `origin` (10 vieilles branches
+`loop/*`, `feat/*`, `fix/*`, `worktree-*` supprimées après vérification). Aucun ticket en cours.
+Première action inchangée : ticket 04. ⚠ Le socle porte 4 commits non poussés d'une autre session :
+⊥ `sync push` Windows tant qu'elle n'a pas fini.
 
 ## Ce qui a changé au checkpoint 129
 
