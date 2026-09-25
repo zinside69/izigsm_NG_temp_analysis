@@ -1,4 +1,46 @@
-# iziGSM — État courant (MàJ : 2026-09-24, checkpoint 127 — ticket 18 fait par le socle, sur une branche locale)
+# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 128 — ticket 18 clos et fusionné, mode opératoire de mise en production)
+
+## Checkpoint 128 — Ticket 18 clos : clé d'ajout idempotente, fusion dans `main` (2026-09-25)
+
+**Production inchangée (`izigsm-v3.11`). `main` poussé et aligné (`f22f8cf`). Migrations `0048` →
+`0051` EN ATTENTE, appliquées sur la base locale Windows seulement.** Lot 1 incomplet : tickets 04 à 09
+`ready-for-agent`, 10 `ready-for-human` (prestataire non choisi) — **pas de déploiement avant**.
+
+- **Point 1 — idempotence serveur de « Ajouter N au stock »** (`9f62463`) : clé tirée par offre à
+  l'écran (`crypto.randomUUID()`), obligatoire (400), réservée par `INSERT OR IGNORE` dans
+  `ajouts_stock_import` (migration **`0051`**, PK `(boutique_id, cle)`, sans FK) **avant** le
+  mouvement. Même clé → premier résultat (`deja_applique: true`) ; autre produit/quantité → 409
+  `cle_reutilisee` ; ajout inachevé → 409 `cle_en_cours`, l'écran retire le bouton. **Écart au plan,
+  décidé** : la clé n'est **jamais libérée** sur échec — `enregistrerMouvement()` écrit le stock avant
+  le journal, un nouvel essai pourrait doubler un stock déjà bougé (`decisions.md`).
+- **Point 2** : `rattacherProduitMobilax()` ne rattrape que `UNIQUE constraint failed:
+  produits.boutique_id, produits.mobilax_id` ; un test de migration verrouille ce libellé.
+- **Point 4** : `tests/produits-mobilax-id-migration.test.ts` et `tests/ajouts-stock-import-migration.test.ts`
+  (vrai SQLite, témoin sans migration) — verts d'emblée (migrations existantes), rouge prouvé par
+  **5 mutations** des migrations, 5 rouges.
+- **Rouge prouvé** : tests service/route vus rouges avant le code ; nouvel E2E « réponse perdue après
+  l'ajout » (`route.fetch()` puis `abort`) rouge sous 2 mutations (clé ignorée côté serveur, clé tirée
+  à chaque clic) avec le **vrai symptôme** `9 → 14`.
+- **Gates** : vitest 1222/1224 (2 permanents), tsc 32, **E2E complets 322/322** (préproduction
+  Mobilax comprise), lignes modifiées en `AVANT :`.
+- **Fusion** : branche rebasée sur `main` (qui portait les docs du 127 — avance rapide directe
+  impossible), avance rapide, puis rebase sur une sauvegarde D1 automatique au push. Branche supprimée
+  après `git cherry`. Ticket 18 `done`, 10 critères cochés, amendement 3.
+- **Décisions de l'exploitant** : preuve en production avec **`telnet@bbox.fr`** (manager, boutique 2),
+  pas de boutique de recette dédiée — geste « Ajouter 1 au stock » sur une pièce de test
+  identifiable, Mobilax de préproduction.
+- **`project-docs/modop-deploiement.md`** (`f22f8cf`) : mise en production en 9 étapes, critère
+  d'arrêt par étape, renvoyé depuis `CLAUDE.md` § Déploiement.
+
+**Pièges de la session** :
+- Playwright : une `page.route()` qui sert la requête par `route.fetch()` sans `fallback()` court-circuite
+  les routes enregistrées **avant** elle — le compteur du harnais ne voit pas ce premier envoi.
+- `git push -q` enchaîné à `git fetch` et `log origin/main..HEAD` a affiché les commits « non poussés »
+  alors que le push avait réussi : relire par `git ls-remote origin refs/heads/main`.
+
+**Prochaine session** : ticket 04 (douchette en caisse) — à la main ou par le socle en bac à sable ;
+`CACHE_VERSION` au dernier ticket d'écran du lot 1. Déploiement du lot 1 selon `modop-deploiement.md`
+quand 01-10 seront faits (10 attend le choix du prestataire).
 
 ## Checkpoint 127 — Ticket 18 : première chaîne complète du socle, travail reporté sur une branche (2026-09-24)
 

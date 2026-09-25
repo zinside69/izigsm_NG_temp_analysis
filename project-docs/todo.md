@@ -35,16 +35,21 @@ Décisions : `decisions.md` § 2026-09-16.
       section 🟠 P2 ci-dessous.
 - [x] **Ticket 03 clos le 2026-09-24** (`9547332`) — E2E joués sur Windows (19/19, 22/22), rouge
       prouvé par mutation, E2E ajouté pour le service à 0 € (trou trouvé par mutation).
-- [ ] **Ticket 18 — mécanisme « zéro appel Mobilax » à trancher** avant de le reprendre
+- [x] **Ticket 18 — mécanisme « zéro appel Mobilax » à trancher** avant de le reprendre
       (`decisions.md` 2026-09-24) : `mobilax_id` stocké sur le produit (migration) ou donnée envoyée
       par l'écran. Essai par le socle non reporté (branche `agent/T-001` du bac à sable
       `~/bac-a-sable/izigsm-t18`, réutilisable après relecture).
       — **Tranché le 2026-09-24** (`mobilax_id` stocké, `da48354`) ; **codé et prouvé** sur la
       branche locale `ticket-18-socle-t002` (`a8b12bd`, checkpoint 127). Reste avant fusion :
-- [ ] **Ticket 18 — avant fusion** (branche `ticket-18-socle-t002`, décisions du 2026-09-24) :
+- [x] **Ticket 18 — avant fusion** (branche `ticket-18-socle-t002`, décisions du 2026-09-24) :
       (1) idempotence serveur de « Ajouter N au stock » par **clé d'ajout**, migration `0051` ;
       (2) `rattacherProduitMobilax()` ne rattrape que la violation de `produits.mobilax_id` ;
       (4) tests des migrations `0050` et `0051` contre un vrai SQLite. Puis fusion, ticket coché.
+      — **Fait et fusionné le 2026-09-25** (checkpoint 128, `d9d09d2`, `9f62463`, `4dd1d40`,
+      poussés). **Écart au plan ci-dessous, décidé** (`decisions.md` 2026-09-25) : une clé n'est
+      **jamais libérée** sur échec du mouvement (non atomique : stock écrit avant le journal) — 409
+      `cle_en_cours` au lieu de « réservation supprimée ». Test (2) : message 0046 simulé par un port,
+      pas un index ajouté (l'`UPDATE` ne touche aucune autre colonne indexée).
   - **Départ** : `git switch ticket-18-socle-t002` (`a8b12bd`). Chaque point : test **vu rouge**
     d'abord ; toute ligne modifiée reste en `// AVANT (date, motif) :` au-dessus de la nouvelle.
   - **(1) Idempotence serveur — clé d'ajout, migration `0051`** (décision `decisions.md` 2026-09-24) :

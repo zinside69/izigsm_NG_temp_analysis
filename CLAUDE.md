@@ -736,6 +736,9 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
     `cle_reutilisee`, ajout inachevé → 409 `cle_en_cours`. ⊥ **libérer une clé sur échec** : le
     mouvement n'est pas atomique (stock écrit avant le journal). `rattacherProduitMobilax()` ne
     rattrape que `produits.boutique_id, produits.mobilax_id`.
+  - E2E « réponse perdue » : `route.fetch()` puis `route.abort()` — le serveur agit, l'écran ne le
+    sait pas. Une route qui répond ainsi, sans `fallback()`, **court-circuite** les routes
+    enregistrées avant elle : consigner l'envoi dans cette route même.
 
 ## Stock — seuil d'alerte, quantité, doublon d'import (depuis 2026-09-12, checkpoint 103)
 

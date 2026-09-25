@@ -1,4 +1,20 @@
-# Recovery Prompt — iziGSM — 2026-09-24 (checkpoint 127 — ticket 18 sur une branche, 3 points avant fusion)
+# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 128 — ticket 18 clos et fusionné)
+
+## Ce qui a changé au checkpoint 128
+
+**Ticket 18 clos, fusionné et poussé** (`main` = `f22f8cf`, aligné sur `origin`). La branche
+`ticket-18-socle-t002` n'existe plus ; le bloc « première action » du 127 ci-dessous est **fait**.
+Production inchangée (`izigsm-v3.11`).
+
+- `0048`, `0049`, `0050`, `0051` : **en attente**, appliquées en local Windows seulement.
+- « Ajouter N au stock » idempotent par **clé d'ajout** (`0051`) ; une clé n'est **jamais libérée**
+  sur échec (`decisions.md` 2026-09-25) — ⊥ le « réservation supprimée » écrit au 127.
+- **Mise en production** : suivre `project-docs/modop-deploiement.md` (9 étapes). Preuve métier avec
+  `telnet@bbox.fr` (manager, boutique 2), pas de boutique de recette.
+- Lot 1 incomplet : tickets **04 à 09** `ready-for-agent`, **10** `ready-for-human` (prestataire).
+
+**Première action** : ticket 04 (douchette en caisse), `.scratch/vente-lit-catalogue/issues/04-*.md` —
+à la main, ou par le socle en bac à sable (O34/O37/O38 ouverts). Tests vus rouges d'abord.
 
 ## Ce qui a changé au checkpoint 127
 
