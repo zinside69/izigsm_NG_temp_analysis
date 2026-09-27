@@ -163,3 +163,31 @@ et l'admin plateforme (403) ; un bouton visible pour eux serait un piège.
       son équivalent générique) ; jamais pour l'admin plateforme.
 - [ ] E2E : compte TECHNICIEN du seed (`fixtures/comptes.ts`) sur un produit rafraîchissable →
       aucun bouton.
+
+**14. Jamais de bouton pour l'admin plateforme** (relecture de conception de T-004, 2026-09-27 ;
+précise le point 13). `peutImporterMobilax()` (`public/static/js/stock.js`) renvoie vrai pour tout
+rôle `admin`, or l'admin plateforme a le rôle `admin` avec un `boutique_id` NULL : consultant une
+boutique, il verrait « Actualiser » et recevrait un 403.
+- [ ] Condition du bouton : rôle manager ou admin **et** pas admin plateforme
+      (`!isAdminPlateforme(session)` ou équivalent) ; ne pas reprendre `peutImporterMobilax()` telle
+      quelle.
+- [ ] E2E : admin plateforme avec une boutique sélectionnée, produit rafraîchissable → aucun bouton ;
+      vu rouge avec `peutImporterMobilax()`.
+
+**15. Les E2E sans clé travaillent sur la vraie D1 locale** (même relecture ; précise les points 11
+et 12). Rien ne pose `produits.mobilax_id` en local sans passer par Mobilax : simuler aussi la
+lecture des produits ferait relire un stub, et un enregistrement qui n'écrit rien passerait vert.
+- [ ] Fixture qui prépare la vraie D1 locale : fournisseur `api_plateforme = 'mobilax'` de la
+      boutique, `mobilax_id` posé sur le produit par SQL local (`wrangler d1 execute --local` ou
+      fixture SQL équivalente), sans appel à Mobilax.
+- [ ] Dans ces specs, **seul** `POST /api/mobilax/produits/:id/rafraichir` peut être simulé
+      (`page.route()`) ; interdit de simuler `GET /api/produits*`. La relecture finale est un `GET`
+      non intercepté qui montre que la base porte bien X.
+
+**16. Une seule règle SQL pour la capacité** (même relecture ; précise les points 8 et 11). Calculer
+`rafraichissable_par` dans une liste paginée pousserait à réécrire en SQL une condition qui existe en
+TypeScript (`mobilaxService`) : deux règles qui peuvent diverger (par exemple sur `f.actif = 1`).
+- [ ] Un seul fragment SQL exporté par `stockService.ts` (jointure + condition d'adaptateur, sur le
+      modèle de `sqlSousSeuil()`), utilisé par `resoudreAdaptateurProduit()`, `listProduits()` et
+      `getProduitById()`.
+- [ ] Le test SQLite réel des cas (a) à (d) passe par ces trois fonctions, sur la même base.
