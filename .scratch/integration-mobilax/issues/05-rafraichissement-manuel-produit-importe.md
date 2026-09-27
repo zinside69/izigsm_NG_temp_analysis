@@ -102,3 +102,25 @@ l'isolation entre boutiques ne se prouve pas avec une seule clé.
       d'écriture avec un prix fourni, sur **deux boutiques**.
 - [ ] L'E2E en préproduction ne garde que le geste d'écran (actualiser, enregistrer, relire).
 - [ ] Le compte rendu de l'agent dit si un test Mobilax a été sauté (clé absente, quota).
+
+**8. La règle d'identité se prouve aussi sur SQLite réel** (relecture de conception de T-002,
+2026-09-27 ; précise les points 1 et 7). Savoir si un produit est un produit Mobilax de *cette*
+boutique tient dans une jointure SQL (`produits.fournisseur_id` → `fournisseurs`,
+`api_plateforme = 'mobilax'`, `fournisseurs.boutique_id = produits.boutique_id`, `mobilax_id` non
+nul) : sur un mock D1, le test passerait même si la requête oubliait un filtre. Le cas existe :
+`rattacherProduitMobilax()` pose `mobilax_id` sans écraser un `fournisseur_id` déjà rempli.
+- [ ] Le test SQLite réel couvre aussi la fonction de **lecture** qui résout le produit et son
+      adaptateur, même base, deux boutiques : (a) `mobilax_id` posé mais fiche fournisseur non
+      Mobilax → aucun adaptateur ; (b) produit de la boutique B demandé par la boutique A → rien ;
+      (c) fiche Mobilax d'une autre boutique → rien ; (d) produit Mobilax conforme → adaptateur
+      `mobilax`.
+- [ ] Les tests de route sur mock ne vérifient que le passage du résultat au code HTTP.
+
+**9. L'écriture revérifie l'identité** (même relecture). Entre la vérification, l'appel réseau à
+Mobilax et l'écriture, le produit peut changer (désactivé, fournisseur ou `mobilax_id` modifié), et
+un futur adaptateur pourrait appeler la fonction d'écriture sans vérifier.
+- [ ] La fonction d'écriture reçoit aussi le `mobilax_id` vérifié ; l'`UPDATE` est conditionné
+      `WHERE id = ? AND boutique_id = ? AND mobilax_id = ? AND actif = 1` et renvoie le nombre de
+      lignes modifiées ; 0 ⇒ la route répond 409, rien écrit.
+- [ ] Test SQLite réel : même produit, `mobilax_id` différent de celui passé → 0 ligne modifiée,
+      prix inchangé.
