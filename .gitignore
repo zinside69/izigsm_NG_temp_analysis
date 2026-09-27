@@ -79,3 +79,6 @@ scripts/loop/.graph-update-failures
 
 # Socle d orchestration : etat local (2026-09-27)
 .orchestrator/
+# Le worktree d un agent recoit node_modules en LIEN SYMBOLIQUE (preparer-worktree.sh) : un lien
+# est un fichier, que le motif node_modules/ (dossier) ne couvre pas. Oubli de l installation du 27/09.
+/node_modules
