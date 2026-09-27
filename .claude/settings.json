@@ -4,6 +4,8 @@
     "defaultMode": "default",
     "disableBypassPermissionsMode": "disable",
     "allow": [
+      "Bash(bash orchestrator/e2e-gate.sh)",
+      "Bash(bash orchestrator/e2e-gate.sh:*)",
       "Bash(cat:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
@@ -130,5 +132,6 @@
     ]
   },
   "cleanupPeriodDays": 30,
-  "includeCoAuthoredBy": false
+  "includeCoAuthoredBy": false,
+  "_commentaire_e2e_agent": "2026-09-27 (decision de l exploitant, T-004) : l agent peut lancer le controle E2E du projet (orchestrator/e2e-gate.sh : D1 locale neuve, .dev.vars factice, jamais la production) pour voir ses tests rouges puis verts. Le script est un fichier critique : l agent ne peut pas le modifier."
 }
