@@ -1,0 +1,20 @@
+{
+  "_commentaire": "Controles iziGSM (bac a sable, 2026-09-21). Reference mesuree sous Linux : tsc 32 erreurs ; vitest 1157 tests dont 2 echecs connus de fuseau (agendaService). Plancher de 1157 tests : supprimer des tests ne doit pas rendre vert.",
+  "gates": {
+    "typecheck": "command -v node >/dev/null && case \"$(command -v npx)\" in /mnt/*|\"\") false ;; *) true ;; esac || { echo \"node/npx Linux introuvables (profil non charge ?) : $(command -v npx)\"; exit 1; }; n=$(npx tsc --noEmit 2>&1 | grep -c \"error TS\"); echo \"erreurs tsc : $n (plafond 32)\"; [ \"$n\" -le 32 ]",
+    "test": "command -v node >/dev/null && case \"$(command -v npx)\" in /mnt/*|\"\") false ;; *) true ;; esac || { echo \"node/npx Linux introuvables (profil non charge ?) : $(command -v npx)\"; exit 1; }; f=$(mktemp); npx vitest run --reporter=json --outputFile=\"$f\" >/dev/null 2>&1; jq -r '\"tests : \\(.numTotalTests), echecs : \\(.numFailedTests)\"' \"$f\"; jq -e --argjson plancher 1224 '(.numTotalTests >= $plancher) and (([.testResults[].assertionResults[] | select(.status == \"failed\") | .fullName] - [\"createRendezVous() calcule fin automatiquement si absent (debut + duree_minutes)\", \"updateRendezVous() recalcule fin si debut change\"]) | length == 0)' \"$f\"",
+    "e2e": "bash \"$ROOT/orchestrator/e2e-gate.sh\""
+  },
+  "_avant_2026_09_24": {
+    "typecheck": "n=$(npx tsc --noEmit 2>&1 | grep -c \"error TS\"); echo \"erreurs tsc : $n (plafond 32)\"; [ \"$n\" -le 32 ]",
+    "test": "f=$(mktemp); npx vitest run --reporter=json --outputFile=\"$f\" >/dev/null 2>&1; jq -r '\"tests : \\(.numTotalTests), echecs : \\(.numFailedTests)\"' \"$f\"; jq -e --argjson plancher 1157 '(.numTotalTests >= $plancher) and (([.testResults[].assertionResults[] | select(.status == \"failed\") | .fullName] - [\"createRendezVous() calcule fin automatiquement si absent (debut + duree_minutes)\", \"updateRendezVous() recalcule fin si debut change\"]) | length == 0)' \"$f\""
+  },
+  "_commentaire_garde": "2026-09-24 : sans profil (cron, systemd, wsl -e bash -c), npx se resolvait vers celui de Windows (/mnt/c) ; tsc ne tournait pas et grep -c comptait 0 erreur : typecheck VERT sans rien verifier. Chaque controle exige node et npx Linux.",
+  "_commentaire_e2e": "2026-09-25 (O28) : e2e = specs E2E du diff de la tache + gardes (menu de gauche, XSS), base D1 locale neuve, serveur arrete dans tous les cas. Script lu dans ROOT. A declarer dans le champ gates des taches d ecran.",
+  "conception": true,
+  "_commentaire_conception": "2026-09-26 : essai reel ADR 0003 R1 (relecture de conception avant l agent)",
+  "_avant_2026_09_27": {
+    "plancher_tests": 1157
+  },
+  "_commentaire_mobilax": "2026-09-27 : repris de izigsm-t18 pour le clone relie a GitHub ; reference mesuree sur main e52f4f7 : tsc 32 erreurs, vitest 1224 tests dont les 2 echecs connus de fuseau : plancher monte a 1224."
+}

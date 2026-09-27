@@ -1,58 +1,134 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable",
     "allow": [
-      "Bash(git status*)",
-      "Bash(git branch*)",
-      "Bash(git checkout*)",
-      "Bash(git pull*)",
-      "Bash(git fetch*)",
-      "Bash(git add*)",
-      "Bash(git commit*)",
-      "Bash(git push origin main)",
-      "Bash(git push -u origin *)",
-      "Bash(git merge --ff-only*)",
-      "Bash(git worktree*)",
-      "Bash(git log*)",
-      "Bash(git diff*)",
-      "Bash(git stash*)",
-
-      "Bash(npm install*)",
-      "Bash(npm ci*)",
-      "Bash(npm test*)",
-      "Bash(npm run build*)",
-      "Bash(npm run test:e2e*)",
-      "Bash(npm run loop:pick*)",
-
-      "Bash(npx tsc*)",
-      "Bash(npx vitest*)",
-      "Bash(npx playwright*)",
-      "Bash(npx wrangler*)",
-      "Bash(npx ccusage*)",
-      "Bash(npx --yes ccusage*)",
-
-      "Bash(node scripts/loop/*)",
-
-      "Read(*)",
-      "Glob(*)",
-      "Grep(*)"
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(ls:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run cf-typegen:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(rg:*)",
+      "Edit(./src/**)",
+      "Edit(./tests/**)",
+      "Read(**)",
+      "Write(./src/**)",
+      "Write(./tests/**)"
+    ],
+    "ask": [
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(pip install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(uv add:*)",
+      "Edit(./package.json)",
+      "Edit(./**/package.json)",
+      "Edit(./Dockerfile)",
+      "Edit(./docker-compose.yml)",
+      "Edit(./.github/**)",
+      "Edit(./infra/**)",
+      "Edit(./terraform/**)",
+      "Edit(./**/migrations/**)",
+      "WebFetch",
+      "WebSearch"
     ],
     "deny": [
-      "Bash(git push --force*)",
-      "Bash(git push -f*)",
-      "Bash(git push origin --delete*)",
-      "Bash(git reset --hard*)",
-      "Bash(git clean -f*)",
-      "Bash(rm -rf *)",
-      "Bash(wrangler pages deploy*)",
-      "Bash(npx wrangler pages deploy*)",
-      "Bash(wrangler secret*)",
-      "Bash(npx wrangler secret*)",
-
-      "Read(.dev.vars)",
-      "Read(.dev.vars.*)",
-      "Read(.env)",
-      "Read(.env.*)"
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.p12)",
+      "Read(./**/credentials.json)",
+      "Read(./**/service-account*.json)",
+      "Read(./.git/config)",
+      "Read(./.orchestrator/state/*.diff)",
+      "Read(./.orchestrator/logs/*)",
+      "Edit(./.git/**)",
+      "Bash(git push:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git checkout main:*)",
+      "Bash(git switch main:*)",
+      "Bash(git rebase main:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(sudo:*)",
+      "Bash(chmod 777:*)",
+      "Bash(chown:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(nc:*)",
+      "Bash(npm publish:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh release create:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(git tag -d:*)",
+      "Bash(docker:*)",
+      "Bash(kubectl:*)",
+      "Bash(terraform apply:*)",
+      "Bash(terraform destroy:*)",
+      "Bash(aws:*)",
+      "Bash(gcloud:*)",
+      "Bash(az:*)",
+      "Bash(eval:*)",
+      "Bash(bash -c:*)",
+      "Bash(sh -c:*)"
     ]
-  }
+  },
+  "disableAllHooks": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-push.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard-publish.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/notify-escalade.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  },
+  "cleanupPeriodDays": 30,
+  "includeCoAuthoredBy": false
 }

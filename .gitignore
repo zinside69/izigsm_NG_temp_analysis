@@ -76,3 +76,6 @@ scripts/loop/.graph-update-failures
 # et un dépôt public n'a pas à porter le rendu de pages tierces. Apparues le 2026-09-09
 # pendant la recherche sur l'API Mobilax.
 .playwright-mcp/
+
+# Socle d orchestration : etat local (2026-09-27)
+.orchestrator/
