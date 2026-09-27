@@ -655,6 +655,78 @@ export async function completerDescriptionSiVide(
   return r.changes > 0
 }
 
+// ─── Rafraîchissement manuel d'une pièce importée (ticket 05, amendement du 2026-09-27) ───────
+
+/** Ce qu'un produit porte pour qu'un adaptateur fournisseur sache le revalider. */
+export interface ProduitAdaptateurApi {
+  produit_id:     number
+  /** Valeur de `fournisseurs.api_plateforme` — `null` si le fournisseur lié n'en a pas. */
+  api_plateforme: string | null
+  /** Identité Mobilax (migration 0050) — seule identité externe existante à ce jour. */
+  mobilax_id:     number | null
+}
+
+/**
+ * Résout, dans SA boutique, si un produit est lié à une fiche fournisseur reliée à une API et
+ * porte l'identifiant que cet adaptateur exige. « Adaptateur choisi par
+ * `fournisseurs.api_plateforme` » (points 1 et 5 de l'amendement du 2026-09-27) : Mobilax est le
+ * seul aujourd'hui — un futur fournisseur à API se distinguerait par une autre valeur
+ * d'`api_plateforme`, sans toucher cette jointure ni la fiche produit.
+ *
+ * Jointure explicite (`f.boutique_id = p.boutique_id`) plutôt que deux lectures séparées : un
+ * mock D1 laisserait passer un test qui aurait oublié ce filtre, une vraie requête ne le peut pas
+ * (point 8 — voir `tests/rafraichissement-mobilax-sqlite.test.ts`, SQLite réel, deux boutiques).
+ * `LEFT JOIN` volontaire : distingue « produit introuvable dans cette boutique » (ligne absente,
+ * 404 à la route) de « produit trouvé mais sans adaptateur » (colonnes nulles, 409 à la route).
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique appelante — filtre d'isolation porté par la requête elle-même
+ * @param produitId   Produit demandé
+ * @returns           `null` si le produit n'existe pas (ou pas dans cette boutique) ; sinon la
+ *                     ligne, `api_plateforme` et/ou `mobilax_id` pouvant être `null`
+ */
+export async function resoudreAdaptateurProduit(
+  db: Database, boutiqueId: number, produitId: number
+): Promise<ProduitAdaptateurApi | null> {
+  return db.get<ProduitAdaptateurApi>(
+    `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id
+     FROM produits p
+     LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.boutique_id = p.boutique_id AND f.actif = 1
+     WHERE p.id = ? AND p.boutique_id = ? AND p.actif = 1`,
+    [produitId, boutiqueId]
+  )
+}
+
+/**
+ * Écrit le prix d'achat revalidé d'une pièce fournisseur importée (rafraîchissement manuel,
+ * ticket 05). Seul `prix_achat_ht` bouge — prix de vente, `prix_achat_cump` et stock ne sont
+ * jamais touchés (cadrage du 2026-09-12, point 2 de l'amendement) : aucune autre colonne ne
+ * figure dans le `SET`, et aucun mouvement de stock n'est écrit ici.
+ *
+ * **Revérifie l'identité au moment même de l'écriture** (point 9) : `mobilax_id` fait partie du
+ * `WHERE`, pas seulement de la lecture qui a choisi l'adaptateur. Entre les deux, le produit a pu
+ * être désactivé ou rattaché ailleurs ; un futur adaptateur qui appellerait cette fonction sans
+ * revérifier en amont ne pourrait pas non plus écrire à tort.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique appelante — filtre d'isolation porté par la requête elle-même
+ * @param produitId   Produit à mettre à jour
+ * @param mobilaxId   Identité Mobilax vérifiée juste avant cet appel — pas relue ici
+ * @param prixAchatHt Nouveau prix d'achat HT, déjà validé (fini, strictement positif)
+ * @returns           `true` si une ligne a été modifiée, `false` sinon (identité invalide,
+ *                     produit désactivé ou d'une autre boutique)
+ */
+export async function ecrirePrixAchatRevalide(
+  db: Database, boutiqueId: number, produitId: number, mobilaxId: number, prixAchatHt: number
+): Promise<boolean> {
+  const r = await db.run(
+    `UPDATE produits SET prix_achat_ht = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND boutique_id = ? AND mobilax_id = ? AND actif = 1`,
+    [prixAchatHt, produitId, boutiqueId, mobilaxId]
+  )
+  return r.changes > 0
+}
+
 /** Motif de l'entrée de stock écrite par « Ajouter N au stock » (ticket 18). */
 export const MOTIF_AJOUT_PIECE_DEJA_EN_STOCK = 'Import fournisseur — déjà en stock'
 
