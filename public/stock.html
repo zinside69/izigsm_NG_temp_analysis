@@ -199,9 +199,24 @@
             <label>Prix de vente HT (€)</label>
             <input type="number" id="stock-price" min="0" step="0.01" placeholder="0.00">
           </div>
+          <!-- Marge affichée : recalculée par editStock() à l'ouverture, et après une actualisation
+               fournisseur (le prix d'achat change, le prix de vente saisi par la boutique jamais). -->
+          <p id="stock-marge" style="grid-column:1/-1;margin:0;font-size:.82rem;color:var(--text-muted);" hidden></p>
           <!-- Lien vers la pièce Mobilax source, en lecture seule (rempli par editStock() quand le
                produit a été importé) : l'EAN est dans le SKU, la référence Mobilax ici. -->
           <p id="stock-ref-mobilax" style="grid-column:1/-1;margin:0;font-size:.82rem;color:var(--text-muted);" hidden></p>
+          <!-- Rafraîchissement manuel auprès du fournisseur qui a fourni la pièce (ticket 05
+               `integration-mobilax`) : le nom du fournisseur (« Mobilax » aujourd'hui) vient du
+               serveur (`rafraichissable_par`), jamais écrit en dur ici — la fiche ne porte aucune
+               logique propre à Mobilax (point 5 de l'amendement). Bouton masqué par `style.display`,
+               jamais par `hidden` (qui ne l'emporte pas sur un `.btn`, CLAUDE.md § Barre latérale). -->
+          <div style="grid-column:1/-1;">
+            <button type="button" class="btn btn-sm btn-outline" id="btn-stock-actualiser" style="display:none" onclick="actualiserProduitFournisseur()">
+              <i class="fas fa-sync"></i> <span id="btn-stock-actualiser-texte">Actualiser</span>
+            </button>
+            <p id="stock-fournisseur-stock" style="margin:6px 0 0;font-size:.82rem;color:var(--text-muted);" hidden></p>
+            <p id="stock-actualiser-message" style="margin:6px 0 0;font-size:.85rem;" hidden></p>
+          </div>
           <!-- Pièce déjà en stock à l'import avec une quantité saisie (ticket 18) : rien ne s'ajoute
                sans ce clic. `hidden` sur des enveloppes sans `display` — jamais sur le .btn. -->
           <div id="stock-ajout-import" style="grid-column:1/-1;" hidden>
