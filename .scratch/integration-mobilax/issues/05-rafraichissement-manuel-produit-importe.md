@@ -84,3 +84,21 @@ accepter des pièces d'autres fournisseurs, par import CSV ou par API.
       un test le prouve.
 - Hors périmètre (tickets à venir) : une identité externe générique par fournisseur en place de
   `mobilax_id` (migration de schéma), l'import de pièces par CSV, un second adaptateur.
+
+**6. Un prix nul ou non numérique ne s'écrit pas** (seconde relecture de conception, 2026-09-27).
+Mobilax peut renvoyer `price: 0` (pièce retirée, sans tarif) : écrit tel quel, il écraserait le vrai
+prix d'achat en silence. Même règle qu'ailleurs dans le dépôt (`prixManquant()` bloque un 0 € venu
+du catalogue).
+- [ ] La route refuse d'écrire (409, rien écrit) si le prix est absent, non numérique, négatif
+      **ou nul**. Tests : `price: 0` ; `price: "44.25"` (chaîne) ; en plus des cas du point 1.
+
+**7. Les règles d'écriture se prouvent sans clé ni réseau** (seconde relecture, 2026-09-27 ; précise
+le point 2). En E2E, la preuve dépendrait de `MOBILAX_API_KEY` et du quota de préproduction : les
+specs Mobilax font `test.skip(!cle)`, le contrôle `e2e` passerait vert sans rien vérifier, et
+l'isolation entre boutiques ne se prouve pas avec une seule clé.
+- [ ] Les règles du point 2 (`prix_vente`, `prix_achat_cump`, `stock_actuel` inchangés, aucun
+      mouvement de stock, filtre `boutique_id`) se prouvent par un test sur **SQLite réel**
+      (`node:sqlite`, comme `tests/email-logs-types-migration.test.ts`) qui appelle la fonction
+      d'écriture avec un prix fourni, sur **deux boutiques**.
+- [ ] L'E2E en préproduction ne garde que le geste d'écran (actualiser, enregistrer, relire).
+- [ ] Le compte rendu de l'agent dit si un test Mobilax a été sauté (clé absente, quota).
