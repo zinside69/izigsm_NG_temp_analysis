@@ -704,6 +704,12 @@ export interface ProduitAdaptateurApi {
   api_plateforme: string | null
   /** Identité Mobilax (migration 0050) — seule identité externe existante à ce jour. */
   mobilax_id:     number | null
+  /**
+   * Nom du fournisseur qui sait revalider ce produit, ou `null` — calculé par
+   * `sqlRafraichissablePar()`, LA seule condition d'adaptateur (point 16) : un appelant lit ce
+   * champ, il ne redérive jamais `api_plateforme`/`mobilax_id` pour la reconstruire lui-même.
+   */
+  rafraichissable_par: string | null
 }
 
 /**
@@ -726,7 +732,8 @@ export async function resoudreAdaptateurProduit(
   db: Database, boutiqueId: number, produitId: number
 ): Promise<ProduitAdaptateurApi | null> {
   return db.get<ProduitAdaptateurApi>(
-    `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id
+    `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id,
+            ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par
      FROM produits p
      ${sqlJointureFournisseurProduit('p', 'f')}
      WHERE p.id = ? AND p.boutique_id = ? AND p.actif = 1`,

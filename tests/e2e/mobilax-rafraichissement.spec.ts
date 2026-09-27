@@ -126,6 +126,9 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     // Fiche rouverte à l'écran, depuis un GET /api/produits réel (loadStock() après saveStock())
     await ouvrirFiche(page, nom)
     await expect(page.locator('#stock-price-buy')).toHaveValue('15.75')
+    // Marge relue (point 5) : (25 - 15.75) / 25 * 100 = 37 %, calculée par le serveur (marge_pct),
+    // pas seulement affichée juste après le clic sur Actualiser (déjà couvert par le 1er test).
+    await expect(page.locator('#stock-marge')).toContainText('37')
   })
 
   test('quota Mobilax atteint (429) : message avec le délai, prix inchangé, bouton réutilisable', async ({ page, request }) => {
@@ -304,19 +307,32 @@ test.describe('Stock — rafraîchissement réel en préproduction', () => {
     await expect(page.locator('#stock-price-buy')).toHaveValue('0.01')
     const bouton = page.locator('#btn-stock-actualiser')
     await expect(bouton).toBeVisible()
-    await bouton.click()
+
+    // Réponse RÉELLE capturée (source indépendante) : la fiche ne doit afficher que ce que le
+    // serveur a effectivement renvoyé — jamais un 0 inventé si `/full` ne porte pas `quantity`
+    // (point 10).
+    const [reponse] = await Promise.all([
+      page.waitForResponse(r => /\/api\/mobilax\/produits\/\d+\/rafraichir(\?|$)/.test(r.url())),
+      bouton.click(),
+    ])
+    const corps = await reponse.json()
+    expect(corps.success, JSON.stringify(corps)).toBe(true)
+    const stockMobilax = corps.data?.stock
 
     const nouveauPrix = Number(await page.locator('#stock-price-buy').inputValue())
     expect(nouveauPrix).toBeGreaterThan(0)
     expect(nouveauPrix).not.toBe(0.01)
+    // Prix relu en base : la vraie D1 locale a bien reçu la valeur revalidée
+    expect((await ficheProduit(request, headers, produitId)).prix_achat_ht).toBe(nouveauPrix)
 
-    // Point 10 : le stock Mobilax affiché doit être celui de Mobilax, jamais un 0 inventé si
-    // `/full` ne porte pas `quantity`. On consigne ici ce qui a été observé, pour le compte rendu.
-    const ficheApi = await ficheProduit(request, headers, produitId)
-    const stockAffiche = page.locator('#stock-fournisseur-stock')
-    const visible = await stockAffiche.isVisible()
-    // eslint-disable-next-line no-console
-    console.log(`[ticket 05, point 10] prix_achat_ht relu=${ficheApi.prix_achat_ht} ; ` +
-      `badge stock Mobilax affiché=${visible} ; texte="${visible ? await stockAffiche.textContent() : ''}"`)
+    const badgeStock = page.locator('#stock-fournisseur-stock')
+    if (Number.isFinite(stockMobilax)) {
+      await expect(badgeStock).toBeVisible()
+      await expect(badgeStock).toContainText('Mobilax')
+      await expect(badgeStock).toContainText(`${stockMobilax} en stock`)
+    } else {
+      // /full ne porte pas quantity pour cette pièce : aucun stock ne doit être inventé à l'écran
+      await expect(badgeStock).toBeHidden()
+    }
   })
 })
