@@ -463,3 +463,127 @@ describe('POST /api/mobilax/produits/:id/ajout-stock', () => {
       expect(d1.__getCalls().some(c => c.sql.includes('ajouts_stock_import'))).toBe(false)
     })
 })
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/mobilax/produits/:id/rafraichir — ticket 05, amendement du 2026-09-27
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// Identité par `mobilax_id` (migration 0050), jamais par `reference_fournisseur` (point 1).
+// Adaptateur choisi par `fournisseurs.api_plateforme` (point 5) : Mobilax est le seul aujourd'hui.
+// Mêmes rôles et mêmes refus que l'import (manager, admin de boutique) ; les règles d'écriture
+// elles-mêmes (isolation, colonnes inchangées, revérification d'identité) sont prouvées contre
+// une vraie D1 locale ailleurs (`tests/rafraichissement-mobilax-sqlite.test.ts`), pas ici : cette
+// suite ne vérifie que le contrat HTTP — qui a le droit, et comment chaque issue devient un
+// statut et un corps.
+
+const SQL_ADAPTATEUR_PRODUIT = `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id
+     FROM produits p
+     LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.boutique_id = p.boutique_id AND f.actif = 1
+     WHERE p.id = ? AND p.boutique_id = ? AND p.actif = 1`
+
+async function rafraichir(
+  compte: { role: string; boutique_id: number | null },
+  produitId = 41,
+  { adaptateur = { produit_id: 41, api_plateforme: 'mobilax', mobilax_id: 17 } as any } = {},
+) {
+  const d1 = createMockD1()
+  d1.__setResponse(SQL_ADAPTATEUR_PRODUIT, adaptateur)
+  d1.__setListResponse(SQL_FOURNISSEUR_API, [{ id: 3, nom: 'MOBILAX', a_cle: 1 }])
+  d1.__setResponse(SQL_CLE_API, { api_key_chiffree: await chiffrer('cle-boutique-1', CLE_CHIFFREMENT) })
+  const { accessToken } = await generateTokenPair(
+    { id: 7, email: 'x@boutique.fr', prenom: 'X', nom: 'Test', ...compte } as any, SECRET,
+  )
+  const res = await app.request(
+    `/api/mobilax/produits/${produitId}/rafraichir`,
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+    { DB: d1, JWT_SECRET: SECRET, FOURNISSEUR_CRYPTO_KEY: CLE_CHIFFREMENT, MOBILAX_API_BASE: BASE } as any,
+    { waitUntil: () => {}, passThroughOnException: () => {} } as any,
+  )
+  return { res, d1 }
+}
+
+function mobilaxRevalide(fiche: { id: number; price: unknown; quantity?: number }, status = 200) {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === `${BASE}/auth`) return json({ token: 'jwt-1', expireIn: '1h' })
+    if (url === `${BASE}/products/17/full`) return json({ status: 'OK', data: fiche }, status)
+    return json({ status: 'NOT_FOUND' }, 404)
+  })
+}
+
+describe('POST /api/mobilax/produits/:id/rafraichir', () => {
+  it('manager : 200 avec le prix revalidé et le stock Mobilax affichable', async () => {
+    mobilaxRevalide({ id: 17, price: 12.9, quantity: 4 })
+    const { res, d1 } = await rafraichir({ role: 'manager', boutique_id: 1 })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { prix_achat_ht: 12.9, stock: 4 } })
+    const ecriture = d1.__getCalls().find(c => c.sql.startsWith('UPDATE produits'))!
+    expect(ecriture.params).toEqual([12.9, 41, 1, 17])
+  })
+
+  it('produit d\'une autre boutique (ou inexistant) : 404, jamais un 409 — son existence n\'est pas confirmée', async () => {
+    const { res, d1 } = await rafraichir({ role: 'manager', boutique_id: 1 }, 41, { adaptateur: null })
+    expect(res.status).toBe(404)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(d1.__getCalls().some(c => c.sql.startsWith('UPDATE produits'))).toBe(false)
+  })
+
+  it('produit non Mobilax (fournisseur sans api_plateforme) : 409, Mobilax jamais appelé', async () => {
+    const { res } = await rafraichir({ role: 'manager', boutique_id: 1 }, 41,
+      { adaptateur: { produit_id: 41, api_plateforme: null, mobilax_id: null } })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ success: false, code: 'non_rattache' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('identifiant renvoyé par Mobilax différent du produit : 409, rien écrit', async () => {
+    mobilaxRevalide({ id: 999, price: 12.9 })
+    const { res, d1 } = await rafraichir({ role: 'manager', boutique_id: 1 })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ success: false, code: 'identifiant_discordant' })
+    expect(d1.__getCalls().some(c => c.sql.startsWith('UPDATE produits'))).toBe(false)
+  })
+
+  it('pièce introuvable chez Mobilax (404) : 409, rien écrit', async () => {
+    mobilaxRevalide({ id: 17, price: 12.9 }, 404)
+    const { res, d1 } = await rafraichir({ role: 'manager', boutique_id: 1 })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ success: false, code: 'supprime_mobilax' })
+    expect(d1.__getCalls().some(c => c.sql.startsWith('UPDATE produits'))).toBe(false)
+  })
+
+  it.each([['nul', 0], ['non numérique', '44.25'], ['négatif', -5], ['absent', undefined]])(
+    'prix %s : 409, rien écrit', async (_libelle, price) => {
+      mobilaxRevalide({ id: 17, price })
+      const { res, d1 } = await rafraichir({ role: 'manager', boutique_id: 1 })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ success: false, code: 'prix_invalide' })
+      expect(d1.__getCalls().some(c => c.sql.startsWith('UPDATE produits'))).toBe(false)
+    })
+
+  it('admin plateforme : refusé, Mobilax jamais appelé', async () => {
+    const { res } = await rafraichir({ role: 'admin', boutique_id: null })
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('technicien : refusé, comme l\'import et l\'ajout au stock', async () => {
+    const { res } = await rafraichir({ role: 'technicien', boutique_id: 1 })
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('identifiant de produit invalide : 400, Mobilax jamais appelé', async () => {
+    const { res } = await rafraichir({ role: 'manager', boutique_id: 1 }, NaN as unknown as number)
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('quota Mobilax atteint : 429 avec le code et le délai', async () => {
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ status: 'RATE_LIMITED' }, 429, { 'ratelimit-reset': '30' }))
+    const { res } = await rafraichir({ role: 'manager', boutique_id: 1 })
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ success: false, code: 'quota', reessayer_dans_s: 30 })
+  })
+})
