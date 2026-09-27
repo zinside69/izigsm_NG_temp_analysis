@@ -191,6 +191,7 @@ export async function listProduits(
     SELECT p.*,
            c.nom AS categorie_nom,
            ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+           ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
            CASE
              WHEN p.stock_actuel = 0               THEN 'rupture'
              WHEN ${sqlSousSeuil('p')}             THEN 'bas'
@@ -198,6 +199,7 @@ export async function listProduits(
            END AS alerte_stock
     FROM   produits p
     LEFT JOIN categories c ON c.id = p.categorie_id
+    ${sqlJointureFournisseurProduit('p', 'f')}
     ${where}
     ORDER  BY p.nom ASC
     LIMIT ? OFFSET ?
@@ -228,9 +230,11 @@ export async function getProduitById(
   const produit = await db.get<any>(`
     SELECT p.*,
            c.nom AS categorie_nom,
-           ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct
+           ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+           ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par
     FROM   produits p
     LEFT JOIN categories c ON c.id = p.categorie_id
+    ${sqlJointureFournisseurProduit('p', 'f')}
     WHERE  p.id = ? AND p.actif = 1
   `, [id])
 
@@ -657,6 +661,42 @@ export async function completerDescriptionSiVide(
 
 // ─── Rafraîchissement manuel d'une pièce importée (ticket 05, amendement du 2026-09-27) ───────
 
+/**
+ * Fragment JOIN unique reliant un produit à SA fiche fournisseur (point 16 de l'amendement,
+ * modèle `sqlSousSeuil()`) : jointure explicite sur `boutique_id` plutôt que deux lectures
+ * séparées — un mock D1 laisserait passer un test qui aurait oublié ce filtre, une vraie requête
+ * ne le peut pas (point 8, `tests/rafraichissement-mobilax-sqlite.test.ts`, SQLite réel, deux
+ * boutiques). `LEFT JOIN` volontaire : un produit sans fournisseur lié reste dans le résultat.
+ * Partagé par `resoudreAdaptateurProduit()`, `listProduits()` et `getProduitById()` — jamais
+ * réécrit à la main ailleurs.
+ *
+ * @param aliasProduit     Alias de `produits` dans la requête
+ * @param aliasFournisseur Alias donné à `fournisseurs` par ce JOIN
+ */
+export function sqlJointureFournisseurProduit(aliasProduit = 'p', aliasFournisseur = 'f'): string {
+  return `LEFT JOIN fournisseurs ${aliasFournisseur} ` +
+    `ON ${aliasFournisseur}.id = ${aliasProduit}.fournisseur_id ` +
+    `AND ${aliasFournisseur}.boutique_id = ${aliasProduit}.boutique_id ` +
+    `AND ${aliasFournisseur}.actif = 1`
+}
+
+/**
+ * Condition d'adaptateur unique (point 16) : nom du fournisseur capable de revalider ce produit,
+ * ou `NULL` si aucun adaptateur ne le sait faire — même condition que `resoudreAdaptateurProduit()`
+ * teste en TypeScript (`api_plateforme === 'mobilax' && mobilax_id !== null`), portée ici en SQL
+ * pour que `listProduits()` et `getProduitById()` ne la réécrivent pas séparément (point 11).
+ * Mobilax est le seul adaptateur aujourd'hui (point 5) : un futur fournisseur à API ajoute un
+ * `WHEN` ici, seul endroit qui connaît la correspondance `api_plateforme` → nom affiché.
+ *
+ * @param aliasProduit     Alias de `produits` dans la requête
+ * @param aliasFournisseur Alias de `fournisseurs`, tel que posé par `sqlJointureFournisseurProduit()`
+ * @returns                Expression SQL (pas de paramètre lié), à nommer `AS rafraichissable_par`
+ */
+export function sqlRafraichissablePar(aliasProduit = 'p', aliasFournisseur = 'f'): string {
+  return `CASE WHEN ${aliasFournisseur}.api_plateforme = 'mobilax' AND ${aliasProduit}.mobilax_id IS NOT NULL ` +
+    `THEN 'Mobilax' ELSE NULL END`
+}
+
 /** Ce qu'un produit porte pour qu'un adaptateur fournisseur sache le revalider. */
 export interface ProduitAdaptateurApi {
   produit_id:     number
@@ -664,6 +704,12 @@ export interface ProduitAdaptateurApi {
   api_plateforme: string | null
   /** Identité Mobilax (migration 0050) — seule identité externe existante à ce jour. */
   mobilax_id:     number | null
+  /**
+   * Nom du fournisseur qui sait revalider ce produit, ou `null` — calculé par
+   * `sqlRafraichissablePar()`, LA seule condition d'adaptateur (point 16) : un appelant lit ce
+   * champ, il ne redérive jamais `api_plateforme`/`mobilax_id` pour la reconstruire lui-même.
+   */
+  rafraichissable_par: string | null
 }
 
 /**
@@ -673,9 +719,6 @@ export interface ProduitAdaptateurApi {
  * seul aujourd'hui — un futur fournisseur à API se distinguerait par une autre valeur
  * d'`api_plateforme`, sans toucher cette jointure ni la fiche produit.
  *
- * Jointure explicite (`f.boutique_id = p.boutique_id`) plutôt que deux lectures séparées : un
- * mock D1 laisserait passer un test qui aurait oublié ce filtre, une vraie requête ne le peut pas
- * (point 8 — voir `tests/rafraichissement-mobilax-sqlite.test.ts`, SQLite réel, deux boutiques).
  * `LEFT JOIN` volontaire : distingue « produit introuvable dans cette boutique » (ligne absente,
  * 404 à la route) de « produit trouvé mais sans adaptateur » (colonnes nulles, 409 à la route).
  *
@@ -689,9 +732,10 @@ export async function resoudreAdaptateurProduit(
   db: Database, boutiqueId: number, produitId: number
 ): Promise<ProduitAdaptateurApi | null> {
   return db.get<ProduitAdaptateurApi>(
-    `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id
+    `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id,
+            ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par
      FROM produits p
-     LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.boutique_id = p.boutique_id AND f.actif = 1
+     ${sqlJointureFournisseurProduit('p', 'f')}
      WHERE p.id = ? AND p.boutique_id = ? AND p.actif = 1`,
     [produitId, boutiqueId]
   )

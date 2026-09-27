@@ -134,6 +134,11 @@ async function loadStock() {
       notes:           p.description    || '',
       reference_fournisseur: p.reference_fournisseur || '',
       fournisseur_id:  p.fournisseur_id ?? null,
+      // Capacité exposée par le serveur (ticket 05, points 11 et 16) : nom du fournisseur sachant
+      // revalider cette pièce (`'Mobilax'` aujourd'hui), ou `null`. Calculé par la même jointure
+      // que `resoudreAdaptateurProduit()` (stockService.ts) — l'écran ne devine jamais lui-même.
+      rafraichissable_par: p.rafraichissable_par || null,
+      marge_pct:       p.marge_pct       ?? null,
       actif:           p.actif          ?? 1,
       createdAt:       p.created_at     || '',
     }));
@@ -384,6 +389,8 @@ function editStock(id) {
     refMobilax.textContent = item.reference_fournisseur ? `Réf. ${item.supplier || 'fournisseur'} : ${item.reference_fournisseur}` : '';
     refMobilax.hidden = !item.reference_fournisseur;
   }
+  afficherMarge(item.marge_pct);
+  preparerActualisationFournisseur(item.id, item.rafraichissable_par);
 
   // Catégorie
   const catEl = document.getElementById('stock-category');
@@ -419,6 +426,8 @@ function resetStockForm() {
   const btnAjuster = document.getElementById('btn-stock-ajuster');
   if (btnAjuster) btnAjuster.style.display = 'none';
   masquerAjoutImport();
+  afficherMarge(null);
+  preparerActualisationFournisseur(null, null);
 }
 
 /**
@@ -493,6 +502,111 @@ async function ajouterAuStockDepuisImport() {
   }
 }
 document.getElementById('btn-stock-ajout-import')?.addEventListener('click', ajouterAuStockDepuisImport);
+
+// ─── Rafraîchissement manuel d'une pièce importée (ticket 05 `integration-mobilax`) ────────────
+// La fiche ne connaît QUE ce que le serveur lui dit (point 5 de l'amendement du 2026-09-27) :
+// `rafraichissable_par` (nom du fournisseur, ou `null`) vient de la même jointure que
+// `resoudreAdaptateurProduit()` (`stockService.ts`) — jamais deviné ici à partir de `mobilax_id`
+// ou d'une autre colonne. Ajouter un fournisseur à API n'a rien à changer sur cette page.
+
+/** Fournisseur du produit actuellement ouvert dans la fiche (nom affiché), ou `null`. */
+let ficheRafraichissablePar = null;
+
+/**
+ * Rôles autorisés à actualiser une pièce fournisseur — mêmes rôles que l'import (point 13),
+ * MAIS jamais l'admin plateforme (point 14) : `peutImporterMobilax()` renvoie vrai pour tout
+ * rôle `admin`, y compris l'admin plateforme (rôle `admin`, `boutique_id` NULL) qui consulterait
+ * une boutique cliente — il recevrait un 403 du serveur si le bouton le laissait cliquer.
+ */
+function peutActualiserFournisseur() {
+  return ['admin', 'manager'].includes(sessionCourante()?.role) && !isAdminPlateforme();
+}
+
+/**
+ * Affiche ou masque « Actualiser » à l'ouverture de la fiche, selon la capacité exposée par le
+ * serveur et le rôle courant. Referme aussi le stock fournisseur et le message d'une actualisation
+ * précédente : ils ne valent que pour la fiche qui vient de se fermer.
+ * @param produitId          Produit ouvert, `null` à la création
+ * @param rafraichissablePar Nom du fournisseur (`rafraichissable_par`), ou `null`
+ */
+function preparerActualisationFournisseur(produitId, rafraichissablePar) {
+  ficheRafraichissablePar = rafraichissablePar || null;
+  const bouton = document.getElementById('btn-stock-actualiser');
+  const peut = produitId != null && !!ficheRafraichissablePar && peutActualiserFournisseur();
+  bouton.style.display = peut ? '' : 'none';
+  bouton.disabled = false;
+  document.getElementById('btn-stock-actualiser-texte').textContent = 'Actualiser';
+  document.getElementById('stock-fournisseur-stock').hidden = true;
+  const msg = document.getElementById('stock-actualiser-message');
+  msg.hidden = true;
+  msg.style.color = '';
+}
+
+/**
+ * Marge affichée (`marge_pct`, calculée par le serveur, même formule que `listProduits()` /
+ * `getProduitById()`) — jamais recalculée séparément ici, pour ne pas diverger de la valeur que
+ * l'API renverrait à la prochaine lecture.
+ * @param margePct `null`/`undefined` masque l'affichage (création, marge non calculable)
+ */
+function afficherMarge(margePct) {
+  const el = document.getElementById('stock-marge');
+  if (margePct == null || Number.isNaN(Number(margePct))) { el.hidden = true; return; }
+  el.textContent = `Marge : ${Number(margePct).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
+  el.hidden = false;
+}
+
+/**
+ * Clic sur « Actualiser » : revalide prix (et stock, affiché seulement) auprès du fournisseur du
+ * produit, via `POST /api/mobilax/produits/:id/rafraichir` — la route choisit elle-même
+ * l'adaptateur (point 5), l'écran ne fait qu'afficher le résultat. Le prix d'achat et la marge du
+ * FORMULAIRE OUVERT sont réécrits (point 4) : un « Enregistrer » qui suivrait doit repartir avec
+ * la valeur revalidée, pas l'ancienne. Toute erreur (429, indisponible, réseau coupé) laisse le
+ * prix d'achat affiché intact et rend le bouton utilisable de nouveau (point 3).
+ */
+async function actualiserProduitFournisseur() {
+  const produitId = document.getElementById('stock-id').value;
+  if (!produitId || !ficheRafraichissablePar) return;
+  const bouton  = document.getElementById('btn-stock-actualiser');
+  const texte   = document.getElementById('btn-stock-actualiser-texte');
+  const msg     = document.getElementById('stock-actualiser-message');
+  const fournisseurStock = document.getElementById('stock-fournisseur-stock');
+  bouton.disabled = true;
+  texte.textContent = 'Actualisation…';
+  msg.hidden = true;
+  try {
+    // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+    const res = (await apiPost(`/api/mobilax/produits/${produitId}/rafraichir`, {})).data;
+    if (!res?.success) {
+      msg.textContent = res?.code === 'quota' && res?.reessayer_dans_s
+        ? `${res.error} Réessayez dans ${res.reessayer_dans_s} s.`
+        : (res?.error || `Actualisation impossible auprès de ${ficheRafraichissablePar}.`);
+      msg.style.color = '#b42318';
+      msg.hidden = false;
+      return;
+    }
+    // Prix d'achat du formulaire ouvert réécrit ; le prix de vente n'est jamais touché (cadrage du
+    // 2026-09-12) — la marge affichée est recalculée à partir des deux champs du formulaire.
+    document.getElementById('stock-price-buy').value = res.data.prix_achat_ht;
+    const prixVente = parseFloat(document.getElementById('stock-price').value) || 0;
+    const prixAchat = Number(res.data.prix_achat_ht) || 0;
+    afficherMarge(prixVente > 0 ? (prixVente - prixAchat) / prixVente * 100 : null);
+    if (Number.isFinite(res.data.stock)) {
+      const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      fournisseurStock.textContent = `Chez ${ficheRafraichissablePar} : ${res.data.stock} en stock (vérifié à ${heure}).`;
+      fournisseurStock.hidden = false;
+    }
+    await loadStock();
+  } catch (e) {
+    // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (CLAUDE.md § Envoi d'email) —
+    // le prix d'achat affiché reste celui d'avant, réessayer est sûr (aucune écriture partielle)
+    msg.textContent = `Connexion perdue : impossible de joindre ${ficheRafraichissablePar}. Réessayez.`;
+    msg.style.color = '#b42318';
+    msg.hidden = false;
+  } finally {
+    bouton.disabled = false;
+    texte.textContent = 'Actualiser';
+  }
+}
 
 /** Depuis la fiche d'un produit : la ferme et ouvre « Ajuster le stock » sur ce produit. */
 function ajusterDepuisFiche() {
