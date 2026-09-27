@@ -124,3 +124,12 @@ un futur adaptateur pourrait appeler la fonction d'écriture sans vérifier.
       lignes modifiées ; 0 ⇒ la route répond 409, rien écrit.
 - [ ] Test SQLite réel : même produit, `mobilax_id` différent de celui passé → 0 ligne modifiée,
       prix inchangé.
+
+**10. Le stock Mobilax affiché est vérifié en préproduction** (relecture de la PR #7, T-002,
+2026-09-27). La partie serveur revalide par `GET /products/:id/full` (identité `mobilax_id`) et non
+par le `lookup` mesuré le 2026-09-12 ; le champ `quantity` de `/full` n'a pas été vérifié : s'il
+manque, la route rend `stock: 0` et la fiche afficherait « Chez Mobilax : 0 en stock » à tort.
+- [ ] L'E2E en préproduction (point 7) vérifie que le stock Mobilax affiché après « Actualiser »
+      est celui de Mobilax (non nul pour une pièce disponible), ou, si `/full` ne porte pas le
+      stock, que la fiche n'affiche **aucun** stock Mobilax plutôt qu'un 0 inventé ; le compte
+      rendu dit ce que `/full` renvoie réellement pour le stock.
