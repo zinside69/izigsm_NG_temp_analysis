@@ -43,6 +43,8 @@ import {
   createCategorie,
   getKpisStock,
   importCatalogueCsv,
+  sqlJointureFournisseurProduit,
+  sqlRafraichissablePar,
   type ProduitRow,
   type KpisStock,
 } from '../src/services/stockService'
@@ -109,6 +111,7 @@ const SQL_SELECT_BASE = n(`
   SELECT p.*,
          c.nom AS categorie_nom,
          ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+         ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
          CASE
            WHEN p.stock_actuel = 0               THEN 'rupture'
            WHEN ${sqlSousSeuil('p')} THEN 'bas'
@@ -116,6 +119,7 @@ const SQL_SELECT_BASE = n(`
          END AS alerte_stock
   FROM   produits p
   LEFT JOIN categories c ON c.id = p.categorie_id
+  ${sqlJointureFournisseurProduit('p', 'f')}
   WHERE p.boutique_id = ? AND p.actif = 1
   ORDER  BY p.nom ASC
   LIMIT ? OFFSET ?
@@ -125,9 +129,11 @@ const SQL_SELECT_BASE = n(`
 const SQL_GET_PRODUIT = n(`
   SELECT p.*,
          c.nom AS categorie_nom,
-         ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct
+         ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+         ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par
   FROM   produits p
   LEFT JOIN categories c ON c.id = p.categorie_id
+  ${sqlJointureFournisseurProduit('p', 'f')}
   WHERE  p.id = ? AND p.actif = 1
 `)
 
@@ -319,6 +325,7 @@ describe('stockService', () => {
         SELECT p.*,
                c.nom AS categorie_nom,
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+               ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
                  WHEN ${sqlSousSeuil('p')} THEN 'bas'
@@ -326,6 +333,7 @@ describe('stockService', () => {
                END AS alerte_stock
         FROM   produits p
         LEFT JOIN categories c ON c.id = p.categorie_id
+        ${sqlJointureFournisseurProduit('p', 'f')}
         WHERE p.boutique_id = ? AND p.actif = 1
         ORDER  BY p.nom ASC
         LIMIT ? OFFSET ?
@@ -347,6 +355,7 @@ describe('stockService', () => {
         SELECT p.*,
                c.nom AS categorie_nom,
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+               ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
                  WHEN ${sqlSousSeuil('p')} THEN 'bas'
@@ -354,6 +363,7 @@ describe('stockService', () => {
                END AS alerte_stock
         FROM   produits p
         LEFT JOIN categories c ON c.id = p.categorie_id
+        ${sqlJointureFournisseurProduit('p', 'f')}
         WHERE p.boutique_id = ? AND p.actif = 1 AND p.categorie_id = ?
         ORDER  BY p.nom ASC
         LIMIT ? OFFSET ?
@@ -385,6 +395,7 @@ describe('stockService', () => {
         SELECT p.*,
                c.nom AS categorie_nom,
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+               ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
                  WHEN ${sqlSousSeuil('p')} THEN 'bas'
@@ -392,6 +403,7 @@ describe('stockService', () => {
                END AS alerte_stock
         FROM   produits p
         LEFT JOIN categories c ON c.id = p.categorie_id
+        ${sqlJointureFournisseurProduit('p', 'f')}
         WHERE p.boutique_id = ? AND p.actif = 1 AND ${sqlSousSeuil('p')}
         ORDER  BY p.nom ASC
         LIMIT ? OFFSET ?
@@ -416,6 +428,7 @@ describe('stockService', () => {
         SELECT p.*,
                c.nom AS categorie_nom,
                ROUND((p.prix_vente_ht - p.prix_achat_ht) / NULLIF(p.prix_vente_ht, 0) * 100, 1) AS marge_pct,
+               ${sqlRafraichissablePar('p', 'f')} AS rafraichissable_par,
                CASE
                  WHEN p.stock_actuel = 0               THEN 'rupture'
                  WHEN ${sqlSousSeuil('p')} THEN 'bas'
@@ -423,6 +436,7 @@ describe('stockService', () => {
                END AS alerte_stock
         FROM   produits p
         LEFT JOIN categories c ON c.id = p.categorie_id
+        ${sqlJointureFournisseurProduit('p', 'f')}
         WHERE p.boutique_id = ? AND p.actif = 1 AND (p.nom LIKE ? OR p.sku LIKE ? OR p.marque LIKE ?)
         ORDER  BY p.nom ASC
         LIMIT ? OFFSET ?
