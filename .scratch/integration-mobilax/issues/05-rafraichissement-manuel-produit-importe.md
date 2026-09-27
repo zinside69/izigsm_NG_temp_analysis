@@ -69,3 +69,18 @@ texte, un « Enregistrer » renvoie l'ancien prix d'achat.
 - [ ] La réponse de la route réécrit le champ prix d'achat du formulaire ouvert, et la marge est
       recalculée à l'écran.
 - [ ] E2E : Actualiser → Enregistrer → relecture de la fiche : la valeur Mobilax a survécu.
+
+**5. Plusieurs fournisseurs à venir : rien de propre à Mobilax hors de son adaptateur** (précision de
+l'exploitant, 2026-09-27). Mobilax est aujourd'hui le seul fournisseur relié, mais iziGSM devra
+accepter des pièces d'autres fournisseurs, par import CSV ou par API.
+- [ ] Le rafraîchissement passe par le fournisseur du produit : la route et le service choisissent
+      l'adaptateur d'après `fournisseurs.api_plateforme` ; Mobilax est le seul adaptateur
+      aujourd'hui (`mobilaxService.ts` reste le seul lecteur de Mobilax). Ajouter un fournisseur à
+      API = ajouter un adaptateur, sans toucher à la fiche produit ni à la route.
+- [ ] La fiche produit ne porte aucune logique Mobilax : elle affiche « Actualiser » quand le
+      fournisseur du produit sait rafraîchir, et nomme ce fournisseur dans ses messages
+      (« Chez Mobilax : N en stock… »).
+- [ ] Un produit d'un fournisseur sans API (saisie manuelle, futur import CSV) n'a pas de bouton ;
+      un test le prouve.
+- Hors périmètre (tickets à venir) : une identité externe générique par fournisseur en place de
+  `mobilax_id` (migration de schéma), l'import de pièces par CSV, un second adaptateur.
