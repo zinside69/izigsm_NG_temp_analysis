@@ -133,3 +133,33 @@ manque, la route rend `stock: 0` et la fiche afficherait « Chez Mobilax : 0 en 
       est celui de Mobilax (non nul pour une pièce disponible), ou, si `/full` ne porte pas le
       stock, que la fiche n'affiche **aucun** stock Mobilax plutôt qu'un 0 inventé ; le compte
       rendu dit ce que `/full` renvoie réellement pour le stock.
+
+**11. Le serveur expose la capacité de rafraîchir ; l'écran ne fait que l'afficher** (relecture de
+conception de T-003, 2026-09-27 ; précise les points 1, 5 et 8). `listProduits()` et la lecture
+d'un produit ne transmettent aujourd'hui rien de `fournisseurs.api_plateforme` au navigateur :
+l'écran devrait sinon deviner (bouton dès que `mobilax_id` existe — faux dans le cas (a) du point 8)
+ou recopier la règle d'identité (jamais prouvée).
+- [ ] La lecture produit (liste et fiche) renvoie un champ générique, par exemple
+      `rafraichissable_par` (nom du fournisseur, `'Mobilax'` aujourd'hui, ou `null`), calculé par la
+      **même jointure** que `resoudreAdaptateurProduit()` (T-002) — jamais une seconde règle.
+- [ ] Prouvé sur SQLite réel, cas (a) à (d) du point 8 : `null` pour (a), (b), (c), `'Mobilax'`
+      pour (d).
+- [ ] L'écran affiche « Actualiser » si et seulement si ce champ est présent, et nomme ce
+      fournisseur dans ses messages. E2E : produit portant `mobilax_id` mais lié à une fiche non
+      Mobilax → aucun bouton.
+
+**12. Le formulaire est prouvé sans clé ni réseau** (même relecture ; précise les points 4 et 7).
+Dans une spec sautée sans `MOBILAX_API_KEY` (`test.skip(!cle)`), le seul test du point 4 passerait
+vert sans rien vérifier.
+- [ ] E2E sans clé : `page.route()` sur `POST /api/mobilax/produits/:id/rafraichir` renvoie
+      `{ success: true, data: { prix_achat_ht: X, stock: N } }` ; « Enregistrer » part vers la
+      vraie D1 locale ; la fiche est relue depuis le serveur et affiche X ; la marge est vérifiée.
+      Test vu rouge sur une version qui ne réécrit pas le champ du formulaire.
+- [ ] La spec de préproduction (clé réelle) reste en plus, pour le point 10.
+
+**13. Le bouton suit les mêmes rôles que l'import** (même relecture). La route refuse le technicien
+et l'admin plateforme (403) ; un bouton visible pour eux serait un piège.
+- [ ] « Actualiser » n'apparaît que pour les rôles autorisés à importer (`peutImporterMobilax()` ou
+      son équivalent générique) ; jamais pour l'admin plateforme.
+- [ ] E2E : compte TECHNICIEN du seed (`fixtures/comptes.ts`) sur un produit rafraîchissable →
+      aucun bouton.
