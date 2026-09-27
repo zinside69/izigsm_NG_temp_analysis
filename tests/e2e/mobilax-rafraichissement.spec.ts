@@ -14,6 +14,13 @@
  *     Mobilax), puis `POST …/rafraichir` est simulé par `page.route()`. Prouve l'affichage, la
  *     survie du prix au formulaire, les trois messages d'erreur, et la visibilité par rôle.
  *   - Groupe B, VRAIE préproduction (points 7 et 10) : clé lue dans `.dev.vars`, sautée sans elle.
+ *
+ * La fiche s'ouvre par le même geste qu'un opérateur : clic sur « Modifier » de la ligne du
+ * tableau, retrouvée par son nom. `page.goto('/stock')` ne garantit QUE la navigation — pas les
+ * requêtes async de `DOMContentLoaded` (`loadStock()` notamment) : `editStock()` cherche le
+ * produit dans `allStockCache`, encore vide juste après le `goto()`. Un `page.evaluate(() =>
+ * editStock(id))` immédiat ne trouvait donc rien et le modal restait fermé — corrigé en attendant
+ * que la ligne du produit soit visible avant de cliquer « Modifier ».
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test'
 import { createTenantAdmin } from './fixtures/tenant'
@@ -40,18 +47,27 @@ async function ficheProduit(request: APIRequestContext, headers: Record<string, 
   return (await r.json()).data
 }
 
-/** Ouvre la fiche d'un produit — même geste que le bouton « Modifier » de la ligne du tableau. */
-async function ouvrirFiche(page: Page, produitId: number) {
-  await page.evaluate((id: number) => (globalThis as any).editStock(id), produitId)
+/**
+ * Ouvre la fiche d'un produit par son NOM (jamais par `page.evaluate(() => editStock(id))` juste
+ * après `page.goto()` : `allStockCache` n'est peuplé qu'une fois `loadStock()` terminé, une requête
+ * asynchrone que la navigation n'attend pas) — même geste qu'un opérateur : attendre la ligne du
+ * tableau, cliquer « Modifier ». Sert aussi de preuve que la fiche est bien ouverte avant qu'un
+ * test « aucun bouton » ne conclue quoi que ce soit sur son contenu.
+ */
+async function ouvrirFiche(page: Page, nom: string) {
+  const ligne = page.locator('#stock-tbody tr', { hasText: nom }).first()
+  await expect(ligne).toBeVisible({ timeout: 20_000 })
+  await ligne.getByTitle('Modifier').click()
   await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1')
 }
 
 test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (sans clé ni réseau)', () => {
   test('bouton visible pour un manager, actualise le prix d\'achat, la marge et affiche le stock fournisseur', async ({ page, request }) => {
+    const nom = 'E2E écran à actualiser'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E écran à actualiser', prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900001,
+      nom, prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900001,
     })
     await page.route(`**/api/mobilax/produits/${produitId}/rafraichir*`, route => route.fulfill({
       json: { success: true, data: { prix_achat_ht: 12.5, stock: 7 } },
@@ -60,7 +76,7 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
 
     const bouton = page.locator('#btn-stock-actualiser')
     await expect(bouton).toBeVisible()
@@ -80,10 +96,11 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
   })
 
   test('Actualiser puis Enregistrer : la valeur revalidée survit à la relecture de la fiche (point 4 et 12)', async ({ page, request }) => {
+    const nom = 'E2E persistance actualisation'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E persistance actualisation', prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900002,
+      nom, prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900002,
     })
     // Seule la route de rafraîchissement est simulée : « Enregistrer » part vers la vraie D1 locale.
     await page.route(`**/api/mobilax/produits/${produitId}/rafraichir*`, route => route.fulfill({
@@ -93,7 +110,7 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await page.click('#btn-stock-actualiser')
     await expect(page.locator('#stock-price-buy')).toHaveValue('15.75')
 
@@ -104,15 +121,16 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     expect((await ficheProduit(request, headers, produitId)).prix_achat_ht).toBe(15.75)
 
     // Fiche rouverte à l'écran, depuis un GET /api/produits réel (loadStock() après saveStock())
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await expect(page.locator('#stock-price-buy')).toHaveValue('15.75')
   })
 
   test('quota Mobilax atteint (429) : message avec le délai, prix inchangé, bouton réutilisable', async ({ page, request }) => {
+    const nom = 'E2E quota'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E quota', prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900003,
+      nom, prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900003,
     })
     await page.route(`**/api/mobilax/produits/${produitId}/rafraichir*`, route => route.fulfill({
       status: 429, json: { success: false, error: 'Quota Mobilax atteint.', code: 'quota', reessayer_dans_s: 42 },
@@ -121,7 +139,7 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     const bouton = page.locator('#btn-stock-actualiser')
     await bouton.click()
 
@@ -132,10 +150,11 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
   })
 
   test('Mobilax indisponible (502) : message affiché, prix inchangé, bouton réutilisable', async ({ page, request }) => {
+    const nom = 'E2E indisponible'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E indisponible', prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900004,
+      nom, prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900004,
     })
     await page.route(`**/api/mobilax/produits/${produitId}/rafraichir*`, route => route.fulfill({
       status: 502, json: { success: false, error: 'Mobilax est indisponible pour le moment.', code: 'indisponible' },
@@ -144,7 +163,7 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     const bouton = page.locator('#btn-stock-actualiser')
     await bouton.click()
 
@@ -154,17 +173,18 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
   })
 
   test('coupure réseau pendant l\'actualisation : « connexion perdue », prix inchangé, bouton réutilisable', async ({ page, request }) => {
+    const nom = 'E2E coupure réseau'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E coupure réseau', prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900005,
+      nom, prix_achat_ht: 10, prix_vente_ht: 25, mobilaxId: 900005,
     })
     await page.route(`**/api/mobilax/produits/${produitId}/rafraichir*`, route => route.abort())
 
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     const bouton = page.locator('#btn-stock-actualiser')
     await bouton.click()
 
@@ -177,59 +197,62 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
 
 test.describe('Stock — visibilité du bouton Actualiser (rôles et capacité serveur)', () => {
   test('produit ordinaire (aucun fournisseur à API) : jamais de bouton', async ({ page, request }) => {
+    const nom = 'E2E produit ordinaire'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
     const cree = await request.post('/api/produits', {
-      headers, data: { nom: 'E2E produit ordinaire', prix_achat_ht: 5, prix_vente_ht: 12 },
+      headers, data: { nom, prix_achat_ht: 5, prix_vente_ht: 12 },
     })
     expect(cree.status(), await cree.text()).toBe(201)
-    const produitId = (await cree.json()).id
 
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await expect(page.locator('#btn-stock-actualiser')).toBeHidden()
   })
 
   test('mobilax_id posé mais fiche fournisseur non Mobilax (point 11, cas a) : jamais de bouton', async ({ page, request }) => {
+    const nom = 'E2E fournisseur non Mobilax'
     const tenant = await createTenantAdmin(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
-    const { produitId } = await creerProduitMobilaxIdSansFournisseurMobilax(request, headers, tenant.boutiqueId, {
-      nom: 'E2E fournisseur non Mobilax', prix_achat_ht: 8, prix_vente_ht: 20, mobilaxId: 900006,
+    await creerProduitMobilaxIdSansFournisseurMobilax(request, headers, tenant.boutiqueId, {
+      nom, prix_achat_ht: 8, prix_vente_ht: 20, mobilaxId: 900006,
     })
 
     await seConnecter(page, { email: tenant.email, password: tenant.password })
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await expect(page.locator('#btn-stock-actualiser')).toBeHidden()
   })
 
   test('technicien : aucun bouton sur un produit rafraîchissable (point 13)', async ({ page, request }) => {
+    const nom = `E2E technicien ${Date.now()}`
     const managerHeaders = { Authorization: `Bearer ${await obtenirToken(request, MANAGER)}` }
-    const { produitId } = await creerProduitMobilaxLocal(request, managerHeaders, 1, {
-      nom: `E2E technicien ${Date.now()}`, prix_achat_ht: 9, prix_vente_ht: 22, mobilaxId: 900007,
+    await creerProduitMobilaxLocal(request, managerHeaders, 1, {
+      nom, prix_achat_ht: 9, prix_vente_ht: 22, mobilaxId: 900007,
     })
 
     await seConnecter(page, TECHNICIEN)
     await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await expect(page.locator('#btn-stock-actualiser')).toBeHidden()
   })
 
   test('admin plateforme avec une boutique sélectionnée : jamais de bouton, même sur un produit rafraîchissable (point 14)', async ({ page, request }) => {
+    const nom = 'E2E admin plateforme'
     const { tenant, nomBoutique } = await creerBoutique(request)
     const headers = { Authorization: `Bearer ${tenant.accessToken}` }
-    const { produitId } = await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
-      nom: 'E2E admin plateforme', prix_achat_ht: 11, prix_vente_ht: 27, mobilaxId: 900008,
+    await creerProduitMobilaxLocal(request, headers, tenant.boutiqueId, {
+      nom, prix_achat_ht: 11, prix_vente_ht: 27, mobilaxId: 900008,
     })
 
     await seConnecterAdminPlateforme(page)
     await choisirBoutique(page, nomBoutique)
     await page.goto('/stock')
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nom)
     await expect(page.locator('#btn-stock-actualiser')).toBeHidden()
   })
 })
@@ -262,6 +285,7 @@ test.describe('Stock — rafraîchissement réel en préproduction', () => {
     await page.click('#btn-mobilax-chercher')
     const premiere = page.locator('#mobilax-resultats tr').first()
     await expect(premiere).toBeVisible({ timeout: 20_000 })
+    const nomPiece = (await premiere.locator('td').first().innerText()).trim()
     await premiere.getByRole('button', { name: 'Importer' }).click()
     await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1', { timeout: 20_000 })
     const produitId = Number(await page.locator('#stock-id').inputValue())
@@ -271,7 +295,7 @@ test.describe('Stock — rafraîchissement réel en préproduction', () => {
     await page.locator('#modal-stock').getByRole('button', { name: 'Enregistrer' }).click()
     await expect(page.locator('#modal-stock')).toBeHidden()
 
-    await ouvrirFiche(page, produitId)
+    await ouvrirFiche(page, nomPiece)
     await expect(page.locator('#stock-price-buy')).toHaveValue('0.01')
     const bouton = page.locator('#btn-stock-actualiser')
     await expect(bouton).toBeVisible()
@@ -284,8 +308,6 @@ test.describe('Stock — rafraîchissement réel en préproduction', () => {
     // Point 10 : le stock Mobilax affiché doit être celui de Mobilax, jamais un 0 inventé si
     // `/full` ne porte pas `quantity`. On consigne ici ce qui a été observé, pour le compte rendu.
     const ficheApi = await ficheProduit(request, headers, produitId)
-    const brut = await request.get(`/api/produits/${produitId}`, { headers })
-    void brut
     const stockAffiche = page.locator('#stock-fournisseur-stock')
     const visible = await stockAffiche.isVisible()
     // eslint-disable-next-line no-console
