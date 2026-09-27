@@ -115,7 +115,10 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await expect(page.locator('#stock-price-buy')).toHaveValue('15.75')
 
     await page.locator('#modal-stock').getByRole('button', { name: 'Enregistrer' }).click()
-    await expect(page.locator('#modal-stock')).toBeHidden()
+    // Fermée par opacité (comme l'ouverture, ligne ~61) : `.modal-overlay` reste dans le DOM et
+    // `toBeHidden()` la compte visible malgré la classe `open` retirée (CLAUDE.md § mobilax-recherche…
+    // « fenêtres .modal-overlay » — ⊥ toBeVisible()/toBeHidden(), assertionner l'opacité).
+    await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '0')
 
     // Relu par une requête directe, jamais interceptée : la vraie base porte la valeur revalidée
     expect((await ficheProduit(request, headers, produitId)).prix_achat_ht).toBe(15.75)
@@ -293,7 +296,9 @@ test.describe('Stock — rafraîchissement réel en préproduction', () => {
     // Prix d'achat modifié à la main, puis enregistré — pour prouver qu'Actualiser le fait revenir
     await page.fill('#stock-price-buy', '0.01')
     await page.locator('#modal-stock').getByRole('button', { name: 'Enregistrer' }).click()
-    await expect(page.locator('#modal-stock')).toBeHidden()
+    // Fermée par opacité, comme l'ouverture ci-dessus : `toBeHidden()` la compte visible malgré
+    // la classe `open` retirée (`.modal-overlay` reste dans le DOM).
+    await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '0')
 
     await ouvrirFiche(page, nomPiece)
     await expect(page.locator('#stock-price-buy')).toHaveValue('0.01')
