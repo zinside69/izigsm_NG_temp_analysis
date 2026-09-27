@@ -11,6 +11,10 @@
  *                                    `quantite_en_rayon?` facultative, ticket 05 réglages de stock)
  *   POST /api/mobilax/produits/:id/ajout-stock — « Ajouter N au stock » d'une pièce déjà en stock
  *                                    (`{ quantite }`, ticket 18 `vente-lit-catalogue`)
+ *   POST /api/mobilax/produits/:id/rafraichir — revalide le prix d'achat d'une pièce déjà
+ *                                    importée (ticket 05 `integration-mobilax`, amendement du
+ *                                    2026-09-27) ; identité par `mobilax_id`, jamais écrit si
+ *                                    discordant, introuvable chez Mobilax, ou prix invalide
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
  * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
@@ -22,7 +26,7 @@ import { Hono } from 'hono'
 import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middleware'
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
-import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, type ErreurMobilax } from '../services/mobilaxService'
+import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, rafraichirProduitImporte, type ErreurMobilax } from '../services/mobilaxService'
 // AVANT (2026-09-25, point 1 : clé d'ajout) : import { ajouterStockPieceImportee } from '../services/stockService'
 import { ajouterStockPieceImportee, MOTIF_CLE_AJOUT } from '../services/stockService'
 
@@ -41,6 +45,12 @@ const STATUT_PAR_ERREUR: Record<ErreurMobilax, 400 | 404 | 409 | 422 | 429 | 502
   quantite_invalide:      400,
   introuvable:            404,
   deja_importe:           409,
+  // Rafraîchissement manuel (ticket 05, amendement du 2026-09-27) : toute discordance refuse
+  // l'écriture avec le même statut — le code distingue le cas, pas la route.
+  non_rattache:           409,
+  supprime_mobilax:       409,
+  identifiant_discordant: 409,
+  prix_invalide:          409,
   sans_fournisseur:       422,
   plusieurs_fournisseurs: 422,
   sans_cle:               422,
@@ -192,6 +202,32 @@ mobilax.post('/mobilax/produits/:id/ajout-stock', requireRole('admin', 'manager'
       : 'Cette clé d\'ajout a déjà servi pour un autre ajout.',
   }, 409)
   return c.json({ success: true, data: r })
+})
+
+// ── POST /api/mobilax/produits/:id/rafraichir ────────────────────────────────
+// Ticket 05 (chantier integration-mobilax), amendement du 2026-09-27 : revalide le prix d'achat
+// d'une pièce déjà importée auprès de Mobilax. Identité par `mobilax_id` (migration 0050),
+// jamais par `reference_fournisseur` (point 1). Adaptateur choisi par
+// `fournisseurs.api_plateforme` (point 5) : Mobilax est le seul aujourd'hui, résolu par
+// `mobilaxService.rafraichirProduitImporte()`. Mêmes rôles que l'import (manager, admin de
+// boutique) ; admin plateforme et compte sans boutique refusés, comme les autres routes Mobilax.
+mobilax.post('/mobilax/produits/:id/rafraichir', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  if (isAdminPlateforme(user) || !user.boutique_id)
+    return c.json({ success: false, error: 'Le rafraîchissement Mobilax est réservé aux utilisateurs de la boutique.' }, 403)
+
+  const produitId = Number(c.req.param('id'))
+  if (!Number.isInteger(produitId) || produitId <= 0)
+    return c.json({ success: false, error: 'Produit invalide.' }, 400)
+
+  const r = await rafraichirProduitImporte(
+    { db: c.get('db'), kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
+    user.boutique_id, produitId,
+  )
+  // Produit introuvable dans la boutique du jeton : son existence chez autrui n'est pas confirmée
+  if (r === null) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
+  if (r.ok) return c.json({ success: true, data: { prix_achat_ht: r.prix_achat_ht, stock: r.stock } })
+  return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 
 export default mobilax

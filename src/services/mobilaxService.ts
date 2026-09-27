@@ -17,7 +17,7 @@ import type { D1KVNamespace } from '../lib/d1kv'
 import { chiffrer, dechiffrer } from '../lib/chiffrement'
 import { trouverFournisseurApi, getApiKeyDechiffree } from './fournisseursService'
 // AVANT (2026-09-24, ticket 18, agent T-002 du socle d'orchestration) : import { createProduit, trouverProduitImporte, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
-import { createProduit, trouverProduitImporte, trouverProduitParMobilaxId, rattacherProduitMobilax, completerDescriptionSiVide, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, type FamilleProduit } from './stockService'
+import { createProduit, trouverProduitImporte, trouverProduitParMobilaxId, rattacherProduitMobilax, completerDescriptionSiVide, referencesImportees, trouverOuCreerCategorie, estEntierPositifOuNul, ErreurCodeEnDoublon, resoudreAdaptateurProduit, ecrirePrixAchatRevalide, type FamilleProduit } from './stockService'
 import { getBoutiqueSettings, resoudreTauxMarge, resoudreDefautsStock } from './boutiqueService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +39,10 @@ export type ErreurMobilax =
   | 'sans_fournisseur' | 'plusieurs_fournisseurs' | 'sans_cle' | 'cle_illisible'
   | 'cle_refusee' | 'quota' | 'indisponible'
   | 'introuvable' | 'deja_importe' | 'quantite_invalide'
+  // Rafraîchissement manuel (ticket 05, amendement du 2026-09-27) : toute discordance d'identité
+  // ou de prix refuse l'écriture avec le même statut HTTP (409, § route) — le code distingue le
+  // cas pour l'opérateur sans changer la décision.
+  | 'non_rattache' | 'supprime_mobilax' | 'identifiant_discordant' | 'prix_invalide'
 
 /** Échec nommé, avec le message destiné à l'opérateur. */
 export interface EchecMobilax {
@@ -529,6 +533,96 @@ function texteBrut(html: string): string {
     .replace(/\n{2,}/g, '\n')
     .trim()
     .slice(0, DESCRIPTION_MAX)
+}
+
+// ─── Rafraîchissement manuel d'une pièce importée (ticket 05, amendement du 2026-09-27) ───────
+
+export type ResultatRafraichissementMobilax =
+  | { ok: true; prix_achat_ht: number; stock: number }
+  | EchecMobilax
+
+/** Ce que `/products/:id/full` doit confirmer pour revalider une pièce déjà importée. */
+interface RevalidationMobilax {
+  id:            number
+  /** `NaN` si Mobilax ne renvoie pas un prix numérique — jamais silencieusement remplacé. */
+  prix_achat_ht: number
+  stock:         number
+}
+
+/**
+ * Normalise `data` de `/products/:id/full` pour la seule revalidation (identité, prix, stock).
+ *
+ * `price` doit être un NOMBRE JSON, pas une chaîne qui se convertirait — `Number("44.25")`
+ * réussit, mais un prix qui arrive en chaîne signale une réponse Mobilax qui ne tient plus son
+ * contrat plutôt qu'un prix exploitable (point 6 de l'amendement du 2026-09-27, même exigence que
+ * `quantite_en_rayon` à l'import, `typeof … === 'number'`).
+ */
+function versRevalidationMobilax(d: any): RevalidationMobilax | null {
+  const id = Number(d?.id)
+  if (!Number.isInteger(id)) return null
+  const prix = typeof d?.price === 'number' && Number.isFinite(d.price) ? d.price : NaN
+  return { id, prix_achat_ht: prix, stock: Number(d?.quantity) || 0 }
+}
+
+/**
+ * Revalide le prix d'achat d'une pièce déjà importée auprès de Mobilax, et l'écrit sur le produit
+ * local — seul `prix_achat_ht` change (cadrage du 2026-09-12, cf. `ecrirePrixAchatRevalide()`) :
+ * prix de vente, `prix_achat_cump` et stock local ne sont jamais touchés, le stock Mobilax n'est
+ * qu'affichable (rendu ici, jamais écrit).
+ *
+ * Identité par `mobilax_id` (migration 0050), jamais par `reference_fournisseur` — pas propre à
+ * Mobilax (amendement du 2026-09-27, point 1). L'adaptateur est choisi par
+ * `fournisseurs.api_plateforme` (point 5, `resoudreAdaptateurProduit()`) : Mobilax est le seul
+ * aujourd'hui — un produit lié à un autre fournisseur, ou sans identifiant Mobilax, est refusé
+ * sans le moindre appel réseau.
+ *
+ * Toute discordance refuse l'écriture sans rien écrire (point 1) : identifiant renvoyé différent
+ * de celui attendu, pièce introuvable chez Mobilax (404), prix absent, non numérique, négatif ou
+ * **nul** (point 6). L'écriture elle-même revérifie l'identité (point 9,
+ * `ecrirePrixAchatRevalide()`) : si le produit a changé entre la lecture et l'appel réseau
+ * (désactivé, rattaché ailleurs), 0 ligne modifiée refuse tout aussi bien.
+ *
+ * @param deps        Dépendances (base, KV, secret, adresse de l'API)
+ * @param boutiqueId  Boutique appelante — SA clé, SON produit
+ * @param produitId   Produit à revalider
+ * @returns           `null` si le produit n'existe pas dans cette boutique (404 à la route) ;
+ *                     sinon le nouveau prix et le stock Mobilax affichable, ou une erreur nommée
+ */
+export async function rafraichirProduitImporte(
+  deps: DepsMobilax, boutiqueId: number, produitId: number
+): Promise<ResultatRafraichissementMobilax | null> {
+  const adaptateur = await resoudreAdaptateurProduit(deps.db, boutiqueId, produitId)
+  if (!adaptateur) return null
+  if (adaptateur.api_plateforme !== 'mobilax' || adaptateur.mobilax_id === null)
+    return echec('non_rattache', 'Cette pièce n\'est pas reliée à Mobilax : impossible de la revalider.')
+  const mobilaxId = adaptateur.mobilax_id
+
+  const cle = await resoudreCle(deps, boutiqueId)
+  if (!cle.ok) return cle.echec
+
+  let fiche: RevalidationMobilax | null
+  try {
+    const appel = await appelerMobilax(deps, boutiqueId, cle.apiKey, `${deps.baseUrl}/products/${mobilaxId}/full`)
+    if (!appel.ok) return appel.echec
+    if (appel.rep.status === 404) return echec('supprime_mobilax', 'Cette pièce n\'existe plus chez Mobilax.')
+    if (!appel.rep.ok) return indisponible()
+    // `GET /products/:id/full` : `{ status: 'OK', data: { … } }` (mesuré le 2026-09-11)
+    const corps = await appel.rep.json() as { data?: unknown }
+    fiche = versRevalidationMobilax(corps.data)
+  } catch {
+    return indisponible()
+  }
+  if (!fiche) return indisponible()
+  if (fiche.id !== mobilaxId)
+    return echec('identifiant_discordant', 'La pièce revalidée ne correspond plus à celle importée.')
+  if (!(fiche.prix_achat_ht > 0))
+    return echec('prix_invalide', 'Mobilax ne renvoie pas de prix exploitable pour cette pièce.')
+
+  const ecrit = await ecrirePrixAchatRevalide(deps.db, boutiqueId, produitId, mobilaxId, fiche.prix_achat_ht)
+  if (!ecrit)
+    return echec('non_rattache', 'Cette pièce n\'est plus reliée à Mobilax : impossible de la revalider.')
+
+  return { ok: true, prix_achat_ht: fiche.prix_achat_ht, stock: fiche.stock }
 }
 
 // ─── Clé de la boutique ───────────────────────────────────────────────────────
