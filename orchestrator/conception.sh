@@ -69,6 +69,7 @@ Cherche une PRESCRIPTION (critère, test prescrit, consigne) qui :
    unitaire à la place d'un geste d'écran.
 
 Rends « doute » seulement pour un risque concret, en citant la prescription et le scénario qui casse.
+Dans les textes, cite avec « », jamais avec des guillemets droits (ils cassent le JSON).
 Réponds UNIQUEMENT par un objet JSON, sans texte autour :
 {\"verdict\":\"conforme\"|\"doute\",\"constats\":[{\"prescription\":\"...\",\"risque\":\"...\",\"amendement\":\"...\"}]}"
 
@@ -83,13 +84,24 @@ RC=$?
 set -e
 journaliser_cout "$TASK_ID" conception "$BRUT"
 
-if (( RC == 0 )) && jq -e '.result | fromjson | (.verdict == "conforme" or .verdict == "doute") and (.constats | type == "array")' \
-     "$BRUT" >/dev/null 2>&1; then
-  jq -c --arg e "$EMPREINTE" --arg t "$TASK_ID" '.result | fromjson | {tache:$t, verdict, constats, empreinte:$e}' "$BRUT" >"$SORTIE"
+# AVANT : if (( RC == 0 )) && jq -e '.result | fromjson | (.verdict == "conforme" or .verdict == "doute") and (.constats | type == "array")' \
+# AVANT :      "$BRUT" >/dev/null 2>&1; then
+# AVANT :   jq -c --arg e "$EMPREINTE" --arg t "$TASK_ID" '.result | fromjson | {tache:$t, verdict, constats, empreinte:$e}' "$BRUT" >"$SORTIE"
+#   (2026-09-27, O43) Lecture par json_du_modele (lib.sh) : un JSON entre balises
+#   Markdown ou entoure de texte se lit ; rien de lisible => fail-safe, comme
+#   avant. Tests CO7, CO8 (CO5 : sans JSON, toujours doute).
+JSON_CO="$(json_du_modele "$BRUT" || true)"
+if (( RC == 0 )) && [[ -n "$JSON_CO" ]] \
+   && jq -e '(.verdict == "conforme" or .verdict == "doute") and (.constats | type == "array")' <<<"$JSON_CO" >/dev/null 2>&1; then
+  jq -c --arg e "$EMPREINTE" --arg t "$TASK_ID" '{tache:$t, verdict, constats, empreinte:$e}' <<<"$JSON_CO" >"$SORTIE"
 else
   # Fail-safe : une relecture illisible ne laisse jamais partir la tache.
+  # AVANT :   jq -nc --arg e "$EMPREINTE" --arg t "$TASK_ID" \
+  # AVANT :     --arg brut "$(jq -r '.result // empty' "$BRUT" 2>/dev/null | head -c 800 || true)" \
+  #   (2026-09-27, O43) « head -c » coupait en OCTETS : l'alerte finissait au
+  #   milieu d'un caractere accentue (« pi� »). Coupe en caracteres par jq. Test CO9.
   jq -nc --arg e "$EMPREINTE" --arg t "$TASK_ID" \
-    --arg brut "$(jq -r '.result // empty' "$BRUT" 2>/dev/null | head -c 800 || true)" \
+    --arg brut "$(jq -r '(.result // "") | .[0:800]' "$BRUT" 2>/dev/null || true)" \
     '{tache:$t, verdict:"doute", empreinte:$e,
       constats:[{prescription:"(relecture illisible)", risque:("sortie du relecteur de conception non conforme : " + $brut), amendement:"relancer la relecture (approuver) ou trancher (modifier)"}]}' >"$SORTIE"
 fi

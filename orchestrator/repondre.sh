@@ -132,7 +132,11 @@ if [[ "$DECISION_H" == "approuver" ]]; then
   RAISONS_OUVERTES="$(jq -r --arg t "$TASK_ID" 'select(.tache == $t and .statut == "ouverte") | .raisons' \
     "$JOURNAL_ESC_T" 2>/dev/null | tail -1 || true)"
   COMMITS_AGENT="$(git -C "$ROOT" rev-list "$INTEGRATION_BRANCH..$AGENT_BRANCH_PREFIX/$TASK_ID" 2>/dev/null || true)"
-  if [[ "$RAISONS_OUVERTES" =~ (^|[^A-Z0-9])P(8|10|11): ]]; then
+  # AVANT :   if [[ "$RAISONS_OUVERTES" =~ (^|[^A-Z0-9])P(8|10|11): ]]; then
+  #   (2026-09-27, O45) P14 (agent arrete ou coupe) relance aussi : un agent
+  #   coupe par max_turns laisse un travail PARTIEL commite, qu'« approuver »
+  #   aurait publie sans controles ni revue. Test MT2.
+  if [[ "$RAISONS_OUVERTES" =~ (^|[^A-Z0-9])P(8|10|11|14): ]]; then
     MODE_APPROUVER="relancer"
   elif [[ -d "$WT_T" && -n "$COMMITS_AGENT" ]]; then
     MODE_APPROUVER="publier"

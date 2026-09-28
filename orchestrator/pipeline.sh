@@ -62,6 +62,30 @@ if (( DRY_RUN == 1 )); then
   exit 0
 fi
 
+# (2026-09-28, O49) Chaque passage juge ses propres appels : les ecarts de
+# modele d'un passage precedent (deja escalades) ne comptent plus. Test MD2.
+rm -f "$STATE_DIR/$TASK_ID.modele-ecart"
+
+# 0 moins. Racine du projet sur la branche d'integration (2026-09-27, O44,
+# premier vrai ticket iziGSM) : « git fetch origin integration:integration »
+# (run-task.sh) est refuse par git quand cette branche est extraite dans la
+# racine (« refusing to fetch into branch checked out ») : la tache echouait en
+# 1 s, P10, message git obscur. Decision de l'operateur : detecter et refuser,
+# jamais toucher le dossier du projet (le socle n'y ecrit pas, les agents
+# travaillent dans des worktrees). Controle fait AVANT tout appel paye, y
+# compris la relecture de conception. Test RI1.
+BRANCHE_RACINE="$(git -C "$ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [[ "$BRANCHE_RACINE" == "$INTEGRATION_BRANCH" ]]; then
+  transition FAILED
+  ESC_RACINE="$STATE_DIR/$TASK_ID.escalade-racine.json"
+  jq -nc --arg b "$INTEGRATION_BRANCH" --arg r "$ROOT" \
+    '{raisons: ["P10:racine-sur-integration"],
+      detail: ("Le dossier du projet (" + $r + ") est sur la branche " + $b + " : le socle ne peut pas la mettre a jour depuis GitHub. Geste : dans ce dossier, git switch -c poste-orchestrateur (meme commit, rien ne change dans les fichiers), puis repondre approuver.")}' >"$ESC_RACINE"
+  "$D/escalade.sh" "$TASK_ID" "$ESC_RACINE" || true
+  log "$TASK_ID : racine du projet sur $INTEGRATION_BRANCH — tache refusee avant tout appel (O44)"
+  exit 32
+fi
+
 # 0. Relecture de conception (2026-09-25, ADR 0003 R1, O39) — si le projet l'a
 # activee ("conception": true dans gates.json). Un doute (ou une relecture en
 # panne, ou illisible) ne laisse jamais partir l'agent : escalade P15 (L3) avec
@@ -172,6 +196,16 @@ if (( rcg != 0 )); then
           && log "$TASK_ID : branche fautive mise en quarantaine ($QUAR)"
       fi
       "$D/escalade.sh" "$TASK_ID" "$GATE_V" || true ;;
+    33)
+      # (2026-09-27, O45) Agent coupe par son plafond de tours : ni panne (P10), ni
+      # controles rouges (P11) — ils n'ont pas tourne. Raison propre, dans l'alerte :
+      # combien de tours, ce qui reste, les trois gestes possibles. Tests MT1, MT2.
+      transition PARKED
+      ESC_TOURS="$STATE_DIR/$TASK_ID.escalade-tours.json"
+      jq -nc --arg n "$(sed -n 's/^tours=//p' "$STATE_DIR/$TASK_ID.state" 2>/dev/null | head -1)" \
+        '{raisons: ["P14:max-turns"],
+          detail: ("Agent coupe a " + $n + " tours, avant la fin : travail partiel garde sur sa branche, controles non lances. approuver = reprendre sa session (meme plafond) ; plafond plus haut = max_tours=N dans la fiche de la tache, puis approuver ; ticket trop gros = le decouper.")}' >"$ESC_TOURS"
+      "$D/escalade.sh" "$TASK_ID" "$ESC_TOURS" || true ;;
     31)
       # (2026-09-24, O1) Depot non approuve dans Claude Code : rien n'a tourne,
       # rien n'a coute. Meme escalade P10 qu'une panne, mais l'alerte dit le geste
@@ -251,7 +285,9 @@ if ! "$D/review.sh" "$TASK_ID" "$WT" "$INTEGRATION_BRANCH" >>"$LOG_DIR/pipeline-
   # Tests RV1, RV2. Ligne d'origine :
   # AVANT :   jq -n '{raisons:["P5:invariant-contexte-neuf"]}' >"$tmp"
   if jq -e '[.rejets[]? | select(.code == "R0")] | length > 0' "$REVUE" >/dev/null 2>&1; then
-    jq -n --arg brut "$(jq -r '.result // empty' "$STATE_DIR/$TASK_ID.reviewer.json" 2>/dev/null | head -c 1500 || true)" \
+    # AVANT :     jq -n --arg brut "$(jq -r '.result // empty' "$STATE_DIR/$TASK_ID.reviewer.json" 2>/dev/null | head -c 1500 || true)" \
+    #   (2026-09-27, O43) Extrait coupe en caracteres, plus en octets (« � »).
+    jq -n --arg brut "$(jq -r '(.result // "") | .[0:1500]' "$STATE_DIR/$TASK_ID.reviewer.json" 2>/dev/null || true)" \
       '{raisons:["P4:revue-non-conforme"], detail:("sortie du relecteur non conforme au schema 2.0 — debut de la sortie brute : " + $brut)}' >"$tmp"
   else
     jq -n '{raisons:["P5:invariant-contexte-neuf"]}' >"$tmp"
@@ -274,6 +310,37 @@ if (( DEC_RC != 0 )); then
 fi
 VERDICT="$(jq -r '.verdict' "$DECISION")"
 transition REVIEWED
+# 3 bis. Boucle de correction (2026-09-27, O48) — doctrine de depart : un
+# desaccord du relecteur renvoie l'agent corriger, avec les rejets en consigne,
+# au plus « revue.corrections_max » fois (matrice.json, 2 par defaut) ; ensuite
+# seulement, PR a relire pour l'humain. Un arret dur ou un risque eleve n'entre
+# jamais dans la boucle (correction_eligible, lib.sh). La decision est
+# journalisee avant la relance (I8). La relance reprend la session de l'agent
+# (run-task.sh, --resume) sur sa branche ; la relecture de conception, deja
+# conforme pour la meme declaration, ne coute rien. Tests BC1 a BC3.
+CORR_MAX="$(jq -r '.revue.corrections_max // 2' "$D/matrice.json" 2>/dev/null || echo 2)"
+CORR_FAITES="$(sed -n 's/^corrections=//p' "$F" | head -1)"
+CORR_FAITES="${CORR_FAITES:-0}"
+if correction_eligible "$DECISION" "$REVUE"; then
+  if (( CORR_FAITES < CORR_MAX )); then
+    CORR_N=$(( CORR_FAITES + 1 ))
+    jq --arg r "C1:correction-agent($CORR_N/$CORR_MAX)" '.raisons += [$r]' "$DECISION" >"$DECISION.tmp" \
+      && mv "$DECISION.tmp" "$DECISION"
+    "$D/journal.sh" "$TASK_ID" "$DECISION" "$REVUE" || true
+    consigne_correction "$REVUE" "$CORR_N" "$CORR_MAX" >"$STATE_DIR/$TASK_ID.corrections.md"
+    if grep -q '^corrections=' "$F"; then
+      sed -i "s/^corrections=.*/corrections=$CORR_N/" "$F"
+    else
+      printf 'corrections=%s\n' "$CORR_N" >>"$F"
+    fi
+    transition RUNNING
+    log "$TASK_ID : desaccord du relecteur — l'agent corrige (correction $CORR_N/$CORR_MAX)"
+    exec "$D/pipeline.sh" "$TASK_ID"
+  fi
+  jq --arg r "M3:desaccord-apres-corrections($CORR_FAITES)" '.raisons += [$r]' "$DECISION" >"$DECISION.tmp" \
+    && mv "$DECISION.tmp" "$DECISION"
+  log "$TASK_ID : desaccord persistant apres $CORR_FAITES correction(s) — la main passe a l'humain"
+fi
 # (2026-09-25, ADR 0003 R3) Preuve a fournir (P16) : le detail des demandes va
 # dans la decision, donc dans l'alerte (specs, attendu, pourquoi). Test PV2.
 if jq -e '.raisons | map(select(startswith("P16:"))) | length > 0' "$DECISION" >/dev/null 2>&1; then

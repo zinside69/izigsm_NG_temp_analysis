@@ -171,6 +171,20 @@ journaliser_cout() {
   [[ -n "$ligne" ]] || ligne="$(jq -cn --arg t "$tache" --arg r "$role" --arg ts "$(date -u +%FT%TZ)" \
     '{ts:$ts, tache:$t, role:$r, mesure:"absente", cout_usd:0}')"
   printf '%s\n' "$ligne" >>"$ORCH_DIR/journal/couts.jsonl"
+  # (2026-09-28, O49) Modele servi compare au modele attendu pour le role
+  # (matrice.json : auteur => modele_auteur ; conception et relecteur =>
+  # modele_reviewer). Un ecart est note dans l'etat de la tache ; decide.sh en
+  # fait un arret dur P17. Une mesure absente, ou sans modele declare, ne prouve
+  # rien : pas d'ecart. Tests MD1, MD2.
+  local attendu servis
+  attendu="$(jq -r --arg r "$role" 'if $r == "auteur" then .revue.modele_auteur else .revue.modele_reviewer end // empty' \
+    "$ROOT/orchestrator/matrice.json" 2>/dev/null || true)"
+  servis="$(jq -r '(.modeles // []) | join(",")' <<<"$ligne" 2>/dev/null || true)"
+  if [[ -n "$attendu" && -n "$servis" && ",$servis," != *",$attendu,"* ]]; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\t%s\t%s\n' "$role" "$attendu" "$servis" >>"$STATE_DIR/$tache.modele-ecart"
+    log "[ALERTE] $tache : modele servi au role $role = $servis, attendu $attendu"
+  fi
 }
 
 # actions_ntfy <T-NNN> <jeton> <sujet de reponse> <reponse>...
@@ -300,4 +314,50 @@ fermer_issue_escalade() {
   gh issue close "$url" --comment "Escalade $2 le $(date -u +%FT%TZ) ; fermee par le socle d'orchestration." >/dev/null 2>&1 \
     || log "[NOTIF] fermeture de l'issue $url en echec (escalade $2 de $1)"
   return 0
+}
+
+# json_du_modele <sortie de claude> — (2026-09-27, O43, premier vrai ticket
+# iziGSM) Objet JSON rendu par un relecteur dans le champ « result » : tel quel,
+# sinon entre balises Markdown (```json … ```), sinon du premier « { » au
+# dernier « } » d'un texte. Sur T-002, 3 relectures de conception sur 4 etaient
+# lisibles a la main mais pas par le socle (JSON entre balises) : chacune a
+# coute une decision humaine. Rien ne se lit (JSON invalide, guillemets non
+# echappes) : code non nul, l'appelant reste en fail-safe. Tests CO7, CO8, RV3.
+json_du_modele() {
+  jq -ce '(.result // "") as $t
+    | [ ($t | fromjson?),
+        ($t | capture("```(?:json)?\\s*(?<j>[\\s\\S]*?)```") | .j | fromjson?),
+        ($t | capture("(?<j>\\{[\\s\\S]*\\})") | .j | fromjson?) ]
+    | map(objects) | if length > 0 then .[0] else error("illisible") end' "$1" 2>/dev/null
+}
+
+# --- Boucle de correction (2026-09-27, O48) ----------------------------------
+# Doctrine de depart (rappel de l'operateur) : l'agent code, le relecteur verifie
+# le diff ; s'il n'est pas d'accord, il RENVOIE l'agent corriger, et l'humain
+# n'est alerte qu'ensuite. Jusqu'a la v3.57, un desaccord sur un diff aux
+# controles verts partait directement en PR a relire (M3:desaccord-reviewer) :
+# les quatre passages de T-004 (iziGSM, 27/09) ont ete relances a la main.
+#
+# correction_eligible <decision.json> <revue.json> — vrai si le desaccord du
+# relecteur peut renvoyer l'agent corriger. Decisions de l'operateur : seul le
+# « desaccord » declenche (une « reserve » part en PR avec ses remarques) ; un
+# arret dur (raison P*, dont P16 preuve a fournir) ou un risque eleve va a
+# l'humain directement, jamais en boucle. Test BC3.
+correction_eligible() {
+  local dec="$1" rev="$2"
+  [[ "$(jq -r '.verdict // ""' "$rev" 2>/dev/null)" == desaccord ]] || return 1
+  [[ "$(jq -r '.verdict // ""' "$dec" 2>/dev/null)" != PARK ]] || return 1
+  jq -e '(.raisons // []) | map(select(startswith("P") or startswith("M3:risque-high"))) | length == 0' \
+    "$dec" >/dev/null 2>&1
+}
+
+# consigne_correction <revue.json> <n> <max> — texte remis a l'agent : les rejets
+# du relecteur, un par ligne, et son resume. Lu par run-task.sh. Test BC1.
+consigne_correction() {
+  jq -r --arg n "$2" --arg m "$3" '
+    "Correction \($n)/\($m) demandee par le relecteur, en desaccord avec ton diff :\n"
+    + ((.rejets // []) | map("- \(.code // "?") (\(.gravite // "?")) \(.fichier // "—"):\(.ligne // 0) — \(.constat // "")") | join("\n"))
+    + "\nResume du relecteur : \(.resume // "aucun")\n"
+    + "Corrige ces points dans ton perimetre. Un rejet que tu juges infonde : ne le contourne pas, explique-le dans ecarts de ton compte rendu."' \
+    "$1"
 }
