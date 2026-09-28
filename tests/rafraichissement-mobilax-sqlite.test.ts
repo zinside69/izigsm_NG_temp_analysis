@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest'
 // @ts-ignore node:sqlite types not available without @types/node — moteur SQLite intégré à Node 24
 import { DatabaseSync } from 'node:sqlite'
 import type { Database } from '../src/ports/database'
-import { resoudreAdaptateurProduit, ecrirePrixAchatRevalide } from '../src/services/stockService'
+import {
+  resoudreAdaptateurProduit, ecrirePrixAchatRevalide,
+  listProduits, getProduitById,
+} from '../src/services/stockService'
 
 /**
  * Rafraîchissement manuel d'une pièce importée (ticket 05 `integration-mobilax`, amendement du
@@ -23,16 +26,28 @@ const SCHEMA = `
     api_plateforme TEXT,
     actif          INTEGER NOT NULL DEFAULT 1
   );
+  CREATE TABLE categories (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    boutique_id  INTEGER NOT NULL,
+    nom          TEXT    NOT NULL
+  );
+  CREATE TABLE users (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    prenom  TEXT,
+    nom     TEXT
+  );
   CREATE TABLE produits (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     boutique_id     INTEGER NOT NULL,
     nom             TEXT    NOT NULL,
+    categorie_id    INTEGER,
     fournisseur_id  INTEGER,
     mobilax_id      INTEGER,
     prix_achat_ht   REAL    NOT NULL DEFAULT 0,
     prix_achat_cump REAL    NOT NULL DEFAULT 0,
     prix_vente_ht   REAL    NOT NULL DEFAULT 0,
     stock_actuel    INTEGER NOT NULL DEFAULT 0,
+    stock_minimum   INTEGER NOT NULL DEFAULT 0,
     actif           INTEGER NOT NULL DEFAULT 1,
     updated_at      DATETIME
   );
@@ -99,13 +114,13 @@ describe('resoudreAdaptateurProduit() — identité Mobilax (points 1 et 8 de l\
   it('(d) produit Mobilax conforme : adaptateur "mobilax" rendu avec son identifiant', async () => {
     const f = fournisseur({ boutique_id: 1, api_plateforme: 'mobilax' })
     const id = produit({ boutique_id: 1, fournisseur_id: f, mobilax_id: 17 })
-    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: 'mobilax', mobilax_id: 17 })
+    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: 'mobilax', mobilax_id: 17, rafraichissable_par: 'Mobilax' })
   })
 
   it('(a) mobilax_id posé mais fiche fournisseur non Mobilax : aucun adaptateur', async () => {
     const f = fournisseur({ boutique_id: 1, api_plateforme: null })
     const id = produit({ boutique_id: 1, fournisseur_id: f, mobilax_id: 17 })
-    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: 17 })
+    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: 17, rafraichissable_par: null })
   })
 
   it('(b) produit de la boutique B demandé par la boutique A : rien', async () => {
@@ -118,7 +133,7 @@ describe('resoudreAdaptateurProduit() — identité Mobilax (points 1 et 8 de l\
     // Donnée volontairement anormale : le produit de la boutique 1 pointe un fournisseur de la boutique 2
     const fAutreBoutique = fournisseur({ boutique_id: 2, api_plateforme: 'mobilax' })
     const id = produit({ boutique_id: 1, fournisseur_id: fAutreBoutique, mobilax_id: 17 })
-    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: 17 })
+    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: 17, rafraichissable_par: null })
   })
 
   it('produit inexistant : rien', async () => {
@@ -133,7 +148,7 @@ describe('resoudreAdaptateurProduit() — identité Mobilax (points 1 et 8 de l\
 
   it('produit sans fournisseur lié : aucun adaptateur', async () => {
     const id = produit({ boutique_id: 1, fournisseur_id: null, mobilax_id: null })
-    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: null })
+    expect(await resoudreAdaptateurProduit(db, 1, id)).toEqual({ produit_id: id, api_plateforme: null, mobilax_id: null, rafraichissable_par: null })
   })
 })
 
@@ -176,5 +191,82 @@ describe('ecrirePrixAchatRevalide() — écriture conditionnée (points 2, 7 et 
     const id = produit({ boutique_id: 1, fournisseur_id: f, mobilax_id: 17, prix_achat_ht: 10, actif: 0 })
     expect(await ecrirePrixAchatRevalide(db, 1, id, 17, 12.5)).toBe(false)
     expect(ligne(id).prix_achat_ht).toBe(10)
+  })
+})
+
+describe('rafraichissable_par — même jointure que resoudreAdaptateurProduit() (points 11 et 16)', () => {
+  /**
+   * `listProduits()` et `getProduitById()` doivent rendre exactement le même `rafraichissable_par`
+   * que celui déjà porté par `resoudreAdaptateurProduit()` — un seul fragment SQL
+   * (`sqlJointureFournisseurProduit()` + `sqlRafraichissablePar()`, exportés de `stockService.ts`),
+   * jamais une seconde règle réécrite en TypeScript ici ou chez un appelant (point 16) :
+   * `attendu()` se contente donc de LIRE le champ `rafraichissable_par` que
+   * `resoudreAdaptateurProduit()` calcule déjà par ce même fragment, sans reconstruire la condition
+   * (`api_plateforme === 'mobilax' && mobilax_id !== null`) à côté. Les quatre cas sont ceux du
+   * point 8 : (a) mobilax_id posé mais fiche non Mobilax, (b) produit d'une autre boutique, (c)
+   * fiche Mobilax d'une autre boutique, (d) produit Mobilax conforme.
+   */
+  async function attendu(boutiqueId: number, produitId: number): Promise<string | null> {
+    return (await resoudreAdaptateurProduit(db, boutiqueId, produitId))?.rafraichissable_par ?? null
+  }
+
+  it('(a) mobilax_id posé mais fiche fournisseur non Mobilax : rafraichissable_par = null, sur les trois fonctions', async () => {
+    const f = fournisseur({ boutique_id: 1, api_plateforme: null })
+    const id = produit({ boutique_id: 1, fournisseur_id: f, mobilax_id: 17 })
+
+    expect(await attendu(1, id)).toBeNull()
+    expect((await getProduitById(db, id)).rafraichissable_par).toBeNull()
+    const { data } = await listProduits(db, 1)
+    expect(data.find((p: any) => p.id === id).rafraichissable_par).toBeNull()
+  })
+
+  it('(b) produit de la boutique B demandé par la boutique A : rien via resoudreAdaptateurProduit ni listProduits(A) ; getProduitById ne filtre pas par boutique — isolation portée par la route', async () => {
+    const f = fournisseur({ boutique_id: 2, api_plateforme: 'mobilax' })
+    const id = produit({ boutique_id: 2, fournisseur_id: f, mobilax_id: 17 })
+
+    // La boutique A (1) ne voit RIEN de ce produit de B via resoudreAdaptateurProduit : la
+    // jointure filtre sur p.boutique_id = ? (le WHERE), pas seulement sur f.boutique_id = p.boutique_id
+    expect(await resoudreAdaptateurProduit(db, 1, id)).toBeNull()
+    // Ni via listProduits(A) — filtré par boutique_id
+    const { data: dataA } = await listProduits(db, 1)
+    expect(dataA.find((p: any) => p.id === id)).toBeUndefined()
+
+    // Dans SA boutique (B), le produit est bien rafraîchissable — sur les trois fonctions
+    expect(await attendu(2, id)).toBe('Mobilax')
+    const { data: dataB } = await listProduits(db, 2)
+    expect(dataB.find((p: any) => p.id === id)?.rafraichissable_par).toBe('Mobilax')
+    // getProduitById() ne prend pas de boutique_id : appelée « côté A » (sans garde), elle rend
+    // quand même la ligne de B — c'est la route (assertBoutiqueOwnership) qui isole, pas cette
+    // fonction. Documenté ici pour ne pas être pris pour un défaut d'isolation de la fonction elle-même.
+    expect((await getProduitById(db, id)).rafraichissable_par).toBe('Mobilax')
+  })
+
+  it('(c) fiche Mobilax d\'une autre boutique : rafraichissable_par = null, sur les trois fonctions', async () => {
+    const fAutreBoutique = fournisseur({ boutique_id: 2, api_plateforme: 'mobilax' })
+    const id = produit({ boutique_id: 1, fournisseur_id: fAutreBoutique, mobilax_id: 17 })
+
+    expect(await attendu(1, id)).toBeNull()
+    expect((await getProduitById(db, id)).rafraichissable_par).toBeNull()
+    const { data } = await listProduits(db, 1)
+    expect(data.find((p: any) => p.id === id).rafraichissable_par).toBeNull()
+  })
+
+  it('(d) produit Mobilax conforme : rafraichissable_par = "Mobilax", sur les trois fonctions', async () => {
+    const f = fournisseur({ boutique_id: 1, api_plateforme: 'mobilax' })
+    const id = produit({ boutique_id: 1, fournisseur_id: f, mobilax_id: 17 })
+
+    expect(await attendu(1, id)).toBe('Mobilax')
+    expect((await getProduitById(db, id)).rafraichissable_par).toBe('Mobilax')
+    const { data } = await listProduits(db, 1)
+    expect(data.find((p: any) => p.id === id).rafraichissable_par).toBe('Mobilax')
+  })
+
+  it('produit sans fournisseur lié : rafraichissable_par = null', async () => {
+    const id = produit({ boutique_id: 1, fournisseur_id: null, mobilax_id: null })
+
+    expect(await attendu(1, id)).toBeNull()
+    expect((await getProduitById(db, id)).rafraichissable_par).toBeNull()
+    const { data } = await listProduits(db, 1)
+    expect(data.find((p: any) => p.id === id).rafraichissable_par).toBeNull()
   })
 })

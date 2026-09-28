@@ -22,7 +22,11 @@ const MOBILAX_ID = 17
 
 const SQL_FOURNISSEUR_API = `SELECT id, nom, (api_key_chiffree IS NOT NULL) AS a_cle FROM fournisseurs WHERE boutique_id = ? AND api_plateforme = ? AND actif = 1 ORDER BY id LIMIT 2`
 const SQL_CLE_API = 'SELECT api_key_chiffree FROM fournisseurs WHERE id = ? AND boutique_id = ? AND actif = 1'
-const SQL_ADAPTATEUR = `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id
+// Point 16 : le SELECT porte aussi rafraichissable_par (sqlRafraichissablePar()), la condition
+// d'adaptateur unique de stockService.ts — texte exact requis par le matching du mock (normalisé
+// espaces/retours à la ligne, cf. tests/helpers/mockDatabase.ts).
+const SQL_ADAPTATEUR = `SELECT p.id AS produit_id, f.api_plateforme AS api_plateforme, p.mobilax_id AS mobilax_id,
+     CASE WHEN f.api_plateforme = 'mobilax' AND p.mobilax_id IS NOT NULL THEN 'Mobilax' ELSE NULL END AS rafraichissable_par
      FROM produits p
      LEFT JOIN fournisseurs f ON f.id = p.fournisseur_id AND f.boutique_id = p.boutique_id AND f.actif = 1
      WHERE p.id = ? AND p.boutique_id = ? AND p.actif = 1`
