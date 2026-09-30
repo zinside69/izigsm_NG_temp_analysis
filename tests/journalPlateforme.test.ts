@@ -12,7 +12,7 @@
  * Couverture :
  *   déclenchement           (mutation admin plateforme / GET / manager)   4 tests
  *   résolution de la cible  (garde, query, corps, non résolue, 404,
- *                            handler qui lève, purge inter-requêtes)      9 tests
+ *                            handler qui lève, purge inter-requêtes)      8 tests
  *   expurgation & troncature du corps                                    3 tests
  *   robustesse (échec d'écriture, handler qui lève, corps, anonyme)      5 tests
  *   application réelle (route métier non prévue par le middleware,
