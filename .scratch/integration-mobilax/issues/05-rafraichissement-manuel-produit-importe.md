@@ -55,7 +55,7 @@ Commun :
 
 - **Service** `rafraichirProduitImporte()` — vitest, Mobilax simulé à sa frontière HTTP (`vi.stubGlobal('fetch', …)`, comme `tests/mobilaxService.test.ts`) : prix d'achat réécrit, prix de vente et stock intacts, refus `non_mobilax` sans appel, 429/indisponible sans écriture.
 - **Route** `POST /api/mobilax/produits/:id/rafraichir` — vitest par `app.request()` : 403 admin plateforme, 403 technicien, 404 autre boutique, codes d'erreur.
-- **Écran** fiche produit — E2E Playwright `tests/e2e/mobilax-actualiser.spec.ts` en **préproduction réelle** (clé de `.dev.vars`, sauté sans clé) : import, prix d'achat modifié à la main, « Actualiser » → la valeur Mobilax revient dans `#stock-price-buy`. ⚠ Le socle ne joue aucun E2E (O28) : rejoué par l'humain avant tout report.
+- **Écran** fiche produit — E2E Playwright `tests/e2e/mobilax-actualiser.spec.ts` en **préproduction réelle** (clé de `.dev.vars`, sauté sans clé) : import, prix d'achat modifié à la main, « Actualiser » → la valeur Mobilax revient dans `#stock-price-buy`. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).
 
 ## Notes
 
