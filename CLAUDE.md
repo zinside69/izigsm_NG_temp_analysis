@@ -990,7 +990,11 @@ reste à décider). Le socle se lance **sous WSL Ubuntu**, jamais d'ici. Premiè
   obligatoire, P18), donne le hash, et code avec l'exploitant les tickets **caisse / NF525**.
 - **Numéros de migration réservés par ticket** (`decisions.md` 2026-09-30) : socle et exploitant
   codent en parallèle, un numéro pris deux fois casse `migrations apply`. Le reprendre dans la
-  déclaration de la tâche.
+  déclaration de la tâche. État au checkpoint 132 : `0052` 05, `0053` 06, `0054` 07 (codé), `0055`
+  08b, `0056` 09, `0057` 11 ; `0058` 14 (conditionnelle, sans objet).
+- **Un ticket confié au socle cite l'ordre imposé par les fichiers partagés** (`bloque-par` ou
+  note) : les tickets du lot 2 touchent tous `tickets.js`, `routes/tickets.ts` ou `devis.js` — deux
+  PR parallèles sur ces fichiers se contrediraient.
 - **Relire la CONCEPTION d'un ticket avant de le confier au socle** (leçon du ticket 18, 2026-09-25) :
   le socle exécute fidèlement une prescription fausse. `todo.md` prescrivait « échec ⇒ clé d'ajout
   libérée », avec le test qui la valide : un agent l'aurait codé, les contrôles l'auraient passé, et le

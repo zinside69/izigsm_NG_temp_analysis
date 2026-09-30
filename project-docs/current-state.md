@@ -1,4 +1,34 @@
-# iziGSM — État courant (MàJ : 2026-09-30, checkpoint 131 — lot 1 : 04 et 07 codés, 05-09 cadrés pour le socle)
+# iziGSM — État courant (MàJ : 2026-09-30, checkpoint 132 — lot 2 : tickets 11 à 14 cadrés pour le socle)
+
+## Checkpoint 132 — Lot 2 : tickets 11 à 14 cadrés, amendements du socle (2026-09-30, soir)
+
+**Aucun code. Production inchangée (`izigsm-v3.11`). `main` = `origin/main`.** Migrations en attente
+inchangées (`0048` → `0051`, `0054`).
+
+- **Règle confirmée par l'exploitant** (question posée, réponse « on garde ») : tout ticket se cadre
+  ici ; **caisse ou NF525 → codé ici avec l'exploitant**, sinon → socle.
+- **Tickets cadrés au nouveau modèle, tous pour le socle** (décisions dans chaque fichier) :
+  - **11** lignes de ticket (`7ea4bfd`) — `lignes_ticket` + `tickets.modele_id`, migration **`0057`**
+    réservée ; prix du modèle ; prix du ticket = somme des lignes ; bloqué par 08c, 09.
+  - **12** pose d'une pièce (`e043a45`) — pose atomique par **un seul `db.batch()`** conditionné
+    (⊥ `enregistrerMouvement()`), ligne posée non retirable, « à commander » calculé à la lecture,
+    page Stock + onglet Fournisseurs avec les tickets, badge seulement ; bloqué par 11, 06.
+  - **13** devis depuis le ticket (`2db03b7`) — `POST /api/tickets/:id/devis`, un devis vivant par
+    ticket, copie indépendante, identité de l'appareil dans la fiche et la page publique ; bloqué
+    par 08a, 11, et après T-007 (`devis.js`).
+  - **14** acceptation et refus (`96468d0`) — signature au comptoir stockée entière, statut de
+    ticket **`devis_refuse`**, forfait de diagnostic = **facture brouillon** (aucune émission).
+- **Amendements demandés par le socle (P15), poussés** : Mobilax 06 couture écran (`fb7aa5f`) ;
+  **08a** (`49e4b41`) — PUT rattache sans réécrire la fiche appareil, client vérifié d'abord (faille
+  existante de `POST /api/tickets`), validations avant écriture. ⚠ Un critère d'origine du 08a
+  (« met à jour l'appareil ») contredit la décision 1 : non barré (consigne « ne touche à aucune
+  ligne »), signalé à l'exploitant.
+- **Défauts trouvés au cadrage** (`bugs.md`) : lignes de devis sans `service_id` ; passage ticket →
+  devis par `localStorage` (une ligne, client retrouvé par le nom) ; signature de devis tronquée à
+  1 000 caractères ; `POST /api/tickets` sans vérification du `client_id`.
+
+**Prochaine session** : cadrer **15** (facture depuis le devis, appareil figé — **NF525, codé ici**),
+puis 16 et 17. Contexte neuf recommandé pour le 15.
 
 ## Checkpoint 131 — Lot 1 : tickets de caisse codés, le reste cadré pour le socle (2026-09-30)
 

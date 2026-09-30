@@ -36,6 +36,11 @@ ferait échouer `migrations apply`.
 
 Lot 2, même jour : **ticket 11** (lignes de ticket) — ni caisse ni NF525 → socle, migration **`0057`**
 réservée (table `lignes_ticket` + `tickets.modele_id`), bloqué par 08c et 09 (mêmes fichiers).
+Puis **12** (pose, socle, sans migration), **13** (devis depuis le ticket, socle, sans migration),
+**14** (acceptation et refus, socle ; `0058` réservée seulement si `tickets.statut` avait un `CHECK`
+— il n'en a pas). Le forfait de diagnostic du 14 ne crée qu'une **facture brouillon** (aucune
+émission) : c'est ce choix de l'exploitant qui le laisse au socle. **La règle de répartition est
+confirmée** (question posée le soir même : « on garde la règle actuelle »).
 
 **Le lot 1 part sans le ticket 10** (service de base d'IMEI) : le prestataire n'est pas choisi et il
 faut une clé de test. Sans lui, le modèle se saisit à la main (story 44). Le 10 devient un ajout

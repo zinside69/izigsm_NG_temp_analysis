@@ -1,4 +1,21 @@
-# Recovery Prompt — iziGSM — 2026-09-30 (checkpoint 131 — lot 1 : 04 et 07 codés, 05-09 cadrés)
+# Recovery Prompt — iziGSM — 2026-09-30 (checkpoint 132 — lot 2 : 11 à 14 cadrés)
+
+## Ce qui a changé au checkpoint 132
+
+Aucun code. **Tickets 11, 12, 13, 14 cadrés pour le socle** (lot 2), amendements P15 poussés
+(08a, Mobilax 06). Règle confirmée : cadrer ici ; caisse / NF525 → coder ici avec l'exploitant ;
+sinon socle (piloté par la session racine, ⊥ y toucher d'ici).
+
+- Migrations **réservées** : `0057` (11), `0058` (14, seulement si `tickets.statut` avait un
+  `CHECK` — il n'en a pas). Rappel : `0052` 05, `0053` 06, `0054` 07, `0055` 08b, `0056` 09.
+- Ordre imposé par les fichiers partagés : 11 après 08c et 09 ; 12 après 11 et 06 ; 13 après 08a,
+  11 et T-007 ; 14 après 13.
+- ⚠ 08a : un critère d'origine (« met à jour l'appareil ») contredit la précision P15 « rattacher,
+  jamais réécrire » — à barrer si l'exploitant le demande.
+
+**Première action** : cadrer le **ticket 15** (facture depuis le devis, identité de l'appareil figée
+à l'émission) — il touche le **NF525** : codé ici avec l'exploitant. Lire d'abord `CLAUDE.md` §
+Factures (sites de figeage) et le helper `tests/helpers/d1Sqlite.ts`. Puis 16, 17.
 
 ## Ce qui a changé au checkpoint 131
 

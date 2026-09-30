@@ -107,6 +107,8 @@ Décisions : `decisions.md` § 2026-09-16.
 - [ ] **Ticket 08b** (parcours IMEI, `0055`) — au socle, après 08a
 - [ ] **Ticket 08c** (requalification SAV ↔ payant) — au socle, après 08b
 - [ ] **Ticket 09** (validation technique, `0056`) — au socle, après 08b
+- [x] **Lot 2 — tickets 11 à 14 cadrés le 2026-09-30** (checkpoint 132), tous pour le socle :
+      11 (`0057`), 12, 13, 14. **Reste à cadrer : 15** (NF525 → codé ici), **16, 17**.
 - [ ] **Report sur `main`** de chaque PR du socle (cherry-pick, session racine), puis **déploiement du
       lot 1 en bloc** : migrations `0048` → `0056` à distance, `d1_migrations` relu, puis le code
       (`modop-deploiement.md`)

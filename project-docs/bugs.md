@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟠 Quatre défauts trouvés au cadrage du lot 2 (2026-09-30, OUVERTS, correctifs cadrés)
+
+- **`POST /api/tickets` ne vérifie pas que `client_id` appartient à la boutique** de l'appelant —
+  relevé par la relecture de conception du socle (P15) sur le 08a ; **correctif : ticket 08a**.
+- **Les lignes de devis n'écrivent pas `service_id`** (`devisService.ts`, création et conversion en
+  facture : `produit_id` seul) alors que la colonne existe depuis `0049` — le lien au catalogue se
+  perd ; **correctif : ticket 13**.
+- **Le passage ticket → devis est cassé** : `localStorage` (`izigsm_new_devis_from_ticket`), ticket
+  relu dans un cache local, **une seule ligne** reprise, client retrouvé **par comparaison de nom** ;
+  **correctif : ticket 13** (génération serveur).
+- **`saveSignatureDevis()` tronque la signature à 1 000 caractères** : une signature dessinée (data URL
+  PNG) est coupée, donc illisible. Le 14 contourne pour le comptoir (stockage entier) ; le chemin
+  **en ligne** garde la troncature — **non corrigé**, hors périmètre.
+
 ## 🟠 Prise en charge : l'IMEI saisi n'est jamais enregistré (trouvé le 2026-09-30, OUVERT)
 
 **Défaut** : le formulaire de prise en charge (`tickets.js`, envoi du ticket) transmet `imei`, mais
