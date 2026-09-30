@@ -11,12 +11,14 @@
  *
  * Couverture :
  *   déclenchement           (mutation admin plateforme / GET / manager)   4 tests
- *   résolution de la cible  (query, corps, non résolue)                   3 tests
- *   expurgation & troncature du corps                                     3 tests
- *   robustesse (échec d'écriture, handler qui lève, corps, anonyme)       5 tests
- *   application réelle (route métier non prévue par le middleware)        1 test
+ *   résolution de la cible  (garde, query, corps, non résolue, 404,
+ *                            handler qui lève, purge inter-requêtes)      8 tests
+ *   expurgation & troncature du corps                                    3 tests
+ *   robustesse (échec d'écriture, handler qui lève, corps, anonyme)      5 tests
+ *   application réelle (route métier non prévue par le middleware,
+ *                        + route gardée `PUT /fournisseurs/:id`)         2 tests
  *
- * Total : 16 tests
+ * Total : 22 tests
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -24,7 +26,7 @@ import { Hono } from 'hono'
 import { createMockDatabase } from './helpers/mockDatabase'
 import { createMockD1 } from './helpers/mockD1'
 import app from '../src/index'
-import { journalPlateformeMiddleware } from '../src/lib/middleware'
+import { journalPlateformeMiddleware, assertBoutiqueOwnership } from '../src/lib/middleware'
 import { generateTokenPair } from '../src/lib/auth'
 import type { JwtPayload } from '../src/lib/auth'
 import type { Database } from '../src/ports/database'
@@ -80,6 +82,32 @@ function creerApp(db: ReturnType<typeof createMockDatabase>, user?: JwtPayload) 
   routeur.post('/lecteur', async (c) => { await c.req.json(); return c.json({ success: true }, 201) })
   // Route qui échoue sans rien attraper — cas majoritaire des handlers mutants du dépôt.
   routeur.post('/casse', () => { throw new Error('handler en panne') })
+  // Routes gardées : reproduisent le patron `assertBoutiqueOwnership()` des routes /:id
+  // réelles (ex. `fournisseurs.ts`) — ressource fixe en boutique 5, quel que soit l'id ou
+  // ce que la requête déclare par ailleurs (`?boutique_id=` / corps).
+  const garder = (c: any) => assertBoutiqueOwnership(c.get('user'), { boutique_id: 5 }, 'Ressource')
+  routeur.get('/gardee/:id', (c) => {
+    const deny = garder(c)
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+    return c.json({ success: true }, 200)
+  })
+  routeur.put('/gardee/:id', (c) => {
+    const deny = garder(c)
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+    return c.json({ success: true }, 200)
+  })
+  // Ressource introuvable : la garde répond 404 sans jamais poser de cible.
+  routeur.put('/gardee-absente/:id', (c) => {
+    const deny = assertBoutiqueOwnership(c.get('user')!, null, 'Ressource')
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+    return c.json({ success: true }, 200)
+  })
+  // Handler qui lève après avoir passé la garde, sans rien attraper.
+  routeur.put('/gardee-casse/:id', (c) => {
+    const deny = garder(c)
+    if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+    throw new Error('handler en panne après garde')
+  })
   app.route('/api', routeur)
 
   return app
@@ -207,6 +235,62 @@ describe('Journal des actions de plateforme', () => {
 
       const lignes = lignesJournal(db)
       expect(lignes).toHaveLength(1)
+      expect(lignes[0].boutique_id).toBeNull()
+    })
+
+    it('une route gardée par assertBoutiqueOwnership() journalise la boutique de la ressource', async () => {
+      const app = creerApp(db, ADMIN_PLATEFORME)
+
+      await appeler(app, '/api/gardee/20', json('PUT', {}))
+
+      expect(lignesJournal(db)[0].boutique_id).toBe(5)
+    })
+
+    it('la cible posée par la garde prime sur ?boutique_id= — pas la boutique déclarée par l\'appelant', async () => {
+      // Un onglet resté ouvert sur une autre boutique que la sélection courante : la requête
+      // déclare boutique_id=3, mais la ressource chargée par la garde est en boutique 5.
+      const app = creerApp(db, ADMIN_PLATEFORME)
+
+      await appeler(app, '/api/gardee/20?boutique_id=3', json('PUT', { boutique_id: 3 }))
+
+      expect(lignesJournal(db)[0].boutique_id).toBe(5)   // pas 3 : l'ancien ordre aurait écrit 3
+    })
+
+    it('ressource absente (garde en 404) → ligne écrite, cible nulle', async () => {
+      const app = creerApp(db, ADMIN_PLATEFORME)
+
+      // Aucun repli disponible (ni query ni corps) : la garde ne pose rien pour une ressource
+      // absente, la ligne doit donc rester à cible nulle — pas juste « pas 404 masqué ».
+      const res = await appeler(app, '/api/gardee-absente/999', json('PUT', {}))
+
+      expect(res.status).toBe(404)
+      const lignes = lignesJournal(db)
+      expect(lignes).toHaveLength(1)
+      expect(lignes[0].boutique_id).toBeNull()
+    })
+
+    it('handler qui lève après la garde → la ligne porte quand même la boutique de la ressource', async () => {
+      const app = creerApp(db, ADMIN_PLATEFORME)
+
+      const res = await appeler(app, '/api/gardee-casse/20', json('PUT', {}))
+
+      expect(res.status).toBe(500)
+      const lignes = lignesJournal(db)
+      expect(lignes).toHaveLength(1)
+      expect(lignes[0]).toMatchObject({ boutique_id: 5, statut_http: 500 })
+    })
+
+    it('la cible posée par une garde ne survit pas à la requête — un GET gardé n\'affecte pas la mutation suivante', async () => {
+      // Même objet payload pour les deux appels (comme le ferait le harnais de test, ou un
+      // appelant qui réutiliserait un JwtPayload) : sans purge systématique dans le `finally`,
+      // la mutation sans garde hériterait de la cible posée par le GET.
+      const app = creerApp(db, ADMIN_PLATEFORME)
+
+      await appeler(app, '/api/gardee/20')                          // GET gardé, non journalisé
+      await appeler(app, '/api/clients', json('POST', { nom: 'Dupont' }))   // mutation sans garde
+
+      const lignes = lignesJournal(db)
+      expect(lignes).toHaveLength(1)                // seule la mutation est journalisée
       expect(lignes[0].boutique_id).toBeNull()
     })
   })
@@ -344,6 +428,46 @@ describe('Journal des actions de plateforme', () => {
       const [user_id, boutique_id, methode, chemin] = ligne!.params as any[]
       expect({ user_id, boutique_id, methode, chemin })
         .toEqual({ user_id: 7, boutique_id: 2, methode: 'POST', chemin: '/api/clients' })
+    })
+
+    /**
+     * `PUT /api/fournisseurs/:id` est gardée par `assertBoutiqueOwnership()`
+     * (`src/routes/fournisseurs.ts`) — la couture réelle du critère « la cible posée par la
+     * garde prime sur `?boutique_id=` ». Le fournisseur chargé appartient à la boutique 5 ;
+     * la requête déclare `?boutique_id=3` (onglet resté ouvert sur une autre boutique que la
+     * sélection courante) : la ligne doit porter 5, jamais 3.
+     */
+    it('PUT /api/fournisseurs/:id journalise la boutique du fournisseur, pas celle de ?boutique_id=', async () => {
+      const d1     = createMockD1()
+      const secret = 'secret-de-test'
+      const { accessToken } = await generateTokenPair(
+        { id: 7, email: 'support@soteli.fr', role: 'admin', boutique_id: null, prenom: 'Support', nom: 'Soteli' },
+        secret,
+      )
+      d1.__setResponse(
+        `SELECT id, boutique_id, nom, contact, email, telephone, adresse, site_web, notes, actif, api_plateforme
+     FROM fournisseurs WHERE id = ? AND actif = 1`,
+        { id: 20, boutique_id: 5, nom: 'Mobilax', actif: 1 },
+      )
+
+      const exec = creerExecutionCtx()
+      const res  = await app.request(
+        '/api/fournisseurs/20?boutique_id=3',
+        {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body:    JSON.stringify({ nom: 'Mobilax Renommé' }),
+        },
+        { DB: d1, JWT_SECRET: secret } as any,
+        exec.ctx as any,
+      )
+      await exec.attendre()
+
+      expect(res.status, `réponse inattendue : ${await res.clone().text()}`).toBe(200)
+      const ligne = d1.__getCalls().find((appel) => appel.sql.includes('journal_actions_plateforme'))
+      expect(ligne, `aucune ligne écrite (réponse ${res.status})`).toBeDefined()
+      const [, boutique_id] = ligne!.params as any[]
+      expect(boutique_id).toBe(5)   // pas 3 : l'ancien ordre (query en priorité) aurait écrit 3
     })
   })
 })
