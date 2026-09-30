@@ -27,6 +27,18 @@ des pièces — le même prix de vente que si la pièce avait été importée. C
 quota `/products*` (30/min) par pièce insérée. Écartés : « toujours pièce » (faux sur un
 accessoire) et « taux par défaut seul » (contraire au critère d'origine).
 
+**Précision du 2026-09-30 — taux null** (relecture de conception du socle, P15). Décision de
+l'exploitant : l'import garde son comportement actuel.
+- La fonction partagée ne reçoit qu'un taux non null : `prixDeVente(prixAchat: number, taux: number): number`,
+  qui calcule prix d'achat × (1 + taux / 100) arrondi au centime. Elle ignore le cas « taux null ».
+- Chaque appelant garde son propre repli : `importerProduitMobilax()` → `prix_vente_ht: 0`
+  (inchangé) ; `prixVenteMobilax()` → prix d'achat et `taux: null`.
+- ⊥ modifier le test de `tests/mobilaxService.test.ts` qui verrouille l'import sans marge
+  (`prix_vente_ht: 0`) : il doit rester vert tel quel.
+- Couture « Fonction partagée », précisée : les tests directs couvrent l'arrondi au centime et le
+  taux 0. Le cas « taux null » se teste sur chaque appelant : l'import rend 0, `prixVenteMobilax()`
+  rend le prix d'achat.
+
 ## Critères d'acceptation
 
 Serveur :
