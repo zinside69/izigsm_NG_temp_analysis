@@ -59,7 +59,7 @@ déjà `appareil_imei` / `appareil_numero_serie` par jointure (`getTicketById()`
 - [ ] `POST /api/tickets` lit le champ (`imei` du formulaire actuel) : 15 chiffres à Luhn juste → appareil retrouvé ou créé avec `imei` ; 15 chiffres à clé fausse → **400** « IMEI invalide (clé de contrôle) », aucun ticket créé ; autre saisie non vide → appareil retrouvé ou créé avec `numero_serie` ; vide → `appareil_id` NULL
 - [ ] Appareil retrouvé = même `client_id` et même `imei` (ou `numero_serie`), jamais un appareil d'un autre client ; créé avec la marque et le modèle du ticket
 - [ ] `appareil_id` explicite dans le corps : **vérifié** (l'appareil appartient au client du ticket, client de la boutique), sinon 400 — ⊥ accepter un `appareil_id` d'une autre boutique
-- [ ] `PUT /api/tickets/:id` : modifier le champ met à jour (ou crée) l'appareil du ticket selon les mêmes règles
+- [ ] ~~`PUT /api/tickets/:id` : modifier le champ met à jour (ou crée) l'appareil du ticket selon les mêmes règles~~ — **barré le 2026-09-30** (demande de l'exploitant) : contredisait la précision P15, décision 1. Remplacé par : `PUT /api/tickets/:id` : champ **absent ou `""`** → `appareil_id` inchangé ; **valeur** → recherche ou création de la fiche selon les règles du POST, puis **nouveau rattachement** de `tickets.appareil_id` ; ⊥ tout `UPDATE` de `appareils.imei` ou `appareils.numero_serie` (la fiche est partagée par les tickets du client)
 - [ ] Le SQL vit dans les services (`clientService.ts` / `ticketService.ts`), jamais dans le controller
 - [ ] Écran : le champ de `tickets.html` est libellé « IMEI / n° de série » ; message 400 affiché en clair ; la fiche ticket rouverte affiche la valeur enregistrée
 - [ ] `CACHE_VERSION` (`public/sw.js`) incrémenté
