@@ -41,6 +41,9 @@ son critère « doublon rapporté dans le bilan CSV » sans objet — un code ja
 
 **À la correction** : lire la colonne, puis appliquer à chaque ligne la conversion du doublon déjà
 écrite pour la création manuelle (`ErreurCodeEnDoublon`), le bilan nommant le produit existant.
+
+**Planifié le 2026-09-30** : préalable du ticket 05 (`codes-maison`), confié au socle — sans ce
+correctif, un produit importé par CSV avec son EAN recevrait un code maison à tort.
 Sans cette conversion, la migration `0048` ferait remonter l'erreur SQL brute dans le bilan.
 
 ## 🟢 Doublon de code-barres ou de SKU : erreur de base de données, voire 500 (trouvé et CORRIGÉ le 2026-09-17, ticket 01 `vente-lit-catalogue`, non déployé)

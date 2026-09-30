@@ -811,6 +811,36 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **Les compteurs suivent la liste affichée** (décision B du 2026-09-15) : `renderStock()` appelle
   `renderKPIs(filtered)` — un seul filtrage pour les lignes et les compteurs, liste vide → 0.
 
+## Douchette, IMEI et appareils vendus (depuis 2026-09-30, tickets 04 et 07 `vente-lit-catalogue`)
+
+- **Un scan se route côté serveur** : `routerScan()` (`src/lib/scan.ts`, pure) — 13 chiffres →
+  code-barres, 15 → IMEI, sinon texte ; `GET /api/catalogue/recherche?scan=` rend `{ type_scan,
+  resultats }` (exclusif de `?q=`, 400 sinon). ⊥ router un scan dans le navigateur : la prise en
+  charge (ticket 08b) passe par la même route.
+- **Un code scanné se cherche par égalité stricte sur `code_barre` OU `sku`** (`rechercherParCode()`) —
+  l'exploitant tape l'EAN dans le SKU. ⊥ le `LIKE %…%` de la recherche texte. Plusieurs résultats
+  restent possibles (EAN de l'un = SKU de l'autre) : l'écran liste, jamais de choix automatique.
+- **`luhnValide()` (`lib/scan.ts`) est la seule clé de contrôle d'IMEI** : fiche produit, scan (IMEI
+  faux → `imei_invalide`, **aucune requête**), prise en charge (08a). ⊥ une seconde implémentation.
+- **La capture de douchette vit dans `public/static/js/douchette.js`** (`ecouterDouchette(surScan)`),
+  sans logique de page ; neutralisée dans tout champ de saisie ; Entrée neutralisée quand un code est
+  lu (sinon elle « clique » le bouton qui a le focus). Pas pour l'admin plateforme en caisse.
+- **`produits.imei`** (`0054`, index unique partiel par boutique, produits actifs) : un appareil = une
+  fiche ; un doublon → `ErreurCodeEnDoublon` champ `imei`. En modification, **trois états** (absent =
+  inchangé, vide = retiré) : ⊥ `COALESCE` sur cette colonne.
+- **`factures.appareils_snapshot`** (liste JSON `{ produit_id, designation, marque, modele, imei }`,
+  modèle = nom de la fiche) est écrit par **l'`UPDATE` post-journal de `createVente()`**, avec les six
+  autres marques du figeage, relu **en base** — jamais depuis le corps de la requête, jamais un
+  troisième site. Hors des données hashées NF525. Le bloc « Appareil vendu » de `_buildFactureHTML()`
+  le lit tel quel.
+- **Tests sur mock qui figent le texte SQL** (`caisseService.test.ts` `SQL_VERROU`, `INSERT`/`UPDATE`
+  de produits dans 5 fichiers) : ajouter une colonne **en fin de liste** et mettre la copie à jour —
+  sinon un test « l'UPDATE n'a pas eu lieu » passe **par vacuité** (vécu : le test « facture
+  déverrouillée si le journal échoue »).
+- **`tests/helpers/d1Sqlite.ts`** : vrai SQLite en mémoire au **schéma réel** (toutes les migrations
+  rejouées), exposé en `D1Database`. À préférer au mock pour toute règle portée par le SQL ou l'ordre
+  des écritures (figeage, index uniques) — pour les services sur D1 brut.
+
 ## Taux de marge et réglages boutique (depuis 2026-09-10, ticket 02 chantier Mobilax)
 
 - **`resoudreTauxMarge(settings, famille)`** (`boutiqueService.ts`, pure) est le seul point de
@@ -954,6 +984,13 @@ reste à décider). Le socle se lance **sous WSL Ubuntu**, jamais d'ici. Premiè
   sans profil (`wsl -e bash -c`, cron), `npx` se résout vers celui de Windows (`/mnt/c/…`), tsc ne
   tourne pas et `grep -c "error TS"` compte **0** — typecheck vert sans rien vérifier.
 - Le travail d'un agent ne se reporte ici qu'après relecture humaine, E2E joués, et verdict du socle.
+- **Partage des rôles (décision du 2026-09-30)** : la **session racine `claude-test` pilote le socle**
+  (`integration`, `todo.md` du socle, `poste-orchestrateur` de mobilax). Une session lancée ici
+  **n'y touche pas** : elle écrit et amende les tickets sur `main` (section « Coutures à tester »
+  obligatoire, P18), donne le hash, et code avec l'exploitant les tickets **caisse / NF525**.
+- **Numéros de migration réservés par ticket** (`decisions.md` 2026-09-30) : socle et exploitant
+  codent en parallèle, un numéro pris deux fois casse `migrations apply`. Le reprendre dans la
+  déclaration de la tâche.
 - **Relire la CONCEPTION d'un ticket avant de le confier au socle** (leçon du ticket 18, 2026-09-25) :
   le socle exécute fidèlement une prescription fausse. `todo.md` prescrivait « échec ⇒ clé d'ajout
   libérée », avec le test qui la valide : un agent l'aurait codé, les contrôles l'auraient passé, et le
@@ -1055,6 +1092,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-09-30 (checkpoint 131) : production inchangée (`izigsm-v3.11`) ; `0048` → `0051` et
+`0054` EN ATTENTE sur `main`** (local Windows seulement). Sur `main`, non déployés : tickets 04 et 07
+du lot 1, ticket 05 Mobilax (reporté d'`integration`), `CACHE_VERSION` `izigsm-v3.14`. Le lot 1 (01-09
++ 18 + 05 Mobilax, **sans le 10**) part **en bloc** quand le socle aura livré 05, 06, 08a-c, 09 :
+`0048` → `0056` à distance, `d1_migrations` relu, **puis** le code. Sans `0054`, la fiche produit, le
+scan par IMEI **et toute vente en caisse** échouent (`createVente()` écrit `appareils_snapshot`).
 
 **État au 2026-09-25 : production inchangée (`izigsm-v3.11`) ; `0048` → `0051` EN ATTENTE sur
 `main`** (ticket 18 fusionné). `0048` à `0051` appliquées sur la base locale Windows seulement, aucune

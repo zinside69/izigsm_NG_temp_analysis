@@ -1,4 +1,49 @@
-# iziGSM — État courant (MàJ : 2026-09-25, checkpoint 130 — ménage des branches : il ne reste que `main`)
+# iziGSM — État courant (MàJ : 2026-09-30, checkpoint 131 — lot 1 : 04 et 07 codés, 05-09 cadrés pour le socle)
+
+## Checkpoint 131 — Lot 1 : tickets de caisse codés, le reste cadré pour le socle (2026-09-30)
+
+**Production inchangée (`izigsm-v3.11`). `main` = `origin/main` (`fb7aa5f`). Migrations EN ATTENTE :
+`0048` → `0051` et `0054`, appliquées sur la base locale Windows seulement.** `CACHE_VERSION` du
+dépôt : `izigsm-v3.14`. Vitest 1 309 verts + 2 échecs permanents (`agendaService`), tsc 32.
+
+- **Modèle de ticket** : section « Coutures à tester » obligatoire (`docs/agents/issue-tracker.md`,
+  `e1d88ca`) — sans elle, le socle refuse la tâche avant l'agent (P18, ADR 0004 du socle).
+- **Règle de répartition (exploitant)** : chaque ticket se cadre d'abord ici ; **caisse ou NF525 →
+  codé par Claude avec l'exploitant**, sinon → socle. Tableau du lot 1 et **numéros de migration
+  réservés** (`0052` 05, `0053` 06, `0054` 07, `0055` 08b, `0056` 09) : `decisions.md` 2026-09-30.
+  **Le lot 1 part sans le ticket 10** (prestataire d'IMEI non choisi).
+- **Ticket 04 — douchette en caisse, codé et poussé** (`24ca557`) : `routerScan()` côté serveur
+  (`src/lib/scan.ts`), `GET /api/catalogue/recherche?scan=` (13 chiffres → égalité code-barres **ou**
+  SKU, jamais `LIKE`), capture partagée `public/static/js/douchette.js`, quantité + 1 au rescan,
+  « Créer la fiche » → `/stock?nouveau=1&code=` (SKU prérempli). E2E `caisse-douchette` 10/10.
+- **Ticket 07 — IMEI du produit, vente d'occasion, codé et poussé** (`b39c525`, migration **`0054`**) :
+  `luhnValide()`, IMEI dans la fiche (trois états en modification, doublon 409 nommant la fiche),
+  scan par IMEI, **identité des appareils figée dans l'`UPDATE` post-journal de `createVente()`**
+  (aucun troisième site), bloc « Appareil vendu » sur la facture A4. E2E prouvé **par mutation**.
+  Nouveau helper **`tests/helpers/d1Sqlite.ts`** : vrai SQLite au schéma réel exposé en `D1Database`.
+- **Tickets 05, 06, 08 (découpé en 08a/08b/08c), 09 cadrés** au nouveau modèle, décisions de
+  l'exploitant dans chaque fichier. **Deux défauts trouvés au cadrage** : l'IMEI saisi à la prise en
+  charge n'est **jamais enregistré** (`bugs.md`, correctif = 08a) ; l'import CSV perd `code_barre`
+  (déjà connu, corrigé en préalable du 05).
+- **Report du ticket 05 `integration-mobilax`** sur `main` (cherry-pick des 5 commits T-002/T-004,
+  auteurs d'agent gardés, `-x`) + `CACHE_VERSION` v3.12 ; E2E `mobilax-rafraichissement` 10/10.
+- **Tickets confiés au socle amendés** : journal-plateforme 001 (cible de la garde lue en premier,
+  effacée dans le `finally` — P15, `f02e71d`) ; Mobilax 06 (taux `null`, `130e386` ; couture écran
+  complétée, `fb7aa5f`).
+- **Nouveau partage des rôles (exploitant, fin de journée)** : la **session racine `claude-test`
+  pilote le socle** (`integration`, `todo.md`, `poste-orchestrateur` de mobilax). Cette session
+  écrit et amende les tickets sur `main` et donne le hash. T-008 (08a), T-009/T-010 (05 serveur /
+  écran), déclarées ici avant le partage, sont reprises par la session racine.
+- Points transmis à la session racine : ⊥ lancer T-008 et T-009 **en parallèle** (retenues dans la
+  même passe malgré `tests/**` commun, toutes deux touchent `public/sw.js`) ; fichier
+  `T-005.env,` (virgule) dans l'état du socle ; T-007 en escalade L3 (probablement réglée par
+  `fb7aa5f`).
+- Serveur `wrangler` local arrêté (port 3000 libre). ⚠ `TaskStop` ne tue que l'enveloppe bash :
+  trois `workerd` écoutaient le port 3000 en même temps, faux rouges E2E (mémoire).
+
+**Prochaine session** : relire les PR du socle à mesure qu'elles arrivent sur `integration` et
+aider au report sur `main` si la session racine le demande ; amender un ticket sur retour P15.
+Rien à coder ici tant qu'aucun ticket caisse / NF525 n'est ouvert (11-17 = lot 2).
 
 ## Checkpoint 130 — Ménage des branches (2026-09-25)
 

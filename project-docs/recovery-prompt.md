@@ -1,4 +1,28 @@
-# Recovery Prompt — iziGSM — 2026-09-25 (checkpoint 130 — ménage des branches)
+# Recovery Prompt — iziGSM — 2026-09-30 (checkpoint 131 — lot 1 : 04 et 07 codés, 05-09 cadrés)
+
+## Ce qui a changé au checkpoint 131
+
+**Tickets 04 (douchette) et 07 (IMEI du produit, figé sur la facture) codés et poussés** ; tickets
+05, 06, 08a/08b/08c, 09 **cadrés pour le socle** ; report du ticket 05 Mobilax sur `main`. `main` =
+`origin/main` = `fb7aa5f`. Production **inchangée** (`izigsm-v3.11`).
+
+- **Migrations en attente** : `0048` → `0051`, `0054` (local seulement). Réservées aux tickets du
+  socle : `0052` (05), `0053` (06), `0055` (08b), `0056` (09). Lot 1 = tickets 01-09 + 18 + 05 Mobilax,
+  **sans le 10** ; il part en bloc selon `modop-deploiement.md`.
+- **Partage des rôles (exploitant, 2026-09-30)** : la session racine `claude-test` pilote le socle
+  (`integration`, `todo.md`, `poste-orchestrateur` de mobilax) — **⊥ y toucher d'ici**. Ici : écrire
+  et amender les tickets sur `main`, donner le hash ; coder avec l'exploitant les tickets caisse /
+  NF525.
+- **Nouveautés à connaître** : scan routé par le serveur (`src/lib/scan.ts`, `?scan=`) ;
+  `douchette.js` partagé (réutilisé au 08b) ; `luhnValide()` unique ; instantané
+  `factures.appareils_snapshot` écrit par l'`UPDATE` post-journal de `createVente()` ; helper
+  `tests/helpers/d1Sqlite.ts` (vrai SQLite au schéma réel, en `D1Database`).
+- **Défaut ouvert trouvé** : l'IMEI de la prise en charge n'a jamais été enregistré (`bugs.md`,
+  correctif = ticket 08a, au socle).
+- ⚠ Avant un E2E : **un seul** serveur sur le port 3000 (`TaskStop` laisse `workerd` vivant).
+
+**Première action** : selon la demande — relecture d'une PR du socle, amendement d'un ticket (P15),
+ou report sur `main`. Aucun ticket caisse / NF525 ouvert.
 
 ## Ce qui a changé au checkpoint 130
 

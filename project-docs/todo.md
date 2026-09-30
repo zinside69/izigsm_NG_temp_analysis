@@ -28,7 +28,8 @@ Décisions : `decisions.md` § 2026-09-16.
       18** (pièce déjà en stock : ajout en un clic, description si vide, rattachement fournisseur),
       bloqué par 01, et un défaut CSV consigné ci-dessous.
 - [ ] 🟡 **Import CSV : `code_barre` ignoré** (`bugs.md`) — colonne documentée, jamais écrite ;
-      à corriger avec la conversion du doublon par ligne
+      à corriger avec la conversion du doublon par ligne — **porté par le ticket 05 depuis le
+      2026-09-30** (préalable des codes maison : sans lui, un EAN importé recevrait un code maison)
 - [x] **Ticket 02 fait le 2026-09-17** (`353d71b`, non poussé, non déployé) — sélecteur de
       produits en caisse, `GET /api/catalogue/recherche`, le stock baisse à la vente, stock
       insuffisant signalé. Sa revue a relevé la faille du résolveur de boutique : chantier à part,
@@ -93,6 +94,22 @@ Décisions : `decisions.md` § 2026-09-16.
     accord de l'exploitant ; cocher le ticket 18 ; mettre à jour `CLAUDE.md` § Service Mobilax
     (idempotence par clé, `0051`) et § Déploiement (lot 1 : `0048` → `0051`). `CACHE_VERSION` au
     dernier ticket d'écran du lot 1.
+
+- [x] **Lot 1 — cadrage des tickets 04 à 09 (2026-09-30, checkpoint 131)** : chacun au nouveau
+      modèle (décisions, critères, « Coutures à tester »), répartition caisse / NF525 → Claude +
+      exploitant, sinon → socle (`decisions.md` 2026-09-30). **Lot 1 sans le ticket 10.**
+- [x] **Ticket 04 fait le 2026-09-30** (`24ca557`) — douchette en caisse, non déployé.
+- [x] **Ticket 07 fait le 2026-09-30** (`b39c525`, migration `0054`) — IMEI du produit, identité figée
+      sur la facture, non déployé.
+- [ ] **Ticket 08a** (IMEI enregistré à la prise en charge) — au socle (session racine), débloqué
+- [ ] **Ticket 05** (codes maison, `0052`) — au socle, débloqué ; corrige d'abord l'import CSV
+- [ ] **Ticket 06** (file d'étiquettes, `0053`) — au socle, après 05
+- [ ] **Ticket 08b** (parcours IMEI, `0055`) — au socle, après 08a
+- [ ] **Ticket 08c** (requalification SAV ↔ payant) — au socle, après 08b
+- [ ] **Ticket 09** (validation technique, `0056`) — au socle, après 08b
+- [ ] **Report sur `main`** de chaque PR du socle (cherry-pick, session racine), puis **déploiement du
+      lot 1 en bloc** : migrations `0048` → `0056` à distance, `d1_migrations` relu, puis le code
+      (`modop-deploiement.md`)
 
 Les cases ci-dessous sont désormais portées par les tickets — elles restent pour la trace :
 

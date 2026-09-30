@@ -1,5 +1,18 @@
 # iziGSM — Décisions
 
+## 2026-09-30 — Partage des rôles : la session racine pilote le socle
+
+**Décision de l'exploitant** (fin de journée) : la session racine `claude-test` pilote le socle dans
+`~/bac-a-sable/izigsm-mobilax` — branche `integration`, `todo.md` du socle, `poste-orchestrateur`.
+La session `izigsm/webapp` n'y touche plus : elle écrit et amende les tickets sur `main` d'iziGSM,
+puis donne le hash du commit ; le report sur `main` et la déclaration des tâches `T-NNN` se font
+depuis la session racine. Les tâches T-008 (ticket 08a), T-009 et T-010 (ticket 05 serveur / écran),
+déclarées depuis cette session avant le partage, sont reprises par la session racine.
+
+**Pourquoi** : deux sessions écrivaient dans le bac à sable le même jour (déclaration de tâches,
+doublon corrigé dans `todo.md`) — un seul pilote évite les manifestes concurrents. La règle
+« caisse / NF525 → codé ici avec l'exploitant » (ci-dessous) est inchangée.
+
 ## 2026-09-30 — Lot 1 `vente-lit-catalogue` : cadrage des tickets 04 à 09, répartition caisse / socle, lot sans le 10
 
 **Règle de l'exploitant** : chaque ticket se cadre d'abord (décisions, critères, « Coutures à
