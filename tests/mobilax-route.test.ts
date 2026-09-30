@@ -591,3 +591,77 @@ describe('POST /api/mobilax/produits/:id/rafraichir', () => {
     expect(await res.json()).toMatchObject({ success: false, code: 'quota', reessayer_dans_s: 30 })
   })
 })
+
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/mobilax/prix-vente?mobilax_id= — ticket 06, chantier integration-mobilax
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// Prix de vente marginé d'une pièce, pour préremplir une ligne de devis (nom de route neutre,
+// rappelée par facture/caisse/prise en charge aux tickets 07-09). Lecture seule : mêmes gardes
+// que la recherche, boutique du jeton seulement, `?boutique_id=` ignoré, admin plateforme
+// refusé. `mobilax_id` absent ou non entier refusé AVANT tout appel Mobilax.
+
+function pieceComplete() {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === `${BASE}/auth`) return json({ token: 'jwt-1', expireIn: '1h' })
+    if (url === `${BASE}/products/17/full`)
+      return json({ status: 'OK', data: { id: 17, reference: 'BATTEST17', ean13: '3000000000017', name: 'Batterie test', price: 8.68 } })
+    return json({ status: 'NOT_FOUND' }, 404)
+  })
+}
+
+describe('GET /api/mobilax/prix-vente', () => {
+  it('manager : prix de vente marginé dans l\'enveloppe du dépôt (taux par défaut, aucun taux de famille)', async () => {
+    pieceComplete()
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/prix-vente?mobilax_id=17')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { mobilax_id: 17, nom: 'Batterie test', prix_achat_ht: 8.68, famille: 'piece', taux: null, prix_vente_ht: 8.68 },
+    })
+  })
+
+  it('la clé utilisée est celle de la boutique du jeton — ?boutique_id= est ignoré', async () => {
+    pieceComplete()
+    const { res, d1 } = await chercher({ role: 'admin', boutique_id: 1 }, '/api/mobilax/prix-vente?mobilax_id=17&boutique_id=99')
+    expect(res.status).toBe(200)
+    const lecture = d1.__getCalls().find(c => c.sql.includes('api_plateforme = ?'))!
+    expect(lecture.params[0]).toBe(1)
+  })
+
+  it('admin plateforme : refusé, Mobilax jamais appelé', async () => {
+    const { res } = await chercher({ role: 'admin', boutique_id: null }, '/api/mobilax/prix-vente?mobilax_id=17&boutique_id=1')
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['', '?mobilax_id=', '?mobilax_id=abc', '?mobilax_id=1.5', '?mobilax_id=0', '?mobilax_id=-3'])(
+    'mobilax_id absent ou invalide (%s) : 400, Mobilax jamais appelé', async (q) => {
+      const { res } = await chercher({ role: 'manager', boutique_id: 1 }, `/api/mobilax/prix-vente${q}`)
+      expect(res.status, q).toBe(400)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+  it('pièce inconnue chez Mobilax : 404', async () => {
+    pieceComplete()
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/prix-vente?mobilax_id=999999')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ success: false, code: 'introuvable' })
+  })
+
+  it('quota Mobilax atteint : 429 avec le code et le délai', async () => {
+    fetchMock.mockImplementation(async (url: string) => url === `${BASE}/auth`
+      ? json({ token: 'jwt-1', expireIn: '1h' })
+      : json({ status: 'RATE_LIMITED' }, 429, { 'ratelimit-reset': '15' }))
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/prix-vente?mobilax_id=17')
+    expect(res.status).toBe(429)
+    expect(await res.json()).toMatchObject({ success: false, code: 'quota', reessayer_dans_s: 15 })
+  })
+
+  it('aucune fiche Mobilax : 422 avec le code, Mobilax jamais appelé', async () => {
+    const { res } = await chercher({ role: 'manager', boutique_id: 1 }, '/api/mobilax/prix-vente?mobilax_id=17', { sansFiche: true })
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ success: false, code: 'sans_fournisseur' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
