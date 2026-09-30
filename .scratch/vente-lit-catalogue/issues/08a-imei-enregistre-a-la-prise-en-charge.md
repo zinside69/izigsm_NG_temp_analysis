@@ -37,6 +37,23 @@ déjà `appareil_imei` / `appareil_numero_serie` par jointure (`getTicketById()`
   même IMEI chez un autre client (appareil revendu) crée une nouvelle fiche appareil pour ce client :
   le parcours du 08b cherchera sur toutes les fiches de la boutique.
 
+**Précision du 2026-09-30 — relecture de conception du socle (P15, 5 constats), décisions de l'exploitant**
+1. **PUT : rattacher, jamais réécrire.** La fiche appareil est partagée par les tickets du client.
+   Au PUT, on refait la recherche ou la création avec les règles du POST, puis on remplace seulement
+   `tickets.appareil_id`. ⊥ tout `UPDATE` de `appareils.imei` ou `appareils.numero_serie` depuis ce
+   chemin : un ticket clos garde son IMEI.
+2. **Client vérifié d'abord.** `client_id` doit appartenir à la boutique de l'appelant (404 sinon)
+   avant toute recherche ou création d'appareil. Le SQL de recherche et de création joint `clients`
+   sur `boutique_id = ?`. C'est une faille existante de `POST /api/tickets`, corrigée ici.
+3. **Validations avant toute écriture.** Luhn, client de la boutique, `appareil_id` explicite et
+   technicien sont tous vérifiés avant la première écriture sur `appareils` : aucun appareil orphelin
+   si la création ou la modification du ticket échoue.
+4. **Preuves SQL sur un vrai SQLite.** Le refus d'un `appareil_id` d'un autre client ou d'une autre
+   boutique se prouve dans les tests de service contre un vrai SQLite ; le test de route sur mock ne
+   vérifie que la conversion en 400.
+5. **PUT, trois états du champ.** Absent → `appareil_id` inchangé ; `""` → inchangé aussi (décision
+   de l'exploitant) ; valeur → recherche ou création, puis nouveau rattachement.
+
 ## Critères d'acceptation
 
 - [ ] `POST /api/tickets` lit le champ (`imei` du formulaire actuel) : 15 chiffres à Luhn juste → appareil retrouvé ou créé avec `imei` ; 15 chiffres à clé fausse → **400** « IMEI invalide (clé de contrôle) », aucun ticket créé ; autre saisie non vide → appareil retrouvé ou créé avec `numero_serie` ; vide → `appareil_id` NULL
@@ -57,6 +74,7 @@ déjà `appareil_imei` / `appareil_numero_serie` par jointure (`getTicketById()`
 - **Services** de rattachement de l'appareil — vitest contre un **vrai SQLite** (la règle vit dans le SQL : recherche par client + IMEI) : appareil créé, retrouvé, jamais celui d'un autre client ; numéro de série ; vide.
 - **Route** `POST /api/tickets` et `PUT /api/tickets/:id` — vitest par `app.request()` : 400 sur clé de Luhn fausse sans ticket créé, `appareil_id` d'une autre boutique refusé.
 - **Écran** — E2E Playwright `tests/e2e/prise-en-charge-imei.spec.ts`, vraie D1 locale : créer un ticket avec un IMEI → rouvrir la fiche → l'IMEI s'affiche ; clé fausse → message, aucun ticket. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).
+- ➕ **Couture ajoutée le 2026-09-30** — vrai SQLite : deux tickets partagent une fiche, on modifie le champ du second, et l'IMEI lu par le premier ne change pas ; un `client_id` d'une autre boutique ne crée ni ne retrouve aucune fiche ; un technicien d'une autre boutique donne 422, sans aucune ligne `appareils` créée ; un PUT sans le champ, ou avec `""`, sur un ticket qui a un appareil le laisse inchangé.
 
 ## Notes
 
