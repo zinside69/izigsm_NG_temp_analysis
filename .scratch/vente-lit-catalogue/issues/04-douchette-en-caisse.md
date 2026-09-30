@@ -73,6 +73,7 @@ Serveur :
 - [ ] Focus dans un champ (désignation, recherche, client, note, montant) → **rien n'est capté** : la frappe reste dans le champ, aucune ligne ajoutée
 - [ ] Fenêtre « Nouvelle vente » fermée → un scan l'ouvre, **puis** traite le code
 - [ ] 1 résultat → ligne ajoutée par `ajouterLigneCatalogue()` (même chemin que le sélecteur : `produit_id` envoyé, prix et TVA du catalogue)
+- [ ] **Résultat de type `service`** → ligne service (`service_id`), comme le sélecteur ; même service rescanné → quantité + 1. Ajouté le 2026-09-30 (découpe du ticket 05 : c'est ici que la caisse apprend à ajouter un service scanné, pour que le 05 ne touche pas `caisse.js`). Aucun service n'a de code-barres avant le 05 : testé en E2E par une réponse de route simulée (`page.route()`)
 - [ ] Même produit rescanné → **quantité + 1 sur la ligne existante**, pas de seconde ligne. Ligne existante = même `produit_id`, que la ligne vienne d'un scan ou du sélecteur
 - [ ] 0 résultat sur un code-barres → message « Code inconnu : <code> » + lien « Créer la fiche » (`target="_blank"`, `rel="noopener"`) vers `/stock?nouveau=1&code=<code>` ; aucune ligne ajoutée
 - [ ] Plusieurs résultats → liste affichée dans la zone de résultats du sélecteur, **aucun ajout automatique** ; un clic ajoute comme le sélecteur
@@ -105,7 +106,8 @@ Commun :
   - code inconnu → message et lien `/stock?nouveau=1&code=…` ;
   - deux produits (EAN = SKU d'un autre) → liste, aucune ligne ;
   - frappe pendant la saisie d'une désignation → aucune ligne, le texte reste dans le champ ;
-  - IMEI de 15 chiffres → « Aucun produit pour cet IMEI ».
+  - IMEI de 15 chiffres → « Aucun produit pour cet IMEI » ;
+  - résultat de type `service` (route simulée par `page.route()`, aucun service n'a de code avant le ticket 05) → ligne service, rescanné → quantité 2.
 - **Écran Stock** — E2E : `/stock?nouveau=1&code=3760000000017` → fiche en création, SKU = ce code.
 
 ## Notes
