@@ -1,7 +1,7 @@
 ---
 id: 04
 titre: Douchette en caisse
-statut: ready-for-human
+statut: done
 bloque-par: [02]
 ---
 
@@ -18,6 +18,15 @@ détourné vers la vente.
 Spec : `.scratch/vente-lit-catalogue/spec.md` (stories 8 à 15 ; décision « Recherche et scan »).
 
 Bloqué par 02 (sélecteur de produits en caisse) — **done** le 2026-09-17 : prenable.
+
+**Livré le 2026-09-30** (codé par Claude avec l'exploitant, sur `main`, non déployé — part avec le
+lot 1) : `src/lib/scan.ts` (`routerScan()`), `rechercherParCode()` (`catalogueService.ts`), route
+`?scan=` (`catalogue.ts`), `public/static/js/douchette.js`, `traiterScan()` (`caisse.js`),
+`ouvrirCreationDepuisScan()` (`stock.js`), `CACHE_VERSION` `izigsm-v3.13`. Tests : vitest
+`scan`, `catalogue-scan-sqlite` (vrai SQLite), `catalogue-scan-route` ; E2E `caisse-douchette`
+10/10, vus rouges d'abord (8 rouges, 2 gardes de non-régression vertes d'emblée). Vitest 1 282
+verts + 2 échecs permanents, tsc 32 (inchangé). **Non couvert par un test** : le message « Scan
+impossible (connexion) » sur rejet de `fetch` (écrit, non simulé).
 
 **Touche la caisse** (`caisse.js`, `caisse.html`) → **codé par Claude avec l'exploitant, pas confié
 au socle** (règle de l'exploitant du 2026-09-30). **Ne touche pas le NF525** : `createVente()` et
@@ -59,41 +68,41 @@ caisse, codé à deux._
 
 Serveur :
 
-- [ ] `routerScan(saisie)` (`src/lib/scan.ts`, pure) : espaces de bord retirés ; exactement 13 chiffres → `{ type: 'code_barre', valeur }` ; exactement 15 chiffres → `{ type: 'imei', valeur }` ; tout le reste → `{ type: 'texte', valeur }`. 12 et 14 chiffres → `texte`
-- [ ] `GET /api/catalogue/recherche?scan=<saisie>` : applique `routerScan()` et rend `{ type_scan, resultats }`
+- [x] `routerScan(saisie)` (`src/lib/scan.ts`, pure) : espaces de bord retirés ; exactement 13 chiffres → `{ type: 'code_barre', valeur }` ; exactement 15 chiffres → `{ type: 'imei', valeur }` ; tout le reste → `{ type: 'texte', valeur }`. 12 et 14 chiffres → `texte`
+- [x] `GET /api/catalogue/recherche?scan=<saisie>` : applique `routerScan()` et rend `{ type_scan, resultats }`
   - `code_barre` → produits actifs de la boutique où `code_barre = ?` **ou** `sku = ?`, égalité stricte, plafond de la recherche (20)
   - `imei` → `resultats: []` (branché au ticket 07)
   - `texte` → même résultat que `?q=` aujourd'hui
-- [ ] `?q=` inchangé (sélecteur du ticket 02) ; `?scan=` et `?q=` ensemble → 400 ; `?scan=` vide → 400 sans requête SQL
-- [ ] Boutique résolue comme `?q=` (`getBoutiqueId()`), isolation vérifiée : un code d'une autre boutique ne remonte pas
+- [x] `?q=` inchangé (sélecteur du ticket 02) ; `?scan=` et `?q=` ensemble → 400 ; `?scan=` vide → 400 sans requête SQL
+- [x] Boutique résolue comme `?q=` (`getBoutiqueId()`), isolation vérifiée : un code d'une autre boutique ne remonte pas
 
 Écran de caisse :
 
-- [ ] **La capture vit dans un module partagé `public/static/js/douchette.js`** (ajouté le 2026-09-30 : la page Tickets la réutilise au ticket 08b), point d'entrée unique du type `ecouterDouchette(surScan)` ; aucune logique de caisse dans le module. `caisse.html` le charge après `app.js`
-- [ ] Capture globale sur l'écran de caisse : caractères tapés **hors** champ de saisie (`input`, `textarea`, `select`, `contenteditable`) accumulés, **Entrée** → envoi du scan. Tampon vidé si plus de 300 ms séparent deux caractères, et après chaque envoi
-- [ ] Focus dans un champ (désignation, recherche, client, note, montant) → **rien n'est capté** : la frappe reste dans le champ, aucune ligne ajoutée
-- [ ] Fenêtre « Nouvelle vente » fermée → un scan l'ouvre, **puis** traite le code
-- [ ] 1 résultat → ligne ajoutée par `ajouterLigneCatalogue()` (même chemin que le sélecteur : `produit_id` envoyé, prix et TVA du catalogue)
-- [ ] **Résultat de type `service`** → ligne service (`service_id`), comme le sélecteur ; même service rescanné → quantité + 1. Ajouté le 2026-09-30 (découpe du ticket 05 : c'est ici que la caisse apprend à ajouter un service scanné, pour que le 05 ne touche pas `caisse.js`). Aucun service n'a de code-barres avant le 05 : testé en E2E par une réponse de route simulée (`page.route()`)
-- [ ] Même produit rescanné → **quantité + 1 sur la ligne existante**, pas de seconde ligne. Ligne existante = même `produit_id`, que la ligne vienne d'un scan ou du sélecteur
-- [ ] 0 résultat sur un code-barres → message « Code inconnu : <code> » + lien « Créer la fiche » (`target="_blank"`, `rel="noopener"`) vers `/stock?nouveau=1&code=<code>` ; aucune ligne ajoutée
-- [ ] Plusieurs résultats → liste affichée dans la zone de résultats du sélecteur, **aucun ajout automatique** ; un clic ajoute comme le sélecteur
-- [ ] 0 résultat sur un IMEI → « Aucun produit pour cet IMEI », aucune erreur
-- [ ] Rejet de `fetch` (réseau coupé) → message d'erreur, tampon vidé, rien d'ajouté
-- [ ] Appels déballés `(await apiGet(…)).data` ; données rendues échappées (`esc()` de `caisse.js`)
+- [x] **La capture vit dans un module partagé `public/static/js/douchette.js`** (ajouté le 2026-09-30 : la page Tickets la réutilise au ticket 08b), point d'entrée unique du type `ecouterDouchette(surScan)` ; aucune logique de caisse dans le module. `caisse.html` le charge après `app.js`
+- [x] Capture globale sur l'écran de caisse : caractères tapés **hors** champ de saisie (`input`, `textarea`, `select`, `contenteditable`) accumulés, **Entrée** → envoi du scan. Tampon vidé si plus de 300 ms séparent deux caractères, et après chaque envoi
+- [x] Focus dans un champ (désignation, recherche, client, note, montant) → **rien n'est capté** : la frappe reste dans le champ, aucune ligne ajoutée
+- [x] Fenêtre « Nouvelle vente » fermée → un scan l'ouvre, **puis** traite le code
+- [x] 1 résultat → ligne ajoutée par `ajouterLigneCatalogue()` (même chemin que le sélecteur : `produit_id` envoyé, prix et TVA du catalogue)
+- [x] **Résultat de type `service`** → ligne service (`service_id`), comme le sélecteur ; même service rescanné → quantité + 1. Ajouté le 2026-09-30 (découpe du ticket 05 : c'est ici que la caisse apprend à ajouter un service scanné, pour que le 05 ne touche pas `caisse.js`). Aucun service n'a de code-barres avant le 05 : testé en E2E par une réponse de route simulée (`page.route()`)
+- [x] Même produit rescanné → **quantité + 1 sur la ligne existante**, pas de seconde ligne. Ligne existante = même `produit_id`, que la ligne vienne d'un scan ou du sélecteur
+- [x] 0 résultat sur un code-barres → message « Code inconnu : <code> » + lien « Créer la fiche » (`target="_blank"`, `rel="noopener"`) vers `/stock?nouveau=1&code=<code>` ; aucune ligne ajoutée
+- [x] Plusieurs résultats → liste affichée dans la zone de résultats du sélecteur, **aucun ajout automatique** ; un clic ajoute comme le sélecteur
+- [x] 0 résultat sur un IMEI → « Aucun produit pour cet IMEI », aucune erreur
+- [x] Rejet de `fetch` (réseau coupé) → message d'erreur, tampon vidé, rien d'ajouté
+- [x] Appels déballés `(await apiGet(…)).data` ; données rendues échappées (`esc()` de `caisse.js`)
 
 Écran Stock :
 
-- [ ] `/stock?nouveau=1&code=<code>` ouvre la fiche en création (`openNewStock()`) avec le SKU prérempli ; `code` absent ou vide → fiche vide ; sans `nouveau=1`, rien ne s'ouvre. Le code est posé en `value`, jamais interprété en HTML
-- [ ] Un SKU déjà porté par un autre produit → message 409 existant (`ErreurCodeEnDoublon`), inchangé
+- [x] `/stock?nouveau=1&code=<code>` ouvre la fiche en création (`openNewStock()`) avec le SKU prérempli ; `code` absent ou vide → fiche vide ; sans `nouveau=1`, rien ne s'ouvre. Le code est posé en `value`, jamais interprété en HTML
+- [x] Un SKU déjà porté par un autre produit → message 409 existant (`ErreurCodeEnDoublon`), inchangé
 
 Commun :
 
-- [ ] `CACHE_VERSION` (`public/sw.js`) incrémenté
-- [ ] ∀ test vu rouge avant correctif
-- [ ] `npx vitest run` sans nouvel échec par rapport à la baseline mesurée avant le ticket
-- [ ] Erreurs tsc ≤ baseline mesurée avant le ticket (`npx tsc --noEmit --pretty false | grep -cE "error TS[0-9]+"`)
-- [ ] ⊥ migration ; ⊥ modification de `createVente()` ni de `journal_nf525`
+- [x] `CACHE_VERSION` (`public/sw.js`) incrémenté
+- [x] ∀ test vu rouge avant correctif
+- [x] `npx vitest run` sans nouvel échec par rapport à la baseline mesurée avant le ticket
+- [x] Erreurs tsc ≤ baseline mesurée avant le ticket (`npx tsc --noEmit --pretty false | grep -cE "error TS[0-9]+"`)
+- [x] ⊥ migration ; ⊥ modification de `createVente()` ni de `journal_nf525`
 
 ## Coutures à tester
 

@@ -87,6 +87,53 @@ export async function rechercherCatalogue(
   return repartirPlafond<ResultatCatalogue>([produits, services, dossiers])
 }
 
+/**
+ * Cherche un article par un **code scanné** (ticket 04 — douchette) : égalité stricte sur le
+ * code-barres **ou** le SKU, produits actifs de la boutique.
+ *
+ * Le SKU compte parce que la fiche produit n'a pas de champ code-barres : l'EAN du fournisseur y
+ * est tapé comme SKU (décision de l'exploitant du 2026-09-30). ⊥ le `LIKE %…%` de
+ * `rechercherCatalogue()` : un SKU qui *contient* les chiffres ne doit pas remonter.
+ *
+ * Plusieurs résultats restent possibles malgré l'index unique `0048` (l'EAN d'un produit peut être
+ * le SKU d'un autre) : ils sont tous rendus, l'écran ne choisit jamais à la place du vendeur.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique consultée — aucune autre n'est lue
+ * @param code        Code scanné, déjà nettoyé (`routerScan()`)
+ * @returns           Au plus `PLAFOND_RECHERCHE_CATALOGUE` produits
+ */
+export async function rechercherParCode(
+  db:         Database,
+  boutiqueId: number,
+  code:       string,
+): Promise<ResultatCatalogue[]> {
+  const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
+    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    FROM   produits
+    WHERE  boutique_id = ? AND actif = 1
+      AND  (code_barre = ? OR sku = ?)
+    ORDER  BY nom ASC
+    LIMIT  ?
+  `, [boutiqueId, code, code, PLAFOND_RECHERCHE_CATALOGUE])
+
+  return (lignes ?? []).map(versResultatProduit)
+}
+
+/** Mapping explicite d'une ligne produit : le contrat de sortie ne dépend pas des colonnes lues. */
+function versResultatProduit(p: Omit<ResultatProduit, 'type'>): ResultatProduit {
+  return {
+    type:          'produit',
+    id:            p.id,
+    nom:           p.nom,
+    sku:           p.sku,
+    code_barre:    p.code_barre,
+    prix_vente_ht: p.prix_vente_ht,
+    tva_taux:      p.tva_taux,
+    stock_actuel:  p.stock_actuel,
+  }
+}
+
 async function chercherProduits(db: Database, boutiqueId: number, motif: string): Promise<ResultatProduit[]> {
   const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
     SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel

@@ -44,7 +44,22 @@ document.addEventListener('DOMContentLoaded', () => {
   bindSearch();
   bindFilters();
   document.getElementById('filtre-fournisseur').hidden = !fournisseurFiltre;
+  ouvrirCreationDepuisScan();
 });
+
+// ─── Création depuis un code inconnu scanné en caisse (ticket 04 `vente-lit-catalogue`) ──
+/**
+ * `/stock?nouveau=1&code=<code>` — lien « Créer la fiche » de la caisse (ouvert dans un nouvel
+ * onglet) : la fiche s'ouvre en création, le code prérempli dans le **SKU** — la fiche n'a pas de
+ * champ code-barres, l'EAN y est tapé comme SKU (décision de l'exploitant du 2026-09-30). Sans
+ * `nouveau=1`, rien ne s'ouvre. Le code est posé en `value`, jamais interprété en HTML.
+ */
+function ouvrirCreationDepuisScan() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('nouveau') !== '1') return;
+  openNewStock();
+  document.getElementById('stock-reference').value = (params.get('code') || '').trim();
+}
 
 // ─── Seuil d'alerte par défaut de la boutique (ticket 03 réglages de stock) ──
 /**
