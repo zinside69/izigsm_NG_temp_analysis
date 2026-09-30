@@ -67,6 +67,7 @@ Base :
 Produits :
 
 - [ ] Fonction commune (`stockService.ts`) : pose `codeMaison(1, id)` dans `code_barre` **si** le produit n'a ni code-barres ni SKU EAN-13 valide ; ne réécrit jamais un code existant
+- [ ] **Préalable, ajouté le 2026-09-30** : l'import CSV **lit et enregistre la colonne `code_barre`** (défaut ouvert de `bugs.md` du 2026-09-17 : documentée, jamais écrite), avec la conversion du doublon en `ErreurCodeEnDoublon` nommée dans le bilan. Sans ce correctif, un produit importé avec son EAN recevrait un code maison à tort. Entrée de `bugs.md` passée à « CORRIGÉ »
 - [ ] Appelée par `createProduit()` **et** par l'`INSERT` de l'import CSV ; **pas** par l'import fournisseur (Mobilax) : `importerProduitMobilax()` ne pose jamais de code maison, même sans EAN
 - [ ] Création manuelle sans code ni SKU EAN → le produit créé porte un code maison ; avec un code-barres saisi, ou un SKU EAN-13 valide → aucun code maison
 - [ ] Violation d'unicité à la pose → `ErreurCodeEnDoublon` (409 nommant le produit porteur), jamais une erreur SQL brute
@@ -102,7 +103,7 @@ Commun :
 
 - **Fonctions pures** `cleEan13()`, `estEan13Valide()`, `codeMaison()` — vitest direct : clés connues (EAN réels), longueur 13, préfixe `21` / `22`, bornes de l'identifiant.
 - **Migration `0052`** — vitest contre un vrai SQLite (`node:sqlite`).
-- **Création de produit** — vitest contre un **vrai SQLite** (la règle vit dans le SQL et l'enchaînement `INSERT` puis pose) : manuelle sans code → code maison ; avec code-barres → inchangé ; SKU EAN-13 valide → aucun ; SKU à clé fausse → code maison ; CSV sans code → code maison ; import Mobilax → aucun.
+- **Création de produit** — vitest contre un **vrai SQLite** (la règle vit dans le SQL et l'enchaînement `INSERT` puis pose) : manuelle sans code → code maison ; avec code-barres → inchangé ; SKU EAN-13 valide → aucun ; SKU à clé fausse → code maison ; CSV sans code → code maison ; **CSV avec `code_barre` → code enregistré, aucun code maison ; CSV au code en doublon → ligne signalée dans le bilan, produit porteur nommé** ; import Mobilax → aucun.
 - **Routes** `POST /api/produits/:id/code-maison` et `POST /api/services/:id/code-maison` — vitest par `app.request()` : 200, 409 déjà codé, 404 autre boutique, 403 technicien.
 - **Recherche** `?scan=` et `?q=` sur un code de service — vitest contre un vrai SQLite.
 - **Écrans** — E2E Playwright `tests/e2e/codes-maison.spec.ts`, vraie D1 locale : créer un produit à la main → son code maison s'affiche dans la fiche → le scanner en caisse ajoute sa ligne ; générer le code d'un service → le scanner en caisse ajoute une ligne service. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).

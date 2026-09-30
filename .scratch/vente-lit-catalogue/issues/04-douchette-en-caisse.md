@@ -69,6 +69,7 @@ Serveur :
 
 Écran de caisse :
 
+- [ ] **La capture vit dans un module partagé `public/static/js/douchette.js`** (ajouté le 2026-09-30 : la page Tickets la réutilise au ticket 08b), point d'entrée unique du type `ecouterDouchette(surScan)` ; aucune logique de caisse dans le module. `caisse.html` le charge après `app.js`
 - [ ] Capture globale sur l'écran de caisse : caractères tapés **hors** champ de saisie (`input`, `textarea`, `select`, `contenteditable`) accumulés, **Entrée** → envoi du scan. Tampon vidé si plus de 300 ms séparent deux caractères, et après chaque envoi
 - [ ] Focus dans un champ (désignation, recherche, client, note, montant) → **rien n'est capté** : la frappe reste dans le champ, aucune ligne ajoutée
 - [ ] Fenêtre « Nouvelle vente » fermée → un scan l'ouvre, **puis** traite le code
@@ -112,7 +113,7 @@ Commun :
 
 ## Notes
 
-- Périmètre : `src/lib/scan.ts` (nouveau), `src/services/catalogueService.ts`, `src/routes/catalogue.ts`, `public/static/js/caisse.js`, `public/caisse.html` (si un conteneur de message est nécessaire), `public/static/js/stock.js`, `public/sw.js`, tests correspondants.
+- Périmètre : `src/lib/scan.ts` (nouveau), `public/static/js/douchette.js` (nouveau), `src/services/catalogueService.ts`, `src/routes/catalogue.ts`, `public/static/js/caisse.js`, `public/caisse.html` (si un conteneur de message est nécessaire), `public/static/js/stock.js`, `public/sw.js`, tests correspondants.
 - Prior art : `rechercherCatalogue()` et son échappement des jokers LIKE ; `ajouterLigneCatalogue()` et `renderResultatCatalogue()` (`caisse.js`) ; `openNewStock()` (`stock.js`) ; lecture d'un paramètre d'URL : `fournisseurFiltre` (`stock.js`).
 - Un produit sans prix (0 €) scanné est ajouté comme par le sélecteur ; le blocage `prixManquant()` à la validation s'applique inchangé.
 - Piège E2E connu : `serviceWorkers: 'block'` est déjà posé ; une frappe Playwright est plus rapide que 300 ms entre deux touches, un humain qui tape hors champ déclenche aussi un scan — sans risque, un code inconnu ne fait que le signaler.

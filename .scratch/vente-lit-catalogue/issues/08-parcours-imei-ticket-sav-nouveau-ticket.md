@@ -12,7 +12,11 @@ vocabulaire `CONTEXT.md` (Garantie, Nouvelle panne hors garantie).
 
 **Blocked by:** 03 — Services et SAV dans la recherche ; 07 — IMEI du produit.
 
-**Status:** ready-for-agent
+**Status:** ~~ready-for-agent~~ **découpé le 2026-09-30** (décision de l'exploitant) — ne pas prendre ce
+fichier : voir **08a** (l'IMEI saisi à la prise en charge est enregistré — préalable, défaut de
+perte silencieuse trouvé au cadrage), **08b** (parcours : ticket en cours, SAV, nouveau ticket avec
+motif, sur la page Tickets) et **08c** (requalification SAV ↔ ticket payant). Contenu d'origine
+conservé ci-dessous pour mémoire.
 
 - [ ] Fonction pure de contrôle de Luhn ; un IMEI faux est refusé **avant** toute recherche —
       tests unitaires vus rouges
