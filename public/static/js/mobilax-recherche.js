@@ -27,6 +27,10 @@
 function monterRechercheMobilax(conteneur, { surSelection }) {
   if (!conteneur) return;
 
+  // La barre de pagination porte hidden sur une enveloppe sans classe ni display en ligne
+  // (data-role, pas class) : posé directement sur .mx-recherche-pagination, qui garde son
+  // display:flex en ligne, l'attribut serait écrasé et la barre resterait affichée sur une
+  // seule page — même défaut que #mobilax-pagination (stock.html/js, bugs.md 2026-09-15).
   conteneur.innerHTML = `
     <form class="mx-recherche-form" style="display:flex;gap:8px;margin-bottom:10px;">
       <input type="search" class="mx-recherche-terme" placeholder="Nom ou EAN — ex. écran iPhone 12"
@@ -35,10 +39,12 @@ function monterRechercheMobilax(conteneur, { surSelection }) {
     </form>
     <div class="mx-recherche-message" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;"></div>
     <div class="mx-recherche-resultats"></div>
-    <div class="mx-recherche-pagination" hidden style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-      <button type="button" class="btn btn-ghost btn-sm mx-recherche-precedente">« Précédente</button>
-      <span class="mx-recherche-page" style="font-size:0.82rem;color:var(--muted);"></span>
-      <button type="button" class="btn btn-ghost btn-sm mx-recherche-suivante">Suivante »</button>
+    <div data-role="mx-recherche-pagination-enveloppe" hidden>
+      <div class="mx-recherche-pagination" style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <button type="button" class="btn btn-ghost btn-sm mx-recherche-precedente">« Précédente</button>
+        <span class="mx-recherche-page" style="font-size:0.82rem;color:var(--muted);"></span>
+        <button type="button" class="btn btn-ghost btn-sm mx-recherche-suivante">Suivante »</button>
+      </div>
     </div>
   `;
 
@@ -46,7 +52,7 @@ function monterRechercheMobilax(conteneur, { surSelection }) {
   const champTerme       = conteneur.querySelector('.mx-recherche-terme');
   const zoneMessage      = conteneur.querySelector('.mx-recherche-message');
   const zoneResultats    = conteneur.querySelector('.mx-recherche-resultats');
-  const pagination       = conteneur.querySelector('.mx-recherche-pagination');
+  const pagination       = conteneur.querySelector('[data-role="mx-recherche-pagination-enveloppe"]');
   const boutonPrecedente = conteneur.querySelector('.mx-recherche-precedente');
   const boutonSuivante   = conteneur.querySelector('.mx-recherche-suivante');
   const pageLabel        = conteneur.querySelector('.mx-recherche-page');

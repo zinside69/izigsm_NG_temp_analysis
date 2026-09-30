@@ -144,6 +144,28 @@ test.describe('Devis — recherche Mobilax (module partagé, ticket 06)', () => 
     expect(ligneApi.prix_unitaire_ht).toBe(65)
   })
 
+  test('un seul résultat (une seule page) : la barre de pagination reste invisible', async ({ page, request }) => {
+    await page.route('**/api/mobilax/produits*', route => route.fulfill({ json: {
+      // src/routes/mobilax.ts:94
+      success: true,
+      data: {
+        fournisseur_id: 3, total: 1, page: 1, pages: 1,
+        produits: [{ mobilax_id: 42, nom: 'Écran iPhone 12 simulé', ean13: '3760123456789', prix_achat_ht: 40, stock: 5 }],
+      },
+    } }))
+
+    const { conteneur } = await prepararDevisAvecMobilax(page, request)
+    await chercher(conteneur, 'ecran iphone 12')
+    await expect(conteneur.locator('.mx-recherche-ligne')).toHaveCount(1, { timeout: 10_000 })
+
+    // `hidden` doit réellement masquer l'élément, pas seulement porter l'attribut : posé
+    // directement sur .mx-recherche-pagination (qui porte display:flex en ligne), il serait
+    // écrasé par ce style d'auteur et la barre resterait visible malgré `pages === 1` — même
+    // défaut que #mobilax-pagination (stock.js/html, bugs.md 2026-09-15). toBeHidden() mesure
+    // le rendu réel, pas l'attribut seul.
+    await expect(conteneur.locator('[data-role="mx-recherche-pagination-enveloppe"]')).toBeHidden()
+  })
+
   test('double clic pendant le calcul du prix : une seule sélection insérée, un seul appel à prix-vente', async ({ page, request }) => {
     const DESCRIPTION = 'Écran iPhone 12 simulé'
 
