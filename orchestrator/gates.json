@@ -13,6 +13,9 @@
   "_commentaire_e2e": "2026-09-25 (O28) : e2e = specs E2E du diff de la tache + gardes (menu de gauche, XSS), base D1 locale neuve, serveur arrete dans tous les cas. Script lu dans ROOT. A declarer dans le champ gates des taches d ecran.",
   "conception": true,
   "_commentaire_conception": "2026-09-26 : essai reel ADR 0003 R1 (relecture de conception avant l agent)",
+  "installation": true,
+  "coutures": true,
+  "_commentaire_doctrine": "2026-09-30 : ADR 0004 D3 et D4 actives (procedure d installation, spec § 3.7) : docs/agents/issue-tracker.md exige ; chaque tache cite son ticket, qui porte une section « Coutures à tester » non vide, sinon P18 avant l agent",
   "_avant_2026_09_27": {
     "plancher_tests": 1157
   },
