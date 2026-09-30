@@ -1,5 +1,34 @@
 # iziGSM — Décisions
 
+## 2026-09-30 — Lot 1 `vente-lit-catalogue` : cadrage des tickets 04 à 09, répartition caisse / socle, lot sans le 10
+
+**Règle de l'exploitant** : chaque ticket se cadre d'abord (décisions, critères, « Coutures à
+tester ») ; s'il touche la **caisse ou le NF525**, Claude le code avec l'exploitant dans cette
+session ; sinon il est confié au **socle d'orchestration**. Rien de ce que produit le socle ne part
+en production sans passer par `main`, puis par `modop-deploiement.md`.
+
+| Ticket | Caisse / NF525 | Qui code | Migration |
+|---|---|---|---|
+| 04 douchette en caisse | caisse | Claude + exploitant | — |
+| 05 codes maison | — | socle | `0052` |
+| 06 file d'étiquettes | — | socle | `0053` |
+| 07 IMEI du produit, vente d'occasion | caisse **et** NF525 | Claude + exploitant | `0054` |
+| 08a IMEI enregistré à la prise en charge | — | socle | — |
+| 08b parcours IMEI | — | socle | `0055` |
+| 08c requalification SAV ↔ payant | — | socle | — |
+| 09 prise en charge, validation technique | — | socle | `0056` |
+
+Numéros de migration **réservés** : socle et exploitant codent en parallèle, un numéro pris deux fois
+ferait échouer `migrations apply`.
+
+**Le lot 1 part sans le ticket 10** (service de base d'IMEI) : le prestataire n'est pas choisi et il
+faut une clé de test. Sans lui, le modèle se saisit à la main (story 44). Le 10 devient un ajout
+ultérieur, qui ne bloque plus le déploiement. Le lot 1 = tickets **01 à 09** (08 découpé en
+08a/08b/08c), plus le 18 et le 05 `integration-mobilax` déjà sur `main`.
+
+Décisions de détail de chaque ticket : dans son fichier (`.scratch/vente-lit-catalogue/issues/`),
+section « Décisions de l'exploitant du 2026-09-30 ».
+
 ## 2026-09-25 — Tickets confiés au socle : conception relue d'abord, ADR 0003 en attente
 
 Retour sur le ticket 18 : le plan écrit prescrivait « clé libérée sur échec », avec le test qui la
