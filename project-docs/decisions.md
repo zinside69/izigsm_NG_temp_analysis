@@ -34,6 +34,9 @@ en production sans passer par `main`, puis par `modop-deploiement.md`.
 Numéros de migration **réservés** : socle et exploitant codent en parallèle, un numéro pris deux fois
 ferait échouer `migrations apply`.
 
+Lot 2, même jour : **ticket 11** (lignes de ticket) — ni caisse ni NF525 → socle, migration **`0057`**
+réservée (table `lignes_ticket` + `tickets.modele_id`), bloqué par 08c et 09 (mêmes fichiers).
+
 **Le lot 1 part sans le ticket 10** (service de base d'IMEI) : le prestataire n'est pas choisi et il
 faut une clé de test. Sans lui, le modèle se saisit à la main (story 44). Le 10 devient un ajout
 ultérieur, qui ne bloque plus le déploiement. Le lot 1 = tickets **01 à 09** (08 découpé en
