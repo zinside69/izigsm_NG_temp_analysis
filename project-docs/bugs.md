@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟠 Prise en charge : l'IMEI saisi n'est jamais enregistré (trouvé le 2026-09-30, OUVERT)
+
+**Défaut** : le formulaire de prise en charge (`tickets.js`, envoi du ticket) transmet `imei`, mais
+`POST /api/tickets` (`src/routes/tickets.ts`) ne lit pas ce champ — il n'accepte qu'un
+`appareil_id` — et `tickets` n'a aucune colonne `imei` (l'IMEI vit sur `appareils`). L'IMEI tapé au
+comptoir est **perdu sans rien signaler**, depuis l'origine du formulaire.
+
+**Conséquence** : aucun ticket n'est retrouvable par IMEI ; le parcours IMEI du lot 1 (story 37) ne
+trouverait rien. Les tickets déjà créés **ne peuvent pas être rattrapés** : la donnée n'a jamais
+été stockée.
+
+**Trouvé** au cadrage du ticket 08 `vente-lit-catalogue`. **Correctif cadré** : ticket **08a**
+(IMEI porté par la fiche appareil du client, décision de l'exploitant du 2026-09-30).
+
 ## 🟠 Résolveur de boutique : un admin de boutique vise une autre boutique par `?boutique_id=` (relevé le 2026-09-17, OUVERT)
 
 **Défaut** : `getBoutiqueId()` (`src/lib/middleware.ts:208`) rend le paramètre dès que

@@ -152,12 +152,14 @@ const SQL_CHECK_PRODUIT_ACTIF = n(`SELECT id FROM produits WHERE id = ? AND acti
 const SQL_CHECK_PRODUIT_STOCK = n(`SELECT id, stock_actuel, boutique_id FROM produits WHERE id = ? AND actif = 1`)
 
 // SQL INSERT produit
+// AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — colonne `imei` ajoutée EN FIN d'INSERT,
+// positions des paramètres inchangées) : la liste finissait par `prix_achat_cump)` et 17 `?`
 const SQL_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
      stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
-     prix_achat_cump)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     prix_achat_cump, imei)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -172,6 +174,8 @@ const SQL_INSERT_MOUVEMENT_INITIAL = n(`
 `)
 
 // SQL UPDATE produit (COALESCE)
+// AVANT (2026-09-30, ticket 07 — IMEI à trois états ajouté avant `updated_at` ; `WHERE id = ?`
+// reste le dernier paramètre) : même requête sans la ligne `imei = CASE …`
 const SQL_UPDATE_PRODUIT = n(`
   UPDATE produits SET
     nom          = COALESCE(?, nom),
@@ -186,6 +190,7 @@ const SQL_UPDATE_PRODUIT = n(`
     fournisseur  = COALESCE(?, fournisseur),
     code_barre   = COALESCE(?, code_barre),
     description  = COALESCE(?, description),
+    imei         = CASE WHEN ? = 1 THEN ? ELSE imei END,
     updated_at   = CURRENT_TIMESTAMP
   WHERE id = ?
 `)

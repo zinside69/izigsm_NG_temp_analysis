@@ -709,6 +709,9 @@ describe('createVente() — verrouillage NF525 (ticket 002)', () => {
   `)
 
   /** Le verrou posé APRÈS le journal — même ordre qu'emettreFacture() */
+  // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue`) : la liste du SET s'arrêtait à
+  // `acheteur_snapshot = ?` ; l'instantané des appareils vendus rejoint le MÊME UPDATE (aucun
+  // troisième site de figeage), les paramètres testés ci-dessous gardent leur position.
   const SQL_VERROU = n(`
     UPDATE factures
     SET locked            = 1,
@@ -716,7 +719,8 @@ describe('createVente() — verrouillage NF525 (ticket 002)', () => {
         tracking_token    = ?,
         hash_nf525        = ?,
         vendeur_snapshot  = ?,
-        acheteur_snapshot = ?
+        acheteur_snapshot = ?,
+        appareils_snapshot = ?
     WHERE id = ?
   `)
 

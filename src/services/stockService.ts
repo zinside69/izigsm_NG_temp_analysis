@@ -22,6 +22,7 @@
 import { parsePagination, auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
+import { luhnValide } from '../lib/scan'
 // Seul point de résolution des valeurs par défaut de stock (`CLAUDE.md` § Stock). Pas de cycle :
 // boutiqueService n'importe de ce fichier qu'un type.
 import { resoudreDefautsStock, type DefautsStock, type DefautsStockEffectifs } from './boutiqueService'
@@ -83,6 +84,8 @@ export interface CreateProduitData {
   reference_fournisseur?: string | null
   code_barre?:           string | null
   description?:          string | null
+  /** IMEI d'un appareil d'occasion en vente (ticket 07) : 15 chiffres, clé de Luhn juste. */
+  imei?:                 string | null
 }
 
 /**
@@ -108,6 +111,8 @@ export interface UpdateProduitData {
   stock_minimum?:        number
   fournisseur?:          string | null
   code_barre?:           string | null
+  /** IMEI (ticket 07) : absent = inchangé, vide = retiré, sinon IMEI valide. */
+  imei?:                 string | null
 }
 
 export interface MouvementData {
@@ -266,6 +271,24 @@ export const ERREUR_PRIX_ACHAT_NEGATIF = 'Le prix d\'achat ne peut pas être né
  */
 export const ERREUR_QUANTITE_DEPART_INVALIDE = 'La quantité de départ doit être un entier positif ou nul.'
 
+/** Message du refus d'un IMEI mal saisi (ticket 07 `vente-lit-catalogue`, story 38). */
+export const ERREUR_IMEI_INVALIDE = 'IMEI invalide : 15 chiffres attendus, clé de contrôle juste.'
+
+/**
+ * IMEI d'un produit tel qu'il sera écrit (ticket 07) : `undefined` si absent du corps (inchangé en
+ * modification), `null` si vide ou blanc (retiré), sinon la valeur nettoyée — refusée si elle n'est
+ * pas un IMEI à clé de Luhn juste (`luhnValide()`, `lib/scan.ts`).
+ *
+ * @throws Error(ERREUR_IMEI_INVALIDE) si la saisie n'est pas un IMEI valide
+ */
+function imeiAEcrire(saisie: unknown): string | null | undefined {
+  if (saisie === undefined) return undefined
+  const valeur = saisie == null ? '' : String(saisie).trim()
+  if (!valeur) return null
+  if (!luhnValide(valeur)) throw new Error(ERREUR_IMEI_INVALIDE)
+  return valeur
+}
+
 /**
  * Règle commune d'une quantité de départ : entier ≥ 0. Partagée par la création manuelle et par
  * l'import depuis un fournisseur connecté (`mobilaxService`) — l'import CSV lit ses cellules
@@ -291,7 +314,8 @@ export function prixAchatNegatif(prix: unknown): boolean {
 }
 
 /** Champ d'un produit dont l'unicité par boutique est tenue en base (migration 0048). */
-export type ChampCodeUnique = 'code_barre' | 'sku'
+// AVANT (2026-09-30, ticket 07 — l'IMEI rejoint les codes uniques, migration 0054) : export type ChampCodeUnique = 'code_barre' | 'sku'
+export type ChampCodeUnique = 'code_barre' | 'sku' | 'imei'
 
 /**
  * Lit, dans une erreur de la base, un doublon de code-barres ou de SKU.
@@ -311,6 +335,8 @@ export function champEnDoublon(err: unknown): ChampCodeUnique | null {
   const derniere = liste.split(',').pop()?.trim()
   if (derniere === 'produits.code_barre') return 'code_barre'
   if (derniere === 'produits.sku') return 'sku'
+  // IMEI (index de 0054, ticket 07) : un appareil = une fiche
+  if (derniere === 'produits.imei') return 'imei'
   return null
 }
 
@@ -319,7 +345,8 @@ export function champEnDoublon(err: unknown): ChampCodeUnique | null {
  * doublon au lieu de subir une erreur de base de données (ticket 01 `vente-lit-catalogue`).
  */
 export function messageCodeEnDoublon(champ: ChampCodeUnique, existant: { id: number; nom: string }): string {
-  const libelle = champ === 'code_barre' ? 'Ce code-barres' : 'Ce SKU'
+  // AVANT (2026-09-30, ticket 07 — libellé de l'IMEI) : const libelle = champ === 'code_barre' ? 'Ce code-barres' : 'Ce SKU'
+  const libelle = champ === 'code_barre' ? 'Ce code-barres' : champ === 'imei' ? 'Cet IMEI' : 'Ce SKU'
   return `${libelle} est déjà utilisé par « ${existant.nom} » (produit n° ${existant.id}).`
 }
 
@@ -344,14 +371,15 @@ export class ErreurCodeEnDoublon extends Error {
 async function leverSiCodeEnDoublon(
   db: D1Database,
   err: unknown,
-  valeurs: { code_barre?: string | null; sku?: string | null },
+  // AVANT (2026-09-30, ticket 07 — l'IMEI peut aussi être en doublon) : valeurs: { code_barre?: string | null; sku?: string | null },
+  valeurs: { code_barre?: string | null; sku?: string | null; imei?: string | null },
   cible: { boutiqueId: number } | { produitId: number },
 ): Promise<void> {
   const champ = champEnDoublon(err)
   const valeur = champ ? valeurs[champ] : null
   if (!champ || valeur == null) return
 
-  // Colonne interpolée : `champ` ne vaut jamais que 'code_barre' ou 'sku' (type fermé)
+  // Colonne interpolée : `champ` ne vaut jamais que 'code_barre', 'sku' ou 'imei' (type fermé)
   const porteur = 'boutiqueId' in cible
     ? await db.prepare(
         `SELECT id, nom FROM produits WHERE boutique_id = ? AND ${champ} = ? AND actif = 1 LIMIT 1`,
@@ -443,6 +471,8 @@ export async function createProduit(
   // Entier ≥ 0 exigé : un « abc » donnait NaN, que `NaN < 0` laissait passer ; 1.5 aussi
   if (data.stock_actuel != null && !estEntierPositifOuNul(Number(data.stock_actuel)))
     throw new Error(ERREUR_QUANTITE_DEPART_INVALIDE)
+  // IMEI validé avant l'écriture (ticket 07) ; vide ou absent → aucun IMEI
+  const imei = imeiAEcrire(data.imei) ?? null
 
   // Seuil absent du corps → seuil d'alerte par défaut de la boutique (0 si jamais réglé), lu
   // seulement dans ce cas ; plus de repli 5 codé en dur (ticket 03 `reglages-stock-boutique`).
@@ -461,12 +491,14 @@ export async function createProduit(
   // explicitement — la même valeur que le `DEFAULT 0` de la colonne (migration 0014).
   // Un code-barres ou un SKU déjà porté est refusé par la base (migration 0048) : la violation
   // devient un refus qui nomme le produit existant (ticket 01 `vente-lit-catalogue`)
+  // `imei` en fin de liste (ticket 07, migration 0054) : ne décale aucune colonne existante.
+  // Un IMEI déjà porté est refusé par l'index de 0054, converti comme un code-barres en doublon.
   const result = await db.prepare(`
     INSERT INTO produits
       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
        stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
-       prix_achat_cump)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       prix_achat_cump, imei)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -486,8 +518,10 @@ export async function createProduit(
     data.description           ?? null,
     options.fournisseur_id     ?? null,
     coutMoyenInitial(stockInitial, data.prix_achat_ht ?? 0),
+    imei,
   ).first<{ id: number }>().catch(async (err) => {
-    await leverSiCodeEnDoublon(db, err, data, { boutiqueId })
+    // AVANT (2026-09-30, ticket 07 — l'IMEI nettoyé sert à retrouver le porteur) : await leverSiCodeEnDoublon(db, err, data, { boutiqueId })
+    await leverSiCodeEnDoublon(db, err, { ...data, imei }, { boutiqueId })
     throw err
   })
 
@@ -886,6 +920,9 @@ export async function updateProduit(
   data: UpdateProduitData
 ): Promise<void> {
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+  // IMEI à trois états (ticket 07) : absent = inchangé, vide = retiré, sinon valeur validée.
+  // `COALESCE` ne sait pas retirer : indicateur « champ fourni », comme `api_plateforme` (0045).
+  const imei = imeiAEcrire(data.imei)
 
   const existing = await db
     .prepare('SELECT id FROM produits WHERE id = ? AND actif = 1')
@@ -910,6 +947,7 @@ export async function updateProduit(
       fournisseur  = COALESCE(?, fournisseur),
       code_barre   = COALESCE(?, code_barre),
       description  = COALESCE(?, description),
+      imei         = CASE WHEN ? = 1 THEN ? ELSE imei END,
       updated_at   = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
@@ -926,10 +964,13 @@ export async function updateProduit(
     data.code_barre   ?? null,
     // « Notes » de la fiche : même COALESCE que le reste (absent = conservé)
     data.description  ?? null,
+    imei === undefined ? 0 : 1,
+    imei ?? null,
     id,
   ).run().catch(async (err) => {
     // Code-barres ou SKU déjà porté par un autre produit (migration 0048) → refus nommant ce produit
-    await leverSiCodeEnDoublon(db, err, data, { produitId: id })
+    // AVANT (2026-09-30, ticket 07 — l'IMEI nettoyé sert à retrouver le porteur) : await leverSiCodeEnDoublon(db, err, data, { produitId: id })
+    await leverSiCodeEnDoublon(db, err, { ...data, imei }, { produitId: id })
     throw err
   })
 

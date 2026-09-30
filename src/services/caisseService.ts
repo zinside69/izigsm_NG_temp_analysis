@@ -536,6 +536,22 @@ export async function createVente(
     FROM clients WHERE id = ?
   `).bind(clientId).first<any>()
 
+  // Identité des appareils vendus (ticket 07 `vente-lit-catalogue`, story 22) : une entrée par
+  // ligne dont le produit porte un IMEI — marque, modèle (= nom de la fiche, décision de
+  // l'exploitant du 2026-09-30), IMEI —, **relue en base** au moment de la vente, jamais prise
+  // dans ce qu'envoie le navigateur. Écrite par CET UPDATE, avec les autres marques du figeage :
+  // aucun troisième site, rien avant le journal. Elle n'entre pas dans les données hashées.
+  const appareils: { produit_id: number; designation: string; marque: string | null; modele: string; imei: string }[] = []
+  for (const l of data.lignes) {
+    if (!l.produit_id) continue
+    const p = await db.prepare(
+      'SELECT nom, marque, imei FROM produits WHERE id = ? AND boutique_id = ?'
+    ).bind(l.produit_id, boutiqueId).first<{ nom: string; marque: string | null; imei: string | null }>()
+    if (p?.imei) appareils.push({ produit_id: l.produit_id, designation: l.designation, marque: p.marque, modele: p.nom, imei: p.imei })
+  }
+
+  // AVANT (2026-09-30, ticket 07 — instantané des appareils ajouté au figeage) : la ligne SQL
+  // `acheteur_snapshot = ?` terminait la liste du SET ; elle est suivie de `appareils_snapshot = ?`.
   await db.prepare(`
     UPDATE factures
     SET locked            = 1,
@@ -543,13 +559,15 @@ export async function createVente(
         tracking_token    = ?,
         hash_nf525        = ?,
         vendeur_snapshot  = ?,
-        acheteur_snapshot = ?
+        acheteur_snapshot = ?,
+        appareils_snapshot = ?
     WHERE id = ?
   `).bind(
     crypto.randomUUID(),
     hashCourant,
     JSON.stringify(vendeur  ?? {}),
     JSON.stringify(acheteur ?? {}),
+    appareils.length ? JSON.stringify(appareils) : null,
     facture.id,
   ).run()
 

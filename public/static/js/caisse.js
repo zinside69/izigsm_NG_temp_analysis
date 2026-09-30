@@ -134,6 +134,12 @@
       }
     })
 
+    // Douchette (ticket 04) : un scan hors champ de saisie ajoute l'article, sans aucun clic.
+    // Pas pour l'admin plateforme, qui ne vend pas (son bouton de vente est retiré ci-dessus).
+    if (typeof window.ecouterDouchette === 'function' && document.getElementById('btn-nouvelle-vente')) {
+      window.ecouterDouchette(traiterScan)
+    }
+
     refreshKpis()
     refreshJournal()
   }
@@ -632,6 +638,90 @@
     hideEl('vente-produit-results')
     renderLignes()
     updateTotaux()
+  }
+
+  // ── Douchette (ticket 04 `vente-lit-catalogue`) ─────────────────────────────
+
+  /**
+   * Traite un code lu par la douchette (`douchette.js`). Le serveur route le code
+   * (`?scan=` : 13 chiffres → code-barres ou SKU, 15 → IMEI, sinon texte) ; l'écran décide :
+   *   - fenêtre de vente fermée → elle s'ouvre d'abord (aucun clic, story 8) ;
+   *   - un seul article (code-barres ou IMEI) → ajouté, ou quantité + 1 s'il est déjà en ligne ;
+   *   - plusieurs → liste dans la zone de résultats, aucun choix automatique (story 14) ;
+   *   - aucun → « Code inconnu » et lien de création de fiche (story 13), ou « Aucun produit pour
+   *     cet IMEI » ;
+   *   - saisie texte → liste, comme la recherche (jamais d'ajout automatique).
+   */
+  async function traiterScan(code) {
+    if (document.getElementById('modal-vente')?.classList.contains('hidden')) openNouvelleVente()
+    const results = document.getElementById('vente-produit-results')
+    if (!results) return
+
+    let res
+    try {
+      res = (await apiGet(`/api/catalogue/recherche?scan=${encodeURIComponent(code)}`)).data
+    } catch {
+      // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (`CLAUDE.md` § Enveloppe)
+      afficherMessageScan(`<span class="text-red-600">Scan impossible (connexion).</span>`)
+      return
+    }
+    if (!res?.success) {
+      afficherMessageScan(`<span class="text-red-600">${esc(res?.error || 'Scan impossible.')}</span>`)
+      return
+    }
+
+    const { type_scan, resultats } = res.data
+    // IMEI à clé de contrôle fausse (ticket 07, story 38) : refusé par le serveur sans recherche
+    if (res.data.imei_invalide) {
+      afficherMessageScan('<span class="text-red-600">IMEI invalide (clé de contrôle).</span>')
+      return
+    }
+    const ajoutables = resultats.filter(r => r.type === 'produit' || r.type === 'service')
+
+    if (type_scan !== 'texte' && ajoutables.length === 1 && resultats.length === 1) {
+      ajouterOuIncrementer(ajoutables[0])
+      return
+    }
+    if (resultats.length === 0) {
+      afficherMessageScan(type_scan === 'code_barre'
+        ? `Code inconnu : ${esc(code)} — <a href="/stock?nouveau=1&code=${encodeURIComponent(code)}" target="_blank" rel="noopener" class="text-blue-600 underline">Créer la fiche</a>`
+        : type_scan === 'imei' ? 'Aucun produit pour cet IMEI.' : 'Aucun résultat.')
+      return
+    }
+    // Plusieurs résultats : même liste et même clic que le sélecteur
+    const parType = (type) => new Map(resultats.filter(r => r.type === type).map(r => [r.id, r]))
+    state.produits = parType('produit')
+    state.services = parType('service')
+    results.classList.remove('hidden')
+    results.innerHTML = resultats.map(renderResultatCatalogue).join('')
+  }
+
+  /** Message dans la zone de résultats (HTML déjà échappé par l'appelant). */
+  function afficherMessageScan(html) {
+    const results = document.getElementById('vente-produit-results')
+    if (!results) return
+    results.classList.remove('hidden')
+    results.innerHTML = `<div class="px-3 py-2 text-sm text-gray-700" data-scan-message>${html}</div>`
+  }
+
+  /**
+   * Un article scanné déjà présent (même produit ou même service, qu'il vienne d'un scan ou du
+   * sélecteur) voit sa quantité augmenter d'une unité — jamais une seconde ligne (story 11).
+   * Une étiquette de lot fournisseur (« ×10 ») porte l'EAN de l'unité : elle ajoute une unité.
+   */
+  function ajouterOuIncrementer(r) {
+    const lien = r.type === 'produit' ? { produit_id: r.id } : { service_id: r.id }
+    const existante = state.lignes.find(l =>
+      (lien.produit_id && l.produit_id === lien.produit_id) || (lien.service_id && l.service_id === lien.service_id))
+    if (existante) {
+      existante.quantite += 1
+      hideEl('vente-produit-results')
+      renderLignes()
+      updateTotaux()
+      return
+    }
+    if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, r.prix_vente_ht, r.tva_taux)
+    else                      ajouterLigneCatalogue(lien, r.nom, r.prix_ht, r.tva_taux)
   }
 
   // ── Recherche client ─────────────────────────────────────────────────────────

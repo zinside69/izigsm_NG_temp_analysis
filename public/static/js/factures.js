@@ -1075,6 +1075,9 @@ async function _fetchFacturePrintData(id) {
     // Un brouillon n'a pas de snapshot et retombe donc sur la jointure vivante.
     vendeurFige:  _parseSnapshot(raw.vendeur_snapshot),
     acheteurFige: _parseSnapshot(raw.acheteur_snapshot),
+    // Appareils vendus (ticket 07 `vente-lit-catalogue`) : identité figée à la vente POS (marque,
+    // modèle, IMEI), jamais relue depuis la fiche produit. Liste vide si la facture n'en porte pas.
+    appareils:    Array.isArray(_parseSnapshot(raw.appareils_snapshot)) ? _parseSnapshot(raw.appareils_snapshot) : [],
     ventilation:  _ventilationTVA(lignes),
     mentionBoutique: (() => {
       const v = _parseSnapshot(raw.vendeur_snapshot);
@@ -1138,6 +1141,13 @@ function _buildFactureHTML(d, printCssHref) {
     payee: 'Payée', brouillon: 'Brouillon', en_attente: 'Émise',
     partiellement_payee: 'Part. payée', annulee: 'Annulée',
   }[d.statut] || d.statut;
+
+  // Bloc « Appareil vendu » (ticket 07, story 22 — garantie légale sur cet appareil précis) :
+  // un par entrée de l'instantané figé, valeurs échappées ; aucun bloc sans appareil.
+  const appareilsHTML = (d.appareils || []).map(a => `
+      <div class="print-appareil-vendu" data-appareil-vendu style="margin-top:8px;font-size:0.85rem;">
+        <strong>Appareil vendu :</strong> ${esc([a.marque, a.modele].filter(Boolean).join(' '))} — IMEI ${esc(a.imei)}
+      </div>`).join('');
 
   const lignesHTML = d.lignes.length
     ? d.lignes.map(l => `
@@ -1229,6 +1239,7 @@ function _buildFactureHTML(d, printCssHref) {
         </thead>
         <tbody>${lignesHTML}</tbody>
       </table>
+      ${appareilsHTML}
 
       <div class="print-totaux">
         <table class="print-totaux-table">
