@@ -79,6 +79,20 @@ Commun :
 - **Route** `GET /api/mobilax/prix-vente` — vitest par `app.request()`, dans `tests/mobilax-route.test.ts` : 403 admin plateforme, 400 sans appel, `?boutique_id=` d'une autre boutique ignoré.
 - **Écran devis** — E2E Playwright `tests/e2e/devis-mobilax.spec.ts`, routes `/api/mobilax/*` stubées par `page.route()` (`serviceWorkers: 'block'` déjà posé) : recherche → clic → ligne insérée au prix marginé attendu → prix modifié à la main → devis enregistré avec le prix modifié, relu par l'API. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).
 
+**Précision du 2026-09-30 — couture « Écran devis » complétée** (relecture de conception du socle,
+P15, tâche écran). Dans `tests/e2e/devis-mobilax.spec.ts`, en plus du parcours nominal, chaque cas
+étant vu rouge avant le correctif :
+- **Double clic** : la route stubée `/api/mobilax/prix-vente` attend une promesse avant de répondre.
+  Pendant cette attente, deux clics (le même résultat, puis un autre), puis libération de la
+  réponse. On vérifie exactement une ligne dans `#devis-lines` et un seul appel à `prix-vente`. Vu
+  rouge en retirant le verrou.
+- **Réseau coupé** : `route.abort()` sur `/api/mobilax/produits`. L'état « Recherche en cours… » est
+  remplacé par un message dans le conteneur.
+- **Quota** : un 429 avec `reessayer_dans_s` sur `prix-vente`. Le délai est affiché dans le
+  conteneur, et aucune ligne n'est insérée.
+- **Jamais d'`alert()`** : un écouteur `page.on('dialog')` fait échouer tout scénario où une boîte
+  de dialogue s'ouvre.
+
 ## Notes
 
 - Périmètre : `src/services/mobilaxService.ts`, `src/routes/mobilax.ts`, `public/static/js/mobilax-recherche.js` (nouveau), `public/static/js/devis.js`, `public/devis.html`, `public/sw.js`, tests correspondants. ⊥ `stock.js` : la recherche de la page Stock (sélection, import) reste la sienne, sa migration vers le module n'est pas demandée.
