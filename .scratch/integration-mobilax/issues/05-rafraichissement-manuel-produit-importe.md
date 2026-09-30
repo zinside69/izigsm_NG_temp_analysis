@@ -1,11 +1,16 @@
 ---
 id: 05
 titre: Rafraîchissement manuel d'un produit importé de Mobilax
-statut: ready-for-agent
+statut: done
 bloque-par: [04]
 ---
 
 # 05 — Rafraîchissement manuel d'un produit importé
+
+> **Livré par le socle dans le bac à sable** (`izigsm-mobilax`, branche `integration`, PR #7 et
+> #12) — **pas encore reporté sur `main`** : report en production par cherry-pick des seuls
+> commits du ticket, depuis `izigsm/webapp`. Statut corrigé le 2026-09-30 : ce fichier avait été
+> remis à `ready-for-agent` par erreur le même jour (`9000ffc`).
 
 ## Contexte
 
