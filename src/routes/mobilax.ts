@@ -15,6 +15,10 @@
  *                                    importée (ticket 05 `integration-mobilax`, amendement du
  *                                    2026-09-27) ; identité par `mobilax_id`, jamais écrit si
  *                                    discordant, introuvable chez Mobilax, ou prix invalide
+ *   GET  /api/mobilax/prix-vente?mobilax_id= — prix de vente marginé d'une pièce, pour une ligne
+ *                                    de devis (ticket 06 `integration-mobilax`) ; nom neutre,
+ *                                    rappelée par facture/caisse/prise en charge (tickets 07-09).
+ *                                    Lecture seule, aucune écriture
  *
  * Isolation : la boutique est TOUJOURS celle du jeton de connexion — un `?boutique_id=` est
  * ignoré, y compris pour un compte de rôle `admin` rattaché à une boutique (dont
@@ -26,7 +30,7 @@ import { Hono } from 'hono'
 import { authMiddleware, requireRole, isAdminPlateforme } from '../lib/middleware'
 import type { Database } from '../ports/database'
 import type { D1KVNamespace } from '../lib/d1kv'
-import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, rafraichirProduitImporte, type ErreurMobilax } from '../services/mobilaxService'
+import { rechercherProduitsMobilax, importerProduitMobilax, seriesDeGeneration, apercuGeneration, rafraichirProduitImporte, prixVenteMobilax, type ErreurMobilax } from '../services/mobilaxService'
 // AVANT (2026-09-25, point 1 : clé d'ajout) : import { ajouterStockPieceImportee } from '../services/stockService'
 import { ajouterStockPieceImportee, MOTIF_CLE_AJOUT } from '../services/stockService'
 
@@ -227,6 +231,34 @@ mobilax.post('/mobilax/produits/:id/rafraichir', requireRole('admin', 'manager')
   // Produit introuvable dans la boutique du jeton : son existence chez autrui n'est pas confirmée
   if (r === null) return c.json({ success: false, error: 'Produit introuvable.' }, 404)
   if (r.ok) return c.json({ success: true, data: { prix_achat_ht: r.prix_achat_ht, stock: r.stock } })
+  return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
+})
+
+// ── GET /api/mobilax/prix-vente?mobilax_id= ──────────────────────────────────
+// Ticket 06 (chantier integration-mobilax) : prix de vente marginé d'une pièce Mobilax, pour
+// préremplir une ligne de devis (et facture/caisse/prise en charge aux tickets 07-09 — nom de
+// route neutre, pas propre au devis). Lecture seule (hors journal de plateforme, aucune écriture
+// en base) : mêmes gardes que la recherche, boutique du jeton seulement, `?boutique_id=` ignoré,
+// admin plateforme refusé.
+mobilax.get('/mobilax/prix-vente', async (c) => {
+  const user = c.get('user')
+  if (isAdminPlateforme(user) || !user.boutique_id)
+    return c.json({ success: false, error: 'Le prix de vente Mobilax utilise la clé d\'une boutique : réservé à ses utilisateurs.' }, 403)
+
+  const brut = c.req.query('mobilax_id')
+  const mobilaxId = Number(brut)
+  if (!brut || !Number.isInteger(mobilaxId) || mobilaxId <= 0)
+    return c.json({ success: false, error: 'Identifiant de pièce Mobilax manquant ou invalide.' }, 400)
+
+  const r = await prixVenteMobilax(
+    { db: c.get('db'), kv: c.env.KV, cleChiffrement: c.env.FOURNISSEUR_CRYPTO_KEY, baseUrl: c.env.MOBILAX_API_BASE },
+    user.boutique_id,
+    mobilaxId,
+  )
+  if (r.ok) return c.json({
+    success: true,
+    data: { mobilax_id: r.mobilax_id, nom: r.nom, prix_achat_ht: r.prix_achat_ht, famille: r.famille, taux: r.taux, prix_vente_ht: r.prix_vente_ht },
+  })
   return c.json({ success: false, error: r.message, code: r.erreur, reessayer_dans_s: r.reessayer_dans_s }, STATUT_PAR_ERREUR[r.erreur])
 })
 

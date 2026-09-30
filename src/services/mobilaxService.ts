@@ -369,7 +369,9 @@ export async function importerProduitMobilax(
   const taux = resoudreTauxMarge(reglages, famille)
   const defauts = resoudreDefautsStock(reglages)
   const quantite = quantiteFournie ? quantiteEnRayon as number : defauts.stock_initial
-  const prixVente = taux === null ? 0 : Math.round(fiche.prix_achat_ht * (1 + taux / 100) * 100) / 100
+  // Taux null (boutique sans marge saisie) : 0, jamais un taux inventé (décision du 2026-09-10) —
+  // repli propre à l'import, distinct de celui de `prixVenteMobilax()` (ticket 06)
+  const prixVente = taux === null ? 0 : prixDeVente(fiche.prix_achat_ht, taux)
 
   // Catégorie locale = catégorie Mobilax la plus fine, trouvée ou créée dans CETTE boutique
   const categorieId = fiche.categorie_nom
@@ -416,6 +418,79 @@ export async function importerProduitMobilax(
     return echec('deja_importe', 'Cette pièce est déjà dans votre stock.', { produit_id: gagnant.id })
   }
   return { ok: true, produit_id: id, famille }
+}
+
+// ─── Prix de vente marginé (ticket 06, chantier integration-mobilax) ──────────
+
+/**
+ * Prix de vente HT arrondi au centime, à un taux de marge non null.
+ *
+ * **Seule formule de prix de vente du service** : `importerProduitMobilax()` et
+ * `prixVenteMobilax()` l'appellent tous deux — ⊥ seconde copie. Elle ignore volontairement le
+ * cas « taux null » (décision du 2026-09-30, précision « taux null ») : chaque appelant garde
+ * son propre repli (0 à l'import, prix d'achat pour la ligne de devis).
+ *
+ * @param prixAchat Prix d'achat HT
+ * @param taux      Taux de marge en pourcentage, déjà résolu (jamais null ici)
+ * @returns         Prix d'achat × (1 + taux / 100), arrondi au centime
+ */
+export function prixDeVente(prixAchat: number, taux: number): number {
+  return Math.round(prixAchat * (1 + taux / 100) * 100) / 100
+}
+
+export type ResultatPrixVenteMobilax =
+  | { ok: true; mobilax_id: number; nom: string; prix_achat_ht: number; famille: FamilleProduit; taux: number | null; prix_vente_ht: number }
+  | EchecMobilax
+
+/**
+ * Prix de vente marginé d'une pièce Mobilax, pour préremplir une ligne de devis (ticket 06) —
+ * puis facture, caisse et prise en charge (tickets 07-09, même route). Relit la fiche complète
+ * chez Mobilax comme l'import (`/products/:id/full`), déduit la famille par la même règle
+ * (`familleDepuisCategorie()`) et résout le même taux (`resoudreTauxMarge()`) : un accessoire
+ * prend le taux des accessoires, une pièce celui des pièces — le prix de vente que l'import
+ * aurait posé si la pièce avait été importée (décision de l'exploitant du 2026-09-30).
+ *
+ * **Aucune écriture** : ni produit, ni catégorie, ni rattachement, ni mouvement — une simple
+ * lecture, appelée à chaque clic sur un résultat de recherche.
+ *
+ * Taux `null` (boutique sans marge saisie) → prix de vente = prix d'achat, `taux: null` rendu
+ * tel quel : jamais un taux inventé (`decisions.md` 2026-09-10), et jamais le repli à 0 de
+ * l'import — la ligne de devis doit rester modifiable à partir d'un prix plausible.
+ *
+ * @param deps        Dépendances (base, KV, secret, adresse de l'API)
+ * @param boutiqueId  Boutique appelante — SA clé, SES réglages de marge
+ * @param mobilaxId   Identifiant Mobilax de la pièce (issu d'un résultat de recherche)
+ * @returns           Prix de vente marginé et ses composants, ou une erreur nommée
+ */
+export async function prixVenteMobilax(
+  deps: DepsMobilax, boutiqueId: number, mobilaxId: number
+): Promise<ResultatPrixVenteMobilax> {
+  const cle = await resoudreCle(deps, boutiqueId)
+  if (!cle.ok) return cle.echec
+
+  let fiche: FicheMobilax | null
+  try {
+    const appel = await appelerMobilax(deps, boutiqueId, cle.apiKey, `${deps.baseUrl}/products/${mobilaxId}/full`)
+    if (!appel.ok) return appel.echec
+    if (appel.rep.status === 404) return echec('introuvable', 'Cette pièce n\'existe plus chez Mobilax.')
+    if (!appel.rep.ok) return indisponible()
+    // `GET /products/:id/full` : `{ status: 'OK', data: { … } }` (mesuré le 2026-09-11)
+    const corps = await appel.rep.json() as { data?: unknown }
+    fiche = versFicheMobilax(corps.data)
+  } catch {
+    return indisponible()
+  }
+  if (!fiche) return indisponible()
+
+  const famille = await familleDepuisCategorie(deps, boutiqueId, cle.apiKey, fiche.categorie_id)
+  const reglages = await getBoutiqueSettings(deps.db, boutiqueId)
+  const taux = resoudreTauxMarge(reglages, famille)
+  const prixVente = taux === null ? fiche.prix_achat_ht : prixDeVente(fiche.prix_achat_ht, taux)
+
+  return {
+    ok: true, mobilax_id: mobilaxId, nom: fiche.nom, prix_achat_ht: fiche.prix_achat_ht,
+    famille, taux, prix_vente_ht: prixVente,
+  }
 }
 
 /**
