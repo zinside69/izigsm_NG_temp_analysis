@@ -775,6 +775,32 @@ function checkFromTicket() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECHERCHE MOBILAX (ticket 06, chantier `integration-mobilax`)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Le module (mobilax-recherche.js) est générique : c'est ici, côté écran devis, que sa
+// sélection devient une ligne. Monté une seule fois (le conteneur reste dans le DOM entre
+// deux ouvertures du modal), le bouton ne fait ensuite qu'afficher/masquer le conteneur.
+let mobilaxRechercheMontee = false;
+
+function toggleRechercheMobilaxDevis() {
+  const conteneur = document.getElementById('devis-mobilax-recherche');
+  if (!conteneur) return;
+
+  if (!mobilaxRechercheMontee) {
+    monterRechercheMobilax(conteneur, {
+      surSelection: (choix) => {
+        // Prix pré-rempli, modifiable avant enregistrement : le devis enregistré porte le
+        // prix saisi en dernier par l'opérateur, jamais le prix calculé (critère du ticket).
+        addLine({ description: choix.description, prix_unitaire_ht: choix.prix_unitaire_ht, quantite: 1 });
+      },
+    });
+    mobilaxRechercheMontee = true;
+  }
+  conteneur.hidden = !conteneur.hidden;
+}
+
 // ─── Utilitaires internes ──────────────────────────────────────────────────────
 
 function esc(s) {
@@ -894,3 +920,4 @@ window.removeLine         = removeLine;
 window.updateLineTotals   = updateLineTotals;
 window.filterDevis        = filterDevis;
 window.filterDevisStatus  = filterDevisStatus;
+window.toggleRechercheMobilaxDevis = toggleRechercheMobilaxDevis;

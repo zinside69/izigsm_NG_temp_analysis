@@ -109,8 +109,12 @@
         <div style="margin-top:20px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <label style="font-weight:700;font-size:0.88rem;">Lignes du devis</label>
-            <button class="btn btn-ghost btn-sm" onclick="addLine()">+ Ajouter une ligne</button>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-devis-mobilax" onclick="toggleRechercheMobilaxDevis()">🔎 Chercher chez Mobilax</button>
+              <button class="btn btn-ghost btn-sm" onclick="addLine()">+ Ajouter une ligne</button>
+            </div>
           </div>
+          <div id="devis-mobilax-recherche" hidden style="margin-bottom:14px;padding:12px;border:1px dashed #d0d5dd;border-radius:10px;background:#fafafa;"></div>
           <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
             <table style="width:100%;border-collapse:collapse;">
               <thead>
@@ -182,6 +186,7 @@
   </div>
 
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/mobilax-recherche.js"></script>
   <script src="/static/js/devis.js"></script>
   <script src="/static/js/pwa.js"></script>
 </body>
