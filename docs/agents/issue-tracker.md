@@ -39,9 +39,16 @@ Pourquoi ce ticket existe.
 - [ ] Vérifiable, pas d'ambiguïté
 - [ ] `npx vitest run` vert
 
+## Coutures à tester
+Les points où les tests observent le comportement (route, fonction publique, écran),
+convenus avant le code. Au moins une ligne.
+
 ## Notes
 Fichiers concernés, pièges connus.
 ```
+
+**« Coutures à tester »** : obligatoire pour tout ticket confié au socle d'orchestration
+(ADR 0004 du socle) : sans cette section, la tâche est refusée avant l'agent (P18).
 
 ## Arêtes bloquantes
 
