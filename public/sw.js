@@ -10,7 +10,8 @@
  * Versioning : incrémenter CACHE_VERSION à chaque déploiement majeur
  */
 
-const CACHE_VERSION  = 'izigsm-v3.11'
+// AVANT (2026-09-30, report du ticket 05 Mobilax — stock.js et stock.html modifiés) : const CACHE_VERSION  = 'izigsm-v3.11'
+const CACHE_VERSION  = 'izigsm-v3.12'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`
