@@ -120,6 +120,32 @@ export async function rechercherParCode(
   return (lignes ?? []).map(versResultatProduit)
 }
 
+/**
+ * Cherche un téléphone d'occasion par l'**IMEI** de sa fiche (ticket 07, story 21) : égalité
+ * stricte, produits actifs de la boutique. L'IMEI arrive déjà contrôlé (`luhnValide()`, route) :
+ * un IMEI faux ne lance aucune requête.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique consultée — aucune autre n'est lue
+ * @param imei        IMEI à clé juste
+ * @returns           Le produit trouvé (au plus un par boutique, index de 0054)
+ */
+export async function rechercherParImei(
+  db:         Database,
+  boutiqueId: number,
+  imei:       string,
+): Promise<ResultatCatalogue[]> {
+  const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
+    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    FROM   produits
+    WHERE  boutique_id = ? AND actif = 1 AND imei = ?
+    ORDER  BY nom ASC
+    LIMIT  ?
+  `, [boutiqueId, imei, PLAFOND_RECHERCHE_CATALOGUE])
+
+  return (lignes ?? []).map(versResultatProduit)
+}
+
 /** Mapping explicite d'une ligne produit : le contrat de sortie ne dépend pas des colonnes lues. */
 function versResultatProduit(p: Omit<ResultatProduit, 'type'>): ResultatProduit {
   return {

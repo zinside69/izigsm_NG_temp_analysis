@@ -1,7 +1,7 @@
 ---
 id: 07
 titre: IMEI du produit et vente d'occasion
-statut: ready-for-human
+statut: done
 bloque-par: [04]
 ---
 
@@ -18,6 +18,28 @@ Spec : `.scratch/vente-lit-catalogue/spec.md` (stories 21 à 23 ; décisions « 
 
 Bloqué par 04 (douchette en caisse) : c'est lui qui route un scan de 15 chiffres vers `imei`, avec
 une liste vide que ce ticket remplit.
+
+**Livré le 2026-09-30** (codé par Claude avec l'exploitant, sur `main`, non déployé — part avec le
+lot 1, `0054` à distance **avant** le code) : `luhnValide()` (`lib/scan.ts`), migration `0054`,
+IMEI dans `createProduit()`/`updateProduit()` (trois états en modification), `rechercherParImei()`
+et contrôle de Luhn dans la route `?scan=`, instantané des appareils dans l'`UPDATE` post-journal
+de `createVente()`, bloc « Appareil vendu » de `_buildFactureHTML()`, champ IMEI de la fiche
+produit, `CACHE_VERSION` `izigsm-v3.14`. Vitest 1 309 verts + 2 échecs permanents, tsc 32
+(inchangé) ; E2E `vente-occasion-imei` 3/3 et 72 E2E voisins verts.
+
+Écarts assumés, à connaître :
+- **IMEI invalide dans la fiche → 422**, pas 400 : convention existante des refus de validation de
+  `POST`/`PUT /api/produits` (prix d'achat négatif, quantité de départ).
+- **L'E2E a été écrit après le code** des tranches 5 et 6 : il a été prouvé **par mutation**
+  (instantané neutralisé dans `createVente()` → E2E rouge sur « Appareil vendu », et 3 tests
+  SQLite du figeage rouges), puis le code restauré. Les tests vitest, eux, ont été vus rouges avant.
+- **Nouveau helper de test `tests/helpers/d1Sqlite.ts`** : un vrai SQLite au schéma réel (toutes les
+  migrations), exposé en `D1Database`, pour prouver le figeage et l'index d'IMEI sans mock.
+- **Sept copies figées de SQL mises à jour** dans les tests sur mock (`INSERT`/`UPDATE` de
+  produits, `UPDATE` de figeage de `caisseService.test.ts`) : colonnes ajoutées en fin de liste,
+  positions des paramètres vérifiés inchangées, ancienne forme gardée en commentaire `AVANT`. Le
+  test « facture déverrouillée si le journal échoue » passait **par vacuité** tant que sa copie
+  n'était pas à jour (il ne trouvait plus l'`UPDATE`) : il redevient significatif.
 
 **Touche la caisse ET le NF525** : il écrit dans `createVente()` (`caisseService.ts`), au site de
 figeage qui suit l'écriture au journal NF525. → **codé par Claude avec l'exploitant, pas confié au
@@ -61,40 +83,40 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
 
 Base :
 
-- [ ] Migration `0054` : colonne `produits.imei` (TEXT, nullable) + index unique partiel `(boutique_id, imei)` sur le patron de `0048` (`actif = 1`, non nul, non vide) ; colonne `factures.appareils_snapshot` (TEXT, nullable). `ALTER TABLE … ADD COLUMN` seulement, aucune recréation de table
-- [ ] Test de la migration contre un **vrai SQLite** (`node:sqlite`) : doublon d'IMEI refusé dans une boutique, admis entre boutiques et sur un produit inactif ; factures existantes intactes
+- [x] Migration `0054` : colonne `produits.imei` (TEXT, nullable) + index unique partiel `(boutique_id, imei)` sur le patron de `0048` (`actif = 1`, non nul, non vide) ; colonne `factures.appareils_snapshot` (TEXT, nullable). `ALTER TABLE … ADD COLUMN` seulement, aucune recréation de table
+- [x] Test de la migration contre un **vrai SQLite** (`node:sqlite`) : doublon d'IMEI refusé dans une boutique, admis entre boutiques et sur un produit inactif ; factures existantes intactes
 
 Fiche produit :
 
-- [ ] `luhnValide(texte)` (`src/lib/scan.ts`, pure) : 15 chiffres et clé de Luhn juste
-- [ ] `createProduit()` et `PUT /produits/:id` acceptent `imei` : vide → `NULL` ; sinon 15 chiffres **et** Luhn juste, sinon 400 explicite
-- [ ] Doublon d'IMEI → conversion en `ErreurCodeEnDoublon` (champ `imei`, 409 nommant le produit porteur), jamais une erreur SQL brute ; `champEnDoublon()` reconnaît `produits.imei`
-- [ ] Champ « IMEI » dans la fiche produit (`stock.js`/`stock.html`), en création et en modification
+- [x] `luhnValide(texte)` (`src/lib/scan.ts`, pure) : 15 chiffres et clé de Luhn juste
+- [x] `createProduit()` et `PUT /produits/:id` acceptent `imei` : vide → `NULL` ; sinon 15 chiffres **et** Luhn juste, sinon 400 explicite
+- [x] Doublon d'IMEI → conversion en `ErreurCodeEnDoublon` (champ `imei`, 409 nommant le produit porteur), jamais une erreur SQL brute ; `champEnDoublon()` reconnaît `produits.imei`
+- [x] Champ « IMEI » dans la fiche produit (`stock.js`/`stock.html`), en création et en modification
 
 Scan en caisse :
 
-- [ ] `?scan=` de type `imei` (route du ticket 04) : produits **actifs** de la boutique où `imei = ?` ; IMEI à clé de Luhn fausse → `resultats: []` et `imei_invalide: true`, **sans requête SQL**
-- [ ] En caisse : IMEI connu → ligne ajoutée comme un code-barres (stock 0 : ajout permis avec l'avertissement existant, story 17) ; IMEI à clé fausse → « IMEI invalide (clé de contrôle) » ; inconnu → « Aucun produit pour cet IMEI »
+- [x] `?scan=` de type `imei` (route du ticket 04) : produits **actifs** de la boutique où `imei = ?` ; IMEI à clé de Luhn fausse → `resultats: []` et `imei_invalide: true`, **sans requête SQL**
+- [x] En caisse : IMEI connu → ligne ajoutée comme un code-barres (stock 0 : ajout permis avec l'avertissement existant, story 17) ; IMEI à clé fausse → « IMEI invalide (clé de contrôle) » ; inconnu → « Aucun produit pour cet IMEI »
 
 Vente et figeage (`caisseService.createVente()`) :
 
-- [ ] Pour chaque ligne portant un `produit_id` dont le produit a un IMEI : entrée de l'instantané relue **en base** (`marque`, `nom` → `modele`, `imei`)
-- [ ] Instantané écrit par l'`UPDATE` post-journal existant, dans la même instruction que les six marques du figeage ; aucune ligne → colonne `NULL`
-- [ ] Échec de l'écriture au journal NF525 → ni verrouillage ni instantané (comportement actuel inchangé)
-- [ ] Modifier ensuite la fiche produit (nom, marque, IMEI) ne change pas l'instantané de la facture émise
+- [x] Pour chaque ligne portant un `produit_id` dont le produit a un IMEI : entrée de l'instantané relue **en base** (`marque`, `nom` → `modele`, `imei`)
+- [x] Instantané écrit par l'`UPDATE` post-journal existant, dans la même instruction que les six marques du figeage ; aucune ligne → colonne `NULL`
+- [x] Échec de l'écriture au journal NF525 → ni verrouillage ni instantané (comportement actuel inchangé)
+- [x] Modifier ensuite la fiche produit (nom, marque, IMEI) ne change pas l'instantané de la facture émise
 
 Document (`factures.js`) :
 
-- [ ] `_buildFactureHTML()` : bloc « Appareil vendu » (marque, modèle, IMEI) par entrée de `appareils_snapshot`, valeurs échappées ; facture sans instantané → aucun bloc
-- [ ] La lecture de la facture renvoie `appareils_snapshot` (colonnes de la route de détail)
+- [x] `_buildFactureHTML()` : bloc « Appareil vendu » (marque, modèle, IMEI) par entrée de `appareils_snapshot`, valeurs échappées ; facture sans instantané → aucun bloc
+- [x] La lecture de la facture renvoie `appareils_snapshot` (colonnes de la route de détail)
 
 Commun :
 
-- [ ] Tests NF525 existants verts : `nf525-ecrivains-conformite`, `factures-immuabilite-conformite`, `caisseService`, et la vérification d'intégrité de la chaîne
-- [ ] `CACHE_VERSION` (`public/sw.js`) incrémenté
-- [ ] ∀ test vu rouge avant correctif
-- [ ] `npx vitest run` sans nouvel échec par rapport à la baseline mesurée avant le ticket
-- [ ] Erreurs tsc ≤ baseline mesurée avant le ticket (`npx tsc --noEmit --pretty false | grep -cE "error TS[0-9]+"`)
+- [x] Tests NF525 existants verts : `nf525-ecrivains-conformite`, `factures-immuabilite-conformite`, `caisseService`, et la vérification d'intégrité de la chaîne
+- [x] `CACHE_VERSION` (`public/sw.js`) incrémenté
+- [x] ∀ test vu rouge avant correctif
+- [x] `npx vitest run` sans nouvel échec par rapport à la baseline mesurée avant le ticket
+- [x] Erreurs tsc ≤ baseline mesurée avant le ticket (`npx tsc --noEmit --pretty false | grep -cE "error TS[0-9]+"`)
 
 ## Coutures à tester
 

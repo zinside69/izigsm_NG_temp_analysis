@@ -14,8 +14,10 @@ import { Hono } from 'hono'
 import { authMiddleware, getBoutiqueId } from '../lib/middleware'
 import type { Database } from '../ports/database'
 // AVANT (2026-09-30, ticket 04 `vente-lit-catalogue` — ajout de la recherche par code scanné) : import { rechercherCatalogue } from '../services/catalogueService'
-import { rechercherCatalogue, rechercherParCode } from '../services/catalogueService'
-import { routerScan } from '../lib/scan'
+// AVANT (2026-09-30, ticket 07 — recherche par IMEI) : import { rechercherCatalogue, rechercherParCode } from '../services/catalogueService'
+import { rechercherCatalogue, rechercherParCode, rechercherParImei } from '../services/catalogueService'
+// AVANT (2026-09-30, ticket 07 — contrôle de Luhn avant toute requête) : import { routerScan } from '../lib/scan'
+import { routerScan, luhnValide } from '../lib/scan'
 
 type Bindings  = { DB: D1Database; JWT_SECRET: string }
 type Variables = { user: any; db: Database }
@@ -48,11 +50,15 @@ catalogue.get('/catalogue/recherche', async (c) => {
     const route = routerScan(scan)
     if (!route.valeur) return c.json({ success: false, error: 'Scan vide.' }, 400)
 
+    // IMEI à clé de Luhn fausse (ticket 07, story 38) : refusé AVANT toute requête
+    if (route.type === 'imei' && !luhnValide(route.valeur))
+      return c.json({ success: true, data: { type_scan: 'imei', resultats: [], imei_invalide: true } })
+
     const db = c.get('db')
     const resultats =
       route.type === 'code_barre' ? await rechercherParCode(db, boutiqueId, route.valeur)
-      // IMEI : aucune colonne IMEI sur les produits avant le ticket 07 — liste vide, aucune requête
-      : route.type === 'imei'     ? []
+      // AVANT (2026-09-30, ticket 04 — aucune colonne IMEI avant le ticket 07) : : route.type === 'imei'     ? []
+      : route.type === 'imei'     ? await rechercherParImei(db, boutiqueId, route.valeur)
       :                             await rechercherCatalogue(db, boutiqueId, route.valeur)
     return c.json({ success: true, data: { type_scan: route.type, resultats } })
   }

@@ -24,6 +24,7 @@ import {
   importCatalogueCsv,
   ERREUR_PRIX_ACHAT_NEGATIF,
   ERREUR_QUANTITE_DEPART_INVALIDE,
+  ERREUR_IMEI_INVALIDE,
   ErreurCodeEnDoublon,
   type MouvementData,
   type FamilleProduit,
@@ -134,7 +135,8 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
     const created = await createProduit(db, boutiqueId, user.sub, body)
     return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
   } catch (err: any) {
-    if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
+    // AVANT (2026-09-30, ticket 07 — IMEI invalide refusé en 422 lui aussi) : if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
+    if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE, ERREUR_IMEI_INVALIDE].includes(err.message))
       return c.json({ success: false, error: err.message }, 422)
     if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
     throw err

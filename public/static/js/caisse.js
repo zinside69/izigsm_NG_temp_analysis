@@ -671,6 +671,11 @@
     }
 
     const { type_scan, resultats } = res.data
+    // IMEI à clé de contrôle fausse (ticket 07, story 38) : refusé par le serveur sans recherche
+    if (res.data.imei_invalide) {
+      afficherMessageScan('<span class="text-red-600">IMEI invalide (clé de contrôle).</span>')
+      return
+    }
     const ajoutables = resultats.filter(r => r.type === 'produit' || r.type === 'service')
 
     if (type_scan !== 'texte' && ajoutables.length === 1 && resultats.length === 1) {

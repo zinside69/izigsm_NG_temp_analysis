@@ -5,7 +5,8 @@
  * toute autre saisie → recherche texte.
  */
 import { describe, it, expect } from 'vitest'
-import { routerScan } from '../src/lib/scan'
+// AVANT (2026-09-30, ticket 07 — ajout de luhnValide()) : import { routerScan } from '../src/lib/scan'
+import { routerScan, luhnValide } from '../src/lib/scan'
 
 describe('routerScan() — routage d\'un scan par sa longueur', () => {
   it('13 chiffres → code-barres', () => {
@@ -32,5 +33,29 @@ describe('routerScan() — routage d\'un scan par sa longueur', () => {
 
   it('chaîne vide ou blanche → texte vide', () => {
     expect(routerScan('   ')).toEqual({ type: 'texte', valeur: '' })
+  })
+})
+
+/**
+ * Clé de Luhn d'un IMEI (ticket 07, réutilisée au scan par le ticket 08b). Valeurs de référence
+ * indépendantes du code : IMEI d'exemple publiés (490154203237518, 356938035643809) et le même
+ * numéro au dernier chiffre faussé.
+ */
+describe('luhnValide() — clé de contrôle d\'un IMEI', () => {
+  it('accepte des IMEI à clé juste', () => {
+    expect(luhnValide('490154203237518')).toBe(true)
+    expect(luhnValide('356938035643809')).toBe(true)
+  })
+
+  it('refuse une clé fausse', () => {
+    expect(luhnValide('490154203237519')).toBe(false)
+    expect(luhnValide('356938035643800')).toBe(false)
+  })
+
+  it('refuse ce qui n\'a pas exactement 15 chiffres', () => {
+    expect(luhnValide('49015420323751')).toBe(false)
+    expect(luhnValide('4901542032375180')).toBe(false)
+    expect(luhnValide('49015420323751A')).toBe(false)
+    expect(luhnValide('')).toBe(false)
   })
 })

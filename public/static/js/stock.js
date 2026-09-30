@@ -144,6 +144,8 @@ async function loadStock() {
       prix_vente_ht:   p.prix_vente_ht  ?? 0,
       prix_achat_ht:   p.prix_achat_ht  ?? 0,
       marque:          p.marque         || '',
+      // IMEI d'un appareil d'occasion (ticket 07)
+      imei:            p.imei           || '',
       supplier:        p.fournisseur    || '',
       // « Notes » de la fiche = colonne `description` (aucune colonne `notes` n'existe)
       notes:           p.description    || '',
@@ -388,6 +390,7 @@ function editStock(id) {
   document.getElementById('stock-reference').value          = item.reference   || '';
   document.getElementById('stock-famille').value            = item.famille     || 'piece';
   document.getElementById('stock-marque').value             = item.marque      || '';
+  document.getElementById('stock-imei').value               = item.imei        || '';
   document.getElementById('stock-qty').value                = item.qty         ?? 0;
   // Quantité en lecture seule : PUT /produits/:id ignore stock_actuel, le stock ne bouge que par
   // un mouvement tracé (décision du 2026-09-12) — la saisie était perdue sans message
@@ -422,7 +425,8 @@ function editStock(id) {
 }
 
 function resetStockForm() {
-  ['stock-name','stock-reference','stock-marque','stock-supplier','stock-notes'].forEach(id => {
+  // AVANT (2026-09-30, ticket 07 — champ IMEI remis à zéro lui aussi) : ['stock-name','stock-reference','stock-marque','stock-supplier','stock-notes'].forEach(id => {
+  ['stock-name','stock-reference','stock-marque','stock-imei','stock-supplier','stock-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -648,6 +652,9 @@ async function saveStock() {
     sku:                  document.getElementById('stock-reference').value.trim() || undefined,
     famille,
     marque:               document.getElementById('stock-marque').value.trim()   || undefined,
+    // IMEI toujours envoyé (ticket 07) : vide = retiré par le serveur, jamais « inchangé » —
+    // sinon effacer le champ d'une fiche n'aurait aucun effet
+    imei:                 document.getElementById('stock-imei').value.trim(),
     categorie_id:         categorieId,
     stock_actuel:         parseInt(document.getElementById('stock-qty').value)     || 0,
     stock_minimum:        seuilSaisi === '' ? undefined : (parseInt(seuilSaisi, 10) || 0),

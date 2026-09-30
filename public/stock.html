@@ -174,6 +174,12 @@
             <label>Marque</label>
             <input type="text" id="stock-marque" placeholder="Apple, Samsung…">
           </div>
+          <!-- IMEI d'un appareil d'occasion en vente (ticket 07 `vente-lit-catalogue`) : trouvé au
+               scan en caisse, figé sur la facture à la vente. 15 chiffres, clé contrôlée. -->
+          <div class="form-field">
+            <label>IMEI (appareil d'occasion)</label>
+            <input type="text" id="stock-imei" inputmode="numeric" maxlength="15" placeholder="15 chiffres">
+          </div>
           <div class="form-field">
             <label>Fournisseur</label>
             <input type="text" id="stock-supplier" placeholder="Nom du fournisseur">

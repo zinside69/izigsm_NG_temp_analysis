@@ -39,10 +39,19 @@ describe('GET /api/catalogue/recherche?scan=', () => {
     expect(appels.some(a => (a.params as unknown[]).includes(EAN))).toBe(true)
   })
 
-  it('15 chiffres → type_scan imei, liste vide, AUCUNE requête (branché au ticket 07)', async () => {
+  // AVANT (2026-09-30, ticket 04) : « 15 chiffres → type_scan imei, liste vide, AUCUNE requête
+  // (branché au ticket 07) » — le ticket 07 branche la recherche par IMEI, le test suit.
+  it('IMEI à clé juste → type_scan imei, recherche par égalité sur l\'IMEI du produit', async () => {
     const { res, appels } = await appeler('/api/catalogue/recherche?scan=356938035643809')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ success: true, data: { type_scan: 'imei', resultats: [] } })
+    expect(appels.map(a => a.sql).join('\n')).toMatch(/imei = \?/)
+  })
+
+  it('IMEI à clé de Luhn fausse → imei_invalide, AUCUNE requête (story 38)', async () => {
+    const { res, appels } = await appeler('/api/catalogue/recherche?scan=356938035643800')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { type_scan: 'imei', resultats: [], imei_invalide: true } })
     expect(appels).toEqual([])
   })
 
