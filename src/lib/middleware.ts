@@ -214,6 +214,22 @@ export function getBoutiqueId(
 // ─── Helper : appartenance d'une ressource à la boutique appelante ────────────
 
 /**
+ * Boutique de la ressource posée par la dernière `assertBoutiqueOwnership()` réussie pour
+ * un payload JWT donné — lue en premier recours par `resoudreBoutiqueVisee()` ci-dessous.
+ *
+ * `assertBoutiqueOwnership()` ne reçoit pas le contexte Hono `c` (seulement le payload du
+ * jeton, le même objet que `c.get('user')`) : un `WeakMap` de module est le seul point de
+ * dépôt possible sans changer sa signature, donc sans toucher ses 44 points d'appel. Clé
+ * = objet payload plutôt que `user_id`, pour ne jamais confondre deux comptes qui
+ * partageraient un identifiant dans deux jetons distincts d'un même run de tests.
+ *
+ * `journalPlateformeMiddleware` efface l'entrée dans son `finally`, pour **toute** requête
+ * — sans quoi un `GET` gardé laisserait une cible pour la requête suivante si elle reçoit
+ * le même objet payload (le cas en production : un jeton décodé neuf par requête).
+ */
+const boutiquesGardees = new WeakMap<JwtPayload, number>()
+
+/**
  * Vérifie qu'une ressource chargée par ID appartient bien à la boutique de l'appelant.
  *
  * `getBoutiqueId()` ci-dessus résout la boutique d'une requête *de liste* ; ce helper
@@ -226,6 +242,11 @@ export function getBoutiqueId(
  * Règle appliquée, identique au patron déjà en place dans `tickets.ts` :
  *   - `admin` (admin plateforme, `boutique_id` NULL) → traverse
  *   - Autres rôles → la ressource doit porter leur `boutique_id`
+ *
+ * Pose aussi, quand l'accès est légitime, la boutique réelle de la ressource dans
+ * `boutiquesGardees` — lue par `journalPlateformeMiddleware` pour attribuer une écriture à
+ * la bonne boutique même quand `?boutique_id=` ou le corps de la requête pointent ailleurs
+ * (onglet resté ouvert sur une autre boutique, cf. `journal-plateforme-lecture` ticket 001).
  *
  * @param user     Payload JWT décodé (contient `role` et `boutique_id`)
  * @param resource Ressource chargée (doit exposer `boutique_id`), ou null/undefined
@@ -248,6 +269,8 @@ export function assertBoutiqueOwnership(
 
   if (user.role !== 'admin' && resource.boutique_id !== user.boutique_id)
     return { status: 403, error: 'Accès refusé.' }
+
+  if (typeof resource.boutique_id === 'number') boutiquesGardees.set(user, resource.boutique_id)
 
   return null
 }
@@ -272,8 +295,21 @@ export function isAdminPlateforme(user: JwtPayload | undefined): boolean {
   return !!user && user.role === 'admin' && !user.boutique_id
 }
 
-/** Boutique visée : paramètre de requête, puis corps de requête, sinon non résolue. */
-function resoudreBoutiqueVisee(paramBoutiqueId: string | undefined, corps: unknown): number | null {
+/**
+ * Boutique visée : cible posée par `assertBoutiqueOwnership()`, sinon paramètre de requête,
+ * sinon corps de requête, sinon non résolue.
+ *
+ * La cible posée par la garde prime sur la valeur déclarée par l'appelant (query/corps) :
+ * elle vient de la ressource relue en base, pas de ce que l'écran a envoyé. Un onglet resté
+ * sur une autre boutique que la sélection courante enverrait sinon `?boutique_id=` d'une
+ * boutique qui n'est pas celle de la ressource réellement modifiée (ticket 001).
+ */
+function resoudreBoutiqueVisee(
+  user: JwtPayload, paramBoutiqueId: string | undefined, corps: unknown
+): number | null {
+  const cible = boutiquesGardees.get(user)
+  if (cible !== undefined) return cible
+
   const depuisParam = paramBoutiqueId ? Number.parseInt(paramBoutiqueId, 10) : Number.NaN
   if (Number.isFinite(depuisParam)) return depuisParam
 
@@ -304,6 +340,13 @@ function resoudreBoutiqueVisee(paramBoutiqueId: string | undefined, corps: unkno
  *
  * L'écriture est différée par `executionCtx.waitUntil()` et ses échecs sont avalés : le
  * registre est un moyen de preuve, jamais une condition de service.
+ *
+ * `boutiquesGardees` est purgée pour l'utilisateur courant dans ce même `finally`, pour
+ * **toute** requête — lecture comme mutation, journalisée ou non, handler qui a levé ou pas.
+ * Une garde traversée par un `GET` pose une cible comme n'importe quelle autre ; sans cette
+ * purge systématique, une mutation suivante sans garde hériterait de cette cible si elle
+ * reçoit le même objet payload (les tests partagent un objet entre requêtes ; en production
+ * chaque requête décode un payload neuf, mais la règle ne doit pas en dépendre).
  */
 export const journalPlateformeMiddleware = createMiddleware<{
   Bindings: Bindings
@@ -327,7 +370,7 @@ export const journalPlateformeMiddleware = createMiddleware<{
 
       const ecriture = enregistrerActionPlateforme(c.get('db'), {
         user_id:     user!.sub,
-        boutique_id: resoudreBoutiqueVisee(c.req.query('boutique_id'), corps),
+        boutique_id: resoudreBoutiqueVisee(user!, c.req.query('boutique_id'), corps),
         methode:     c.req.method,
         chemin:      c.req.path,
         // Ne pas lire `c.res` quand le handler a levé : Hono fabriquerait une réponse 404 au
@@ -340,5 +383,7 @@ export const journalPlateformeMiddleware = createMiddleware<{
       // `executionCtx` n'existe pas hors runtime Workers (tests, dev) — l'écriture part alors seule.
       try { c.executionCtx.waitUntil(ecriture) } catch { /* rien à différer */ }
     }
+
+    if (user) boutiquesGardees.delete(user)
   }
 })
