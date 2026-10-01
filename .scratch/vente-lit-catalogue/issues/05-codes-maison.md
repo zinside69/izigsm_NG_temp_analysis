@@ -51,6 +51,23 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
 - **La fiche produit n'a pas de champ code-barres** (constaté au ticket 04) : ce ticket l'ajoute,
   puisque le code doit être « visible et modifiable ».
 
+### Précision du 2026-10-01 — relecture de conception du socle (P15, 3 constats)
+
+1. **La pose automatique ne fait jamais échouer une création.** L'erreur 409
+   (`ErreurCodeEnDoublon`) est réservée aux écritures demandées par l'utilisateur : la route
+   `POST …/code-maison` et le champ `code_barre` saisi. Pour la pose automatique (appelée par
+   `createProduit()` et par l'`INSERT` de l'import CSV), une collision laisse le produit sans code
+   et la création réussit, avec un avertissement dans la réponse (ou dans le bilan CSV) : l'action
+   « Générer » le rattrape. Fixer ici la forme exacte de l'avertissement (clé de la réponse), car
+   l'écran (T-010) l'affiche. Le code est posé après le mouvement « Stock initial » et l'audit. Une
+   ligne CSV dont la pose a échoué est comptée comme importée.
+2. **Écriture conditionnelle.** La pose (automatique, à la demande, produit et service) est un seul
+   `UPDATE … WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`.
+   Le 409 « déjà codé » n'est rendu que si aucune ligne n'a changé. La règle « SKU EAN-13 valide »
+   est contrôlée avant.
+3. **CSV : écrire `code_barre` seulement à l'`INSERT` d'un nouveau produit.** Sur un produit
+   existant retrouvé par SKU, on ne complète le code que s'il est vide, jamais on ne l'écrase.
+
 ## Critères d'acceptation
 
 Fonctions pures (`src/lib/codeMaison.ts`, nouveau) :
@@ -107,6 +124,9 @@ Commun :
 - **Routes** `POST /api/produits/:id/code-maison` et `POST /api/services/:id/code-maison` — vitest par `app.request()` : 200, 409 déjà codé, 404 autre boutique, 403 technicien.
 - **Recherche** `?scan=` et `?q=` sur un code de service — vitest contre un vrai SQLite.
 - **Écrans** — E2E Playwright `tests/e2e/codes-maison.spec.ts`, vraie D1 locale : créer un produit à la main → son code maison s'affiche dans la fiche → le scanner en caisse ajoute sa ligne ; générer le code d'un service → le scanner en caisse ajoute une ligne service. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).
+- ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite (`tests/helpers/d1Sqlite.ts`) : collision à la pose automatique ⇒ produit créé une seule fois, sans code, mouvement « Stock initial » présent, ligne CSV comptée comme importée, avertissement présent.
+- ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite : un code déjà présent reste intact après la pose et après l'appel à la route.
+- ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite : un CSV qui met à jour un produit déjà codé laisse le code inchangé.
 
 ## Notes
 
