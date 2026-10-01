@@ -14,6 +14,19 @@
 **Première action** : inchangée — report d'une PR du socle (mode opératoire du checkpoint 134), ou
 le 15 quand 12-14 sont sur `main`.
 
+**➡ À traiter le 2026-10-02 (demande de l'exploitant, fin de soirée du 2026-10-01) : le
+DÉPLOIEMENT.** Tout est poussé (`origin/main` = `a19b7e7`), rien n'est en production. Décision à
+prendre **d'abord**, car `main` ne contient pas que les correctifs du jour :
+- `main` porte aussi le code du **lot 1** (tickets 04, 07, 08a, 18, 05 Mobilax), qui dépend des
+  migrations en attente **`0048` → `0051` et `0054`** (sans `0054`, toute vente en caisse échoue).
+  La règle actée est « le lot 1 part **en bloc** » — or 05, 06, 08b, 08c, 09 ne sont pas livrés.
+- Donc deux voies : (a) **déployer `main` tel quel** = lever la règle du bloc, appliquer `0048` →
+  `0051` + `0054` à distance, relire `d1_migrations`, **puis** le code ; (b) **attendre** la fin du
+  lot 1 — mais la clôture de caisse des managers (défaut `gerant`, 🔴) attend avec lui.
+- Quelle que soit la voie : `project-docs/modop-deploiement.md` (9 étapes), migrations **avant** le
+  code, aperçu **avant** l'apex, déploiement lancé par l'exploitant. Preuve métier après : un manager
+  clôture sa caisse en production.
+
 ## Ce qui a changé au checkpoint 136
 
 Suppressions du référentiel (`services.js` : marque, modèle, liaison) : un refus du serveur est

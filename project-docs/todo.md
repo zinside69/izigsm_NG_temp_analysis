@@ -1,5 +1,12 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 À TRAITER LE 2026-10-02 — Déploiement (demandé le 2026-10-01 au soir)
+
+- [ ] Décider : déployer `main` tel quel (lève la règle « lot 1 en bloc » : migrations `0048` → `0051`
+      + `0054` à distance d'abord) **ou** attendre la fin du lot 1 (la clôture de caisse des managers
+      attend avec lui). Détail : `recovery-prompt.md` § checkpoint 137.
+- [ ] Puis `modop-deploiement.md` ; preuve métier : un manager clôture sa caisse en production.
+
 ## 🔴 P1 — La vente lit le catalogue (cadré le 2026-09-16, rien d'implémenté)
 
 Chantier ouvert par une mesure : **la caisse et les devis ignorent le catalogue** — chaque ligne
