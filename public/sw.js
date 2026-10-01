@@ -15,7 +15,8 @@
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — stock.js/html, caisse.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.13'
 // AVANT (2026-10-01, report du ticket 08a `vente-lit-catalogue` — tickets.js ; v3.15 réservée au ticket 06 Mobilax, encore sur `integration`, saut voulu pour rester aligné sur `integration`) : const CACHE_VERSION  = 'izigsm-v3.14'
 // AVANT (2026-10-01, trois correctifs P3 — stock.js, reset-password.html, notifications.html) : const CACHE_VERSION  = 'izigsm-v3.16'
-const CACHE_VERSION  = 'izigsm-v3.17'
+// AVANT (2026-10-01, suppressions du référentiel annoncées en cas de refus — services.js) : const CACHE_VERSION  = 'izigsm-v3.17'
+const CACHE_VERSION  = 'izigsm-v3.18'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

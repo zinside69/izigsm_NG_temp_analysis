@@ -539,7 +539,11 @@ async function saveMarque() {
 async function deleteMarque(id) {
   const m = _marques.find(x => x.id === id);
   if (!confirm(`Désactiver la marque "${m?.nom}" et tous ses modèles ?`)) return;
-  await apiDelete(`/api/services/marques/${id}`);
+  // AVANT (2026-10-01, todo.md 🟡 P3) : `await apiDelete(…)` sans lire la réponse — `api()` ne lève pas
+  // sur une erreur HTTP, un refus (403 pour un manager : route admin) restait muet.
+  // await apiDelete(`/api/services/marques/${id}`);
+  const res = (await apiDelete(`/api/services/marques/${id}`)).data;
+  if (!res?.success) return alert(res?.error || 'Suppression refusée.');
   await loadMarques();
   if (_selectedMarque === id) {
     _selectedMarque = null;
@@ -645,7 +649,10 @@ async function saveModele() {
 async function deleteModele(id) {
   const mo = _modelesFull.find(x => x.id === id);
   if (!confirm(`Désactiver le modèle "${mo?.nom}" ?`)) return;
-  await apiDelete(`/api/services/modeles/${id}`);
+  // AVANT (2026-10-01, todo.md 🟡 P3) : réponse jamais lue, refus muet (même défaut que deleteMarque())
+  // await apiDelete(`/api/services/modeles/${id}`);
+  const res = (await apiDelete(`/api/services/modeles/${id}`)).data;
+  if (!res?.success) return alert(res?.error || 'Suppression refusée.');
   await loadModeles(_selectedMarque);
   await loadMarques();
 }
@@ -717,7 +724,10 @@ async function addLiaison() {
 
 async function removeLiaison(serviceId) {
   const modeleId = parseInt(document.getElementById('liaison-modele-id').value, 10);
-  await apiDelete(`/api/services/modeles/${modeleId}/services/${serviceId}`);
+  // AVANT (2026-10-01, todo.md 🟡 P3) : réponse jamais lue, refus muet (même défaut que deleteMarque())
+  // await apiDelete(`/api/services/modeles/${modeleId}/services/${serviceId}`);
+  const res = (await apiDelete(`/api/services/modeles/${modeleId}/services/${serviceId}`)).data;
+  if (!res?.success) return alert(res?.error || 'Suppression refusée.');
   await refreshLiaisonList(modeleId);
 }
 

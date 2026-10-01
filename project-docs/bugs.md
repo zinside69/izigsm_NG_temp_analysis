@@ -283,6 +283,10 @@ enregistré ; rejet de `fetch` → même rétablissement. Test de rendu `notific
 § « préférence refusée par le serveur », vu rouge (« Préférences mises à jour » affiché sur un 500).
 Même écriture ailleurs (recherche du jour) : 3 suppressions de `services.js` (marque, modèle,
 liaison) — moins graves, aucun succès annoncé et la liste est relue ; notées au `todo.md`.
+→ **Les 3 corrigées le même jour** (v3.18) : refus annoncé par `alert()`. Cas réel trouvé en les
+testant : un **manager** voit 🗑 sur les marques et modèles du référentiel global, mais ces routes
+sont `requireRole('admin')` — son clic ne faisait rien, sans un mot. Bouton toujours proposé au
+manager (non traité : choix d'écran à faire).
 
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 

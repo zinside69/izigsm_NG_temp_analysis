@@ -256,11 +256,16 @@ laissé hors périmètre de ce ticket-là.
 - [x] Lire l'enveloppe (`res.ok` / `res.error`) et n'annoncer le succès qu'ensuite — test de rendu
       vu rouge sur une réponse en erreur (`page.route()` qui renvoie 500) — **fait le 2026-10-01**,
       bascules remises dans l'état enregistré (`loadStats()`), non déployé
-- [ ] Chercher la même écriture ailleurs : un `await apiX(…)` dont le résultat n'est jamais lu n'est
+- [x] Chercher la même écriture ailleurs : un `await apiX(…)` dont le résultat n'est jamais lu n'est
       attrapé par **aucun** garde-fou actuel — décider s'il en faut un
       → recherche faite le 2026-10-01 : il reste **3** appels, tous dans `services.js`
       (`deleteMarque()`, `deleteModele()`, `removeLiaison()`). Moins graves : aucun succès annoncé,
       la liste est relue, mais un refus reste muet. Correctif et garde-fou : **non décidés**.
+      → **Corrigés le 2026-10-01** (non déployé, v3.18) : déballage + `alert()` du refus, convention
+      du chemin Marques/Modèles/Liaisons ; `services-suppressions-refus.spec.ts`, vu rouge — cas
+      réel : un manager voit 🗑 sur le référentiel global mais la route est `requireRole('admin')`
+      (403 muet jusque-là). **Plus aucun** `await apiX(…)` non lu dans `public/`. Garde-fou statique
+      contre ce motif : toujours **non décidé**.
 
 ## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
 

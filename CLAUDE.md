@@ -307,7 +307,7 @@ rouges d'abord par ce garde-fou **et** par `tests/e2e/notifications-rendu.spec.t
 
 **Ce que ce garde-fou ne voit toujours pas** : un `await apiX(…)` dont le résultat n'est **jamais
 lu**. _(2026-10-01 : `saveNotif()` corrigé ; il en reste 3, les `apiDelete` de `services.js` —
-liste relue, refus muet — `todo.md`.)_ `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
+liste relue, refus muet — `todo.md` ; corrigés le même jour : plus aucun appel non lu dans `public/`.)_ `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
 `saveNotif()` (`notifications.html`) est dans ce cas (`bugs.md` 🟡, `todo.md` 🟡 P3). Un `catch` ne
 protège de rien ici : il ne se déclenche que si `fetch` lui-même est rejeté.
 
