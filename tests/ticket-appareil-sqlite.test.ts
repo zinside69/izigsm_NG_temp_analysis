@@ -42,6 +42,24 @@ async function putTicket(id: number, corps: unknown, boutiqueId = 1) {
   )
 }
 
+/** Même principe que `putTicket()`, pour `POST /api/tickets`. */
+async function postTicket(corps: unknown, boutiqueId = 1) {
+  const { accessToken } = await generateTokenPair(
+    { id: 1, email: 'manager@b1.fr', prenom: 'M', nom: 'Test', role: 'manager', boutique_id: boutiqueId } as any,
+    SECRET,
+  )
+  return app.request(
+    '/api/tickets',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(corps),
+    },
+    { DB: base.d1, JWT_SECRET: SECRET } as any,
+    { waitUntil: () => {}, passThroughOnException: () => {} } as any,
+  )
+}
+
 let base: BaseReelle
 beforeEach(() => {
   base = baseAuSchemaReel()
@@ -59,6 +77,10 @@ beforeEach(() => {
 
 function nbAppareils(): number {
   return (base.sqlite.prepare('SELECT COUNT(*) AS n FROM appareils').get() as any).n
+}
+
+function nbTickets(): number {
+  return (base.sqlite.prepare('SELECT COUNT(*) AS n FROM tickets').get() as any).n
 }
 
 describe('resoudreAppareilTicket()', () => {
@@ -210,7 +232,36 @@ describe('createTicket() — garantie orpheline (ticket 08a)', () => {
   // rouge, puis restaurée — voir compte rendu.
 })
 
+describe('POST /api/tickets — vrai routeur + vrai SQLite (correctifs de revue 2026-10-01)', () => {
+  it('client_id d\'une autre boutique → 404, aucun ticket ni aucune ligne appareils créés', async () => {
+    const res = await postTicket({
+      client_id: 9, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+      description_panne: 'Écran cassé',
+    })
+
+    expect(res.status).toBe(404)
+    expect(nbTickets()).toBe(0)
+    expect(nbAppareils()).toBe(0)
+  })
+})
+
 describe('PUT /api/tickets/:id — vrai routeur + vrai SQLite (correctifs de revue 2026-10-01)', () => {
+  it('ticket dont le client_id ne correspond pas à la boutique du ticket (incohérence de données) → 404 au PUT, aucune ligne appareils créée', async () => {
+    // Insertion directe hors service, pour simuler une incohérence : createTicket() refuse
+    // désormais un tel mélange (correctif du tour précédent) — ce test prouve que
+    // resoudreAppareilTicket() s'en protège AUSSI à la relecture d'un ticket déjà existant,
+    // si une ligne pareille devait malgré tout exister (ex: donnée historique).
+    const { lastInsertRowid: id } = base.sqlite.prepare(`
+      INSERT INTO tickets (boutique_id, numero, client_id, appareil_marque, appareil_modele, description_panne)
+      VALUES (1, 'TKT-TEST-1', 9, 'Apple', 'iPhone 14', 'Écran cassé')
+    `).run()
+
+    const res = await putTicket(Number(id), { imei: IMEI })
+
+    expect(res.status).toBe(404)
+    expect(nbAppareils()).toBe(0)
+  })
+
   it('technicien d\'une autre boutique + IMEI nouveau : rejeté (422) avant toute écriture sur appareils, aucun orphelin', async () => {
     const { id } = await createTicket(base.d1, 1, 50, {
       client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
@@ -233,6 +284,28 @@ describe('PUT /api/tickets/:id — vrai routeur + vrai SQLite (correctifs de rev
   // ne rejette le technicien). Mutation appliquée, testée rouge, puis restaurée — voir
   // compte rendu.
 
+  it('priorité invalide + IMEI nouveau : rejeté (422) avant toute écriture sur appareils, aucun orphelin', async () => {
+    const { id } = await createTicket(base.d1, 1, 50, {
+      client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+      description_panne: 'Écran cassé',
+    })
+
+    const res = await putTicket(id, { priorite: 'critique', imei: IMEI })
+
+    expect(res.status).toBe(422)
+    expect(nbAppareils()).toBe(0)  // aucun orphelin : la priorité est validée avant l'écriture
+    const ticket = base.sqlite.prepare('SELECT appareil_id, priorite FROM tickets WHERE id = ?').get(id) as any
+    expect(ticket.appareil_id).toBeNull()
+    expect(ticket.priorite).toBe('normale')  // valeur par défaut, jamais touchée
+  })
+
+  // ─── Mutation (ADR 0003) ────────────────────────────────────────────────────
+  // Mutant : dans la route PUT /:id (src/routes/tickets.ts), retirer le bloc
+  // `try { validerPriorite(body.priorite) } catch …` placé avant la résolution d'appareil —
+  // relancer CE test seul → rouge attendu (nbAppareils() vaudrait 1 : l'appareil se crée avant
+  // que updateTicket() ne rejette la priorité). Mutation appliquée, testée rouge, puis
+  // restaurée — voir compte rendu.
+
   it('technicien d\'une autre boutique SANS imei → 422 (chemin updateTicket() seul, sans resoudreAppareilTicket())', async () => {
     const { id } = await createTicket(base.d1, 1, 50, {
       client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
@@ -245,6 +318,12 @@ describe('PUT /api/tickets/:id — vrai routeur + vrai SQLite (correctifs de rev
     const ticket = base.sqlite.prepare('SELECT technicien_id FROM tickets WHERE id = ?').get(id) as any
     expect(ticket.technicien_id).toBeNull()
   })
+
+  // ─── Mutation (ADR 0003, revue 2026-10-01) ─────────────────────────────────
+  // Mutant : dans updateTicket() (src/services/ticketService.ts), retirer l'appel
+  // `await validateTechnicienBoutique(db, data.technicien_id, existing.boutique_id)`.
+  // Rouge observé : `expected 200 to be 422` (le technicien d'une autre boutique était
+  // accepté). Mutation restaurée, test revérifié vert (voir compte rendu).
 
   it('PUT sans le champ imei, ou avec "", laisse appareil_id inchangé (vrai SQLite, pas seulement un paramètre de mock)', async () => {
     const { id } = await createTicket(base.d1, 1, 50, {
@@ -265,6 +344,12 @@ describe('PUT /api/tickets/:id — vrai routeur + vrai SQLite (correctifs de rev
     expect(apres.appareil_id).toBe(avant.appareil_id)
     expect(nbAppareils()).toBe(1)  // aucune fiche supplémentaire créée
   })
+
+  // ─── Mutation (ADR 0003, revue 2026-10-01) ─────────────────────────────────
+  // Mutant : dans updateTicket() (src/services/ticketService.ts), `appareil_id =
+  // COALESCE(?, appareil_id),` → `appareil_id = ?,` (toujours écraser, plus de COALESCE).
+  // Rouge observé : `expected null to be 1` (appareil_id remis à NULL par le PUT sans champ).
+  // Mutation restaurée, test revérifié vert (voir compte rendu).
 
   it('deux tickets partagent une fiche appareil : modifier le second ne change jamais l\'IMEI lu par le premier', async () => {
     const t1 = await createTicket(base.d1, 1, 50, {
@@ -292,4 +377,11 @@ describe('PUT /api/tickets/:id — vrai routeur + vrai SQLite (correctifs de rev
     const ticket1Apres = base.sqlite.prepare('SELECT appareil_id FROM tickets WHERE id = ?').get(t1.id) as any
     expect(ticket1Apres.appareil_id).toBe(ticket1Avant.appareil_id)  // le premier ticket n'a pas bougé
   })
+
+  // ─── Mutation (ADR 0003, revue 2026-10-01) ─────────────────────────────────
+  // Mutant : dans resoudreAppareilTicket() (src/services/ticketService.ts), retirer le filtre
+  // `AND ap.${colonne} = ?` de la recherche `existant` (ne filtrer plus que par client_id).
+  // Rouge observé : `expected 1 to be 2` (le second ticket se rattachait à tort à la fiche du
+  // premier au lieu d'en créer une nouvelle pour son nouvel IMEI). Mutation restaurée, test
+  // revérifié vert (voir compte rendu).
 })

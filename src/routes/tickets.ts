@@ -23,6 +23,7 @@ import {
   createTicket,
   updateTicket,
   resoudreAppareilTicket,
+  validerPriorite,
   updateStatutTicket,
   deleteTicket,
   archiveTicket,
@@ -297,6 +298,18 @@ tickets.put('/:id', async (c) => {
   if (body.signature_client) {
     const sigError = validateSignatureDataUrl(body.signature_client)
     if (sigError) return c.json({ success: false, error: sigError }, 400)
+  }
+
+  // Priorité : validée ICI, AVANT toute résolution d'appareil — P15 précision n°3 exige que
+  // TOUTE validation qui ferait échouer la mise à jour du ticket précède la première écriture
+  // sur `appareils`, pas seulement le technicien. Sans ce contrôle en amont, un PUT avec un
+  // IMEI nouveau et une priorité invalide créerait l'appareil avant que updateTicket() ne
+  // rejette la mise à jour (trouvé en revue, correctif du 2026-10-01). Même fonction que
+  // updateTicket() (validerPriorite(), ticketService.ts) — une seule liste PRIORITES_VALIDES.
+  try {
+    validerPriorite(body.priorite)
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
   }
 
   // ── Appareil (ticket 08a) : trois états du champ « imei » du corps — absent ou

@@ -281,6 +281,21 @@ export const STATUT_LABELS: Record<StatutTicket, { label: string; emoji: string;
 
 const PRIORITES_VALIDES: PrioriteTicket[] = ['basse', 'normale', 'haute', 'urgente']
 
+/**
+ * Valide une priorité de ticket — extraite de `updateTicket()` (ticket 08a, correctif de
+ * revue 2026-10-01) pour être appelée par la route `PUT /:id` AVANT `resoudreAppareilTicket()` :
+ * P15 n°3 exige que TOUTE validation qui ferait échouer la mise à jour du ticket précède la
+ * première écriture sur `appareils`, pas seulement le technicien. Une seule liste
+ * `PRIORITES_VALIDES`, un seul message — `updateTicket()` appelle cette même fonction, jamais
+ * une copie de la liste.
+ * @throws Error si `priorite` est fournie et n'est pas une valeur reconnue.
+ */
+export function validerPriorite(priorite: PrioriteTicket | null | undefined): void {
+  if (priorite && !PRIORITES_VALIDES.includes(priorite)) {
+    throw new Error(`Priorité invalide. Valeurs acceptées : ${PRIORITES_VALIDES.join(', ')}.`)
+  }
+}
+
 /** Ordre des colonnes Kanban */
 const COLONNES_KANBAN: StatutTicket[] = [
   'recu', 'en_diagnostic', 'attente_accord',
@@ -681,9 +696,7 @@ export async function updateTicket(
   data: UpdateTicketData,
   appareilId?: number | null
 ): Promise<void> {
-  if (data.priorite && !PRIORITES_VALIDES.includes(data.priorite)) {
-    throw new Error(`Priorité invalide. Valeurs acceptées : ${PRIORITES_VALIDES.join(', ')}.`)
-  }
+  validerPriorite(data.priorite)
 
   const existing = await db
     .prepare('SELECT id, boutique_id FROM tickets WHERE id = ? AND actif = 1')
