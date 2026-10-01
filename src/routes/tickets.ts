@@ -270,6 +270,9 @@ tickets.post('/', async (c) => {
  * @body description_panne?, diagnostic?, technicien_id?, prix_estime?, prix_final?,
  *       date_promesse?, notes_internes?, priorite?, etat_appareil?, code_deverrouillage?,
  *       code_sim?, signature_client?, signature_date?
+ * @body imei? — absent ou "" : appareil_id inchangé ; valeur : résolu puis rattaché
+ *       (mêmes règles que POST, ticket 08a). ⊥ `appareil_id` : un identifiant explicite dans
+ *       le corps d'un PUT est toujours ignoré (décision du 2026-09-30, P15).
  * @returns { success, message }
  */
 tickets.put('/:id', async (c) => {
