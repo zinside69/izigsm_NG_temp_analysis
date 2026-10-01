@@ -1,4 +1,15 @@
-# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 134 — 08a reporté, faille admin cadrée)
+# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 135 — trois correctifs P3)
+
+## Ce qui a changé au checkpoint 135
+
+Trois correctifs P3 codés ici (`765bc89`, non déployés, `CACHE_VERSION` **v3.17**) : recherche
+Mobilax par article figée sur coupure réseau, email dans l'adresse à la demande de lien de
+`reset-password` (fuite réelle), `saveNotif()` qui annonçait un succès sans lire la réponse. Trois
+tests vus rouges. Restent ouverts, non décidés : 3 `apiDelete` de `services.js` sans lecture du
+résultat, garde-fou statique des formulaires à email.
+
+**Première action** : inchangée — report d'une PR du socle (mode opératoire du checkpoint 134
+ci-dessous), ou le 15 quand 12-14 sont sur `main`.
 
 ## Ce qui a changé au checkpoint 134
 

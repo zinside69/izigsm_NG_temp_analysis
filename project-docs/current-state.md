@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 134 — 08a reporté sur `main`, faille admin avec boutique cadrée)
+# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 135 — trois correctifs P3)
+
+## Checkpoint 135 — Trois correctifs P3 (2026-10-01, fin d'après-midi)
+
+**Production inchangée (`izigsm-v3.11`). Migrations en attente inchangées. `CACHE_VERSION` du dépôt :
+`izigsm-v3.17`.** Vitest 1 341 + 2 échecs permanents, tsc 32. `765bc89`, non déployé.
+
+- **Recherche Mobilax par article figée sur coupure réseau** : `catch` dans `chercherMobilax()`,
+  même message que le mode génération ; `tests/e2e/mobilax-recherche-coupure.spec.ts`, vu rouge.
+- **`reset-password.html #form-request`** : `method="post"` + `onsubmit="return false"`. La fuite
+  était **réelle** (mesurée sans JavaScript : `GET /reset-password?email=…`) ;
+  `formulaires-mot-de-passe.spec.ts` § « demande de lien », vu rouge.
+- **`saveNotif()`** (`notifications.html`) lit l'enveloppe : refus → message du serveur et bascules
+  remises dans l'état enregistré (`loadStats()`) ; `notifications-rendu.spec.ts` § « préférence
+  refusée », vu rouge (succès affiché sur un 500). Piège d'E2E : la case est masquée par
+  `.toggle-switch`, cliquer `.toggle-slider`.
+- E2E des trois correctifs et voisins : 55/55. Faits ici à la demande de l'exploitant (hors socle).
+- **Ouverts, non décidés** : 3 `apiDelete` de `services.js` dont le résultat n'est jamais lu
+  (marque, modèle, liaison — liste relue, refus muet) ; extension du garde-fou statique aux
+  formulaires portant un email.
+- Serveur local arrêté, port 3000 libre.
+
+**Prochaine session** : inchangée (report des PR du socle, 15 quand 12-14 sont sur `main`).
 
 ## Checkpoint 134 — 08a reporté, 08b et 05 prêts, faille latente cadrée (2026-10-01, après-midi)
 

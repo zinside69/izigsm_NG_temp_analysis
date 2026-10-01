@@ -306,7 +306,8 @@ lieu de le supprimer, pour que les lignes rendues soient celles du fichier HTML)
 rouges d'abord par ce garde-fou **et** par `tests/e2e/notifications-rendu.spec.ts`.
 
 **Ce que ce garde-fou ne voit toujours pas** : un `await apiX(…)` dont le résultat n'est **jamais
-lu**. `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
+lu**. _(2026-10-01 : `saveNotif()` corrigé ; il en reste 3, les `apiDelete` de `services.js` —
+liste relue, refus muet — `todo.md`.)_ `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
 `saveNotif()` (`notifications.html`) est dans ce cas (`bugs.md` 🟡, `todo.md` 🟡 P3). Un `catch` ne
 protège de rien ici : il ne se déclenche que si `fetch` lui-même est rejeté.
 
@@ -1097,6 +1098,10 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-01 (checkpoint 135) : production inchangée (`izigsm-v3.11`), migrations en attente
+inchangées.** Sur `main`, en plus du 134 : trois correctifs P3 sans migration (`765bc89`),
+`CACHE_VERSION` `izigsm-v3.17`.
 
 **État au 2026-10-01 (checkpoint 134) : production inchangée (`izigsm-v3.11`) ; migrations en attente
 inchangées (`0048` → `0051`, `0054`).** Sur `main`, en plus : ticket 08a (report de la PR #38 du
