@@ -91,7 +91,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
  * Doit obligatoirement être chaîné APRÈS `authMiddleware` (utilise `c.var.user`).
  *
  * Rôles disponibles dans le système :
- *   `admin` | `manager` | `gerant` | `technicien` | `client`
+ *   `admin` | `manager` | `technicien` | `client` (table `roles`, migration 0001 ; `gerant`, cité ici jusqu'au 2026-10-01, n'a jamais existé)
  *
  * @param roles  Un ou plusieurs rôles autorisés (au moins un suffit pour passer)
  * @returns      Middleware Hono — 401 si non authentifié, 403 si rôle insuffisant
@@ -101,7 +101,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
  *   // Un seul rôle :
  *   app.delete('/api/boutiques/:id', authMiddleware, requireRole('admin'), handler)
  *   // Plusieurs rôles :
- *   app.post('/api/caisse/cloture', authMiddleware, requireRole('admin', 'gerant'), handler)
+ *   app.post('/api/caisse/cloture', authMiddleware, requireRole('admin', 'manager'), handler)
  * ```
  */
 export function requireRole(...roles: string[]) {

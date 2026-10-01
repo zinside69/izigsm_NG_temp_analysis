@@ -160,7 +160,9 @@ stats.get('/stats/activite', async (c) => {
  * @returns { success: true, data: Array<{ id, technicien, total_tickets,
  *            termines, en_cours, delai_moyen_jours }> }
  */
-stats.get('/stats/techniciens', requireRole('admin', 'gerant'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin', 'gerant') — le rôle `gerant` n'a jamais existé : seul
+// l'admin plateforme passait. Le manager dirige sa boutique (décision de l'exploitant).
+stats.get('/stats/techniciens', requireRole('admin', 'manager'), async (c) => {
   try {
     const { db, boutiqueId } = ctx(c)
     const data = await getRapportTechnicien(db, boutiqueId)
@@ -182,7 +184,9 @@ stats.get('/stats/techniciens', requireRole('admin', 'gerant'), async (c) => {
  * @query boutique_id (optionnel)
  * @returns text/csv avec Content-Disposition attachment
  */
-stats.get('/stats/export/csv', requireRole('admin', 'gerant', 'technicien'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin', 'gerant', 'technicien') — rôle inexistant : le technicien
+// exportait, son manager non.
+stats.get('/stats/export/csv', requireRole('admin', 'manager', 'technicien'), async (c) => {
   try {
     const { db, boutiqueId } = ctx(c)
     const q    = new URL(c.req.url).searchParams
@@ -231,7 +235,8 @@ stats.get('/stats/export/csv', requireRole('admin', 'gerant', 'technicien'), asy
  * @returns { success, data: { periode, nb_factures, total_ht, total_tva,
  *            total_ttc, par_tva, par_mode_paiement } }
  */
-stats.get('/stats/rapport-comptable', requireRole('admin', 'gerant'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin', 'gerant') — rôle inexistant, voir /stats/techniciens
+stats.get('/stats/rapport-comptable', requireRole('admin', 'manager'), async (c) => {
   try {
     const { db, boutiqueId } = ctx(c)
     const q    = new URL(c.req.url).searchParams

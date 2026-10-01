@@ -287,7 +287,8 @@ describe('getRapportComptable()', () => {
 describe('exportCsvTechniciens()', () => {
   let db: ReturnType<typeof createMockDatabase>
 
-  const SQL_TECHNICIENS = `SELECT u.prenom || ' ' || u.nom AS technicien, r.nom AS role, COUNT(t.id) AS total_tickets, SUM(CASE WHEN t.statut IN ('termine','livre') THEN 1 ELSE 0 END) AS termines, SUM(CASE WHEN t.statut NOT IN ('livre','annule','termine') THEN 1 ELSE 0 END) AS en_cours, ROUND(AVG( CASE WHEN t.statut IN ('termine','livre') THEN julianday(t.updated_at) - julianday(t.created_at) ELSE NULL END ), 1) AS delai_moyen_jours, ROUND(COALESCE(SUM(t.prix_final), 0), 2) AS ca_genere FROM users u LEFT JOIN roles r ON r.id = u.role_id LEFT JOIN tickets t ON t.technicien_id = u.id AND t.boutique_id = ? AND DATE(t.created_at) BETWEEN ? AND ? WHERE u.boutique_id = ? AND u.actif = 1 AND r.nom IN ('admin','gerant','technicien') GROUP BY u.id ORDER BY total_tickets DESC`
+  // AVANT (2026-10-01) : la copie citait r.nom IN ('admin','gerant','technicien') — rôle inexistant, remplacé par manager
+  const SQL_TECHNICIENS = `SELECT u.prenom || ' ' || u.nom AS technicien, r.nom AS role, COUNT(t.id) AS total_tickets, SUM(CASE WHEN t.statut IN ('termine','livre') THEN 1 ELSE 0 END) AS termines, SUM(CASE WHEN t.statut NOT IN ('livre','annule','termine') THEN 1 ELSE 0 END) AS en_cours, ROUND(AVG( CASE WHEN t.statut IN ('termine','livre') THEN julianday(t.updated_at) - julianday(t.created_at) ELSE NULL END ), 1) AS delai_moyen_jours, ROUND(COALESCE(SUM(t.prix_final), 0), 2) AS ca_genere FROM users u LEFT JOIN roles r ON r.id = u.role_id LEFT JOIN tickets t ON t.technicien_id = u.id AND t.boutique_id = ? AND DATE(t.created_at) BETWEEN ? AND ? WHERE u.boutique_id = ? AND u.actif = 1 AND r.nom IN ('admin','manager','technicien') GROUP BY u.id ORDER BY total_tickets DESC`
 
   const TECH_ROW = {
     technicien: 'Martin Jean', role: 'technicien', total_tickets: 12,
@@ -521,7 +522,8 @@ describe('getActiviteRecente()', () => {
 describe('getRapportTechnicien()', () => {
   let db: ReturnType<typeof createMockDatabase>
 
-  const SQL_RAPPORT = `SELECT u.id, u.prenom || ' ' || u.nom as technicien, COUNT(t.id) as total_tickets, SUM(CASE WHEN t.statut='termine' OR t.statut='livre' THEN 1 ELSE 0 END) as termines, SUM(CASE WHEN t.statut NOT IN ('livre','annule','termine') THEN 1 ELSE 0 END) as en_cours, ROUND(AVG( CASE WHEN t.statut IN ('termine','livre') THEN (julianday(t.updated_at) - julianday(t.created_at)) ELSE NULL END ),1) as delai_moyen_jours FROM users u LEFT JOIN roles r ON r.id=u.role_id LEFT JOIN tickets t ON t.technicien_id=u.id AND t.boutique_id=? WHERE u.boutique_id=? AND u.actif=1 AND r.nom IN ('admin','gerant','technicien') GROUP BY u.id ORDER BY total_tickets DESC`
+  // AVANT (2026-10-01) : la copie citait r.nom IN ('admin','gerant','technicien') — rôle inexistant, remplacé par manager
+  const SQL_RAPPORT = `SELECT u.id, u.prenom || ' ' || u.nom as technicien, COUNT(t.id) as total_tickets, SUM(CASE WHEN t.statut='termine' OR t.statut='livre' THEN 1 ELSE 0 END) as termines, SUM(CASE WHEN t.statut NOT IN ('livre','annule','termine') THEN 1 ELSE 0 END) as en_cours, ROUND(AVG( CASE WHEN t.statut IN ('termine','livre') THEN (julianday(t.updated_at) - julianday(t.created_at)) ELSE NULL END ),1) as delai_moyen_jours FROM users u LEFT JOIN roles r ON r.id=u.role_id LEFT JOIN tickets t ON t.technicien_id=u.id AND t.boutique_id=? WHERE u.boutique_id=? AND u.actif=1 AND r.nom IN ('admin','manager','technicien') GROUP BY u.id ORDER BY total_tickets DESC`
 
   beforeEach(() => {
     db = createMockDatabase()

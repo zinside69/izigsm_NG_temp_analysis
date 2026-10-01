@@ -359,13 +359,16 @@ clients.get('/:id/export-rgpd', requireRole('admin', 'manager'), async (c) => {
 /**
  * Purge RGPD d'un client (Art. 17 — droit à l'effacement).
  * Pseudonymise les données personnelles. Conserve l'historique comptable.
- * Réservé admin uniquement — action irréversible.
+ * Réservé admin et manager (manager depuis le 2026-10-01, décision de l'exploitant) — action irréversible.
  *
  * @param id — ID du client
  * @body confirm: true (obligatoire pour éviter les purges accidentelles)
  * @returns { success, message }
  */
-clients.delete('/:id/purge', requireRole('admin'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin') — décision de l'exploitant : le manager gère ses clients.
+// La garde d'appartenance existait déjà (`canAccessClient()` ci-dessous) : un manager ne purge que
+// les clients de sa boutique.
+clients.delete('/:id/purge', requireRole('admin', 'manager'), async (c) => {
   const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const boutiqueId = getBoutiqueId(user, queryBoutiqueId)
   const id = parseInt(c.req.param('id'), 10)

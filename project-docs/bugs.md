@@ -1,5 +1,23 @@
 # iziGSM — Bugs connus
 
+## ✅ 🔴 Rôle `gerant` inexistant : aucun manager ne pouvait clôturer sa caisse (trouvé le 2026-10-01, CORRIGÉ le même jour, non déployé)
+
+**Défaut** : six routes exigeaient `requireRole('admin', 'gerant')` (ou `'admin', 'gerant',
+'technicien'`). La table `roles` n'a jamais contenu `gerant` (admin, manager, technicien, client —
+mesuré en production le 2026-10-01). `requireRole()` compare le nom exactement : **seul l'admin
+plateforme passait**. Aucun manager ne pouvait **clôturer sa caisse** (`POST /caisse/cloture`,
+clôture journalière NF525), vérifier l'intégrité de la chaîne, lire le rapport comptable ni les
+statistiques par technicien — alors que le technicien, lui, exportait le CSV. Deux requêtes de
+`statsService.ts` filtraient aussi les comptes sur `('admin','gerant','technicien')` : un manager qui
+répare n'apparaissait pas dans les statistiques.
+
+**Correctif** : `gerant` → `manager` partout (`caisse.ts`, `stats.ts`, `statsService.ts`), lignes
+d'origine en `AVANT :`. Garde-fou `tests/roles-manager-routes.test.ts` : chaque rôle cité dans un
+`requireRole()` doit exister dans la migration `0001`. Preuves vues rouges : tests de route (9) et E2E
+`roles-manager.spec.ts` sur la vraie base (« Rôles requis : admin, gerant. Votre rôle : manager. »),
+puis clôture réelle en 201. Même jour, par décision : purge RGPD d'un client et suppression d'un
+employé ouvertes au manager — la seconde **avec** une garde d'appartenance qu'elle n'avait pas.
+
 ## 🟠 Trois défauts trouvés au cadrage des tickets 15 à 17 (2026-10-01, OUVERTS, correctifs cadrés)
 
 - **La durée de garantie d'un service n'est lue par personne** : `services.garantie_jours` se saisit

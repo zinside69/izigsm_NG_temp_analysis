@@ -12,12 +12,12 @@
  *   POST   /api/caisse/vente        → Vente POS directe (crée facture + journal NF525)
  *   POST   /api/caisse/encaissement → Encaisser une facture existante
  *   GET    /api/caisse/clotures     → Historique des clôtures journalières
- *   POST   /api/caisse/cloture      → Clôture journalière NF525 (admin/gerant)
- *   GET    /api/caisse/integrite    → Vérifier intégrité chaîne de hash (admin/gerant)
+ *   POST   /api/caisse/cloture      → Clôture journalière NF525 (admin/manager)
+ *   GET    /api/caisse/integrite    → Vérifier intégrité chaîne de hash (admin/manager)
  *
  * Sécurité :
  *   Toutes les routes requièrent `authMiddleware`.
- *   `cloture` et `integrite` requièrent en plus `requireRole('admin', 'gerant')`.
+ *   `cloture` et `integrite` requièrent en plus `requireRole('admin', 'manager')` (`gerant`, rôle inexistant, jusqu'au 2026-10-01).
  *
  * Format de réponse (P5 uniforme) : `{ success, data?, error?, message? }`
  */
@@ -298,7 +298,7 @@ caisse.get('/caisse/clotures', async (c) => {
 /**
  * POST /api/caisse/cloture
  * Effectue la clôture journalière NF525 (opération irréversible).
- * Réservé aux rôles `admin` et `gerant`.
+ * Réservé aux rôles `admin` et `manager` (`gerant` jusqu'au 2026-10-01 : rôle inexistant).
  *
  * Body JSON (optionnel) :
  * ```json
@@ -311,7 +311,10 @@ caisse.get('/caisse/clotures', async (c) => {
  * @returns 201 `{ success: true, data: { hash_cloture, nb_transactions, total_ttc } }`
  * @returns 400 si journée déjà clôturée, format date invalide, ou aucune transaction
  */
-caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin', 'gerant') — le rôle `gerant` n'a jamais existé (table
+// `roles` : admin, manager, technicien, client) : aucun manager ne pouvait clôturer sa caisse.
+// Décision de l'exploitant : le manager dirige sa boutique sans contrainte.
+caisse.post('/caisse/cloture', requireRole('admin', 'manager'), async (c) => {
   const { user, boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
@@ -335,7 +338,7 @@ caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
 /**
  * GET /api/caisse/integrite
  * Vérifie l'intégrité complète de la chaîne de hash NF525 pour la boutique.
- * Réservé aux rôles `admin` et `gerant`.
+ * Réservé aux rôles `admin` et `manager` (`gerant` jusqu'au 2026-10-01 : rôle inexistant).
  *
  * Recalcule chaque hash SHA-256 et détecte toute rupture de chaîne
  * qui indiquerait une modification frauduleuse des données.
@@ -349,7 +352,8 @@ caisse.post('/caisse/cloture', requireRole('admin', 'gerant'), async (c) => {
  * @returns 400 si boutique_id manquant
  * @returns 500 en cas d'erreur serveur
  */
-caisse.get('/caisse/integrite', requireRole('admin', 'gerant'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin', 'gerant') — rôle inexistant, voir /caisse/cloture
+caisse.get('/caisse/integrite', requireRole('admin', 'manager'), async (c) => {
   const { boutiqueId } = ctx(c)
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 

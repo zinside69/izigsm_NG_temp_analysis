@@ -1,5 +1,19 @@
 # iziGSM — Décisions
 
+## 2026-10-01 — Hiérarchie des rôles : le manager dirige sa boutique sans contrainte
+
+**Décision de l'exploitant** : admin plateforme (supervision multi-tenant, aucune boutique) >
+**manager** (dirige sa boutique sans contrainte) > technicien (équipe). Pas de rôle « vendeur » pour
+l'instant : le technicien en tient lieu, les permissions fines par utilisateur restreignent au
+besoin.
+
+Conséquences appliquées le jour même : le rôle fantôme `gerant` remplacé par `manager` (6 routes,
+dont la clôture de caisse) ; purge RGPD d'un client et suppression d'un employé ouvertes au manager
+(avec garde d'appartenance). **Restent à la plateforme**, parce qu'ils ne sont pas à une boutique :
+créer une boutique, le référentiel global marques / modèles et sa synchronisation, l'expiration des
+devis en lot. Un manager qui a besoin de ses propres marques / modèles relève d'un chantier
+« référentiel par boutique », non ouvert.
+
 ## 2026-10-01 — Un compte admin n'est jamais rattaché à une boutique
 
 **Décision de l'exploitant** : `admin` = admin plateforme, toujours `boutique_id` NULL. Un jeton

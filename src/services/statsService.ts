@@ -551,6 +551,8 @@ export async function exportCsvTechniciens(
 ): Promise<string> {
   const today = todayParis()
 
+  // AVANT (2026-10-01) : `AND r.nom IN ('admin','gerant','technicien')` — le rôle `gerant` n'a jamais
+  // existé : un manager qui répare n'apparaissait pas dans les statistiques. Remplacé par `manager`.
   const rows = await db.all<any>(`
     SELECT
       u.prenom || ' ' || u.nom AS technicien,
@@ -570,7 +572,7 @@ export async function exportCsvTechniciens(
       AND t.boutique_id = ?
       AND DATE(t.created_at) BETWEEN ? AND ?
     WHERE u.boutique_id = ? AND u.actif = 1
-      AND r.nom IN ('admin','gerant','technicien')
+      AND r.nom IN ('admin','manager','technicien')
     GROUP BY u.id
     ORDER BY total_tickets DESC
   `, [
@@ -686,6 +688,7 @@ export async function getRapportTechnicien(db: Database, boutiqueId: number) {
     id: number; technicien: string; total_tickets: number;
     termines: number; en_cours: number; delai_moyen_jours: number | null
   }>(
+    // AVANT (2026-10-01) : `r.nom IN ('admin','gerant','technicien')` — rôle inexistant, remplacé par `manager`
     `SELECT
        u.id,
        u.prenom || ' ' || u.nom as technicien,
@@ -700,7 +703,7 @@ export async function getRapportTechnicien(db: Database, boutiqueId: number) {
      FROM users u
      LEFT JOIN roles r ON r.id=u.role_id
      LEFT JOIN tickets t ON t.technicien_id=u.id AND t.boutique_id=?
-     WHERE u.boutique_id=? AND u.actif=1 AND r.nom IN ('admin','gerant','technicien')
+     WHERE u.boutique_id=? AND u.actif=1 AND r.nom IN ('admin','manager','technicien')
      GROUP BY u.id
      ORDER BY total_tickets DESC`, [boutiqueId, boutiqueId]
   )

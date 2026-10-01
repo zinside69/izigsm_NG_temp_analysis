@@ -99,8 +99,18 @@ personnel.put('/employes/:id', requireRole('admin', 'manager'), async (c) => {
  * DELETE /api/employes/:id
  * Désactive un employé (soft delete).
  */
-personnel.delete('/employes/:id', requireRole('admin'), async (c) => {
+// AVANT (2026-10-01) : requireRole('admin') seul, sans garde d'appartenance (l'admin plateforme
+// traverse par conception). Décision de l'exploitant : le manager gère son équipe — la route lui est
+// ouverte, AVEC la garde d'appartenance des autres routes par ID (même patron que PUT /employes/:id).
+// personnel.delete('/employes/:id', requireRole('admin'), async (c) => {
+personnel.delete('/employes/:id', requireRole('admin', 'manager'), async (c) => {
   const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : ne jamais désactiver l'employé d'une autre boutique
+  const employe = await getEmploye(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(c.get('user'), employe, 'Employé')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
   await desactiverEmploye(c.get('db'), id)
   return c.json({ success: true, message: 'Employé désactivé.' })
 })

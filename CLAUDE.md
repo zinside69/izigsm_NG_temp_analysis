@@ -102,6 +102,21 @@ Isolation multi-tenant : `boutique_id` sur (quasi) toutes les tables, dérivé d
 vérifier explicitement l'appartenance à la boutique de l'appelant, ne jamais supposer
 qu'un filtre en amont suffit.
 
+## Hiérarchie des rôles (décision du 2026-10-01)
+
+- **Quatre rôles, et seulement eux** : `admin`, `manager`, `technicien`, `client` (migration `0001`,
+  identique en production). `admin` = admin plateforme, sans boutique (supervision multi-tenant) ;
+  **le manager dirige sa boutique sans contrainte** ; le technicien travaille dessous. Pas de rôle
+  « vendeur ».
+- **Tout rôle cité dans un `requireRole()` doit exister** : `tests/roles-manager-routes.test.ts`
+  fait échouer la suite sinon. Le rôle fantôme `gerant` a privé tous les managers de la clôture de
+  caisse jusqu'au 2026-10-01 (`bugs.md`).
+- **Un geste de boutique s'ouvre au manager avec sa garde d'appartenance** : `requireRole('admin')`
+  seul servait de garde à `DELETE /employes/:id` ; l'ouvrir sans `assertBoutiqueOwnership()` aurait
+  laissé un manager désactiver l'employé d'une autre boutique.
+- **Restent à la plateforme** : création de boutique, référentiel global marques / modèles (partagé
+  par toutes les boutiques), expiration des devis en lot (`decisions.md`).
+
 ## Invariants isolation multi-tenant — routes par ID (depuis 2026-07-31)
 
 Chantier `feat/isolation-routes-par-id` (36 routes gardées, voir `project-docs/bugs.md` et
