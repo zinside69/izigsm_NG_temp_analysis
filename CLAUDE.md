@@ -1098,6 +1098,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-01 (checkpoint 134) : production inchangée (`izigsm-v3.11`) ; migrations en attente
+inchangées (`0048` → `0051`, `0054`).** Sur `main`, en plus : ticket 08a (report de la PR #38 du
+socle, sans migration), `CACHE_VERSION` `izigsm-v3.16` (v3.15 laissée au ticket 06 Mobilax). Il
+rejoint le lot 1, qui part toujours en bloc.
+
 **État au 2026-09-30 (checkpoint 131) : production inchangée (`izigsm-v3.11`) ; `0048` → `0051` et
 `0054` EN ATTENTE sur `main`** (local Windows seulement). Sur `main`, non déployés : tickets 04 et 07
 du lot 1, ticket 05 Mobilax (reporté d'`integration`), `CACHE_VERSION` `izigsm-v3.14`. Le lot 1 (01-09

@@ -106,8 +106,10 @@ Décisions : `decisions.md` § 2026-09-16.
       E2E rejoués sur Windows. Suite : panneau `viewTicket()` (IMEI vide) → **intégré au 08b**
       (décision de l'exploitant du 2026-10-01).
 - [ ] **Ticket 05** (codes maison, `0052`) — au socle, débloqué ; corrige d'abord l'import CSV
+      → amendé deux fois le 2026-10-01 (`f7ff91e`, `ff72c91` : contrat de l'avertissement fixé, option `sansCodeMaison`)
 - [ ] **Ticket 06** (file d'étiquettes, `0053`) — au socle, après 05
 - [ ] **Ticket 08b** (parcours IMEI, `0055`) — au socle, après 08a
+      → **prêt pour le socle** le 2026-10-01 (`03702e9`, 08a livré ; `viewTicket()` intégré)
 - [ ] **Ticket 08c** (requalification SAV ↔ payant) — au socle, après 08b
 - [ ] **Ticket 09** (validation technique, `0056`) — au socle, après 08b
 - [x] **Lot 2 — tickets 11 à 14 cadrés le 2026-09-30** (checkpoint 132), tous pour le socle :

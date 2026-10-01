@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 133 — lot 2 entièrement cadré : tickets 15 à 17)
+# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 134 — 08a reporté sur `main`, faille admin avec boutique cadrée)
+
+## Checkpoint 134 — 08a reporté, 08b et 05 prêts, faille latente cadrée (2026-10-01, après-midi)
+
+**Production inchangée (`izigsm-v3.11`). Migrations en attente inchangées (`0048` → `0051`, `0054`).
+`CACHE_VERSION` du dépôt : `izigsm-v3.16`.** Vitest 1 341 verts + 2 échecs permanents, tsc 32.
+
+- **Ticket 08a reporté sur `main`** (`3c550f2`) : diff net de la PR #38 d'`integration` (`ce51ced`,
+  T-008), sans `tests/_debug-t008.test.ts` ; les 7 fichiers étaient identiques sur `main` et sur la
+  base de la PR. `sw.js` v3.14 → **v3.16** (v3.15 laissée au ticket 06 Mobilax, encore sur
+  `integration`). Rejoué sur Windows : vitest +32, tsc 32, E2E `prise-en-charge-imei` 2/2 et
+  `resolveur-boutique-pages` 17/17. **21 lignes retirées par l'agent sans `AVANT :`** : reportées
+  telles quelles (décision de l'exploitant : `main` reste aligné sur `integration`), signalé au socle
+  pour la doctrine. `bugs.md` : IMEI jamais enregistré + `client_id` non vérifié → CORRIGÉS.
+- **Ticket 08b préparé pour le socle** (`03702e9`) : identifiant lu sur la fiche appareil, « Autre
+  panne » par le champ `imei` (jamais un `appareil_id` : appareil revendu), `createSav()` lit
+  l'`appareil_id` en base ; **panneau `viewTicket()` (IMEI toujours vide) intégré au 08b** (décision).
+- **Ticket 05** : précision P15 ajoutée à la demande du socle (`f7ff91e`), puis 2e précision écrite et
+  commitée par la session « Socle » dans ce dépôt (`ff72c91`) — contrat de l'avertissement fixé
+  (`avertissement_code_maison`, `avertissements: string[]`), option `sansCodeMaison` pour Mobilax.
+- **Faille du résolveur : LATENTE, cadrée** (`e666197`, `.scratch/admin-sans-boutique/issues/001-…`,
+  socle, P3). Mesuré en production : **0** admin avec boutique (1 admin plateforme, 5 managers, 2
+  techniciens), aucun chemin n'en crée. Mais 23 sites + 15 routes `requireRole('admin')` testent le
+  rôle seul (dont `assertBoutiqueOwnership()` → 36 gardes par ID). Décision : un admin avec boutique
+  ne doit pas exister → **403 `compte_incoherent` dans `authMiddleware`**, plus `getBoutiqueId()` /
+  `assertBoutiqueOwnership()` via `isAdminPlateforme()`. Mentions « admin de boutique » de
+  `CLAUDE.md` caduques à la relecture du ticket.
+- Messages transmis à la session « Socle » (collés par l'exploitant) pour chaque hash.
+- Serveur local arrêté ; un `workerd` survivant sur le port 3000 a été tué (piège connu).
+
+**Prochaine session** : relire les PR du socle et les reporter à la demande ; P3 en attente
+(`reset-password #form-request`, `saveNotif()`, recherche Mobilax figée) ; coder le 15 quand 12-14
+sont sur `main`.
 
 ## Checkpoint 133 — Lot 2 : tickets 15, 16, 17 cadrés (2026-10-01)
 

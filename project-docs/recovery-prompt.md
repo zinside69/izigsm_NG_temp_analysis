@@ -1,4 +1,23 @@
-# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 133 — lot 2 entièrement cadré)
+# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 134 — 08a reporté, faille admin cadrée)
+
+## Ce qui a changé au checkpoint 134
+
+- **08a sur `main`** (`3c550f2`, report de la PR #38 du socle) : IMEI / n° de série enregistré sur la
+  fiche appareil du client, `client_id` vérifié. `CACHE_VERSION` **v3.16** (v3.15 réservée au 06
+  Mobilax). Non déployé, aucune migration.
+- **Report d'une PR du socle — mode opératoire suivi** : `git fetch origin integration` ; diff net
+  `git diff <merge>^1 <merge>` sans les fichiers de débogage ; `git apply --3way` ; `sw.js` à la main ;
+  baseline vitest/tsc **avant**, puis vitest, tsc, E2E du ticket et balayage du menu sur la vraie D1
+  locale ; règle additive contrôlée (décision du jour : reporter tel quel, `main` aligné sur
+  `integration`). Après l'E2E : vérifier qu'aucun `workerd` ne reste sur le port 3000.
+- **08b prêt** pour le socle (`03702e9`, `viewTicket()` intégré) ; **05** amendé deux fois
+  (`f7ff91e`, `ff72c91` écrit par la session « Socle » dans ce dépôt).
+- **Faille admin avec boutique** : latente (0 compte), cadrée pour le socle (`e666197`, P3).
+- ⚠ La session « Socle » peut **écrire et commiter dans ce dépôt** : `git status` et `git log` avant
+  tout commit.
+
+**Première action** : selon la demande — report d'une PR du socle (mode opératoire ci-dessus), ou un
+P3 (`reset-password #form-request`, `saveNotif()`, recherche Mobilax figée). Le 15 attend 12-14.
 
 ## Ce qui a changé au checkpoint 133
 
