@@ -991,7 +991,8 @@ reste à décider). Le socle se lance **sous WSL Ubuntu**, jamais d'ici. Premiè
 - **Numéros de migration réservés par ticket** (`decisions.md` 2026-09-30) : socle et exploitant
   codent en parallèle, un numéro pris deux fois casse `migrations apply`. Le reprendre dans la
   déclaration de la tâche. État au checkpoint 132 : `0052` 05, `0053` 06, `0054` 07 (codé), `0055`
-  08b, `0056` 09, `0057` 11 ; `0058` 14 (conditionnelle, sans objet).
+  08b, `0056` 09, `0057` 11 ; `0058` 14 (conditionnelle, sans objet). Checkpoint 133 : **`0059` 16** ;
+  15 et 17 sans migration.
 - **Un ticket confié au socle cite l'ordre imposé par les fichiers partagés** (`bloque-par` ou
   note) : les tickets du lot 2 touchent tous `tickets.js`, `routes/tickets.ts` ou `devis.js` — deux
   PR parallèles sur ces fichiers se contrediraient.

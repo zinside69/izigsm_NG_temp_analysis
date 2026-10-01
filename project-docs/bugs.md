@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟠 Trois défauts trouvés au cadrage des tickets 15 à 17 (2026-10-01, OUVERTS, correctifs cadrés)
+
+- **La durée de garantie d'un service n'est lue par personne** : `services.garantie_jours` se saisit
+  dans le catalogue (champ, badge 🛡), mais `createGarantieFromTicket()` n'applique que la durée par
+  défaut de la boutique. Un champ vide part en **0** (`parseInt(…) || 0`) et `updateService()`
+  (`COALESCE`) ne permet pas de vider la durée. **Correctif : ticket 16** (vide = défaut, 0 = sans
+  garantie, migration `0059`).
+- **Création de la garantie en fin de réparation : échec avalé en silence** (`catch {}` du hook de
+  passage en `termine`, `routes/tickets.ts`) — une garantie manquante est indiscernable d'une
+  garantie jamais due. **Correctif : ticket 16** (`console.error` au minimum).
+- **`convertirDevis()` convertit un devis non accepté** (brouillon, envoyé, expiré) en facture. Pour
+  un devis lié à un ticket : **correctif : ticket 15** (seul `accepte`, 409 sinon) ; devis sans
+  ticket : règle actuelle conservée, par décision.
+
 ## 🟠 Quatre défauts trouvés au cadrage du lot 2 (2026-09-30, OUVERTS, correctifs cadrés)
 
 - **`POST /api/tickets` ne vérifie pas que `client_id` appartient à la boutique** de l'appelant —

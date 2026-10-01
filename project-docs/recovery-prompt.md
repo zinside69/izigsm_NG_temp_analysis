@@ -1,4 +1,27 @@
-# Recovery Prompt — iziGSM — 2026-09-30 (checkpoint 132 — lot 2 : 11 à 14 cadrés)
+# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 133 — lot 2 entièrement cadré)
+
+## Ce qui a changé au checkpoint 133
+
+Aucun code. **Tickets 15, 16, 17 cadrés** — le lot 2 (11 à 17) est entièrement cadré. `main` =
+`origin/main`. Production inchangée (`izigsm-v3.11`) ; migrations en attente inchangées (`0048` →
+`0051`, `0054`).
+
+- **15** (`19a22cc`) — facture depuis le devis, **NF525 → codé ici avec l'exploitant**, sans
+  migration : identité de l'appareil réparé figée par `emettreFacture()` dans
+  `factures.appareils_snapshot` (`nature: 'repare'`), seul un devis **accepté** d'un ticket se
+  convertit, IMEI / n° de série exigé à la création **sauf acompte**. Bloqué par 07, 12, 13, 14.
+- **16** (`eaa256b`) — garanties par ligne de service, socle, migration **`0059`** : vide = défaut
+  boutique, 0 = sans garantie (0 existants → `NULL`), ticket sans ligne de service → garantie de
+  ticket, un « Même panne » par ligne.
+- **17** (`7e2b37f`) — lignes de SAV sur le **ticket SAV**, facturé 0 € calculé à la lecture,
+  encart « Coût des garanties » page SAV, sans migration. Amendements : **12** (coût figé à la pose),
+  **16** (ticket SAV terminé → aucune garantie).
+- Trois défauts ajoutés à `bugs.md` (durée de garantie jamais lue, échec de garantie muet,
+  conversion d'un devis non accepté) — correctifs dans 15 et 16.
+
+**Première action** : transmettre les trois hashes à la session racine (12 et 16 amendés). Ensuite,
+selon la demande : relecture d'une PR du socle, amendement P15, report sur `main`. **Le 15 se code
+ici quand 12, 13 et 14 sont sur `main`** — ⊥ avant (conflits de fichiers partagés).
 
 ## Ce qui a changé au checkpoint 132
 

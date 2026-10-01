@@ -109,6 +109,15 @@ Décisions : `decisions.md` § 2026-09-16.
 - [ ] **Ticket 09** (validation technique, `0056`) — au socle, après 08b
 - [x] **Lot 2 — tickets 11 à 14 cadrés le 2026-09-30** (checkpoint 132), tous pour le socle :
       11 (`0057`), 12, 13, 14. **Reste à cadrer : 15** (NF525 → codé ici), **16, 17**.
+- [x] **Lot 2 — tickets 15 à 17 cadrés le 2026-10-01** (checkpoint 133) : 15 (`19a22cc`, NF525,
+      sans migration), 16 (`eaa256b`, socle, **`0059`**), 17 (`7e2b37f`, socle, sans migration) ;
+      amendements **12** (coût figé à la pose) et **16** (ticket SAV sans garantie) dans `7e2b37f`.
+      **Tout le lot 2 est cadré.**
+- [ ] **Ticket 15 — à coder ici avec l'exploitant**, quand 12, 13 et 14 sont reportés sur `main`
+      (⊥ avant : conflits sur `devisService.ts` / `factureService.ts`). Trancher alors le point
+      ouvert : facture **manuelle** liée à un ticket SAV (refusée ou non).
+- [ ] **Transmettre à la session racine** : hashes `19a22cc`, `eaa256b`, `7e2b37f` ; 12 et 16 amendés
+      (à reprendre s'ils sont déjà déclarés) ; `0059` réservée au 16.
 - [ ] **Report sur `main`** de chaque PR du socle (cherry-pick, session racine), puis **déploiement du
       lot 1 en bloc** : migrations `0048` → `0056` à distance, `d1_migrations` relu, puis le code
       (`modop-deploiement.md`)

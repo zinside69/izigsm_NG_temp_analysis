@@ -1,4 +1,36 @@
-# iziGSM — État courant (MàJ : 2026-09-30, checkpoint 132 — lot 2 : tickets 11 à 14 cadrés pour le socle)
+# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 133 — lot 2 entièrement cadré : tickets 15 à 17)
+
+## Checkpoint 133 — Lot 2 : tickets 15, 16, 17 cadrés (2026-10-01)
+
+**Aucun code. Production inchangée (`izigsm-v3.11`). `main` = `origin/main`.** Migrations en attente
+inchangées (`0048` → `0051`, `0054`). Sync multi-machines : sautée (« skip »).
+
+- **15 facture depuis le devis, appareil figé** (`19a22cc`) — **NF525 → codé ici**, sans migration.
+  Décisions : instantané dans la colonne existante `factures.appareils_snapshot` (entrée
+  `nature: 'repare'`, `appareil_id`, marque, modèle, IMEI, n° de série ; sans `nature` = vendu),
+  écrit par l'`UPDATE` de verrouillage d'`emettreFacture()` — couvre aussi l'acompte, aucun
+  troisième site ; devis lié à un ticket convertible **seulement `accepte`** (409) ; garde
+  d'identifiant à la création (422) **sauf l'acompte**. Constats : tous les chemins d'émission
+  passent par `emettreFacture()` (hors caisse) ; conversion et émission ne touchent pas le stock ;
+  mock figeant le `SET` d'émission dans `tests/factureService.test.ts`. 14 ajouté aux bloqueurs.
+  **Quand** : après report de 12, 13, 14 sur `main` (fichiers partagés) — fin de chaîne du socle.
+- **16 garanties par ligne de service** (`eaa256b`) — socle, **`0059` réservée** (`decisions.md`).
+  Constat : la saisie de la durée existe déjà mais n'est lue par personne ; vide part en 0.
+  Décisions : vide = défaut boutique, **0 = sans garantie**, 0 existants → `NULL` ; ticket sans ligne
+  de service → garantie de ticket au défaut ; un « Même panne » par ligne garantie. Conception :
+  `ligne_ticket_id` + deux index uniques partiels (⊥ recréation de table), création idempotente par
+  l'index, `DELETE` d'une ligne garantie → 409, `catch {}` muet remplacé.
+- **17 lignes de SAV et coût des garanties** (`7e2b37f`) — socle, sans migration. Décisions :
+  lignes sur le **ticket SAV** (routes 11/12), facturé 0 € à la lecture tant que le dossier n'est pas
+  `refuse` ; **coût figé à la pose** ; encart « Coût des garanties » page SAV (admin, manager) ;
+  ticket SAV terminé → **aucune** garantie. Une seule définition « ticket SAV valide ». Devis d'un
+  ticket SAV → 409. Bloqué par 08c, 12, 13, 16.
+- **Amendements** (`7e2b37f`) : **12** (pose fige `cout_unitaire`), **16** (hook saute les tickets SAV).
+- **Point ouvert** : facture manuelle liée à un ticket SAV — à trancher au codage du 15.
+- `bugs.md` : 3 défauts trouvés au cadrage (correctifs dans 15 et 16).
+
+**Prochaine session** : transmettre les hashes à la session racine ; relire les PR du socle ; coder
+le 15 quand 12-14 sont sur `main`.
 
 ## Checkpoint 132 — Lot 2 : tickets 11 à 14 cadrés, amendements du socle (2026-09-30, soir)
 
