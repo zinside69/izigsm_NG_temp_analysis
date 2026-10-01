@@ -68,6 +68,27 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
 3. **CSV : écrire `code_barre` seulement à l'`INSERT` d'un nouveau produit.** Sur un produit
    existant retrouvé par SKU, on ne complète le code que s'il est vide, jamais on ne l'écrase.
 
+### Précision du 2026-10-01 après-midi — 2e relecture de conception du socle (P15, 3 constats)
+
+1. **Le 409 ne vaut que pour une écriture demandée.** Le critère « Violation d'unicité à la pose »
+   est barré et réécrit ci-dessous : la pose automatique ne lève jamais d'exception.
+2. **L'import Mobilax est exclu par une option, jamais par les données.** `CreateProduitOptions`
+   reçoit `sansCodeMaison?: boolean` ; seul `importerProduitMobilax()` le passe
+   (`{ fournisseur_id: …, sansCodeMaison: true }`, une ligne de `mobilaxService.ts`, qui entre au
+   périmètre). ⊥ déduire l'exclusion de `fournisseur_id`, `fournisseur` ou `reference_fournisseur` :
+   une création manuelle qui renseigne une référence fournisseur reçoit son code maison.
+3. **Contrat de l'avertissement (fixé ici, lu par l'écran de T-010) :**
+   - `createProduit()` renvoie `{ id: number; avertissement_code_maison?: string }`.
+   - `POST /api/produits` → 201 `{ success: true, id, message, avertissement_code_maison? }`, la clé
+     **au même niveau que `id`** (forme actuelle de la route, pas sous `data`). Clé absente quand la
+     pose a réussi ou n'était pas due.
+   - `importCatalogueCsv()` et la route d'import CSV existante ajoutent `avertissements: string[]` à
+     côté de `errors`, **toujours présent** (tableau vide sinon). Une entrée par ligne, de la forme
+     `Ligne N : …`. Un avertissement n'est pas une erreur : la règle du statut 422 ne change pas.
+   - Chaque avertissement **nomme le code et le produit porteur**. Le code maison dépend de
+     l'identifiant : « Générer » retombe sur le même 409 tant que le code du porteur n'est pas
+     corrigé. Le message le dit.
+
 ## Critères d'acceptation
 
 Fonctions pures (`src/lib/codeMaison.ts`, nouveau) :
@@ -86,8 +107,10 @@ Produits :
 - [ ] Fonction commune (`stockService.ts`) : pose `codeMaison(1, id)` dans `code_barre` **si** le produit n'a ni code-barres ni SKU EAN-13 valide ; ne réécrit jamais un code existant
 - [ ] **Préalable, ajouté le 2026-09-30** : l'import CSV **lit et enregistre la colonne `code_barre`** (défaut ouvert de `bugs.md` du 2026-09-17 : documentée, jamais écrite), avec la conversion du doublon en `ErreurCodeEnDoublon` nommée dans le bilan. Sans ce correctif, un produit importé avec son EAN recevrait un code maison à tort. Entrée de `bugs.md` passée à « CORRIGÉ »
 - [ ] Appelée par `createProduit()` **et** par l'`INSERT` de l'import CSV ; **pas** par l'import fournisseur (Mobilax) : `importerProduitMobilax()` ne pose jamais de code maison, même sans EAN
+  - Mécanisme imposé (2026-10-01) : option `{ sansCodeMaison: true }` dans le 5e argument de `createProduit()`, passée par `importerProduitMobilax()` seul
 - [ ] Création manuelle sans code ni SKU EAN → le produit créé porte un code maison ; avec un code-barres saisi, ou un SKU EAN-13 valide → aucun code maison
-- [ ] Violation d'unicité à la pose → `ErreurCodeEnDoublon` (409 nommant le produit porteur), jamais une erreur SQL brute
+- ~~[ ] Violation d'unicité à la pose → `ErreurCodeEnDoublon` (409 nommant le produit porteur), jamais une erreur SQL brute~~ — barré le 2026-10-01 (2e P15)
+- [ ] Violation d'unicité lors d'une **écriture demandée** (route `…/code-maison`, `code_barre` saisi) → `ErreurCodeEnDoublon` (409 nommant le produit porteur), jamais une erreur SQL brute ; lors de la **pose automatique** → aucune exception, produit créé sans code, avertissement selon le contrat ci-dessus
 - [ ] `POST /api/produits/:id/code-maison` (`requireRole('admin', 'manager')`, `assertBoutiqueOwnership()`) : pose le code ; **409** si le produit a déjà un code-barres ou un SKU EAN-13 valide ; 404 autre boutique
 
 Services :
@@ -106,6 +129,7 @@ Recherche :
 - [ ] Fiche produit : champ « Code-barres » (création et modification), code maison affiché ; bouton « Générer un code maison » visible seulement si le produit n'a ni code-barres ni SKU EAN-13 valide
 - [ ] Fiche service : champ « Code-barres » et bouton « Générer un code maison » visible seulement si le service n'en a pas
 - [ ] Erreur 409 affichée en clair (le produit ou service porteur est nommé) ; appels déballés `(await apiX(…)).data` ; valeurs posées en `value` / `textContent`
+- [ ] Avertissement de pose affiché en clair (`textContent`) : `avertissement_code_maison` après une création, `avertissements` dans le bilan d'import CSV
 - [ ] `CACHE_VERSION` (`public/sw.js`) incrémenté
 
 Commun :
@@ -127,10 +151,13 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite (`tests/helpers/d1Sqlite.ts`) : collision à la pose automatique ⇒ produit créé une seule fois, sans code, mouvement « Stock initial » présent, ligne CSV comptée comme importée, avertissement présent.
 - ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite : un code déjà présent reste intact après la pose et après l'appel à la route.
 - ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite : un CSV qui met à jour un produit déjà codé laisse le code inchangé.
+- ➕ **Couture ajoutée le 2026-10-01 après-midi** — vrai SQLite : `createProduit()` avec `reference_fournisseur` et `fournisseur` renseignés, sans option → code maison posé ; avec `{ sansCodeMaison: true }` → aucun.
+- ➕ **Couture ajoutée le 2026-10-01 après-midi** — routes par `app.request()` : collision à la pose automatique ⇒ `POST /api/produits` répond **201** avec `avertissement_code_maison` nommant le porteur ; l'import CSV répond `avertissements` de longueur 1 et compte la ligne comme importée.
 
 ## Notes
 
 - Périmètre : `src/lib/codeMaison.ts` (nouveau), `migrations/0052_services_code_barre.sql` (nouveau), `src/services/stockService.ts`, `src/services/servicesService.ts`, `src/services/catalogueService.ts`, `src/routes/stocks.ts`, `src/routes/services.ts`, `public/static/js/stock.js`, `public/stock.html`, `public/static/js/services.js`, `public/services.html`, `public/sw.js`, tests correspondants.
+- Périmètre étendu le 2026-10-01 : `src/services/mobilaxService.ts` (l'option `sansCodeMaison` seulement).
 - Prior art : `ErreurCodeEnDoublon` et `champEnDoublon()` (`stockService.ts`, index `0048`) ; `rattacherProduitMobilax()` pour une écriture qui ne réécrit jamais une colonne déjà remplie.
 - Le code maison d'un produit est dans `produits.code_barre` : le scan du ticket 04 le trouve sans autre changement.
 - `CLAUDE.md` § Stock : « ⊥ un nouveau chemin d'écriture de code sans cette conversion » — vaut pour la pose automatique, la génération à la demande et le champ de la fiche.
