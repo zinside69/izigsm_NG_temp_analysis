@@ -99,3 +99,49 @@ describe('formulaires avec mot de passe — method="post" et onsubmit="return fa
     expect(violations).toEqual([])
   })
 })
+
+// ── Formulaires qui portent un email (ajouté le 2026-10-01, décision de l'exploitant) ─────────
+//
+// Même règle, même raison : un envoi natif part en GET et met la saisie dans l'adresse. Mesuré le
+// 2026-10-01 sur `reset-password.html #form-request` (fuite réelle, `GET /reset-password?email=…`).
+// Deux autres formulaires ne la suivaient pas sans fuir pour autant — `settings.html #form-general`
+// (aucun champ `name`) et `personnel.html #form-add-employe` (fenêtre masquée ouverte par le script) :
+// des propriétés fragiles, mis en conformité le même jour.
+
+/** Formulaires d'une page qui portent un champ `type="email"` : identifiant et balise ouvrante. */
+function formulairesAvecEmail(html: string): { id: string; balise: string }[] {
+  const sansCommentaires = html.replace(/<!--[\s\S]*?-->/g, '')
+  const trouves: { id: string; balise: string }[] = []
+  const formulaire = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi
+  let m: RegExpExecArray | null
+  while ((m = formulaire.exec(sansCommentaires)) !== null) {
+    if (!attribut('type', 'email').test(m[2])) continue
+    trouves.push({ id: attribut('id').exec(m[1])?.[2] ?? '(sans id)', balise: `<form${m[1]}>` })
+  }
+  return trouves
+}
+
+describe('formulaires avec email — method="post" et onsubmit="return false"', () => {
+  it('le détecteur repère un formulaire à email et ignore le reste', () => {
+    const html = `<form id="a"><input type="email" name="email"></form>
+      <form id="b" method="post" onsubmit="return false"><input type=email></form>
+      <form id="c"><input type="text" data-type="email"></form>
+      <!-- <form id="d"><input type="email"></form> -->`
+    const trouves = formulairesAvecEmail(html)
+    expect(trouves.map(f => f.id)).toEqual(['a', 'b'])
+    expect(trouves.map(f => baliseConforme(f.balise))).toEqual([false, true])
+  })
+
+  it('le balayage voit bien les formulaires à email existants', () => {
+    const tous = pages().flatMap((p: string) =>
+      formulairesAvecEmail(readFileSync(join(PUBLIC_DIR, p), 'utf8')).map(f => `${p} #${f.id}`))
+    expect(tous).toContain('reset-password.html #form-request')
+  })
+
+  it('aucune page de public/ ne porte un formulaire à email soumissible nativement', () => {
+    const violations = pages().flatMap((p: string) =>
+      formulairesAvecEmail(readFileSync(join(PUBLIC_DIR, p), 'utf8'))
+        .filter(f => !baliseConforme(f.balise)).map(f => `${p} #${f.id}`))
+    expect(violations).toEqual([])
+  })
+})

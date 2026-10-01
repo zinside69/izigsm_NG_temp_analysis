@@ -171,7 +171,9 @@
       <h2 class="text-xl font-semibold text-gray-900">Nouvel employé</h2>
       <button onclick="closeModal('modal-add-employe')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
     </div>
-    <form id="form-add-employe" class="p-6 space-y-4" onsubmit="submitAddEmploye(event)">
+    <!-- AVANT (2026-10-01, garde-fou des formulaires à email) : <form id="form-add-employe" class="p-6 space-y-4" onsubmit="submitAddEmploye(event)">
+         — l'appel passe par l'écouteur posé dans personnel.js (DOMContentLoaded). -->
+    <form id="form-add-employe" class="p-6 space-y-4" method="post" onsubmit="return false">
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>

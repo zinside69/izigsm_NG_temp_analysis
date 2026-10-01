@@ -633,6 +633,13 @@ function stopAutoRefresh() {
 }
 
 // ─── Fermeture des modals par clic sur fond ───────────────────────────────────
+// ─── Ajout d'un employé : écouteur de soumission (2026-10-01) ─────────────────
+// La balise porte `onsubmit="return false"` (CLAUDE.md § Formulaires — jamais de soumission
+// native) : c'est cet écouteur, et lui seul, qui appelle submitAddEmploye().
+document.addEventListener('DOMContentLoaded', function () {
+  document.getElementById('form-add-employe')?.addEventListener('submit', submitAddEmploye);
+});
+
 document.addEventListener('DOMContentLoaded', function () {
   ['modal-pointage', 'modal-add-employe', 'modal-rapport'].forEach(id => {
     const el = document.getElementById(id);

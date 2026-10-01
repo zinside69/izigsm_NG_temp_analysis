@@ -287,6 +287,10 @@ liaison) — moins graves, aucun succès annoncé et la liste est relue ; notée
 testant : un **manager** voit 🗑 sur les marques et modèles du référentiel global, mais ces routes
 sont `requireRole('admin')` — son clic ne faisait rien, sans un mot. Bouton toujours proposé au
 manager (non traité : choix d'écran à faire).
+→ **Traité le même jour** (v3.19) : ✏️ et 🗑 des marques et modèles réservés à l'admin plateforme
+(`isAdminPlateforme()`), les liaisons restent ouvertes au manager ; test « manager : ni ✏️ ni 🗑 »
+vu rouge. Restent proposés au manager, sur des routes `requireRole('admin')` aussi : « ＋ Marque »,
+« ＋ Modèle », « Synchroniser API » (refus désormais annoncé, non masqués — non décidé).
 
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 

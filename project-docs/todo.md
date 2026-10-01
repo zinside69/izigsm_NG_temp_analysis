@@ -266,6 +266,9 @@ laissé hors périmètre de ce ticket-là.
       réel : un manager voit 🗑 sur le référentiel global mais la route est `requireRole('admin')`
       (403 muet jusque-là). **Plus aucun** `await apiX(…)` non lu dans `public/`. Garde-fou statique
       contre ce motif : toujours **non décidé**.
+      → **Garde-fou ajouté le 2026-10-01** (`143a696`, `frontend-enveloppe-api-conformite.test.ts`,
+      vu rouge sur les anciens `services.js` et `notifications.html`). Et ✏️/🗑 des marques et modèles
+      **masqués** pour qui n'est pas admin plateforme (décision du même jour).
 
 ## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
 
@@ -356,6 +359,11 @@ occurrence constatée.
       2026-10-01**, non déployé. La fuite était **réelle** (mesurée sans JavaScript :
       `GET /reset-password?email=…`), E2E `formulaires-mot-de-passe.spec.ts` § « demande de lien »,
       vu rouge. Extension du garde-fou statique aux formulaires à email : **non décidée**.
+      → **Décidée et faite le 2026-10-01** : volet « email » de
+      `tests/formulaires-mot-de-passe-conformite.test.ts`, vu rouge sur `settings.html #form-general`
+      (aucun `name` : ne fuyait pas) et `personnel.html #form-add-employe` (fenêtre masquée : ne fuyait
+      pas) — tous deux mis en conformité (écouteur `submit`), enregistrement gardé par
+      `tests/e2e/formulaires-email.spec.ts`.
 
 ## 🟠 P2 — Import en masse depuis la recherche fournisseur (demandé le 2026-09-12, **prochaine session**)
 

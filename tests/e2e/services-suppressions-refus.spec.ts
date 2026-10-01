@@ -14,18 +14,32 @@
  *
  * Ces chemins suivent la convention « déballage » de `services.js` (`CLAUDE.md` : deux conventions
  * gardées délibérément) : message du serveur par `alert()`, comme `saveMarque()`.
+ *
+ * MàJ du 2026-10-01 (décision de l'exploitant) : ✏️ et 🗑 des marques et modèles ne sont plus
+ * proposés qu'à l'**admin plateforme**. Le cas réel « manager refusé » ne se produit donc plus : le
+ * manager ne voit plus ces boutons (test dédié), et le refus annoncé se prouve avec l'admin
+ * plateforme sur une suppression **simulée** en 403 — aucune donnée globale n'est jamais supprimée.
  */
 import { test, expect, type Page } from '@playwright/test'
 import { createTenantAdmin } from './fixtures/tenant'
 import { seConnecter } from './fixtures/comptes'
+import { seConnecterAdminPlateforme, creerBoutique, choisirBoutique } from './fixtures/console-plateforme'
 
 /** Manager d'une boutique neuve sur l'onglet Modèles de `/services` ; dialogues consignés et acceptés. */
-async function ouvrirReferentiel(page: Page, request: any): Promise<string[]> {
+// AVANT (2026-10-01, ✏️/🗑 réservés à l'admin plateforme) : async function ouvrirReferentiel(page: Page, request: any): Promise<string[]> {
+async function ouvrirReferentiel(page: Page, request: any, compte: 'manager' | 'plateforme' = 'manager'): Promise<string[]> {
   const dialogues: string[] = []
   page.on('dialog', async d => { dialogues.push(`${d.type()}: ${d.message()}`); await d.accept() })
+  if (compte === 'plateforme') {
+    // Admin plateforme sur une boutique neuve choisie dans la console (même patron que le balayage)
+    const { nomBoutique } = await creerBoutique(request)
+    await seConnecterAdminPlateforme(page)
+    await choisirBoutique(page, nomBoutique)
+  } else {
   const tenant = await createTenantAdmin(request)
   await seConnecter(page, { email: tenant.email, password: tenant.password })
   await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  }
   await page.goto('/services')
   await page.click('#tab-modeles')
   await expect(page.locator('#marques-list .marque-item').first()).toBeVisible({ timeout: 15_000 })
@@ -51,9 +65,36 @@ async function refusAnnonce(dialogues: string[]) {
   expect(alerte.replace('alert:', '').trim().length).toBeGreaterThan(0)
 }
 
+/** Suppressions de marque et de modèle refusées en 403 par simulation : rien n'atteint le serveur. */
+async function simulerRefusSuppressions(page: Page) {
+  await page.route(u => /^\/api\/services\/(marques|modeles)\/\d+$/.test(u.pathname), route =>
+    route.request().method() === 'DELETE'
+      ? route.fulfill({ status: 403, json: { success: false, error: 'Refus simulé du serveur' } })
+      : route.fallback())
+}
+
 test.describe('Services — une suppression refusée est annoncée', () => {
-  test('marque : un manager refusé (403) voit le refus, la marque reste', async ({ page, request }) => {
-    const dialogues = await ouvrirReferentiel(page, request)
+  test('manager : ni ✏️ ni 🗑 sur les marques et modèles du référentiel global', async ({ page, request }) => {
+    await simulerUnModele(page)
+    await ouvrirReferentiel(page, request)
+    const premiere = page.locator('#marques-list .marque-item').first()
+    await premiere.hover()
+    await expect(premiere.locator('button')).toHaveCount(0)
+    await premiere.click()
+    const carte = page.locator('.modele-card').first()
+    await expect(carte).toBeVisible({ timeout: 15_000 })
+    await expect(carte.locator('button.btn-danger')).toHaveCount(0)
+    await expect(carte.getByRole('button', { name: '✏️' })).toHaveCount(0)
+    // Les liaisons restent ouvertes au manager (route DELETE `admin` et `manager`)
+    await expect(carte.getByRole('button', { name: /Services/ })).toBeVisible()
+  })
+
+  // AVANT (2026-10-01) : test('marque : un manager refusé (403) voit le refus, la marque reste', …)
+  //   — sur le vrai 403 d'un manager, qui ne voit plus le bouton.
+  test('marque : un refus du serveur est annoncé (admin plateforme, refus simulé), la marque reste', async ({ page, request }) => {
+    await simulerRefusSuppressions(page)
+    // AVANT (2026-10-01) : const dialogues = await ouvrirReferentiel(page, request)
+    const dialogues = await ouvrirReferentiel(page, request, 'plateforme')
     const premiere = page.locator('#marques-list .marque-item').first()
     const id = await premiere.getAttribute('id')
     // Les actions d'une marque n'apparaissent qu'au survol (`.marque-item:hover .marque-actions`)
@@ -65,10 +106,13 @@ test.describe('Services — une suppression refusée est annoncée', () => {
     await expect(page.locator(`#${id}`)).toBeVisible()
   })
 
-  test('modèle : un manager refusé (403) voit le refus', async ({ page, request }) => {
-    // Liste simulée, suppression RÉELLE : `requireRole('admin')` refuse le manager avant toute lecture
+  // AVANT (2026-10-01) : test('modèle : un manager refusé (403) voit le refus', …) — liste simulée,
+  //   suppression RÉELLE refusée au manager, qui ne voit plus le bouton.
+  test('modèle : un refus du serveur est annoncé (admin plateforme, refus simulé)', async ({ page, request }) => {
     await simulerUnModele(page)
-    const dialogues = await ouvrirReferentiel(page, request)
+    await simulerRefusSuppressions(page)
+    // AVANT (2026-10-01) : const dialogues = await ouvrirReferentiel(page, request)
+    const dialogues = await ouvrirReferentiel(page, request, 'plateforme')
     await page.locator('#marques-list .marque-item').first().click()
     const carte = page.locator('.modele-card').first()
     await expect(carte).toBeVisible({ timeout: 15_000 })

@@ -307,7 +307,9 @@ rouges d'abord par ce garde-fou **et** par `tests/e2e/notifications-rendu.spec.t
 
 **Ce que ce garde-fou ne voit toujours pas** : un `await apiX(…)` dont le résultat n'est **jamais
 lu**. _(2026-10-01 : `saveNotif()` corrigé ; il en reste 3, les `apiDelete` de `services.js` —
-liste relue, refus muet — `todo.md` ; corrigés le même jour : plus aucun appel non lu dans `public/`.)_ `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
+liste relue, refus muet — `todo.md` ; corrigés le même jour : plus aucun appel non lu dans `public/`.
+**Garde-fou ajouté le même jour** dans `tests/frontend-enveloppe-api-conformite.test.ts` : la suite
+échoue si un `await apiX(…)` est posé en instruction seule, sans que personne en lise le résultat.)_ `api()` ne lève pas sur une erreur HTTP, donc la page annonce un succès qui n'a pas eu lieu —
 `saveNotif()` (`notifications.html`) est dans ce cas (`bugs.md` 🟡, `todo.md` 🟡 P3). Un `catch` ne
 protège de rien ici : il ne se déclenche que si `fetch` lui-même est rejeté.
 
@@ -361,6 +363,11 @@ même chose, aucune unification tentée.
   Mesuré avant correctif : aucune de ces quatre pages ne fuyait réellement (inscription sans bouton
   de soumission dans le formulaire, étape de réinitialisation masquée sans JavaScript, clés API sans
   `name`) — les E2E `formulaires-mot-de-passe.spec.ts` gardent ces propriétés.
+- **Même règle pour tout `<form>` qui porte un `type="email"`** (depuis le 2026-10-01) : fuite
+  réelle mesurée sur `reset-password.html #form-request` (`GET /reset-password?email=…` sans
+  JavaScript). Volet « email » du même garde-fou statique ; `settings.html #form-general` et
+  `personnel.html #form-add-employe` mis en conformité (écouteur `submit`), enregistrement gardé
+  par `tests/e2e/formulaires-email.spec.ts`.
 - **Un `onsubmit="fonction(event)"` ne protège pas** : tant que le script qui définit la fonction
   n'est pas chargé, l'appel lève une erreur et l'envoi natif part. Poser `onsubmit="return false"` et
   appeler la fonction depuis un `addEventListener('submit', …)` du script de la page.

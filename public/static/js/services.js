@@ -487,10 +487,12 @@ function renderMarques() {
         <span>${escHtml(m.nom)}</span>
         <span style="font-size:11px;color:#94a3b8;background:#f1f5f9;border-radius:10px;padding:1px 7px;">${m.nb_modeles || 0}</span>
       </div>
-      <div class="marque-actions">
+      ${/* AVANT (2026-10-01) : ✏️ et 🗑 proposés à tous ; les routes PUT/DELETE des marques sont
+           requireRole('admin') — un manager était refusé (403). Réservés à l'admin plateforme. */
+        isAdminPlateforme() ? `<div class="marque-actions">
         <button class="btn" style="padding:2px 8px;font-size:12px;" onclick="event.stopPropagation();openModalMarque(${m.id})">✏️</button>
         <button class="btn btn-danger" style="padding:2px 8px;font-size:12px;" onclick="event.stopPropagation();deleteMarque(${m.id})">🗑</button>
-      </div>
+      </div>` : ''}
     </div>
   `).join('');
 }
@@ -586,10 +588,12 @@ function renderModeles() {
       <div class="modele-card-actions">
         <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;"
           onclick="openModalLiaison(${mo.id}, '${escHtml(mo.nom)}')">🔗 Services</button>
-        <button class="btn" style="font-size:12px;padding:4px 10px;"
+        ${/* AVANT (2026-10-01) : ✏️ et 🗑 proposés à tous ; PUT/DELETE des modèles sont
+             requireRole('admin'). Réservés à l'admin plateforme (les liaisons restent ouvertes au manager). */
+          isAdminPlateforme() ? `<button class="btn" style="font-size:12px;padding:4px 10px;"
           onclick="openModalModele(${mo.id})">✏️</button>
         <button class="btn btn-danger" style="font-size:12px;padding:4px 10px;"
-          onclick="deleteModele(${mo.id})">🗑</button>
+          onclick="deleteModele(${mo.id})">🗑</button>` : ''}
       </div>
     </div>
   `).join('');
