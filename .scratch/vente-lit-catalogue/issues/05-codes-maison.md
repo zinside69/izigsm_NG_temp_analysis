@@ -88,6 +88,12 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
    - Chaque avertissement **nomme le code et le produit porteur**. Le code maison dépend de
      l'identifiant : « Générer » retombe sur le même 409 tant que le code du porteur n'est pas
      corrigé. Le message le dit.
+4. **CSV, produit existant : le code se complète dans le même `UPDATE` que les autres champs**, avant
+   le mouvement de stock : `code_barre = CASE WHEN code_barre IS NULL OR TRIM(code_barre) = '' THEN ?
+   ELSE code_barre END`. Un doublon fait alors échouer cet `UPDATE` seul : la ligne est rejetée en
+   entier, sans écriture partielle, et signalée dans le bilan (porteur nommé). ⊥ une écriture du code
+   à part, après le mouvement : le bilan dirait « écartée » une ligne déjà appliquée. _(3e relecture
+   de conception, 2026-10-01.)_
 
 ## Critères d'acceptation
 
@@ -153,6 +159,7 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-01** — vrai SQLite : un CSV qui met à jour un produit déjà codé laisse le code inchangé.
 - ➕ **Couture ajoutée le 2026-10-01 après-midi** — vrai SQLite : `createProduit()` avec `reference_fournisseur` et `fournisseur` renseignés, sans option → code maison posé ; avec `{ sansCodeMaison: true }` → aucun.
 - ➕ **Couture ajoutée le 2026-10-01 après-midi** — routes par `app.request()` : collision à la pose automatique ⇒ `POST /api/produits` répond **201** avec `avertissement_code_maison` nommant le porteur ; l'import CSV répond `avertissements` de longueur 1 et compte la ligne comme importée.
+- ➕ **Couture ajoutée le 2026-10-01 (3e P15)** — vrai SQLite : un CSV met à jour un produit existant sans code avec un `code_barre` déjà porté par un autre produit ⇒ ligne signalée dans le bilan, porteur nommé ; nom, prix et `stock_actuel` inchangés ; aucun nouveau mouvement de stock ; ligne comptée une seule fois en `skipped` (ni `updated` ni `imported`).
 
 ## Notes
 
