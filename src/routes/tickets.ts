@@ -22,6 +22,8 @@ import {
   getTicketById,
   createTicket,
   updateTicket,
+  resoudreAppareilTicket,
+  validerPriorite,
   updateStatutTicket,
   deleteTicket,
   archiveTicket,
@@ -68,6 +70,18 @@ function ctx(c: any) {
     dbPort:          c.get('db') as Database,
     queryBoutiqueId: c.req.query('boutique_id') ?? undefined,
   }
+}
+
+/**
+ * Statut HTTP d'une erreur de `resoudreAppareilTicket()` — partagé POST / PUT (ticket
+ * 08a). Saisie (Luhn, appareil explicite) → 400 ; client hors de la boutique de
+ * l'appelant → 404 (précision P15 n°2 du ticket 08a) ; le reste (ex: technicien d'une
+ * autre boutique) garde le statut déjà en usage ailleurs sur ce fichier (422).
+ */
+function statutErreurAppareil(message: string): 400 | 404 | 422 {
+  if (message.includes('IMEI invalide') || message.includes('Appareil introuvable')) return 400
+  if (message.includes('Client introuvable')) return 404
+  return 422
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -185,13 +199,15 @@ tickets.get('/:id', async (c) => {
  * Hook email non bloquant : envoi confirmation de dépôt au client.
  * @body client_id, appareil_marque, appareil_modele, description_panne (obligatoires)
  * @body boutique_id, technicien_id?, prix_estime?, date_promesse?, notes_internes? (optionnels)
+ * @body appareil_id? (explicite, vérifié), imei? (« IMEI / n° de série » du formulaire,
+ *       résolu en appareil_id — ticket 08a)
  * @body etat_appareil?, code_deverrouillage?, code_sim?, signature_client?, signature_date? (prise en charge, optionnels)
  * @returns { success, id, numero, tracking_token }
  */
 tickets.post('/', async (c) => {
   const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
-  const { client_id, appareil_id, appareil_marque, appareil_modele,
+  const { client_id, appareil_id, imei, appareil_marque, appareil_modele,
           description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
           etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date } = body
 
@@ -212,12 +228,12 @@ tickets.post('/', async (c) => {
   let created: { id: number; numero: string; tracking_token: string }
   try {
     created = await createTicket(db, boutiqueId, user.sub, {
-      client_id, appareil_id, appareil_marque, appareil_modele,
+      client_id, appareil_id, imei, appareil_marque, appareil_modele,
       description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
       etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date,
     })
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 422)
+    return c.json({ success: false, error: err.message }, statutErreurAppareil(err.message))
   }
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
@@ -261,6 +277,9 @@ tickets.post('/', async (c) => {
  * @body description_panne?, diagnostic?, technicien_id?, prix_estime?, prix_final?,
  *       date_promesse?, notes_internes?, priorite?, etat_appareil?, code_deverrouillage?,
  *       code_sim?, signature_client?, signature_date?
+ * @body imei? — absent ou "" : appareil_id inchangé ; valeur : résolu puis rattaché
+ *       (mêmes règles que POST, ticket 08a). ⊥ `appareil_id` : un identifiant explicite dans
+ *       le corps d'un PUT est toujours ignoré (décision du 2026-09-30, P15).
  * @returns { success, message }
  */
 tickets.put('/:id', async (c) => {
@@ -281,11 +300,53 @@ tickets.put('/:id', async (c) => {
     if (sigError) return c.json({ success: false, error: sigError }, 400)
   }
 
+  // Priorité : validée ICI, AVANT toute résolution d'appareil — P15 précision n°3 exige que
+  // TOUTE validation qui ferait échouer la mise à jour du ticket précède la première écriture
+  // sur `appareils`, pas seulement le technicien. Sans ce contrôle en amont, un PUT avec un
+  // IMEI nouveau et une priorité invalide créerait l'appareil avant que updateTicket() ne
+  // rejette la mise à jour (trouvé en revue, correctif du 2026-10-01). Même fonction que
+  // updateTicket() (validerPriorite(), ticketService.ts) — une seule liste PRIORITES_VALIDES.
   try {
-    await updateTicket(db, id, user.sub, body)
+    validerPriorite(body.priorite)
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 422)
+  }
+
+  // ── Appareil (ticket 08a) : trois états du champ « imei » du corps — absent ou
+  // "" → appareil_id inchangé ; valeur → résolution (mêmes règles que POST) puis
+  // nouveau rattachement, transmis à updateTicket() par un argument SÉPARÉ.
+  // Un `appareil_id` explicite dans le corps d'un PUT est TOUJOURS ignoré — il ne
+  // transite jamais vers updateTicket() (décision du 2026-09-30, P15).
+  // `technicien_id` est transmis ICI (et non laissé au seul updateTicket() qui suit) :
+  // P15 précision n°3 exige que le technicien soit vérifié AVANT la première écriture
+  // sur `appareils` — sans ça, un PUT avec un IMEI nouveau et un technicien d'une autre
+  // boutique créerait l'appareil avant que updateTicket() ne rejette la mise à jour,
+  // laissant un orphelin (trouvé en revue, correctif du 2026-10-01).
+  let appareilId: number | null | undefined
+  const imeiSaisie = typeof body.imei === 'string' ? body.imei.trim() : ''
+  if (imeiSaisie) {
+    try {
+      appareilId = await resoudreAppareilTicket(db, {
+        boutiqueId:   existing.boutique_id,
+        clientId:     existing.client_id,
+        technicienId: body.technicien_id,
+        imeiOuSerie:  imeiSaisie,
+        marque:       existing.appareil_marque,
+        modele:       existing.appareil_modele,
+      })
+    } catch (err: any) {
+      return c.json({ success: false, error: err.message }, statutErreurAppareil(err.message))
+    }
+  }
+
+  try {
+    await updateTicket(db, id, user.sub, body, appareilId)
     return c.json({ success: true, message: 'Ticket mis à jour.' })
   } catch (err: any) {
-    const status = err.message.includes('introuvable') ? 404 : 422
+    // Correspondance exacte, pas `.includes('introuvable')` : « Technicien introuvable
+    // dans cette boutique. » est une erreur de validation (422), pas un ticket absent
+    // (404) — un `.includes()` les confondait (trouvé en revue le 2026-10-01).
+    const status = err.message === 'Ticket introuvable.' ? 404 : 422
     return c.json({ success: false, error: err.message }, status)
   }
 })

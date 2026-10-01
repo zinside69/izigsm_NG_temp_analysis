@@ -14,7 +14,8 @@
 // AVANT (2026-09-30, ticket 04 `vente-lit-catalogue` — douchette.js, caisse.js, stock.js) : const CACHE_VERSION  = 'izigsm-v3.12'
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — stock.js/html, caisse.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.13'
 // AVANT (2026-09-30, ticket 06 `integration-mobilax` — mobilax-recherche.js, devis.js/html) : const CACHE_VERSION  = 'izigsm-v3.14'
-const CACHE_VERSION  = 'izigsm-v3.15'
+// AVANT (2026-09-30, ticket 08a `vente-lit-catalogue` — tickets.js) : const CACHE_VERSION  = 'izigsm-v3.15'
+const CACHE_VERSION  = 'izigsm-v3.16'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

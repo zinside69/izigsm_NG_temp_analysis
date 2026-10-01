@@ -15,7 +15,8 @@
  *   getKanban(db, boutiqueId)                      — Vue Kanban groupée par statut
  *   getTicketById(db, id)                          — Fiche complète (+ historique + photos)
  *   createTicket(db, boutiqueId, userId, data)     — Création + historique initial
- *   updateTicket(db, id, userId, data)             — Mise à jour champs éditables
+ *   updateTicket(db, id, userId, data, appareilId) — Mise à jour champs éditables
+ *   resoudreAppareilTicket(db, input)              — Validations + résolution appareil (ticket 08a)
  *   updateStatut(db, id, userId, statut, comment)  — Machine à états + champs date
  *   deleteTicket(db, id, userId)                   — Soft delete (actif = 0)
  *   archiveTicket(db, id, userId)                  — Sprint 2.37 : archivage manuel ticket terminal
@@ -26,6 +27,7 @@
 
 import { parsePagination, nextNumero, auditLog } from '../lib/db'
 import { parseUtcTimestamp } from '../lib/timezone'
+import { luhnValide } from '../lib/scan'
 import type { Database } from '../ports/database'
 
 /**
@@ -51,6 +53,110 @@ async function validateTechnicienBoutique(
     .first()
 
   if (!user) throw new Error('Technicien introuvable dans cette boutique.')
+}
+
+// ─── Résolution appareil (ticket 08a) ──────────────────────────────────────────
+
+export interface ResolutionAppareilInput {
+  boutiqueId:    number
+  clientId:      number
+  technicienId?: number | null
+  /** Explicite (déjà un identifiant d'appareil) — prioritaire sur `imeiOuSerie`. */
+  appareilId?:   number | null
+  /** Saisie brute du champ « IMEI / n° de série » du formulaire. */
+  imeiOuSerie?:  string | null
+  marque:        string
+  modele:        string
+}
+
+/**
+ * Fonction unique portant, dans cet ordre, toutes les validations qui doivent
+ * précéder la moindre écriture sur `appareils` — technicien de la boutique, client
+ * de la boutique, `appareil_id` explicite appartenant à ce client, clé de Luhn de
+ * l'IMEI — puis la résolution de l'appareil (retrouvé ou créé). Appelée avant
+ * l'INSERT par `createTicket()`, et avant l'UPDATE par la route `PUT /:id` (qui
+ * transmet ensuite l'id résolu à `updateTicket()` par un argument séparé — jamais
+ * lu depuis le corps de la requête, décision du 2026-09-30, précision P15 du socle).
+ *
+ * Retrouvé = même `client_id` ET même `imei` (ou `numero_serie`) — jamais un
+ * appareil d'un autre client (un même IMEI chez un autre client crée une
+ * nouvelle fiche pour CE client — l'appareil a pu être revendu). Si plusieurs
+ * fiches existent pour le même client et le même IMEI, la plus ancienne
+ * (`ORDER BY id LIMIT 1`) est reprise.
+ *
+ * ⊥ met à jour `appareils.imei`/`numero_serie` d'une fiche déjà existante : la
+ * fiche est partagée par tous les tickets du client, un ticket clos garde l'IMEI
+ * qu'il avait (P15, décision 1).
+ *
+ * Aucun appareil orphelin sur échec de validation (tout ce qui précède la
+ * résolution ne fait que lire). Un échec d'écriture APRÈS la création d'un
+ * nouvel appareil (ex: l'INSERT du ticket qui suit) laisse un appareil orphelin —
+ * accepté par décision de l'exploitant : il est retrouvé et réutilisé à la saisie
+ * suivante pour le même client et le même IMEI.
+ *
+ * @returns `appareil_id` résolu, ou `null` si aucun appareil n'est désigné (champ vide).
+ * @throws  si le technicien, le client, l'appareil explicite ou la clé de Luhn est invalide.
+ */
+export async function resoudreAppareilTicket(
+  db: D1Database,
+  input: ResolutionAppareilInput
+): Promise<number | null> {
+  await validateTechnicienBoutique(db, input.technicienId, input.boutiqueId)
+
+  const client = await db
+    .prepare('SELECT id FROM clients WHERE id = ? AND boutique_id = ?')
+    .bind(input.clientId, input.boutiqueId)
+    .first<{ id: number }>()
+  if (!client) throw new Error('Client introuvable dans cette boutique.')
+
+  // ── appareil_id explicite : vérifié, jamais accepté tel quel ────────────────
+  // Jointure clients (et non la seule égalité ap.client_id = ?) : même garde que la
+  // recherche ci-dessous — ticket 08a, précision n°2 et § Notes (« toute requête sur
+  // appareils joint le client »). Le contrôle séparé de `client` ci-dessus confirme déjà
+  // que `clientId` est de la boutique ; cette jointure porte la même garantie au niveau
+  // du SQL de `appareils`, qui n'a pas de `boutique_id` propre.
+  if (input.appareilId != null) {
+    const appareil = await db
+      .prepare(`
+        SELECT ap.id FROM appareils ap
+        JOIN   clients c ON c.id = ap.client_id AND c.boutique_id = ?
+        WHERE  ap.id = ? AND ap.client_id = ?
+      `)
+      .bind(input.boutiqueId, input.appareilId, input.clientId)
+      .first<{ id: number }>()
+    if (!appareil) throw new Error('Appareil introuvable pour ce client.')
+    return appareil.id
+  }
+
+  const saisie = (input.imeiOuSerie ?? '').trim()
+  if (!saisie) return null
+
+  // Règle (décision du 2026-09-30) : exactement 15 chiffres → IMEI, clé de Luhn
+  // obligatoire ; toute autre saisie non vide → numéro de série.
+  const estImei = /^\d{15}$/.test(saisie)
+  if (estImei && !luhnValide(saisie)) {
+    throw new Error('IMEI invalide (clé de contrôle).')
+  }
+  const colonne = estImei ? 'imei' : 'numero_serie'
+
+  const existant = await db
+    .prepare(`
+      SELECT ap.id FROM appareils ap
+      JOIN   clients c ON c.id = ap.client_id AND c.boutique_id = ?
+      WHERE  ap.client_id = ? AND ap.${colonne} = ?
+      ORDER  BY ap.id LIMIT 1
+    `)
+    .bind(input.boutiqueId, input.clientId, saisie)
+    .first<{ id: number }>()
+  if (existant) return existant.id
+
+  const cree = await db.prepare(`
+    INSERT INTO appareils (client_id, marque, modele, ${colonne})
+    VALUES (?, ?, ?, ?)
+    RETURNING id
+  `).bind(input.clientId, input.marque, input.modele, saisie).first<{ id: number }>()
+
+  return cree!.id
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,6 +215,8 @@ export interface ListTicketsOpts {
 export interface CreateTicketData {
   client_id:            number
   appareil_id?:         number | null
+  /** Champ « IMEI / n° de série » du formulaire — résolu en appareil_id (ticket 08a). */
+  imei?:                string | null
   appareil_marque:      string
   appareil_modele:      string
   description_panne:    string
@@ -172,6 +280,21 @@ export const STATUT_LABELS: Record<StatutTicket, { label: string; emoji: string;
 }
 
 const PRIORITES_VALIDES: PrioriteTicket[] = ['basse', 'normale', 'haute', 'urgente']
+
+/**
+ * Valide une priorité de ticket — extraite de `updateTicket()` (ticket 08a, correctif de
+ * revue 2026-10-01) pour être appelée par la route `PUT /:id` AVANT `resoudreAppareilTicket()` :
+ * P15 n°3 exige que TOUTE validation qui ferait échouer la mise à jour du ticket précède la
+ * première écriture sur `appareils`, pas seulement le technicien. Une seule liste
+ * `PRIORITES_VALIDES`, un seul message — `updateTicket()` appelle cette même fonction, jamais
+ * une copie de la liste.
+ * @throws Error si `priorite` est fournie et n'est pas une valeur reconnue.
+ */
+export function validerPriorite(priorite: PrioriteTicket | null | undefined): void {
+  if (priorite && !PRIORITES_VALIDES.includes(priorite)) {
+    throw new Error(`Priorité invalide. Valeurs acceptées : ${PRIORITES_VALIDES.join(', ')}.`)
+  }
+}
 
 /** Ordre des colonnes Kanban */
 const COLONNES_KANBAN: StatutTicket[] = [
@@ -485,7 +608,19 @@ export async function createTicket(
   userId: number,
   data: CreateTicketData
 ): Promise<{ id: number; numero: string; tracking_token: string }> {
-  await validateTechnicienBoutique(db, data.technicien_id, boutiqueId)
+  // Toutes les validations (technicien, client de la boutique, appareil_id
+  // explicite, Luhn) précèdent ici tout écriture — y compris celle, éventuelle,
+  // d'un nouvel appareil — et avant `nextNumero()` : un numéro de ticket ne doit
+  // pas être consommé sur une saisie invalide.
+  const appareilId = await resoudreAppareilTicket(db, {
+    boutiqueId,
+    clientId:     data.client_id,
+    technicienId: data.technicien_id,
+    appareilId:   data.appareil_id,
+    imeiOuSerie:  data.imei,
+    marque:       data.appareil_marque,
+    modele:       data.appareil_modele,
+  })
 
   const numero        = await nextNumero(db, boutiqueId, 'ticket')
   const trackingToken = genererTrackingToken()
@@ -501,7 +636,7 @@ export async function createTicket(
     boutiqueId,
     numero,
     data.client_id,
-    data.appareil_id     ?? null,
+    appareilId,
     data.appareil_marque,
     data.appareil_modele,
     data.description_panne,
@@ -543,21 +678,25 @@ export async function createTicket(
  * prise en charge (état, codes de sécurité, signature), éditables après création
  * (ex : signature recueillie après coup, code communiqué plus tard par le client).
  *
- * @param db      — Instance D1Database
- * @param id      — ID du ticket
- * @param userId  — ID utilisateur (pour audit)
- * @param data    — Champs à modifier (voir UpdateTicketData)
- * @throws        — Error si priorité invalide
+ * @param db         — Instance D1Database
+ * @param id         — ID du ticket
+ * @param userId     — ID utilisateur (pour audit)
+ * @param data       — Champs à modifier (voir UpdateTicketData) — NE PORTE PAS `appareil_id` :
+ *                     un `appareil_id` explicite dans le corps d'un PUT est toujours ignoré
+ *                     (décision du 2026-09-30, P15, ticket 08a).
+ * @param appareilId — `appareil_id` déjà RÉSOLU par `resoudreAppareilTicket()` (route
+ *                     PUT /:id) — `undefined`/absent = champ inchangé (trois états : absent ou
+ *                     `""` → inchangé, valeur → rattachement). ⊥ y passer une saisie brute.
+ * @throws           — Error si priorité invalide
  */
 export async function updateTicket(
   db: D1Database,
   id: number,
   userId: number,
-  data: UpdateTicketData
+  data: UpdateTicketData,
+  appareilId?: number | null
 ): Promise<void> {
-  if (data.priorite && !PRIORITES_VALIDES.includes(data.priorite)) {
-    throw new Error(`Priorité invalide. Valeurs acceptées : ${PRIORITES_VALIDES.join(', ')}.`)
-  }
+  validerPriorite(data.priorite)
 
   const existing = await db
     .prepare('SELECT id, boutique_id FROM tickets WHERE id = ? AND actif = 1')
@@ -577,6 +716,7 @@ export async function updateTicket(
       date_promesse       = COALESCE(?, date_promesse),
       notes_internes      = COALESCE(?, notes_internes),
       priorite            = COALESCE(?, priorite),
+      appareil_id         = COALESCE(?, appareil_id),
       etat_appareil       = COALESCE(?, etat_appareil),
       code_deverrouillage = COALESCE(?, code_deverrouillage),
       code_sim            = COALESCE(?, code_sim),
@@ -593,6 +733,7 @@ export async function updateTicket(
     data.date_promesse       ?? null,
     data.notes_internes      ?? null,
     data.priorite            ?? null,
+    appareilId               ?? null,
     data.etat_appareil       ?? null,
     data.code_deverrouillage ?? null,
     data.code_sim            ?? null,

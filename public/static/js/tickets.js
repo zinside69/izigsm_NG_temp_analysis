@@ -235,12 +235,18 @@ async function editTicket(id) {
   clearEtatSecuriteFields();
   openModal('modal-ticket');
 
-  // État/sécurité/signature absents du cache liste (SELECT allégé côté API) —
-  // récupérés depuis la fiche détail au moment de l'édition.
+  // État/sécurité/signature/IMEI absents du cache liste (SELECT allégé côté API) —
+  // récupérés depuis la fiche détail au moment de l'édition. L'IMEI vit sur la fiche
+  // appareil (jointure appareils côté getTicketById), jamais sur `tickets` (ticket 08a) :
+  // appareil_imei / appareil_numero_serie, jamais ticket.imei (qui n'existe pas en base).
   if (ticketsUseApi) {
     try {
       const result = await apiGet('/api/tickets/' + id);
-      if (result.ok) populateEtatSecurite(result.data?.data || result.data);
+      if (result.ok) {
+        const detail = result.data?.data || result.data;
+        populateEtatSecurite(detail);
+        document.getElementById('t-imei').value = detail.appareil_imei || detail.appareil_numero_serie || '';
+      }
     } catch {}
   }
 }
