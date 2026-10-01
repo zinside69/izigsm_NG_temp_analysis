@@ -1,4 +1,25 @@
-# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 135 — trois correctifs P3)
+# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 136 — suppressions du référentiel annoncées)
+
+## Checkpoint 136 — Suppressions du référentiel : refus annoncé (2026-10-01, soir)
+
+**Production inchangée (`izigsm-v3.11`). Migrations en attente inchangées. `CACHE_VERSION` du dépôt :
+`izigsm-v3.18`.** Vitest 1 341 + 2 échecs permanents, tsc 32. `8b194fb`, non déployé.
+
+- `deleteMarque()`, `deleteModele()`, `removeLiaison()` (`services.js`) lisent la réponse ; refus →
+  `alert()` du message serveur (convention « déballage » du chemin Marques/Modèles/Liaisons, ⊥
+  uniformiser). **Plus aucun `await apiX(…)` non lu dans `public/`.**
+- **Cas réel trouvé** : un manager voit 🗑 sur les marques / modèles du référentiel global, routes
+  `requireRole('admin')` → 403 muet jusque-là. Le bouton reste proposé au manager (choix d'écran
+  **non décidé**).
+- Test `tests/e2e/services-suppressions-refus.spec.ts`, vu rouge : marque et modèle sur le **vrai**
+  403 (aucune donnée globale touchée), liaison sur un refus simulé ; preuve que la confirmation a
+  été demandée (anti-vacuité). Pièges : base locale sans modèles (liste simulée par prédicat d'URL,
+  `apiGet` ajoute `boutique_id`) ; actions d'une marque visibles au survol seulement.
+- **Ouvert, non décidé** : garde-fou statique contre un appel API non lu ; garde-fou des formulaires
+  à email ; 🗑 du référentiel proposé au manager.
+- Serveur local arrêté, port 3000 libre.
+
+**Prochaine session** : inchangée (report des PR du socle ; 15 quand 12-14 sont sur `main`).
 
 ## Checkpoint 135 — Trois correctifs P3 (2026-10-01, fin d'après-midi)
 

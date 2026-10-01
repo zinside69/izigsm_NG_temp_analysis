@@ -1099,6 +1099,10 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-01 (checkpoint 136) : production inchangée (`izigsm-v3.11`), migrations en attente
+inchangées.** Sur `main`, en plus du 135 : suppressions du référentiel annoncées (`8b194fb`, sans
+migration), `CACHE_VERSION` `izigsm-v3.18`.
+
 **État au 2026-10-01 (checkpoint 135) : production inchangée (`izigsm-v3.11`), migrations en attente
 inchangées.** Sur `main`, en plus du 134 : trois correctifs P3 sans migration (`765bc89`),
 `CACHE_VERSION` `izigsm-v3.17`.

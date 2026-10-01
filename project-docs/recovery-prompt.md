@@ -1,4 +1,13 @@
-# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 135 — trois correctifs P3)
+# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 136 — suppressions du référentiel)
+
+## Ce qui a changé au checkpoint 136
+
+Suppressions du référentiel (`services.js` : marque, modèle, liaison) : un refus du serveur est
+annoncé (`8b194fb`, non déployé, `CACHE_VERSION` **v3.18**). Plus aucun appel API non lu dans
+`public/`. Cas réel : 🗑 proposé à un manager sur des routes réservées à l'admin. Choix ouverts :
+garde-fou des appels non lus, garde-fou des formulaires à email, 🗑 du référentiel pour un manager.
+
+**Première action** : inchangée.
 
 ## Ce qui a changé au checkpoint 135
 
