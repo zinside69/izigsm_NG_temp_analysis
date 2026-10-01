@@ -1,5 +1,19 @@
 # iziGSM — Décisions
 
+## 2026-10-01 — Un compte admin n'est jamais rattaché à une boutique
+
+**Décision de l'exploitant** : `admin` = admin plateforme, toujours `boutique_id` NULL. Un jeton
+`admin` qui porte une boutique est refusé par `authMiddleware` (403 `compte_incoherent`) ;
+`getBoutiqueId()` et `assertBoutiqueOwnership()` passent par `isAdminPlateforme()` en défense en
+profondeur. Ticket `.scratch/admin-sans-boutique/issues/001-…` (socle, sans migration).
+
+**Pourquoi** : 23 sites et 15 routes `requireRole('admin')` testent le rôle seul ; un admin avec
+boutique les traverserait toutes, hors journal de plateforme. Aucun n'existe (mesuré en production
+le jour même : 0), aucun chemin n'en crée — un seul point d'entrée fermé suffit, sans toucher aux
+38 sites ni entrer en conflit avec 08b, 08c, 09, 11. **Option écartée** : un vrai rôle « admin de
+boutique » cantonné à sa boutique. Les mentions « admin de boutique » de `CLAUDE.md` deviennent
+caduques (à reprendre à la relecture du ticket).
+
 ## 2026-10-01 — Lot 2 : tickets 15 et 16 cadrés, migration `0059` réservée
 
 | Ticket | Caisse / NF525 | Qui code | Migration |

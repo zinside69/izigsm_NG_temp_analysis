@@ -160,7 +160,14 @@ prix, stock d'une autre boutique). **Décision de l'exploitant (2026-09-17) : co
 commun pour toutes les routes, dans un chantier à part** — ni exception locale sur la route de
 recherche, ni statu quo.
 
-- [ ] Cadrer : le paramètre ne vaut que pour l'admin plateforme (`isAdminPlateforme` côté serveur :
+**Cadré le 2026-10-01 → ticket `.scratch/admin-sans-boutique/issues/001-jeton-admin-avec-boutique-refuse.md`
+(socle, sans migration), ramené en P3 : faille LATENTE** — 0 admin avec boutique en production et en
+local, aucun chemin ne peut en créer. Mais elle est plus large que le résolveur : 23 sites et 15
+routes `requireRole('admin')` testent le rôle seul. Décision de l'exploitant : un admin avec
+boutique ne doit pas exister → refusé à l'entrée par `authMiddleware` (403 `compte_incoherent`), plus
+`getBoutiqueId()` / `assertBoutiqueOwnership()` via `isAdminPlateforme()`.
+
+- [x] Cadrer (2026-10-01, ticket 001 ci-dessus) : le paramètre ne vaut que pour l'admin plateforme (`isAdminPlateforme` côté serveur :
       `role === 'admin'` **et** `boutique_id` NULL) ; un admin de boutique retombe sur sa boutique
 - [ ] Recenser les appelants de `getBoutiqueId()` et les routes qui résolvent la boutique depuis le
       corps (liste dans le JSDoc de `_avecBoutique()`, `app.js`) — même faille possible
