@@ -246,6 +246,8 @@ const SQL_IMPORT_SELECT_SKU = n(
   `SELECT id, stock_actuel FROM produits WHERE boutique_id = ? AND sku = ? AND actif = 1 LIMIT 1`
 )
 
+// AVANT (2026-10-01, ticket 05 `vente-lit-catalogue` — `code_barre` complété dans ce même UPDATE,
+// jamais écrasé, avant `updated_at`) : même requête sans la ligne `code_barre = CASE …`
 const SQL_IMPORT_UPDATE_PRODUIT = n(`
   UPDATE produits SET
     nom           = ?,
@@ -255,17 +257,21 @@ const SQL_IMPORT_UPDATE_PRODUIT = n(`
     tva_taux      = ?,
     marque        = COALESCE(?, marque),
     fournisseur   = COALESCE(?, fournisseur),
+    code_barre    = CASE WHEN code_barre IS NULL OR TRIM(code_barre) = '' THEN ? ELSE code_barre END,
     updated_at    = CURRENT_TIMESTAMP
   WHERE id = ?
 `)
 
 // Params : boutique(0), sku(1), nom(2), marque(3), famille(4), prix_achat_ht(5), prix_vente_ht(6),
-// tva(7), stock_actuel(8), stock_minimum(9), fournisseur(10), prix_achat_cump(11)
+// tva(7), stock_actuel(8), stock_minimum(9), fournisseur(10), prix_achat_cump(11), code_barre(12)
+// AVANT (2026-10-01, ticket 05 — `code_barre` ajouté EN FIN d'INSERT, défaut ouvert de bugs.md du
+// 2026-09-17 corrigé : la colonne était documentée mais jamais lue) : même requête sans `,
+// code_barre)` ni son 13ᵉ `?`
 const SQL_IMPORT_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-     tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump, code_barre)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -1116,9 +1122,10 @@ describe('stockService', () => {
       const calls = db.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_IMPORT_UPDATE_PRODUIT)
       expect(updateCall).toBeDefined()
-      // params : [nom, famille, paHt, pvHt, tva, marque, fourn, id]
+      // params : [nom, famille, paHt, pvHt, tva, marque, fourn, code_barre, id]
+      // AVANT (2026-10-01, ticket 05 — `code_barre` ajouté avant `id`) : `params[7]` valait 5 (id)
       expect(updateCall!.params[0]).toBe('Écran iPhone 14')
-      expect(updateCall!.params[7]).toBe(5)
+      expect(updateCall!.params[8]).toBe(5)
     })
 
     it('crée un mouvement inventaire si le stock CSV diffère du stock existant', async () => {

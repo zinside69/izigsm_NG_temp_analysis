@@ -22,10 +22,12 @@ import {
   createCategorie,
   getKpisStock,
   importCatalogueCsv,
+  poserCodeMaisonProduit,
   ERREUR_PRIX_ACHAT_NEGATIF,
   ERREUR_QUANTITE_DEPART_INVALIDE,
   ERREUR_IMEI_INVALIDE,
   ErreurCodeEnDoublon,
+  ErreurDejaCode,
   type MouvementData,
   type FamilleProduit,
 } from '../services/stockService'
@@ -133,7 +135,11 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
   // jamais un 500 nu ; toute autre erreur remonte telle quelle
   try {
     const created = await createProduit(db, boutiqueId, user.sub, body)
-    return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
+    return c.json({
+      success: true, id: created.id, message: 'Produit créé.',
+      // Clé au même niveau que `id`, absente quand la pose a réussi ou n'était pas due (ticket 05).
+      ...(created.avertissement_code_maison ? { avertissement_code_maison: created.avertissement_code_maison } : {}),
+    }, 201)
   } catch (err: any) {
     // AVANT (2026-09-30, ticket 07 — IMEI invalide refusé en 422 lui aussi) : if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
     if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE, ERREUR_IMEI_INVALIDE].includes(err.message))
@@ -262,6 +268,33 @@ stocks.post('/produits/:id/mouvement', async (c) => {
   } catch (err: any) {
     const status = err.message.includes('introuvable') ? 404 : 422
     return c.json({ success: false, error: err.message }, status)
+  }
+})
+
+// ── POST /api/produits/:id/code-maison ────────────────────────────────────────
+/**
+ * Génère un code maison (ticket 05 `vente-lit-catalogue`) : refuse si le produit a déjà un
+ * code-barres ou un SKU EAN-13 valide (409), ou si un autre produit porte déjà exactement ce code
+ * maison (409, collision improbable). Réservé admin/manager.
+ * @param id — ID du produit
+ * @returns { success, code_barre, message }
+ */
+stocks.post('/produits/:id/code-maison', requireRole('admin', 'manager'), async (c) => {
+  const { user, dbPort } = ctx(c)
+  const id = parseInt(c.req.param('id'), 10)
+
+  // Isolation multi-tenant : ne jamais poser de code sur le produit d'une autre boutique
+  const produit = await getProduitById(dbPort, id)
+  const deny = assertBoutiqueOwnership(user, produit, 'Produit')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+  try {
+    const { code } = await poserCodeMaisonProduit(dbPort, produit.boutique_id, id)
+    return c.json({ success: true, code_barre: code, message: 'Code maison généré.' })
+  } catch (err: any) {
+    if (err instanceof ErreurDejaCode) return c.json({ success: false, error: err.message }, 409)
+    if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
+    throw err
   }
 })
 

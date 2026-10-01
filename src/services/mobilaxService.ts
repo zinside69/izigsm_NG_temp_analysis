@@ -395,7 +395,9 @@ export async function importerProduitMobilax(
       fournisseur:           cle.fiche.nom,
       reference_fournisseur: fiche.reference,
       code_barre:            fiche.ean13,
-    }, { fournisseur_id: cle.fiche.id }))
+      // `sansCodeMaison` (ticket 05 `vente-lit-catalogue`, P15 du 2026-10-01) : l'import
+      // fournisseur ne pose jamais de code maison, même quand l'EAN de la pièce est vide.
+    }, { fournisseur_id: cle.fiche.id, sansCodeMaison: true }))
     // Identifiant Mobilax posé pour que l'import suivant reconnaisse la pièce sans appel (ticket 18)
     await rattacherProduitMobilax(deps.db, boutiqueId, id, {
       fournisseur_id: cle.fiche.id, fournisseur_nom: cle.fiche.nom, reference: fiche.reference, mobilax_id: mobilaxId,

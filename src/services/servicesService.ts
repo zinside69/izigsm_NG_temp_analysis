@@ -30,6 +30,7 @@
 
 import { parsePagination, auditLog, calculTva } from '../lib/db'
 import type { Database } from '../ports/database'
+import { codeMaison } from '../lib/codeMaison'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export interface Service {
   duree_minutes:  number | null
   reference:      string | null
   garantie_jours: number
+  /** Code-barres (EAN fournisseur saisi, ou code maison — ticket 05 `vente-lit-catalogue`, migration 0052). */
+  code_barre:     string | null
   actif:          number
 }
 
@@ -265,27 +268,116 @@ export async function getService(
   `, [id])
 }
 
+// ─── Code-barres / code maison (ticket 05 `vente-lit-catalogue`, migration 0052) ───────────────
+
+/** Refus d'une écriture qui donnerait à un service le code-barres d'un autre (index de 0052). */
+export class ErreurServiceCodeEnDoublon extends Error {
+  constructor(readonly service: { id: number; nom: string }) {
+    super(`Ce code-barres est déjà utilisé par « ${service.nom} » (service n° ${service.id}).`)
+    this.name = 'ErreurServiceCodeEnDoublon'
+  }
+}
+
+/** Refus de poser un code maison sur un service qui a déjà un code-barres. */
+export class ErreurServiceDejaCode extends Error {
+  constructor() {
+    super('Ce service a déjà un code-barres.')
+    this.name = 'ErreurServiceDejaCode'
+  }
+}
+
+/**
+ * Convertit une violation d'unicité du code-barres de service (index `idx_services_code_barre_unique`,
+ * migration 0052) en `ErreurServiceCodeEnDoublon`, en nommant le service qui le porte déjà. Toute
+ * autre erreur — et un porteur introuvable — est laissée à l'appelant, même patron que
+ * `leverSiCodeEnDoublon()` (`stockService.ts`) pour les produits.
+ */
+async function leverSiServiceCodeEnDoublon(
+  db: D1Database, err: unknown, codeBarre: string | null | undefined,
+  cible: { boutiqueId: number } | { serviceId: number },
+): Promise<void> {
+  if (!codeBarre) return
+  if (!/UNIQUE constraint failed: services\.boutique_id, services\.code_barre\b/.test(String((err as Error)?.message ?? ''))) return
+
+  const porteur = 'boutiqueId' in cible
+    ? await db.prepare('SELECT id, nom FROM services WHERE boutique_id = ? AND code_barre = ? AND actif = 1 LIMIT 1')
+        .bind(cible.boutiqueId, codeBarre).first<{ id: number; nom: string }>()
+    : await db.prepare(
+        `SELECT id, nom FROM services
+         WHERE boutique_id = (SELECT boutique_id FROM services WHERE id = ?)
+           AND code_barre = ? AND actif = 1 AND id <> ? LIMIT 1`,
+      ).bind(cible.serviceId, codeBarre, cible.serviceId).first<{ id: number; nom: string }>()
+
+  if (porteur) throw new ErreurServiceCodeEnDoublon(porteur)
+}
+
+/**
+ * Pose un code maison à la demande (route `POST /services/:id/code-maison`) : refuse si le service
+ * a déjà un code-barres ; sinon pose `codeMaison(2, id)` par une écriture conditionnelle (même
+ * patron que `poserCodeMaisonProduit()`, `stockService.ts`) — jamais de code maison automatique à
+ * la création d'un service (spec : « peuvent recevoir », génération à la demande seulement).
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique du service (celle de la ressource — l'appelant a déjà vérifié
+ *                    l'appartenance via `assertBoutiqueOwnership()`)
+ * @param serviceId   Service cible
+ * @returns           Le code posé
+ * @throws            ErreurServiceDejaCode si le service a déjà un code-barres ;
+ *                     ErreurServiceCodeEnDoublon si un autre service actif porte déjà ce code ;
+ *                     Error('Service introuvable.') si absent de cette boutique
+ */
+export async function poserCodeMaisonService(
+  db: Database, boutiqueId: number, serviceId: number
+): Promise<{ code: string }> {
+  const service = await db.get<{ code_barre: string | null }>(
+    'SELECT code_barre FROM services WHERE id = ? AND boutique_id = ? AND actif = 1',
+    [serviceId, boutiqueId]
+  )
+  if (!service) throw new Error('Service introuvable.')
+  if (service.code_barre && service.code_barre.trim()) throw new ErreurServiceDejaCode()
+
+  const code = codeMaison(2, serviceId)
+  try {
+    await db.run(
+      `UPDATE services SET code_barre = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`,
+      [code, serviceId, boutiqueId]
+    )
+  } catch (err) {
+    const porteur = await db.get<{ id: number; nom: string }>(
+      'SELECT id, nom FROM services WHERE boutique_id = ? AND code_barre = ? AND actif = 1 AND id <> ? LIMIT 1',
+      [boutiqueId, code, serviceId]
+    )
+    if (porteur) throw new ErreurServiceCodeEnDoublon(porteur)
+    throw err
+  }
+  return { code }
+}
+
 /**
  * Crée un service dans le catalogue de prestations.
  *
  * @param db      Binding D1 Cloudflare
- * @param data    `{ boutique_id, nom, prix_ht, categorie_id?, tva_taux?, duree_minutes?, reference?, garantie_jours? }`
- *                — `tva_taux` par défaut 20%, `garantie_jours` par défaut 0
+ * @param data    `{ boutique_id, nom, prix_ht, categorie_id?, tva_taux?, duree_minutes?, reference?, garantie_jours?, code_barre? }`
+ *                — `tva_taux` par défaut 20%, `garantie_jours` par défaut 0 ; pas de code maison
+ *                automatique (spec : génération à la demande seulement, ticket 05)
  * @param userId  Identifiant de l'utilisateur (pour audit log)
  * @returns       Identifiant du service créé
+ * @throws        ErreurServiceCodeEnDoublon si `code_barre` est déjà porté par un autre service
  */
 export async function createService(
   db: D1Database,
   data: {
     boutique_id: number; categorie_id?: number | null; nom: string; description?: string
     prix_ht: number; tva_taux?: number; duree_minutes?: number; reference?: string; garantie_jours?: number
+    code_barre?: string | null
   },
   userId: number
 ): Promise<number> {
   const result = await db.prepare(`
     INSERT INTO services
-      (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours, code_barre)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     data.boutique_id,
@@ -296,8 +388,12 @@ export async function createService(
     data.tva_taux        ?? 20,
     data.duree_minutes   ?? null,
     data.reference       ?? null,
-    data.garantie_jours  ?? 0
-  ).first<{ id: number }>()
+    data.garantie_jours  ?? 0,
+    data.code_barre      ?? null,
+  ).first<{ id: number }>().catch(async (err) => {
+    await leverSiServiceCodeEnDoublon(db, err, data.code_barre, { boutiqueId: data.boutique_id })
+    throw err
+  })
 
   await auditLog(db, { boutique_id: data.boutique_id, user_id: userId, action: 'CREATE_SERVICE', entite_type: 'service', entite_id: result?.id })
   return result?.id ?? 0
@@ -308,9 +404,10 @@ export async function createService(
  *
  * @param db      Binding D1 Cloudflare
  * @param id      Identifiant du service
- * @param data    Champs à modifier (tous optionnels)
+ * @param data    Champs à modifier (tous optionnels), `code_barre` compris (ticket 05)
  * @param userId  Identifiant de l'utilisateur (pour audit log)
  * @returns       void
+ * @throws        ErreurServiceCodeEnDoublon si `code_barre` est déjà porté par un autre service
  */
 export async function updateService(
   db: D1Database,
@@ -318,6 +415,7 @@ export async function updateService(
   data: {
     categorie_id?: number | null; nom?: string; description?: string
     prix_ht?: number; tva_taux?: number; duree_minutes?: number; reference?: string; garantie_jours?: number
+    code_barre?: string | null
   },
   userId: number
 ): Promise<void> {
@@ -331,6 +429,7 @@ export async function updateService(
       duree_minutes   = COALESCE(?, duree_minutes),
       reference       = COALESCE(?, reference),
       garantie_jours  = COALESCE(?, garantie_jours),
+      code_barre      = COALESCE(?, code_barre),
       updated_at      = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
@@ -342,8 +441,12 @@ export async function updateService(
     data.duree_minutes  ?? null,
     data.reference      ?? null,
     data.garantie_jours ?? null,
+    data.code_barre     ?? null,
     id
-  ).run()
+  ).run().catch(async (err) => {
+    await leverSiServiceCodeEnDoublon(db, err, data.code_barre, { serviceId: id })
+    throw err
+  })
   await auditLog(db, { user_id: userId, action: 'UPDATE_SERVICE', entite_type: 'service', entite_id: id })
 }
 

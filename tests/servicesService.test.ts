@@ -206,7 +206,9 @@ describe('createService()', () => {
 
   beforeEach(() => {
     db = createMockD1()
-    db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
+    // AVANT (2026-10-01, ticket 05 `vente-lit-catalogue` — colonne `code_barre` ajoutée EN FIN
+    // d'INSERT) : même requête sans `, code_barre` ni son 10ᵉ `?`
+    db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours, code_barre) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
     db.__setResponse('INSERT INTO audit_logs', null)
   })
 
@@ -221,6 +223,8 @@ describe('updateService()', () => {
 
   beforeEach(() => {
     db = createMockD1()
+    // AVANT (2026-10-01, ticket 05 `vente-lit-catalogue` — `code_barre` ajouté avant `updated_at`,
+    // `WHERE id = ?` reste le dernier paramètre) : même requête sans la ligne `code_barre = …`
     db.__setResponse(
       `UPDATE services SET
       categorie_id    = COALESCE(?, categorie_id),
@@ -231,6 +235,7 @@ describe('updateService()', () => {
       duree_minutes   = COALESCE(?, duree_minutes),
       reference       = COALESCE(?, reference),
       garantie_jours  = COALESCE(?, garantie_jours),
+      code_barre      = COALESCE(?, code_barre),
       updated_at      = CURRENT_TIMESTAMP
     WHERE id = ?`, null)
     db.__setResponse('INSERT INTO audit_logs', null)
