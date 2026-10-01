@@ -46,7 +46,16 @@ const SCHEMA = `
     ON services(boutique_id, code_barre)
     WHERE actif = 1 AND code_barre IS NOT NULL AND TRIM(code_barre) <> '';
   CREATE TABLE audit_logs (
-    id BLOB
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    boutique_id    INTEGER,
+    user_id        INTEGER NOT NULL,
+    action         TEXT    NOT NULL,
+    entite_type    TEXT,
+    entite_id      INTEGER,
+    donnees_avant  TEXT,
+    donnees_apres  TEXT,
+    ip_address     TEXT,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `
 
