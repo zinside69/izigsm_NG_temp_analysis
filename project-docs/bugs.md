@@ -277,6 +277,13 @@ et il n'est attrapé par aucun garde-fou : celui de l'enveloppe ne voit que les 
 
 **Trouvé en corrigeant les cinq autres appels, laissé hors du périmètre de ce ticket** (`todo.md`).
 
+**→ CORRIGÉ le 2026-10-01** (non déployé, `CACHE_VERSION` v3.17) : `saveNotif()` lit l'enveloppe ;
+`!res.ok` → message du serveur en rouge et **`loadStats()`**, qui remet les bascules dans l'état
+enregistré ; rejet de `fetch` → même rétablissement. Test de rendu `notifications-rendu.spec.ts`
+§ « préférence refusée par le serveur », vu rouge (« Préférences mises à jour » affiché sur un 500).
+Même écriture ailleurs (recherche du jour) : 3 suppressions de `services.js` (marque, modèle,
+liaison) — moins graves, aucun succès annoncé et la liste est relue ; notées au `todo.md`.
+
 ## 🟡 Recherche Mobilax par article : la pagination ne se masque jamais (trouvé le 2026-09-15, vu à l'écran, CORRIGÉ et DÉPLOYÉ le même jour — izigsm-v3.06)
 
 **Symptôme attendu** : dans la fenêtre Mobilax de `/stock`, la barre « ← Précédente · page ·
@@ -328,6 +335,9 @@ page. `chercherGeneration()` et `chercherMobilax()` (`stock.js`) n'avaient qu'un
 `mobilax-generation.spec.ts` § « réseau coupé », vu rouge (`page.route(…).abort()`).
 **Reste ouvert** : `chercherMobilax()` (mode article), `todo.md` 🟡 P3. Règle générale dans
 `CLAUDE.md` § Enveloppe des réponses API.
+**→ Mode article CORRIGÉ le 2026-10-01** (non déployé) : même `catch` et même message dans
+`chercherMobilax()`. Test `mobilax-recherche-coupure.spec.ts`, vu rouge (« Recherche en cours chez
+Mobilax… » figé). Les deux modes sont couverts.
 
 ## 🟠 Connexion bloquée juste après un déploiement : « landingPageFor is not defined », identifiants dans l'URL (vécu en production le 2026-09-12, NON corrigé, cause NON établie)
 

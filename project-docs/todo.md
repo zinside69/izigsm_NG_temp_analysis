@@ -253,10 +253,14 @@ Détail : `bugs.md` § « Préférences mises à jour ». Symptôme **inverse** 
 restent à l'écran dans un état que la base n'a pas. Trouvé en corrigeant les cinq autres appels,
 laissé hors périmètre de ce ticket-là.
 
-- [ ] Lire l'enveloppe (`res.ok` / `res.error`) et n'annoncer le succès qu'ensuite — test de rendu
-      vu rouge sur une réponse en erreur (`page.route()` qui renvoie 500)
+- [x] Lire l'enveloppe (`res.ok` / `res.error`) et n'annoncer le succès qu'ensuite — test de rendu
+      vu rouge sur une réponse en erreur (`page.route()` qui renvoie 500) — **fait le 2026-10-01**,
+      bascules remises dans l'état enregistré (`loadStats()`), non déployé
 - [ ] Chercher la même écriture ailleurs : un `await apiX(…)` dont le résultat n'est jamais lu n'est
       attrapé par **aucun** garde-fou actuel — décider s'il en faut un
+      → recherche faite le 2026-10-01 : il reste **3** appels, tous dans `services.js`
+      (`deleteMarque()`, `deleteModele()`, `removeLiaison()`). Moins graves : aucun succès annoncé,
+      la liste est relue, mais un refus reste muet. Correctif et garde-fou : **non décidés**.
 
 ## 🟡 P3 — Import par génération : aucun bouton pour l'interrompre (relevé en revue le 2026-09-14)
 
@@ -290,8 +294,9 @@ Mobilax, sans cet effet).
 Même défaut que celui corrigé sur `chercherGeneration()` (`bugs.md`) : `chercherMobilax()`
 (`stock.js`) n'a qu'un `finally`, `api()` laisse passer le rejet de `fetch`.
 
-- [ ] Test E2E vu rouge (`page.route('**/api/mobilax/produits?*', r => r.abort())`), puis `catch`
-      qui remplace le message — même texte que le mode génération
+- [x] Test E2E vu rouge (`page.route('**/api/mobilax/produits?*', r => r.abort())`), puis `catch`
+      qui remplace le message — même texte que le mode génération — **fait le 2026-10-01**
+      (`mobilax-recherche-coupure.spec.ts`), non déployé
 
 ## 🟡 P3 — Code de test Mobilax recopié (relevé en revue le 2026-09-14)
 
@@ -341,8 +346,11 @@ de fin de page. Un envoi natif (NoScript, script pas encore exécuté) ferait `G
 /reset-password?email=…` — une donnée personnelle dans l'historique et les journaux. Aucune
 occurrence constatée.
 
-- [ ] `method="post"` + `onsubmit="return false"` sur `#form-request` (et étendre éventuellement le
-      garde-fou statique aux formulaires portant un email — à décider)
+- [x] `method="post"` + `onsubmit="return false"` sur `#form-request` (et étendre éventuellement le
+      garde-fou statique aux formulaires portant un email — à décider) — **balise corrigée le
+      2026-10-01**, non déployé. La fuite était **réelle** (mesurée sans JavaScript :
+      `GET /reset-password?email=…`), E2E `formulaires-mot-de-passe.spec.ts` § « demande de lien »,
+      vu rouge. Extension du garde-fou statique aux formulaires à email : **non décidée**.
 
 ## 🟠 P2 — Import en masse depuis la recherche fournisseur (demandé le 2026-09-12, **prochaine session**)
 

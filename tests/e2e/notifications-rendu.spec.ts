@@ -205,4 +205,24 @@ test.describe('Page Notifications — l\'écran rend ce que l\'API renvoie', () 
     await expect(resultat).toContainText('Mode simulé')
     await expect(resultat).toHaveClass(/text-yellow-700/)
   })
+
+  // Ajouté le 2026-10-01 (`todo.md` 🟡 P3, `bugs.md` « Préférences mises à jour ») : `saveNotif()`
+  // ne lisait pas la réponse — un refus du serveur affichait quand même le succès, et la bascule
+  // restait à l'écran dans un état que la base n'a pas.
+  test('préférence refusée par le serveur : erreur affichée, bascule rendue à l\'état enregistré', async ({ page, request }) => {
+    const avecNotifs = stats('boutique') as any
+    avecNotifs.data.config.notifs = { ticket_cree: 1, ticket_termine: 1, sav_ouvert: 0, relance: 0 }
+    await ouvrirNotifications(page, request, avecNotifs)
+    await expect(page.locator('#notif-ticket-cree')).toBeChecked()
+
+    await page.route('**/api/boutiques/*/settings*', route =>
+      route.fulfill({ status: 500, contentType: 'application/json',
+        body: JSON.stringify({ success: false, error: 'Panne simulée du serveur' }) }))
+    // La case est masquée par le curseur (`.toggle-switch`) : on clique ce que voit l'opérateur
+    await page.locator('label.toggle-switch:has(#notif-ticket-cree) .toggle-slider').click()
+
+    await expect(page.locator('#toast-inner')).toContainText('Panne simulée du serveur')
+    await expect(page.locator('#toast-inner')).not.toContainText('mises à jour')
+    await expect(page.locator('#notif-ticket-cree')).toBeChecked()
+  })
 })

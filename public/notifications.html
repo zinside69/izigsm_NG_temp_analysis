@@ -425,10 +425,25 @@
       email_notif_relance:        document.getElementById('notif-relance').checked        ? 1 : 0,
     }
     try {
-      await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
+      // AVANT (2026-10-01, todo.md 🟡 P3) : `await apiPut(…)` sans lire le résultat, puis succès annoncé
+      // d'office — `api()` ne lève pas sur une erreur HTTP, un 401/422/500 affichait « Préférences mises
+      // à jour » et la bascule restait dans un état que la base n'a pas (`bugs.md`).
+      // await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
+      // showToast('Préférences mises à jour', 'green')
+      const res = await apiPut(`/api/boutiques/${_boutiqueId}/settings`, payload)
+      if (!res.ok) {
+        // Message du serveur s'il en donne un (corps déballé), sinon celui de l'enveloppe
+        showToast(res.data?.error || res.error || 'Préférences non enregistrées', 'red')
+        // Les bascules reprennent l'état réellement enregistré, relu sur le serveur
+        loadStats()
+        return
+      }
       showToast('Préférences mises à jour', 'green')
     } catch (e) {
-      showToast('Erreur', 'red')
+      // AVANT (2026-10-01) : showToast('Erreur', 'red') — sans rien rétablir à l'écran
+      // Rejet de `fetch` (réseau coupé) : rien n'est enregistré, les bascules reprennent l'état serveur
+      showToast('Erreur — préférences non enregistrées', 'red')
+      loadStats()
     }
   }
 

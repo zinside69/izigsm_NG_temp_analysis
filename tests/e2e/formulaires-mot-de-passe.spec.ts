@@ -58,4 +58,25 @@ test.describe('réinitialisation, JavaScript bloqué (NoScript)', () => {
     await expect(page.locator('#form-reset')).toBeHidden()
     await expect(page.locator('#new-password')).toBeHidden()
   })
+
+  // Ajouté le 2026-10-01 (`todo.md` 🟡 P3 « #form-request ») : contrairement à `#form-reset`, la
+  // demande de lien est VISIBLE sans JavaScript et porte un vrai bouton de soumission — l'envoi
+  // natif part. Ce test le prouve, puis garde la correction (`method="post"`) : l'email voyage
+  // dans le corps, jamais dans l'adresse (historique, journaux).
+  test('demande de lien : l\'email saisi ne part jamais dans l\'adresse', async ({ page }) => {
+    const EMAIL = 'fuite-demande@exemple.fr'
+    const navigations: { methode: string; url: string }[] = []
+    page.on('request', r => { if (r.isNavigationRequest()) navigations.push({ methode: r.method(), url: r.url() }) })
+
+    await page.goto('/reset-password')
+    await expect(page.locator('#form-request')).toBeVisible()
+    await page.locator('#req-email').fill(EMAIL)
+    await page.locator('#form-request button[type="submit"]').click()
+    await page.waitForLoadState('load')
+
+    // L'envoi natif a bien eu lieu (sinon ce test ne prouverait rien)
+    expect(navigations.length, JSON.stringify(navigations)).toBeGreaterThan(1)
+    expect(page.url()).not.toContain('fuite-demande')
+    for (const n of navigations) expect(n.url, `${n.methode} ${n.url}`).not.toContain('fuite-demande')
+  })
 })

@@ -984,6 +984,10 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
           <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}"${fige}>Importer</button>` : ''}
         </td>
       </tr>`).join('');
+  } catch {
+    // `api()` laisse passer un rejet de `fetch` (réseau coupé) : sans ce message, « Recherche en
+    // cours chez Mobilax… » resterait affiché indéfiniment — même parade que chercherGeneration()
+    messageMobilax(MESSAGE_MOBILAX_INJOIGNABLE, true);
   } finally {
     bouton.disabled = false;
     // « Tout cocher » suit les lignes affichées (aucune, page de résultats, échec de la recherche)
