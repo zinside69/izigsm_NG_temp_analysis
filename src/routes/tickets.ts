@@ -22,6 +22,7 @@ import {
   getTicketById,
   createTicket,
   updateTicket,
+  resoudreAppareilTicket,
   updateStatutTicket,
   deleteTicket,
   archiveTicket,
@@ -185,13 +186,15 @@ tickets.get('/:id', async (c) => {
  * Hook email non bloquant : envoi confirmation de dépôt au client.
  * @body client_id, appareil_marque, appareil_modele, description_panne (obligatoires)
  * @body boutique_id, technicien_id?, prix_estime?, date_promesse?, notes_internes? (optionnels)
+ * @body appareil_id? (explicite, vérifié), imei? (« IMEI / n° de série » du formulaire,
+ *       résolu en appareil_id — ticket 08a)
  * @body etat_appareil?, code_deverrouillage?, code_sim?, signature_client?, signature_date? (prise en charge, optionnels)
  * @returns { success, id, numero, tracking_token }
  */
 tickets.post('/', async (c) => {
   const { user, db, dbPort, queryBoutiqueId } = ctx(c)
   const body = await c.req.json()
-  const { client_id, appareil_id, appareil_marque, appareil_modele,
+  const { client_id, appareil_id, imei, appareil_marque, appareil_modele,
           description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
           etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date } = body
 
@@ -212,12 +215,18 @@ tickets.post('/', async (c) => {
   let created: { id: number; numero: string; tracking_token: string }
   try {
     created = await createTicket(db, boutiqueId, user.sub, {
-      client_id, appareil_id, appareil_marque, appareil_modele,
+      client_id, appareil_id, imei, appareil_marque, appareil_modele,
       description_panne, technicien_id, prix_estime, date_promesse, notes_internes,
       etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date,
     })
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 422)
+    // IMEI invalide (clé de Luhn) et appareil_id explicite non possédé par ce client sont
+    // des erreurs de saisie (400) ; le reste (ex: technicien d'une autre boutique) garde
+    // le statut existant (422) — voir resoudreAppareilTicket() (ticketService.ts).
+    const status = err.message.includes('IMEI invalide') || err.message.includes('Appareil introuvable')
+      ? 400
+      : 422
+    return c.json({ success: false, error: err.message }, status)
   }
 
   // ── Hook email création (non bloquant) ──────────────────────────────────────
@@ -281,8 +290,29 @@ tickets.put('/:id', async (c) => {
     if (sigError) return c.json({ success: false, error: sigError }, 400)
   }
 
+  // ── Appareil (ticket 08a) : trois états du champ « imei » du corps — absent ou
+  // "" → appareil_id inchangé ; valeur → résolution (mêmes règles que POST) puis
+  // nouveau rattachement, transmis à updateTicket() par un argument SÉPARÉ.
+  // Un `appareil_id` explicite dans le corps d'un PUT est TOUJOURS ignoré — il ne
+  // transite jamais vers updateTicket() (décision du 2026-09-30, P15).
+  let appareilId: number | null | undefined
+  const imeiSaisie = typeof body.imei === 'string' ? body.imei.trim() : ''
+  if (imeiSaisie) {
+    try {
+      appareilId = await resoudreAppareilTicket(db, {
+        boutiqueId:  existing.boutique_id,
+        clientId:    existing.client_id,
+        imeiOuSerie: imeiSaisie,
+        marque:      existing.appareil_marque,
+        modele:      existing.appareil_modele,
+      })
+    } catch (err: any) {
+      return c.json({ success: false, error: err.message }, 400)
+    }
+  }
+
   try {
-    await updateTicket(db, id, user.sub, body)
+    await updateTicket(db, id, user.sub, body, appareilId)
     return c.json({ success: true, message: 'Ticket mis à jour.' })
   } catch (err: any) {
     const status = err.message.includes('introuvable') ? 404 : 422

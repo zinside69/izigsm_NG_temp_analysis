@@ -399,6 +399,9 @@ describe('getTicketById()', () => {
 describe('createTicket()', () => {
   let db: ReturnType<typeof createMockD1>
 
+  // Isolation multi-tenant (ticket 08a) : le client du ticket doit appartenir à la boutique.
+  const SQL_CLIENT = 'SELECT id FROM clients WHERE id = ? AND boutique_id = ?'
+
   beforeEach(() => {
     db = createMockD1()
     // nextNumero : SELECT boutique_settings + upsert sequences + SELECT sequences
@@ -410,6 +413,8 @@ describe('createTicket()', () => {
       'SELECT dernier_num FROM sequences WHERE boutique_id = ? AND type = ? AND annee = ?',
       { dernier_num: 42 }
     )
+    // Client de la boutique — générique, les tests d'isolation l'écrasent avec __setNotFound.
+    db.__setResponse(SQL_CLIENT, { id: 7 })
     // INSERT ticket RETURNING id
     db.__setResponseFn(
       `INSERT INTO tickets (boutique_id, numero, client_id, appareil_id, appareil_marque, appareil_modele, description_panne, technicien_id, prix_estime, date_promesse, notes_internes, tracking_token, etat_appareil, code_deverrouillage, code_sim, signature_client, signature_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -488,6 +493,51 @@ describe('createTicket()', () => {
     const calls = db.__getCalls()
     expect(calls.find(c => c.sql === SQL_TECHNICIEN)).toBeUndefined()
   })
+
+  // ─── Résolution appareil (ticket 08a) — règle SQL (recherche/création) prouvée
+  // contre un vrai SQLite (tests/ticket-appareil-sqlite.test.ts) ; ici, seule la
+  // bonne propagation du refus jusqu'à la route importe : aucun ticket créé.
+  describe('résolution appareil — isolation et refus (voir aussi ticket-appareil-sqlite.test.ts)', () => {
+    it('rejette la création si le client appartient à une autre boutique, aucun ticket créé', async () => {
+      db.__setNotFound(SQL_CLIENT)
+      await expect(createTicket(db, 1, 5, {
+        client_id: 99, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+        description_panne: 'Écran cassé',
+      })).rejects.toThrow('Client introuvable dans cette boutique.')
+      const calls = db.__getCalls()
+      expect(calls.find(c => c.sql.startsWith('INSERT INTO tickets'))).toBeUndefined()
+    })
+
+    it('rejette un IMEI à clé de Luhn fausse, aucun ticket créé', async () => {
+      await expect(createTicket(db, 1, 5, {
+        client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+        description_panne: 'Écran cassé', imei: '356938035643800',
+      })).rejects.toThrow('IMEI invalide (clé de contrôle).')
+      const calls = db.__getCalls()
+      expect(calls.find(c => c.sql.startsWith('INSERT INTO tickets'))).toBeUndefined()
+      expect(calls.find(c => c.sql.startsWith('INSERT INTO appareils'))).toBeUndefined()
+    })
+
+    it('rejette un appareil_id explicite qui n\'appartient pas au client, aucun ticket créé', async () => {
+      db.__setNotFound('SELECT ap.id FROM appareils ap WHERE ap.id = ? AND ap.client_id = ?')
+      await expect(createTicket(db, 1, 5, {
+        client_id: 7, appareil_id: 123, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+        description_panne: 'Écran cassé',
+      })).rejects.toThrow('Appareil introuvable pour ce client.')
+      const calls = db.__getCalls()
+      expect(calls.find(c => c.sql.startsWith('INSERT INTO tickets'))).toBeUndefined()
+    })
+
+    it('un champ imei vide pose appareil_id à NULL sans consulter appareils', async () => {
+      const res = await createTicket(db, 1, 5, {
+        client_id: 7, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
+        description_panne: 'Écran cassé', imei: '   ',
+      })
+      expect(res.id).toBe(42)
+      const insert = db.__getCalls().find(c => c.sql.startsWith('INSERT INTO tickets'))
+      expect(insert?.params[3]).toBeNull()  // appareil_id — 4e paramètre bindé
+    })
+  })
 })
 
 // ─── updateTicket ─────────────────────────────────────────────────────────────
@@ -538,6 +588,31 @@ describe('updateTicket()', () => {
     db.__setNotFound(SQL_TECHNICIEN)
     await expect(updateTicket(db, 42, 5, { technicien_id: 999 }))
       .rejects.toThrow('Technicien introuvable dans cette boutique.')
+  })
+
+  // ─── appareil_id (ticket 08a) — argument séparé, JAMAIS lu depuis `data` ────
+  describe('appareil_id — argument séparé (ticket 08a)', () => {
+    it('appareilId fourni : COALESCE reçoit cette valeur', async () => {
+      db.__setResponse(SQL_SELECT, { id: 42, boutique_id: 1 })
+      await updateTicket(db, 42, 5, { diagnostic: 'Fusible grillé' }, 77)
+      const updateCall = db.__getCalls().find(c => c.sql.startsWith('UPDATE tickets SET'))
+      expect(updateCall?.sql).toContain('appareil_id = COALESCE(?, appareil_id)')
+      expect(updateCall?.params).toContain(77)
+    })
+
+    it('appareilId absent : COALESCE reçoit null (inchangé), même si `data` porte un appareil_id', async () => {
+      db.__setResponse(SQL_SELECT, { id: 42, boutique_id: 1 })
+      // `data` ne déclare pas `appareil_id` (UpdateTicketData) — un appel qui en
+      // glisserait un quand même (corps brut d'une route) ne doit jamais l'utiliser :
+      // seul le 5e paramètre compte.
+      await updateTicket(db, 42, 5, { diagnostic: 'Fusible grillé', appareil_id: 999 } as any)
+      const updateCall = db.__getCalls().find(c => c.sql.startsWith('UPDATE tickets SET'))
+      // Paramètre lié à `appareil_id = COALESCE(?, appareil_id)` : 9e valeur bindée
+      // (description_panne, diagnostic, technicien_id, prix_estime, prix_final,
+      // date_promesse, notes_internes, priorite, appareil_id, …) — jamais 999.
+      expect(updateCall?.params[8]).toBeNull()
+      expect(updateCall?.params).not.toContain(999)
+    })
   })
 })
 
