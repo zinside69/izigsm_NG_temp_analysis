@@ -1,4 +1,18 @@
-# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 136 — suppressions du référentiel)
+# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 137 — hiérarchie des rôles)
+
+## Ce qui a changé au checkpoint 137
+
+- **Hiérarchie des rôles décidée** (`CLAUDE.md` § Hiérarchie des rôles) : admin plateforme > manager
+  (sa boutique sans contrainte) > technicien. Rôle fantôme `gerant` remplacé : **la clôture de caisse
+  redevient possible aux managers** (`2ca1df0`). Purge RGPD et suppression d'employé ouvertes au
+  manager (garde d'appartenance ajoutée).
+- Deux garde-fous statiques nouveaux : appels API non lus (`143a696`) ; formulaires à email
+  (`dc4374f`). Et : tout rôle d'un `requireRole()` doit exister.
+- ✏️/🗑 du référentiel global réservés à l'admin plateforme (`dc4374f`, `CACHE_VERSION` v3.19).
+- Rien de déployé ; aucune migration nouvelle.
+
+**Première action** : inchangée — report d'une PR du socle (mode opératoire du checkpoint 134), ou
+le 15 quand 12-14 sont sur `main`.
 
 ## Ce qui a changé au checkpoint 136
 

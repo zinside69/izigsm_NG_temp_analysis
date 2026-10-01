@@ -1,4 +1,33 @@
-# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 136 — suppressions du référentiel annoncées)
+# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 137 — hiérarchie des rôles, garde-fous, formulaires à email)
+
+## Checkpoint 137 — Hiérarchie des rôles, garde-fous, formulaires à email (2026-10-01, soir)
+
+**Production inchangée (`izigsm-v3.11`). Migrations en attente inchangées. `CACHE_VERSION` du dépôt :
+`izigsm-v3.19`.** Vitest 1 358 + 2 échecs permanents, tsc 32. Rien de déployé.
+
+- **Garde-fou des appels API non lus** (`143a696`) : la suite échoue si un `await apiX(…)` est posé
+  en instruction seule (JS et scripts inline). Vu rouge sur les anciens `services.js` et
+  `notifications.html`, aux bonnes lignes (commentaires **blanchis**, pas supprimés).
+- **Formulaires à email** (`dc4374f`) : volet « email » du garde-fou des formulaires ;
+  `settings.html #form-general` et `personnel.html #form-add-employe` passent par un écouteur
+  `submit` (aucun ne fuyait : pas de `name` / fenêtre masquée) ; `formulaires-email.spec.ts` garde
+  l'enregistrement.
+- **✏️/🗑 des marques et modèles réservés à l'admin plateforme** (`dc4374f`) : test « manager : ni
+  ✏️ ni 🗑 » vu rouge ; refus annoncé prouvé avec l'admin plateforme sur un 403 **simulé** (aucune
+  donnée globale supprimée). « ＋ Marque », « ＋ Modèle », « Synchroniser API » restent visibles au
+  manager (refus annoncé) : relève d'un chantier « référentiel par boutique », non ouvert.
+- **Hiérarchie des rôles** (décision, `2ca1df0`) : admin plateforme > manager (sa boutique sans
+  contrainte) > technicien ; pas de vendeur. **Défaut 🔴 corrigé** : le rôle `gerant` n'a jamais
+  existé — 6 routes (clôture de caisse NF525, intégrité, rapport comptable, stats techniciens, export
+  CSV) refusaient tout manager ; remplacé par `manager` (+ 2 requêtes de `statsService.ts`). Purge
+  RGPD et suppression d'employé ouvertes au manager, la seconde **avec** une garde d'appartenance
+  ajoutée. Garde-fou : tout rôle d'un `requireRole()` doit exister (migration `0001`). E2E
+  `roles-manager.spec.ts` vu rouge sur le vrai serveur, puis clôture réelle en 201.
+- **À dire au déploiement** : c'est ce lot qui rend la clôture de caisse aux 5 managers de production.
+- Serveur local arrêté, port 3000 libre.
+
+**Prochaine session** : report des PR du socle ; 15 quand 12-14 sont sur `main` ; décider du
+référentiel par boutique si le besoin se confirme.
 
 ## Checkpoint 136 — Suppressions du référentiel : refus annoncé (2026-10-01, soir)
 

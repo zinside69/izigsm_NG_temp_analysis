@@ -1121,6 +1121,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-01 (checkpoint 137) : production inchangée (`izigsm-v3.11`), migrations en attente
+inchangées.** Sur `main`, en plus du 136 : garde-fous (appels non lus, formulaires à email, rôles
+existants), ✏️/🗑 du référentiel réservés à l'admin plateforme, **rôle `gerant` remplacé par
+`manager`** (clôture de caisse rendue aux managers), `CACHE_VERSION` `izigsm-v3.19`. Sans migration.
+
 **État au 2026-10-01 (checkpoint 136) : production inchangée (`izigsm-v3.11`), migrations en attente
 inchangées.** Sur `main`, en plus du 135 : suppressions du référentiel annoncées (`8b194fb`, sans
 migration), `CACHE_VERSION` `izigsm-v3.18`.
