@@ -1,5 +1,18 @@
 # iziGSM — Décisions
 
+## 2026-10-01 — Lot 2 : tickets 15 et 16 cadrés, migration `0059` réservée
+
+| Ticket | Caisse / NF525 | Qui code | Migration |
+|---|---|---|---|
+| 15 facture depuis le devis, appareil figé | NF525 | Claude + exploitant | — (instantané dans `factures.appareils_snapshot`, `nature: 'repare'`) |
+| 16 garanties par ligne de service | — | socle | **`0059`** |
+
+**15** : seul un devis **accepté** d'un ticket se convertit ; l'IMEI ou le n° de série est exigé à la
+création d'une facture liée à un ticket, **sauf l'acompte** ; il attend 12, 13 et 14 (fichiers
+partagés `devisService.ts`, `factureService.ts`). **16** : durée de service vide = défaut de la
+boutique, **0 = sans garantie** (les 0 existants passent à `NULL`) ; un ticket sans ligne de service
+garde sa garantie de ticket ; un « Même panne » par ligne garantie. Détail dans chaque ticket.
+
 ## 2026-09-30 — Partage des rôles : la session racine pilote le socle
 
 **Décision de l'exploitant** (fin de journée) : la session racine `claude-test` pilote le socle dans
