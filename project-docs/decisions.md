@@ -13,6 +13,12 @@ partagés `devisService.ts`, `factureService.ts`). **16** : durée de service vi
 boutique, **0 = sans garantie** (les 0 existants passent à `NULL`) ; un ticket sans ligne de service
 garde sa garantie de ticket ; un « Même panne » par ligne garantie. Détail dans chaque ticket.
 
+**17** (lignes de SAV, coût des garanties — socle, **sans migration**) : les lignes d'un SAV vivent
+sur **son ticket SAV** (routes et pose des 11 et 12), facturé 0 € calculé à la lecture tant que le
+dossier n'est pas `refuse` ; coût d'une pièce **figé à la pose** (amendement du **12**) ; encart
+« Coût des garanties » sur la page SAV ; un ticket SAV terminé n'ouvre **aucune** garantie
+(amendement du **16**).
+
 ## 2026-09-30 — Partage des rôles : la session racine pilote le socle
 
 **Décision de l'exploitant** (fin de journée) : la session racine `claude-test` pilote le socle dans

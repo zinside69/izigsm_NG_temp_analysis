@@ -86,6 +86,15 @@ _Mis au format du modèle le 2026-10-01. Ancien en-tête : `**Status:** ready-fo
   emails : aucune sortie muette).
 - `createGarantie()` (manuelle) et `createSav()` : inchangés hors de ce qui précède.
 
+### Précision du 2026-10-01 — cadrage du ticket 17 (décision de l'exploitant)
+
+**Un ticket SAV terminé n'ouvre aucune garantie** : une réparation sous garantie ne crée pas de
+garantie neuve. Le hook de passage en `termine` saute un ticket **SAV valide** = ticket dont un
+dossier `sav_dossiers` actif porte `ticket_sav_id` = ce ticket, en statut ≠ `refuse` (un dossier
+`refuse` = requalifié en payant par le 08c : ce ticket ouvre alors ses garanties normalement). La
+définition « SAV valide » est **une seule fonction de service**, partagée avec le ticket 17 (prix
+facturé à 0) — ⊥ la réécrire.
+
 ## Critères d'acceptation
 
 Base :
@@ -101,6 +110,8 @@ Serveur :
 - [ ] Passage en `termine` : une garantie par ligne de service à durée > 0, à sa durée et à sa date
       de fin ; service à 0 → aucune ; lignes pièce et libres → aucune ; aucune ligne de service →
       une garantie de ticket au défaut (décision 2)
+- [ ] ➕ (2026-10-01) Ticket SAV valide terminé → **aucune** garantie ; ticket SAV requalifié en payant
+      (dossier `refuse`) terminé → garanties ouvertes comme un ticket — vrai SQLite
 - [ ] Idempotence : second passage en `termine` → aucune garantie en double ; ligne de service
       ajoutée entre-temps → seule sa garantie est créée
 - [ ] `PATCH` statut renvoie `garanties: [{ id, ligne_ticket_id, description_reparation, date_fin,

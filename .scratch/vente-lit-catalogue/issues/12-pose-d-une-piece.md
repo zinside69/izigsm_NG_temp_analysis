@@ -68,6 +68,15 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
 - **« Attendue par un ticket »** = une ligne de pièce **non posée**, d'un ticket **non rendu** (ni
   `livre` ni `annule`, non archivé), dont la quantité dépasse le stock du produit.
 
+### Précision du 2026-10-01 — cadrage du ticket 17 (décision de l'exploitant)
+
+**Le coût d'une pièce est figé à la pose**, pas à l'ajout : l'instruction (3) du lot, qui pose
+`pose_le` et `pose_par`, pose aussi `cout_unitaire = produits.prix_achat_cump` (relu en base au même
+instant, sous la même condition `pose_le IS NULL`). La valeur écrite à l'ajout (ticket 11) n'est
+qu'**indicative** jusqu'à la pose. Pourquoi : une pièce « à commander » a un coût moyen nul ou ancien
+au moment de l'ajout ; le coût des garanties (ticket 17) doit compter son vrai prix d'achat. Vaut pour
+toute pose, ticket payant ou ticket SAV (le ticket SAV est un ticket : la pose est la même).
+
 ## Critères d'acceptation
 
 Serveur :
@@ -78,6 +87,9 @@ Serveur :
       ci-dessus ; mouvement `sortie`, motif « Pose — ticket <numéro> », `user_id` = poseur ; réponse
       `{ pose_le, pose_par, stock_avant, stock_apres, stock_insuffisant? }`
 - [ ] Seconde pose → **409** « déjà posée », aucun mouvement de plus
+- [ ] ➕ (2026-10-01) La pose fige `cout_unitaire` = `prix_achat_cump` du produit à cet instant, dans
+      la même instruction que `pose_le` ; une seconde pose ne le réécrit pas — prouvé sur vrai SQLite
+      (coût moyen changé entre l'ajout et la pose → la ligne porte le coût de la pose)
 - [ ] `DELETE /api/lignes-ticket/:id` sur une ligne posée → **409** (décision 1) ; non posée →
       supprimée comme au ticket 11
 - [ ] `PUT /api/lignes-ticket/:id` sur une ligne posée : quantité ou produit → **409** ; désignation et
