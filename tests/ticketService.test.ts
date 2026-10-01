@@ -519,7 +519,7 @@ describe('createTicket()', () => {
     })
 
     it('rejette un appareil_id explicite qui n\'appartient pas au client, aucun ticket créé', async () => {
-      db.__setNotFound('SELECT ap.id FROM appareils ap WHERE ap.id = ? AND ap.client_id = ?')
+      db.__setNotFound('SELECT ap.id FROM appareils ap JOIN clients c ON c.id = ap.client_id AND c.boutique_id = ? WHERE ap.id = ? AND ap.client_id = ?')
       await expect(createTicket(db, 1, 5, {
         client_id: 7, appareil_id: 123, appareil_marque: 'Apple', appareil_modele: 'iPhone 14',
         description_panne: 'Écran cassé',

@@ -110,10 +110,19 @@ export async function resoudreAppareilTicket(
   if (!client) throw new Error('Client introuvable dans cette boutique.')
 
   // ── appareil_id explicite : vérifié, jamais accepté tel quel ────────────────
+  // Jointure clients (et non la seule égalité ap.client_id = ?) : même garde que la
+  // recherche ci-dessous — ticket 08a, précision n°2 et § Notes (« toute requête sur
+  // appareils joint le client »). Le contrôle séparé de `client` ci-dessus confirme déjà
+  // que `clientId` est de la boutique ; cette jointure porte la même garantie au niveau
+  // du SQL de `appareils`, qui n'a pas de `boutique_id` propre.
   if (input.appareilId != null) {
     const appareil = await db
-      .prepare('SELECT ap.id FROM appareils ap WHERE ap.id = ? AND ap.client_id = ?')
-      .bind(input.appareilId, input.clientId)
+      .prepare(`
+        SELECT ap.id FROM appareils ap
+        JOIN   clients c ON c.id = ap.client_id AND c.boutique_id = ?
+        WHERE  ap.id = ? AND ap.client_id = ?
+      `)
+      .bind(input.boutiqueId, input.appareilId, input.clientId)
       .first<{ id: number }>()
     if (!appareil) throw new Error('Appareil introuvable pour ce client.')
     return appareil.id
@@ -131,8 +140,13 @@ export async function resoudreAppareilTicket(
   const colonne = estImei ? 'imei' : 'numero_serie'
 
   const existant = await db
-    .prepare(`SELECT id FROM appareils WHERE client_id = ? AND ${colonne} = ? ORDER BY id LIMIT 1`)
-    .bind(input.clientId, saisie)
+    .prepare(`
+      SELECT ap.id FROM appareils ap
+      JOIN   clients c ON c.id = ap.client_id AND c.boutique_id = ?
+      WHERE  ap.client_id = ? AND ap.${colonne} = ?
+      ORDER  BY ap.id LIMIT 1
+    `)
+    .bind(input.boutiqueId, input.clientId, saisie)
     .first<{ id: number }>()
   if (existant) return existant.id
 

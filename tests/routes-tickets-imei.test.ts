@@ -67,7 +67,7 @@ describe('POST /api/tickets — IMEI (ticket 08a)', () => {
   it('appareil_id explicite d\'un autre client → 400, aucun ticket créé', async () => {
     const d1 = createMockD1()
     d1.__setResponse(SQL_CLIENT_BOUTIQUE, { id: 7 })
-    d1.__setNotFound('SELECT ap.id FROM appareils ap WHERE ap.id = ? AND ap.client_id = ?')
+    d1.__setNotFound('SELECT ap.id FROM appareils ap JOIN clients c ON c.id = ap.client_id AND c.boutique_id = ? WHERE ap.id = ? AND ap.client_id = ?')
     const { res, d1: d1Apres } = await appeler('/api/tickets', {
       method: 'POST',
       corps: {
@@ -117,7 +117,7 @@ describe('PUT /api/tickets/:id — IMEI (ticket 08a)', () => {
     })
     d1.__setResponse('SELECT id, boutique_id FROM tickets WHERE id = ? AND actif = 1', { id: 42, boutique_id: 1 })
     d1.__setResponse(SQL_CLIENT_BOUTIQUE, { id: 7 })
-    d1.__setNotFound('SELECT id FROM appareils WHERE client_id = ? AND imei = ? ORDER BY id LIMIT 1')
+    d1.__setNotFound('SELECT ap.id FROM appareils ap JOIN clients c ON c.id = ap.client_id AND c.boutique_id = ? WHERE ap.client_id = ? AND ap.imei = ? ORDER BY ap.id LIMIT 1')
     d1.__setResponseFn(
       'INSERT INTO appareils (client_id, marque, modele, imei) VALUES (?, ?, ?, ?) RETURNING id',
       () => ({ id: 55 }),
