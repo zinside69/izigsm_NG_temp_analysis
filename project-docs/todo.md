@@ -103,7 +103,8 @@ Décisions : `decisions.md` § 2026-09-16.
       sur la facture, non déployé.
 - [x] **Ticket 08a** (IMEI enregistré à la prise en charge) — au socle (session racine), débloqué
       → **livré** (T-008, PR #38 `ce51ced`), **reporté sur `main` le 2026-10-01**, non déployé ;
-      E2E rejoués sur Windows. Suite : panneau `viewTicket()` (IMEI vide), voir plus bas.
+      E2E rejoués sur Windows. Suite : panneau `viewTicket()` (IMEI vide) → **intégré au 08b**
+      (décision de l'exploitant du 2026-10-01).
 - [ ] **Ticket 05** (codes maison, `0052`) — au socle, débloqué ; corrige d'abord l'import CSV
 - [ ] **Ticket 06** (file d'étiquettes, `0053`) — au socle, après 05
 - [ ] **Ticket 08b** (parcours IMEI, `0055`) — au socle, après 08a

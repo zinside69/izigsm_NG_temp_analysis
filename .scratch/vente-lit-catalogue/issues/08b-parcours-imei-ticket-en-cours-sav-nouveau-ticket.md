@@ -44,6 +44,26 @@ recherche globale — la « recherche générale » du ticket d'origine n'existe
 - **« Autre panne »** ouvre le formulaire de prise en charge **prérempli** (client, marque, modèle,
   IMEI, motif) : la panne se décrit comme d'habitude, rien n'est créé sans « Enregistrer ».
 
+### Précision du 2026-10-01 — après la livraison du 08a (reporté sur `main`, `3c550f2`)
+
+Les deux bloqueurs (04, 08a) sont livrés. Ce que le 08a a réellement posé, et qui s'impose ici :
+
+1. **L'identifiant vit sur la fiche appareil** : `GET /api/tickets/:id` (`getTicketById()`) rend
+   `appareil_imei` et `appareil_numero_serie` par jointure ; **`tickets.imei` n'existe pas**. Toute
+   lecture d'écran passe par ces deux champs.
+2. **« Autre panne » envoie le champ `imei` du formulaire**, jamais un `appareil_id` : `POST
+   /api/tickets` (08a) retrouve ou crée la fiche **du client choisi** et refuse (400) un
+   `appareil_id` qui appartient à un autre client — cas réel d'un appareil revendu, dont la garantie
+   trouvée est celle de l'ancien propriétaire. Client prérempli = client du ticket d'origine de la
+   garantie, **modifiable** dans le formulaire.
+3. **`createSav()` lit l'`appareil_id` en base** (garantie → `ticket_id` → `tickets.appareil_id`),
+   jamais depuis le corps de la requête.
+4. **Décision de l'exploitant du 2026-10-01 — panneau `viewTicket()`** : il affiche toujours un IMEI
+   vide (il lit `ticket.imei` dans le cache de la liste ; défaut déclaré par l'agent du 08a, hors de
+   son périmètre). C'est la fiche que ce ticket ouvre sur `ticket_en_cours` : **corrigé ici**, en
+   lisant `appareil_imei` / `appareil_numero_serie` sur `GET /api/tickets/:id`, comme
+   `editTicket()` depuis le 08a. Pas de ticket séparé.
+
 ## Critères d'acceptation
 
 Base :
@@ -67,6 +87,8 @@ Serveur :
 - [ ] `garantie` → écran de décision : réparations garanties et date de fin, « Même panne » / « Autre panne »
 - [ ] « Même panne » → `POST /api/sav` (`garantie_id`, motif « même panne ») → le ticket SAV s'ouvre
 - [ ] « Autre panne » → choix du motif **obligatoire** dans la liste fermée → formulaire de prise en charge prérempli (client, marque, modèle, IMEI, motif) ; le ticket enregistré porte le motif, affiché dans sa fiche
+- [ ] ➕ (2026-10-01) `viewTicket()` affiche l'IMEI, ou à défaut le n° de série, lu sur `GET /api/tickets/:id` (`appareil_imei` / `appareil_numero_serie`) ; ⊥ `ticket.imei`
+- [ ] ➕ (2026-10-01) « Autre panne » envoie `imei` (champ du 08a) et le client prérempli, jamais un `appareil_id`
 - [ ] Appels déballés `(await apiX(…)).data` ; données rendues échappées (`esc()` de `tickets.js`)
 - [ ] `CACHE_VERSION` (`public/sw.js`) incrémenté
 
@@ -84,6 +106,7 @@ Commun :
 - **Route** — vitest par `app.request()` : 400 `imei_invalide` sans appel à la base.
 - **`createSav()`** — vitest contre un vrai SQLite : le ticket SAV porte l'`appareil_id` du ticket d'origine.
 - **Écran** — E2E Playwright `tests/e2e/parcours-imei.spec.ts`, vraie D1 locale : IMEI faux ; ticket en cours ouvert ; garantie active → « Même panne » → ticket SAV ouvert ; garantie active → « Autre panne » + motif → ticket enregistré avec le motif. L'E2E est joué par le socle dans le bac à sable (contrôle e2e de gates.json, à déclarer dans la tâche d'écran) ; un E2E hors de sa portée (préproduction, production) se demande dans le compte rendu (P16).
+- ➕ **Couture ajoutée le 2026-10-01** — E2E (même spec) : le ticket en cours ouvert par le scan affiche son IMEI dans le panneau de lecture ; garantie d'un appareil revendu → « Autre panne » pour un **autre** client → ticket enregistré (aucun 400), rattaché à une fiche appareil de ce client.
 
 ## Notes
 
