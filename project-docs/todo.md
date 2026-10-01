@@ -116,7 +116,7 @@ Décisions : `decisions.md` § 2026-09-16.
 - [ ] **Ticket 15 — à coder ici avec l'exploitant**, quand 12, 13 et 14 sont reportés sur `main`
       (⊥ avant : conflits sur `devisService.ts` / `factureService.ts`). Trancher alors le point
       ouvert : facture **manuelle** liée à un ticket SAV (refusée ou non).
-- [ ] **Transmettre à la session racine** : hashes `19a22cc`, `eaa256b`, `7e2b37f` ; 12 et 16 amendés
+- [x] **Transmettre à la session racine** (fait le 2026-10-01, collé dans la session « Socle ») : hashes `19a22cc`, `eaa256b`, `7e2b37f` ; 12 et 16 amendés
       (à reprendre s'ils sont déjà déclarés) ; `0059` réservée au 16.
 - [ ] **Report sur `main`** de chaque PR du socle (cherry-pick, session racine), puis **déploiement du
       lot 1 en bloc** : migrations `0048` → `0056` à distance, `d1_migrations` relu, puis le code
