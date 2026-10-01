@@ -132,6 +132,40 @@ function violations(fichier: string, source: string): Violation[] {
   return trouvees
 }
 
+/**
+ * Appels `await api*(…)` posés en **instruction seule** : le résultat n'est lu par personne.
+ *
+ * Ajouté le 2026-10-01 (`todo.md` 🟡 P3, décision de l'exploitant). `api()` ne lève pas sur une
+ * erreur HTTP : un appel dont personne ne lit l'enveloppe rend tout refus du serveur muet — ou
+ * pire, laisse la page annoncer un succès qui n'a pas eu lieu (`saveNotif()`, `notifications.html`).
+ * Quatre cas corrigés ce jour-là (`saveNotif()`, et `deleteMarque()` / `deleteModele()` /
+ * `removeLiaison()` de `services.js`, dont un vrai 403 muet pour un manager).
+ *
+ * Repère : `await apiX(` en début d'instruction (début de ligne, après `;`, `{`, `}`, ou après le
+ * `)` d'un `if (…)`), et dont l'expression n'est pas suivie d'un `.` (`.then`, `.data`…). Une
+ * affectation, un `return`, un argument ou un `(await apiX(…)).data` ne commencent pas ainsi.
+ */
+function appelsNonLus(fichier: string, source: string): { fichier: string; ligne: number; appel: string }[] {
+  // Commentaires BLANCHIS, pas supprimés : `sansCommentaires()` retire les sauts de ligne d'un
+  // commentaire de bloc, ce qui décale les numéros rendus (mesuré : 496 au lieu de 542).
+  const src = source
+    .replace(/\/\*[\s\S]*?\*\//g, c => blanchir(c))
+    .replace(/(^|[^:])(\/\/.*)$/gm, (_t, avant, c) => avant + blanchir(c))
+  const trouves: { fichier: string; ligne: number; appel: string }[] = []
+  const instruction = new RegExp(`(^|[;{}]|\\)\\s*)\\s*await\\s+(${HELPERS.join('|')})\\s*\\(`, 'gm')
+
+  let m: RegExpExecArray | null
+  while ((m = instruction.exec(src)) !== null) {
+    const ouvrante = src.indexOf('(', m.index + m[0].length - 1)
+    const fin = finExpression(src, ouvrante)
+    if (fin === -1) continue
+    // `await apiX(…).then(…)` ou un accès qui suit : le résultat est consommé
+    if (/^\s*\./.test(src.slice(fin + 1, fin + 6))) continue
+    trouves.push({ fichier, ligne: src.slice(0, ouvrante).split('\n').length, appel: m[2] })
+  }
+  return trouves
+}
+
 /** Remplace chaque caractère par une espace, en gardant les sauts de ligne. */
 function blanchir(texte: string): string {
   return texte.replace(/[^\n]/g, ' ')
@@ -249,5 +283,49 @@ describe('Conformité du niveau d\'enveloppe des réponses API (frontend)', () =
       }
     `
     expect(violations('cas-correct.js', correct)).toEqual([])
+  })
+
+  // ── Appels dont le résultat n'est jamais lu (ajouté le 2026-10-01) ──────────────────────
+
+  it('aucun fichier de page ni script inline ne lance un api*() sans en lire le résultat', () => {
+    const js = readdirSync(JS_DIR).filter((f: string) => f.endsWith('.js'))
+      .flatMap((f: string) => appelsNonLus(f, readFileSync(join(JS_DIR, f), 'utf8')))
+    const html = readdirSync(HTML_DIR).filter((f: string) => f.endsWith('.html'))
+      .flatMap((f: string) => appelsNonLus(f, scriptsInline(readFileSync(join(HTML_DIR, f), 'utf8'))))
+
+    const anomalies = [...js, ...html].map(a => `${a.fichier}:${a.ligne} — \`await ${a.appel}(…)\` `
+      + `jamais lu : un refus du serveur reste muet (lire \`res.ok\` / \`res.error\`, ou déballer `
+      + `\`(await ${a.appel}(…)).data\` et tester \`success\`)`)
+    expect(anomalies, 'appels api*() dont le résultat n\'est jamais lu').toEqual([])
+  })
+
+  it('le détecteur d\'appels non lus voit les écritures réelles corrigées le 2026-10-01', () => {
+    // Preuve par mutation : les quatre écritures fautives telles qu'elles étaient dans le dépôt
+    const fautif = `
+      async function saveNotif() {
+        try {
+          await apiPut(\`/api/boutiques/\${_boutiqueId}/settings\`, payload)
+          showToast('Préférences mises à jour', 'green')
+        } catch (e) {}
+      }
+      async function deleteMarque(id) {
+        if (!confirm('?')) return;
+        await apiDelete(\`/api/services/marques/\${id}\`);
+        await loadMarques();
+      }
+      async function removeLiaison(serviceId) { await apiDelete('/x'); await refreshLiaisonList(1); }
+      async function retirer() { if (ok) await apiDelete('/y') }
+    `
+    expect(appelsNonLus('cas-fautif.js', fautif).map(a => a.appel))
+      .toEqual(['apiPut', 'apiDelete', 'apiDelete', 'apiDelete'])
+
+    const correct = `
+      async function a() { const res = await apiPut('/x', {}); if (!res.ok) return }
+      async function b() { const res = (await apiDelete('/y')).data; if (!res?.success) return }
+      async function c() { return await apiGet('/z') }
+      async function d() { await apiGet('/w').then(r => r) }
+      async function e() { afficher(await apiGet('/v')) }
+    `
+    expect(appelsNonLus('cas-correct.js', correct)).toEqual([])
   })
 })
