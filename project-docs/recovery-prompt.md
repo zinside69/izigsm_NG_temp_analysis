@@ -19,7 +19,11 @@ Aucun code. **Tickets 15, 16, 17 cadrés** — le lot 2 (11 à 17) est entièrem
 - Trois défauts ajoutés à `bugs.md` (durée de garantie jamais lue, échec de garantie muet,
   conversion d'un devis non accepté) — correctifs dans 15 et 16.
 
-**Première action** : transmettre les trois hashes à la session racine (12 et 16 amendés). Ensuite,
+**Fait après le checkpoint** : les hashes ont été **transmis** à la session racine (fenêtre « Socle »
+de l'app de bureau, collés par l'exploitant). Pour la joindre : message prêt à coller, ⊥
+`SendMessage` à l'aveugle.
+
+**Première action** (transmission faite, voir ci-dessus) : transmettre les trois hashes à la session racine (12 et 16 amendés). Ensuite,
 selon la demande : relecture d'une PR du socle, amendement P15, report sur `main`. **Le 15 se code
 ici quand 12, 13 et 14 sont sur `main`** — ⊥ avant (conflits de fichiers partagés).
 

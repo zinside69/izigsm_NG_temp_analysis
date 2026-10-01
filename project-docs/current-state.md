@@ -32,6 +32,11 @@ inchangées (`0048` → `0051`, `0054`). Sync multi-machines : sautée (« skip 
 **Prochaine session** : transmettre les hashes à la session racine ; relire les PR du socle ; coder
 le 15 quand 12-14 sont sur `main`.
 
+**Ajout après le checkpoint 133 (même jour)** : hashes `19a22cc`, `eaa256b`, `7e2b37f`, `99afa00`
+**transmis** — message collé par l'exploitant dans la session racine (app de bureau, titre
+« Socle », dépôt `claude-projects`) ; `todo.md` coché (`19b28cd`). Manière de joindre cette session :
+mémoire `partage-roles-socle`.
+
 ## Checkpoint 132 — Lot 2 : tickets 11 à 14 cadrés, amendements du socle (2026-09-30, soir)
 
 **Aucun code. Production inchangée (`izigsm-v3.11`). `main` = `origin/main`.** Migrations en attente
