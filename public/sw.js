@@ -13,7 +13,8 @@
 // AVANT (2026-09-30, report du ticket 05 Mobilax — stock.js et stock.html modifiés) : const CACHE_VERSION  = 'izigsm-v3.11'
 // AVANT (2026-09-30, ticket 04 `vente-lit-catalogue` — douchette.js, caisse.js, stock.js) : const CACHE_VERSION  = 'izigsm-v3.12'
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — stock.js/html, caisse.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.13'
-const CACHE_VERSION  = 'izigsm-v3.14'
+// AVANT (2026-10-01, report du ticket 08a `vente-lit-catalogue` — tickets.js ; v3.15 réservée au ticket 06 Mobilax, encore sur `integration`, saut voulu pour rester aligné sur `integration`) : const CACHE_VERSION  = 'izigsm-v3.14'
+const CACHE_VERSION  = 'izigsm-v3.16'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

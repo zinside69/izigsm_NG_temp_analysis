@@ -18,6 +18,7 @@
 
 - **`POST /api/tickets` ne vérifie pas que `client_id` appartient à la boutique** de l'appelant —
   relevé par la relecture de conception du socle (P15) sur le 08a ; **correctif : ticket 08a**.
+  → **CORRIGÉ le 2026-10-01** (report du 08a sur `main`, non déployé).
 - **Les lignes de devis n'écrivent pas `service_id`** (`devisService.ts`, création et conversion en
   facture : `produit_id` seul) alors que la colonne existe depuis `0049` — le lien au catalogue se
   perd ; **correctif : ticket 13**.
@@ -28,7 +29,23 @@
   PNG) est coupée, donc illisible. Le 14 contourne pour le comptoir (stockage entier) ; le chemin
   **en ligne** garde la troncature — **non corrigé**, hors périmètre.
 
-## 🟠 Prise en charge : l'IMEI saisi n'est jamais enregistré (trouvé le 2026-09-30, OUVERT)
+## ✅ 🟠 Prise en charge : l'IMEI saisi n'est jamais enregistré (trouvé le 2026-09-30, **CORRIGÉ le 2026-10-01**, non déployé)
+
+**Correctif (ticket 08a, socle T-008, PR #38 d'`integration` `ce51ced`, reporté sur `main`)** :
+`POST /api/tickets` lit le champ « IMEI / n° de série » — 15 chiffres à clé de Luhn juste → IMEI,
+clé fausse → 400 sans ticket créé, autre saisie → numéro de série — et retrouve ou crée la fiche
+appareil **du client** (même client + même identifiant), puis pose `tickets.appareil_id`. Le client
+est vérifié dans la boutique de l'appelant **avant** toute écriture (faille de `POST /api/tickets`
+fermée au passage). `PUT /api/tickets/:id` **rattache** le ticket sans jamais réécrire la fiche
+appareil (partagée par les tickets du client) ; champ absent ou vide → inchangé. La fiche de
+modification rouvre avec l'identifiant enregistré. Preuves : `tests/ticket-appareil-sqlite.test.ts`
+(vrai SQLite), `tests/routes-tickets-imei.test.ts`, E2E `prise-en-charge-imei.spec.ts` 2/2 rejoué sur
+Windows. Tickets antérieurs : non rattrapables (la donnée n'a jamais existé).
+⚠ Reste : le panneau en lecture seule `viewTicket()` affiche toujours un IMEI vide (hors périmètre,
+déclaré par l'agent).
+
+_Titre d'origine : « 🟠 Prise en charge : l'IMEI saisi n'est jamais enregistré (trouvé le 2026-09-30,
+OUVERT) »._
 
 **Défaut** : le formulaire de prise en charge (`tickets.js`, envoi du ticket) transmet `imei`, mais
 `POST /api/tickets` (`src/routes/tickets.ts`) ne lit pas ce champ — il n'accepte qu'un
