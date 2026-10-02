@@ -1,5 +1,19 @@
 # iziGSM — Bugs connus
 
+## 🟠 Caisse : un paiement « mixte » ne garde pas sa ventilation espèces / CB (trouvé le 2026-10-02, OUVERT)
+
+**Défaut** : `createVente()` (`caisseService.ts`, étape 5) écrit **une seule** ligne `paiements`
+au mode `mixte` pour tout le montant ; seul `montant_especes` est transmis, pour calculer la monnaie
+à rendre, et n'est stocké nulle part. La part réellement encaissée en espèces et en CB est perdue :
+ni la caisse, ni l'export comptable ne peuvent la ventiler. **Mesuré** : 0 paiement `mixte` en
+production à ce jour (modes présents : `cb`, `CB`, `especes`).
+
+**Conséquence** : l'export comptable mensuel (ticket 001 `export-comptable-mensuel`) présente ces
+montants dans une colonne **« Mixte \* »** à part, avec une note. **Correctif à cadrer** : un paiement
+par mode en caisse (caisse / NF525 → codé ici). Second constat du même jour : `CB` et `cb`
+coexistent (casse non normalisée à l'écriture) — l'export les regroupe, l'écriture reste à
+normaliser.
+
 ## ✅ 🔴 Rôle `gerant` inexistant : aucun manager ne pouvait clôturer sa caisse (trouvé le 2026-10-01, CORRIGÉ le même jour, non déployé)
 
 **Défaut** : six routes exigeaient `requireRole('admin', 'gerant')` (ou `'admin', 'gerant',

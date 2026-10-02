@@ -54,3 +54,13 @@ export function todayParis(date: Date = new Date()): string {
 export function currentMonthParis(date: Date = new Date()): string {
   return todayParis(date).slice(0, 7)
 }
+
+/**
+ * Heure ("HH:MM", 24 h) en heure locale France — ajoutée le 2026-10-02 pour l'export comptable
+ * mensuel (onglet « Encaissements »). Même source de fuseau que `todayParis()`.
+ */
+export function heureParis(date: Date): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: PARIS_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date)
+}

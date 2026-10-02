@@ -29,7 +29,15 @@ import {
   exportCsvCa,
   exportCsvTechniciens,
   getRapportComptable,
+  lireEncaissementsPeriode,
+  agregerEncaissementsMensuels,
+  lireFacturesPayeesPeriode,
+  COLONNES_FACTURES_PAYEES,
 } from '../services/statsService'
+import { construireOngletsComptables } from '../services/exportComptableService'
+import { construireXlsx }             from '../lib/xlsx'
+import { getBoutiqueById }            from '../services/boutiqueService'
+import { todayParis, heureParis }     from '../lib/timezone'
 
 type Bindings  = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { db: Database }
@@ -216,6 +224,76 @@ stats.get('/stats/export/csv', requireRole('admin', 'manager', 'technicien'), as
       headers: {
         'Content-Type':        'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="${name}"`,
+      },
+    })
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message }, 500)
+  }
+})
+
+// ─── GET /api/stats/export/xlsx — Export comptable Excel (3 onglets) ──────────
+
+/** Date calendaire valide AAAA-MM-JJ. */
+const estDateIso = (s: string | null): s is string =>
+  !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`))
+  && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s
+
+/**
+ * Export comptable Excel de la boutique : onglets « Mensuel » (encaissements par jour et par
+ * mode), « Encaissements » (une ligne par paiement) et « Factures payées » (le CSV « CA »).
+ * Ticket 001 `export-comptable-mensuel`, décisions de l'exploitant du 2026-10-02.
+ *
+ * Réservé à la gestion de la boutique (manager, admin plateforme) : c'est un document comptable.
+ *
+ * @query from  AAAA-MM-JJ (défaut : 1er du mois courant, heure de Paris)
+ * @query to    AAAA-MM-JJ (défaut : aujourd'hui) — période d'au plus 366 jours
+ * @returns     .xlsx en pièce jointe ; 400 si période invalide
+ */
+stats.get('/stats/export/xlsx', requireRole('admin', 'manager'), async (c) => {
+  try {
+    const { db, boutiqueId } = ctx(c)
+    if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+    const q     = new URL(c.req.url).searchParams
+    const today = todayParis()
+    const du    = q.get('from') || `${today.slice(0, 7)}-01`
+    const au    = q.get('to')   || today
+    if (!estDateIso(du) || !estDateIso(au))
+      return c.json({ success: false, error: 'Période invalide : dates attendues au format AAAA-MM-JJ.' }, 400)
+    if (du > au)
+      return c.json({ success: false, error: 'Période invalide : la date de début suit la date de fin.' }, 400)
+    if ((Date.parse(au) - Date.parse(du)) / 86_400_000 > 366)
+      return c.json({ success: false, error: 'Période trop longue : 366 jours au plus.' }, 400)
+
+    const [encaissements, factures, boutique] = await Promise.all([
+      lireEncaissementsPeriode(db, boutiqueId, du, au),
+      lireFacturesPayeesPeriode(db, boutiqueId, du, au),
+      getBoutiqueById(db, boutiqueId),
+    ])
+    const maintenant = new Date()
+    const onglets = construireOngletsComptables(
+      agregerEncaissementsMensuels(encaissements, du, au),
+      factures,
+      COLONNES_FACTURES_PAYEES,
+      {
+        boutique: (boutique as any)?.nom || 'Boutique',
+        ville:    (boutique as any)?.ville ?? null,
+        du, au,
+        genereLe: `${todayParis(maintenant).split('-').reverse().join('/')} à ${heureParis(maintenant)}`,
+      },
+    )
+
+    const slug = String((boutique as any)?.slug || (boutique as any)?.nom || `boutique-${boutiqueId}`)
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
+    const nom = du.slice(0, 7) === au.slice(0, 7)
+      ? `export-comptable_${slug}_${du.slice(0, 7)}.xlsx`
+      : `export-comptable_${slug}_${du}_${au}.xlsx`
+
+    return new Response(construireXlsx(onglets), {
+      headers: {
+        'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${nom}"`,
+        'Cache-Control':       'no-store',
       },
     })
   } catch (e: any) {

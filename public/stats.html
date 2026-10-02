@@ -195,9 +195,16 @@
           <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wide">
             <i class="fas fa-calculator text-indigo-400 mr-2"></i>Synthèse comptable
           </h2>
+          <!-- AVANT (2026-10-02) : le bouton CSV était seul dans ce bloc ; il est gardé tel quel, et
+               l'export comptable Excel (3 onglets, ticket 001 export-comptable-mensuel) le rejoint. -->
+          <div class="flex items-center gap-2">
+          <button class="btn-export" id="btn-export-comptable" onclick="Stats.exportXlsx()">
+            <i class="fas fa-file-excel"></i>Export comptable (Excel)
+          </button>
           <button class="btn-export" onclick="Stats.exportCsv('ca')">
             <i class="fas fa-file-csv"></i>Exporter CA (CSV)
           </button>
+          </div>
         </div>
         <div id="rapport-comptable-content">
           <div class="grid grid-cols-3 gap-4 mb-4">
@@ -888,6 +895,46 @@
       }
     }
 
+    /**
+     * Export comptable Excel (ticket 001 `export-comptable-mensuel`, 2026-10-02) : onglets « Mensuel »,
+     * « Encaissements », « Factures payées », sur la période de la page. Téléchargé par `fetch()`
+     * (jeton dans l'en-tête), comme l'export CSV ; un refus du serveur est annoncé, jamais muet.
+     */
+    async function exportXlsx() {
+      const bouton = document.getElementById('btn-export-comptable')
+      try {
+        if (bouton) bouton.disabled = true
+        const qs = new URLSearchParams()
+        if (_boutiqueId) qs.set('boutique_id', _boutiqueId)
+        if (_from) qs.set('from', _from)
+        if (_to)   qs.set('to',   _to)
+        const token = typeof getToken === 'function' ? getToken() : ''
+        const resp  = await fetch(`/api/stats/export/xlsx?${qs}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        })
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}))
+          alert(`Export comptable refusé : ${err.error ?? resp.status}`)
+          return
+        }
+        const blob = await resp.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        const cd   = resp.headers.get('Content-Disposition') ?? ''
+        a.href     = url
+        a.download = cd.match(/filename="([^"]+)"/)?.[1] ?? 'export-comptable.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } catch (e) {
+        alert(`Erreur lors de l'export comptable : ${e.message}`)
+        console.error('Export comptable', e)
+      } finally {
+        if (bouton) bouton.disabled = false
+      }
+    }
+
     // ─── Rapport comptable ────────────────────────────────────────────────────
 
     async function loadRapportComptable() {
@@ -946,7 +993,8 @@
     }
 
     // ─── API publique ─────────────────────────────────────────────────────────
-    return { init, switchTab, setPeriod, setDateRange, refreshActivite, exportCsv }
+    // AVANT (2026-10-02, export comptable Excel) : return { init, switchTab, setPeriod, setDateRange, refreshActivite, exportCsv }
+    return { init, switchTab, setPeriod, setDateRange, refreshActivite, exportCsv, exportXlsx }
 
   })()
 

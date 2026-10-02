@@ -26,7 +26,9 @@
  *   getRapportTechnicien(db, boutiqueId)       — Tickets par technicien
  */
 
-import { todayParis, currentMonthParis } from '../lib/timezone'
+// AVANT (2026-10-02, export comptable mensuel : parseUtcTimestamp et heureParis ajoutés) :
+// import { todayParis, currentMonthParis } from '../lib/timezone'
+import { todayParis, currentMonthParis, parseUtcTimestamp, heureParis } from '../lib/timezone'
 import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
 
@@ -487,6 +489,12 @@ export async function exportCsvCa(
   from?:      string,
   to?:        string
 ): Promise<string> {
+  // AVANT (2026-10-02, export comptable mensuel) : requête et colonnes déplacées TELLES QUELLES dans
+  // `lireFacturesPayeesPeriode()` et `COLONNES_FACTURES_PAYEES` (ci-dessous), pour que l'onglet
+  // « Factures payées » de l'export Excel lise exactement la même chose que ce CSV — une seule
+  // définition, ⊥ une copie qui divergerait. Ancien code conservé en commentaire :
+  return toCSV(await lireFacturesPayeesPeriode(db, boutiqueId, from, to), COLONNES_FACTURES_PAYEES)
+  /*
   const today = todayParis()
 
   const rows = await db.all<any>(`
@@ -531,6 +539,65 @@ export async function exportCsvCa(
     { key: 'statut',        label: 'Statut'           },
     { key: 'notes',         label: 'Notes'            },
   ])
+  */
+}
+
+/** Colonnes de l'export des factures payées — CSV « CA » et onglet « Factures payées » de l'Excel. */
+export const COLONNES_FACTURES_PAYEES: { key: string; label: string }[] = [
+  { key: 'numero',        label: 'N° Facture'       },
+  { key: 'client',        label: 'Client'           },
+  { key: 'client_email',  label: 'Email'            },
+  { key: 'date_emission', label: 'Date émission'    },
+  { key: 'date_echeance', label: 'Date échéance'    },
+  { key: 'total_ht',      label: 'Montant HT (€)'   },
+  { key: 'total_tva',     label: 'TVA (€)'          },
+  { key: 'total_ttc',     label: 'Montant TTC (€)'  },
+  { key: 'mode_paiement', label: 'Mode paiement'    },
+  { key: 'statut',        label: 'Statut'           },
+  { key: 'notes',         label: 'Notes'            },
+]
+
+/**
+ * Factures payées d'une boutique, à leur date d'émission — la requête de l'export CSV « CA »,
+ * déplacée telle quelle le 2026-10-02 (voir `exportCsvCa()`).
+ */
+export async function lireFacturesPayeesPeriode(
+  db:         Database,
+  boutiqueId: number,
+  from?:      string,
+  to?:        string
+): Promise<any[]> {
+  const today = todayParis()
+
+  const rows = await db.all<any>(`
+    SELECT
+      f.numero,
+      c.nom  || ' ' || c.prenom  AS client,
+      c.email                    AS client_email,
+      DATE(f.date_emission)      AS date_emission,
+      DATE(f.date_echeance)      AS date_echeance,
+      ROUND(f.total_ht,   2)     AS total_ht,
+      ROUND(f.total_tva,  2)     AS total_tva,
+      ROUND(f.total_ttc,  2)     AS total_ttc,
+      COALESCE((
+        SELECT GROUP_CONCAT(DISTINCT p.mode_paiement)
+        FROM paiements p WHERE p.facture_id = f.id
+      ), '')                     AS mode_paiement,
+      f.statut,
+      COALESCE(f.notes, '')      AS notes
+    FROM factures f
+    LEFT JOIN clients c ON c.id = f.client_id
+    WHERE f.boutique_id = ?
+      AND f.statut = 'payee'
+      AND DATE(f.date_emission) BETWEEN ? AND ?
+    ORDER BY f.date_emission DESC
+    LIMIT 5000
+  `, [
+    boutiqueId,
+    from ?? (today.slice(0, 7) + '-01'),
+    to   ?? today
+  ])
+  return rows ?? []
 }
 
 /**
@@ -707,4 +774,210 @@ export async function getRapportTechnicien(db: Database, boutiqueId: number) {
      GROUP BY u.id
      ORDER BY total_tickets DESC`, [boutiqueId, boutiqueId]
   )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPORT COMPTABLE MENSUEL — encaissements par jour et par mode
+// (ticket 001 `export-comptable-mensuel`, décisions de l'exploitant du 2026-10-02)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Colonnes de mode, dans l'ordre de l'onglet « Mensuel ». `mixte` et `autre` : seulement si utilisées. */
+export const MODES_ENCAISSEMENT = ['especes', 'cb', 'cheque', 'virement', 'mixte', 'autre'] as const
+export type ModeEncaissement = typeof MODES_ENCAISSEMENT[number]
+
+/** Un encaissement tel que lu en base : le paiement, sa facture, et les lignes de la facture par taux. */
+export interface EncaissementBrut {
+  id:             number
+  date_paiement:  string          // UTC, format SQLite « AAAA-MM-JJ HH:MM:SS »
+  montant:        number          // TTC encaissé
+  mode_paiement:  string | null
+  facture_numero: string | null
+  client:         string | null
+  facture_ht:     number | null
+  facture_ttc:    number | null
+  lignes:         { taux: number; ht: number; tva: number }[]
+}
+
+export interface JourMensuel {
+  date:  string                                   // AAAA-MM-JJ, jour de Paris
+  modes: Record<ModeEncaissement, number>
+  ttc:   number
+  ht:    number
+  tva:   number
+  nb:    number
+}
+
+export interface EncaissementDetail {
+  date: string; heure: string; facture_numero: string; client: string
+  mode: ModeEncaissement; ttc: number; ht: number; tva: number
+}
+
+export interface ExportMensuel {
+  jours:         JourMensuel[]
+  total:         Omit<JourMensuel, 'date'>
+  colonnes:      ModeEncaissement[]
+  tvaParTaux:    { taux: number; ht: number; tva: number }[]
+  encaissements: EncaissementDetail[]
+}
+
+/** Mode normalisé : casse, accents et espaces ignorés (`CB` et `cb` coexistent en production). */
+function normaliserMode(mode: string | null): ModeEncaissement {
+  const m = (mode ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  if (m === 'especes' || m === 'espece') return 'especes'
+  if (m === 'cb' || m === 'carte' || m === 'carte bancaire') return 'cb'
+  if (m === 'cheque' || m === 'cheques') return 'cheque'
+  if (m === 'virement') return 'virement'
+  if (m === 'mixte') return 'mixte'
+  return 'autre'
+}
+
+/** Jours AAAA-MM-JJ de `du` à `au` inclus (calendrier, sans fuseau). */
+function joursEntre(du: string, au: string): string[] {
+  const jours: string[] = []
+  for (let d = new Date(`${du}T00:00:00Z`); d <= new Date(`${au}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1))
+    jours.push(d.toISOString().slice(0, 10))
+  return jours
+}
+
+/** Jour AAAA-MM-JJ décalé de `n` jours (calendrier). */
+function decalerJour(jour: string, n: number): string {
+  const d = new Date(`${jour}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+const enEuros = (centimes: number) => Math.round(centimes) / 100
+
+/**
+ * Agrège les encaissements par jour de Paris et par mode — fonction pure.
+ *
+ * Calcul en **centimes** : HT d'un encaissement = montant × HT / TTC de sa facture (prorata : un
+ * paiement partiel ou un acompte ne prend que sa part), TVA = montant − HT ; HT + TVA = TTC au
+ * centime, chaque jour et au total. La TVA par taux répartit ce HT et cette TVA selon les lignes de
+ * la facture, le reste d'arrondi porté sur le dernier taux.
+ *
+ * @param encaissements Lus par `lireEncaissementsPeriode()` (bornes larges, en UTC)
+ * @param du            Premier jour (AAAA-MM-JJ), heure de Paris
+ * @param au            Dernier jour (AAAA-MM-JJ), heure de Paris
+ */
+export function agregerEncaissementsMensuels(
+  encaissements: EncaissementBrut[],
+  du:            string,
+  au:            string,
+): ExportMensuel {
+  type Cumul = { modes: Record<ModeEncaissement, number>; ttc: number; ht: number; tva: number; nb: number }
+  const vide = () => Object.fromEntries(MODES_ENCAISSEMENT.map(m => [m, 0])) as Record<ModeEncaissement, number>
+  const parJour = new Map<string, Cumul>(joursEntre(du, au).map(d => [d, { modes: vide(), ttc: 0, ht: 0, tva: 0, nb: 0 }]))
+  const parTaux = new Map<number, { ht: number; tva: number }>()
+  const detail: (EncaissementDetail & { tri: number })[] = []
+
+  for (const e of encaissements) {
+    const instant = parseUtcTimestamp(e.date_paiement)
+    const jour = todayParis(instant)
+    const cible = parJour.get(jour)
+    if (!cible) continue                          // hors période une fois ramené à l'heure de Paris
+
+    const mode  = normaliserMode(e.mode_paiement)
+    const ttc   = Math.round((e.montant ?? 0) * 100)
+    const ratio = e.facture_ttc ? (e.facture_ht ?? 0) / e.facture_ttc : 1
+    const ht    = Math.round(ttc * ratio)
+    const tva   = ttc - ht
+
+    cible.modes[mode] += ttc; cible.ttc += ttc; cible.ht += ht; cible.tva += tva; cible.nb += 1
+
+    // TVA par taux : part de chaque taux dans le HT de la facture ; facture sans ligne → taux déduit des totaux
+    const lignes = e.lignes.filter(l => l.ht || l.tva)
+    const htFacture = lignes.reduce((s, l) => s + l.ht, 0)
+    const repartition = lignes.length && htFacture
+      ? lignes.map(l => ({ taux: l.taux, part: l.ht / htFacture }))
+      : [{ taux: e.facture_ht ? Math.round(((e.facture_ttc ?? 0) - e.facture_ht) / e.facture_ht * 1000) / 10 : 0, part: 1 }]
+    let resteHt = ht, resteTva = tva
+    repartition.forEach((r, i) => {
+      const dernier = i === repartition.length - 1
+      const h = dernier ? resteHt : Math.round(ht * r.part)
+      const t = dernier ? resteTva : Math.round(tva * r.part)
+      resteHt -= h; resteTva -= t
+      const acc = parTaux.get(r.taux) ?? { ht: 0, tva: 0 }
+      acc.ht += h; acc.tva += t
+      parTaux.set(r.taux, acc)
+    })
+
+    detail.push({
+      tri: instant.getTime(), date: jour, heure: heureParis(instant),
+      facture_numero: e.facture_numero ?? '—', client: (e.client ?? '').trim() || '—',
+      mode, ttc: enEuros(ttc), ht: enEuros(ht), tva: enEuros(tva),
+    })
+  }
+
+  const versEuros = (c: Cumul) => ({
+    modes: Object.fromEntries(MODES_ENCAISSEMENT.map(m => [m, enEuros(c.modes[m])])) as Record<ModeEncaissement, number>,
+    ttc: enEuros(c.ttc), ht: enEuros(c.ht), tva: enEuros(c.tva), nb: c.nb,
+  })
+  const cumulTotal: Cumul = { modes: vide(), ttc: 0, ht: 0, tva: 0, nb: 0 }
+  for (const j of parJour.values()) {
+    for (const m of MODES_ENCAISSEMENT) cumulTotal.modes[m] += j.modes[m]
+    cumulTotal.ttc += j.ttc; cumulTotal.ht += j.ht; cumulTotal.tva += j.tva; cumulTotal.nb += j.nb
+  }
+
+  return {
+    jours: [...parJour].map(([date, j]) => ({ date, ...versEuros(j) })),
+    total: versEuros(cumulTotal),
+    colonnes: MODES_ENCAISSEMENT.filter(m =>
+      m === 'especes' || m === 'cb' || m === 'cheque' || m === 'virement' || cumulTotal.modes[m] !== 0),
+    tvaParTaux: [...parTaux].sort((a, b) => b[0] - a[0]).map(([taux, v]) => ({ taux, ht: enEuros(v.ht), tva: enEuros(v.tva) })),
+    encaissements: detail.sort((a, b) => a.tri - b.tri).map(({ tri, ...d }) => d),
+  }
+}
+
+/**
+ * Lit les encaissements d'une boutique autour de la période, avec facture, client et lignes.
+ *
+ * Bornes **larges** en UTC (veille du premier jour → surlendemain du dernier) : `date_paiement` est
+ * en UTC et un jour de Paris déborde sur deux jours UTC. Le filtre exact au jour de Paris est fait
+ * par `agregerEncaissementsMensuels()`.
+ */
+export async function lireEncaissementsPeriode(
+  db:         Database,
+  boutiqueId: number,
+  du:         string,
+  au:         string,
+): Promise<EncaissementBrut[]> {
+  const debut = `${decalerJour(du, -1)} 00:00:00`
+  const fin   = `${decalerJour(au, 2)} 00:00:00`
+
+  const paiements = await db.all<any>(`
+    SELECT p.id, p.date_paiement, p.montant, p.mode_paiement, p.facture_id,
+           f.numero AS facture_numero, f.total_ht AS facture_ht, f.total_ttc AS facture_ttc,
+           TRIM(COALESCE(NULLIF(c.raison_sociale, ''), COALESCE(c.prenom, '') || ' ' || COALESCE(c.nom, ''))) AS client
+    FROM   paiements p
+    LEFT   JOIN factures f ON f.id = p.facture_id
+    LEFT   JOIN clients  c ON c.id = f.client_id
+    WHERE  p.boutique_id = ? AND p.date_paiement >= ? AND p.date_paiement < ?
+    ORDER  BY p.date_paiement
+  `, [boutiqueId, debut, fin])
+
+  const lignes = await db.all<any>(`
+    SELECT l.document_id AS facture_id, l.tva_taux AS taux,
+           SUM(l.total_ht) AS ht, SUM(l.total_tva) AS tva
+    FROM   lignes_document l
+    WHERE  l.document_type = 'facture'
+      AND  l.document_id IN (
+             SELECT p.facture_id FROM paiements p
+             WHERE  p.boutique_id = ? AND p.date_paiement >= ? AND p.date_paiement < ?)
+    GROUP  BY l.document_id, l.tva_taux
+  `, [boutiqueId, debut, fin])
+
+  const parFacture = new Map<number, { taux: number; ht: number; tva: number }[]>()
+  for (const l of lignes ?? []) {
+    const liste = parFacture.get(l.facture_id) ?? []
+    liste.push({ taux: Number(l.taux), ht: Number(l.ht) || 0, tva: Number(l.tva) || 0 })
+    parFacture.set(l.facture_id, liste)
+  }
+
+  return (paiements ?? []).map((p: any) => ({
+    id: p.id, date_paiement: p.date_paiement, montant: Number(p.montant) || 0, mode_paiement: p.mode_paiement,
+    facture_numero: p.facture_numero ?? null, client: p.client ?? null,
+    facture_ht: p.facture_ht ?? null, facture_ttc: p.facture_ttc ?? null,
+    lignes: parFacture.get(p.facture_id) ?? [],
+  }))
 }
