@@ -1,4 +1,45 @@
-# iziGSM — État courant (MàJ : 2026-10-01, checkpoint 137 — hiérarchie des rôles, garde-fous, formulaires à email)
+# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 138 — v3.19 en production ; export comptable et correctif de clôture prêts à déployer)
+
+## Checkpoint 138 — Déploiement du matin, export comptable Excel, clôture par boutique (2026-10-02)
+
+**Production : `izigsm-v3.19`, dernière migration distante `0054`** (déployée ce matin, relue). **Sur
+`main`, non déployé : `0060` (migration) + export comptable (v3.20).** Vitest 1 384 + 2 permanents,
+tsc 32, **E2E complets 358/358** (sur le schéma `0060` local). `main` = `origin/main` = `a9d3cab`.
+
+- **Déploiement du matin** (décision « a », règle « lot 1 en bloc » levée, `b5c9f54`) : `0048` →
+  `0051` + `0054` à distance à 07:35 UTC, puis le code ; aperçu `0e426f1b` puis apex vérifiés (v3.19,
+  assets du manifeste, routes 401). Test E2E corrigé avant : `mobilax_id` fixe sur la boutique partagée
+  (`ed2041f`). **Journal des migrations** créé : `project-docs/journal-migrations.md` (52 migrations
+  datées, SQL inverses, points Time Travel ; `modop-deploiement.md` étape 5 y renvoie).
+- **Recette du matin (manager `telnet@bbox.fr`, boutique 2)** : ✅ Caisse › Intégrité NF525 ; ✅
+  Synthèse comptable + export CSV. **Restent** : import Mobilax de la pièce `#804` (« Ecran Tactile
+  Hard Oled Apple iPhone 15 Pro Max… », stock 0, `mobilax_id` NULL) → « Ajouter 1 au stock », puis
+  relire en base 1 seul mouvement « Import fournisseur — déjà en stock » + `mobilax_id` posé ;
+  douchette en caisse ; **clôture du soir — seulement APRÈS le déploiement de `0060`**.
+- **Export comptable Excel** (`424ea56`, ticket `.scratch/export-comptable-mensuel/issues/001-…`,
+  décisions de l'exploitant) : `GET /api/stats/export/xlsx`, bouton « Export comptable (Excel) »
+  (Statistiques › Synthèse comptable). 3 onglets : **Mensuel** (un jour par ligne, Espèces / CB /
+  Chèque / Virement [+ Mixte, Autre si utilisés], TOTAL TTC, HT, TVA, Nb ; total, part de chaque mode,
+  TVA par taux), **Encaissements** (une ligne par paiement, somme = total), **Factures payées** (CSV
+  actuel, requête partagée `lireFacturesPayeesPeriode()`). Base = **paiements au jour de Paris**,
+  HT/TVA au prorata de la facture en centimes. `src/lib/xlsx.ts` sans dépendance (relu `openpyxl`).
+  Démo : `scratchpad/export-comptable_DEMO_2026-09.xlsx` (montants de l'exemple de juin).
+- **Défaut 🔴 trouvé par l'E2E** : `0008` imposait `date_cloture UNIQUE` sur **toute la plateforme**
+  → une seule boutique pouvait clôturer par jour (exposé ce matin, les managers clôturant). Correctif
+  **`0060`** (`a9d3cab`) : unique `(boutique_id, date_cloture)`, recréation patron `0040`, 0 ligne en
+  production. Reste ouvert : `UPDATE` du journal avant `INSERT` de la clôture (non atomique).
+- **Défauts consignés** (`bugs.md`) : paiement **mixte** non ventilé en caisse ; `CB`/`cb` non normalisés.
+
+**Prochaine action — déploiement de `0060` + v3.20, AVANT la clôture de ce soir** (`modop-deploiement.md`) :
+1. `npx wrangler d1 time-travel info DB` (relever le point, le noter au journal des migrations) ;
+2. relire `d1_migrations` distant (= `0054`) et `SELECT COUNT(*) FROM pragma_foreign_key_check` = **0**
+   (prérequis d'une recréation de table), et `SELECT COUNT(*) FROM clotures_journalieres` ;
+3. `npx wrangler d1 migrations apply DB --remote` (lire « remote ») → relire : dernière `0060`, index
+   `idx_clotures_boutique_date` présent, aucune table `_transit` ;
+4. `npm run deploy` par l'exploitant ; aperçu puis apex (`sw.js` v3.20, `stats.*.js` du manifeste) ;
+5. journal des migrations : ligne `0060` (date relue, inverse = Time Travel seulement — recréation `R`).
+⚠ Sans le shell propre (`CLOUDFLARE_API_TOKEN` absent) → `7403` ; un 7403 isolé s'est produit ce
+matin et est passé au second essai.
 
 ## Checkpoint 137 — Hiérarchie des rôles, garde-fous, formulaires à email (2026-10-01, soir)
 

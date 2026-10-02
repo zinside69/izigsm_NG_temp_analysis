@@ -1,4 +1,20 @@
-# Recovery Prompt — iziGSM — 2026-10-01 (checkpoint 137 — hiérarchie des rôles)
+# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 138 — déployer 0060 + export comptable avant la clôture du soir)
+
+## Ce qui a changé au checkpoint 138
+
+**Production `izigsm-v3.19` / migration distante `0054`** (déployée ce matin). Sur `main` (`a9d3cab`),
+non déployés : **migration `0060`** (clôture NF525 unique par boutique et par jour — avant : une seule
+boutique de la plateforme pouvait clôturer par jour) et **export comptable Excel** (v3.20). E2E
+358/358, vitest 1 384 + 2, tsc 32.
+
+**Première action : déployer `0060` + v3.20 AVANT toute clôture de caisse ce soir** — étapes exactes
+dans `current-state.md` § Checkpoint 138 (Time Travel relevé, `pragma_foreign_key_check` = 0, migration
+`--remote`, relecture, `npm run deploy` par l'exploitant, aperçu puis apex, ligne au
+`journal-migrations.md`). Puis finir la recette : import Mobilax pièce `#804` + « Ajouter 1 au
+stock » (relire le mouvement et `mobilax_id`), douchette, clôture du soir par le manager.
+
+Hors de ce soir : paiement mixte non ventilé, `CB`/`cb`, clôture non atomique (`bugs.md`) ;
+lot 2 ; ticket 15.
 
 ## Ce qui a changé au checkpoint 137
 

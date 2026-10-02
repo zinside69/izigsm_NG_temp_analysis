@@ -1,6 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
-## 🔴 À TRAITER LE 2026-10-02 — Déploiement (demandé le 2026-10-01 au soir)
+## 🔴 2026-10-02 — Déployer `0060` + export comptable (v3.20) AVANT la clôture du soir
+
+- [ ] Déploiement selon `current-state.md` § Checkpoint 138 (Time Travel, FK = 0, `0060` à distance,
+      relecture, `npm run deploy` par l'exploitant, aperçu puis apex, ligne au journal des migrations)
+- [ ] Recette restante : import Mobilax `#804` + « Ajouter 1 au stock » ; douchette ; clôture du soir
+- [ ] Ensuite (caisse / NF525, ici) : paiement mixte ventilé ; `CB`/`cb` normalisé à l'écriture ;
+      clôture atomique (`db.batch()`)
+
+## 🔴 À TRAITER LE 2026-10-02 — Déploiement (demandé le 2026-10-01 au soir) — ✅ FAIT le matin même (v3.19)
 
 - [ ] Décider : déployer `main` tel quel (lève la règle « lot 1 en bloc » : migrations `0048` → `0051`
       + `0054` à distance d'abord) **ou** attendre la fin du lot 1 (la clôture de caisse des managers

@@ -78,6 +78,12 @@ est inaltérable, la supprimer revient à effacer une partie d'un document léga
 cette colonne** une fois qu'une vente portant un appareil a été émise — vérifier d'abord :
 `SELECT COUNT(*) FROM factures WHERE appareils_snapshot IS NOT NULL`.
 
+**En attente d'application à distance** (au 2026-10-02, checkpoint 138) :
+
+| # | Migration | Effet | R | Inverse |
+|---|---|---|---|---|
+| — | `0060_clotures_unique_par_boutique` | `clotures_journalieres` recréée : unicité `(boutique_id, date_cloture)` au lieu de `date_cloture` seule | R | Time Travel au point relevé juste avant (à noter ici) ; une migration inverse rétablirait le défaut |
+
 Numéros **réservés, pas encore écrits** (le trou 0052–0053 est voulu) : `0052` ticket 05, `0053`
 ticket 06, `0055` 08b, `0056` 09, `0057` 11, `0058` 14 (sans objet), `0059` 16.
 

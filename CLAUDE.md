@@ -1121,6 +1121,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-02 (checkpoint 138) : migration `0060` EN ATTENTE, dépôt EN AVANCE** (export
+comptable Excel, `CACHE_VERSION` `izigsm-v3.20`). `0060` **recrée** `clotures_journalieres` (unicité
+par boutique et par jour) : prérequis `pragma_foreign_key_check` = 0, à appliquer à distance
+**avant** le code, et **avant toute clôture de caisse** — sans elle, une seule boutique de la
+plateforme peut clôturer par jour.
+
 **État au 2026-10-02 : DÉPLOYÉ — production en `izigsm-v3.19`, dernière migration distante `0054`
 (relue).** Décision de l'exploitant : `main` déployé tel quel, règle « lot 1 en bloc » levée
 (`decisions.md`). `0048` → `0051` et `0054` appliquées à distance à 07:35 UTC **puis** le code
