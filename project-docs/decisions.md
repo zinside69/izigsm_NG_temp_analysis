@@ -1,5 +1,18 @@
 # iziGSM — Décisions
 
+## 2026-10-02 — Le lot 1 ne part plus en bloc : `main` est déployé tel quel
+
+**Décision de l'exploitant** (voie « a » posée le 2026-10-01 au soir) : déployer `main` en l'état —
+tickets 04, 07, 08a, 18, 05 Mobilax du lot 1, plus les correctifs du 2026-10-01 — sans attendre 05,
+06, 08b, 08c, 09. Migrations `0048` → `0051` et `0054` appliquées à distance **avant** le code.
+
+**Pourquoi** : le défaut `gerant` (🔴, `bugs.md`) prive tous les managers de la clôture de caisse ;
+il ne doit pas attendre la fin d'un lot dont cinq tickets sont encore au socle. **Règle levée** :
+« le lot 1 part en bloc » (`decisions.md` 2026-09-30). Les tickets restants partiront à leur
+livraison, chacun avec ses migrations réservées (`0052`, `0053`, `0055`, `0056`) appliquées à distance
+d'abord. Les numéros réservés et non encore écrits n'empêchent rien : `migrations apply` applique
+les fichiers présents, dans l'ordre.
+
 ## 2026-10-01 — Hiérarchie des rôles : le manager dirige sa boutique sans contrainte
 
 **Décision de l'exploitant** : admin plateforme (supervision multi-tenant, aucune boutique) >
