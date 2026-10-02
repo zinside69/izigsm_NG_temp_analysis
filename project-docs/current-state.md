@@ -1,4 +1,22 @@
-# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 138 — v3.19 en production ; export comptable et correctif de clôture prêts à déployer)
+# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 139 — v3.20 et 0060 en production, dépôt et production alignés)
+
+## Checkpoint 139 — `0060` et v3.20 déployées (2026-10-02, fin de matinée)
+
+**Production : `izigsm-v3.20`, dernière migration distante `0060` (relue). Dépôt et production
+alignés** (`6d51b6e`).
+
+- `0060` appliquée à distance à **10:31:18 UTC** après lecture (dernière `0054`, FK = 0, 0 clôture) et
+  relevé du point Time Travel `000001cd-00000000-000050f8-06381c1130ab9cc0a9bf614264036856` ; relue
+  après (index `idx_clotures_boutique_date`, aucune table `_transit`, FK = 0).
+- Code déployé par l'exploitant : aperçu `2381cbeb` **puis** apex — `sw.js` v3.20, bouton « Export
+  comptable (Excel) » servi, assets du manifeste en JavaScript, `/api/health` 200, export et clôture
+  sans jeton → 401. Journal des migrations complété.
+- **Toutes les boutiques peuvent clôturer ce soir**, chacune la sienne.
+
+**Recette restante (manager `telnet@bbox.fr`)** : export comptable Excel de septembre sur données
+réelles ; import Mobilax `#804` + « Ajouter 1 au stock » (relire mouvement et `mobilax_id`) ;
+douchette ; **clôture du soir**. Ensuite (caisse / NF525, ici) : paiement mixte ventilé, `CB`/`cb`,
+clôture atomique.
 
 ## Checkpoint 138 — Déploiement du matin, export comptable Excel, clôture par boutique (2026-10-02)
 

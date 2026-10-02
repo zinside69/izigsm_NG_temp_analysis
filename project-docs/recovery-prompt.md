@@ -1,4 +1,15 @@
-# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 138 — déployer 0060 + export comptable avant la clôture du soir)
+# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 139 — v3.20 et 0060 en production)
+
+## Ce qui a changé au checkpoint 139
+
+**Le déploiement prévu au 138 est FAIT** : `0060` à distance (10:31:18 UTC), puis v3.20 (aperçu
+`2381cbeb` puis apex). Production `izigsm-v3.20` / `0060`, dépôt aligné (`6d51b6e`). Toutes les
+boutiques peuvent clôturer.
+
+**Première action** : finir la recette avec `telnet@bbox.fr` — export comptable Excel de septembre ;
+import Mobilax `#804` puis « Ajouter 1 au stock » (relire en base : 1 mouvement « Import fournisseur —
+déjà en stock », `mobilax_id` posé) ; douchette ; clôture du soir (relire `clotures_journalieres`).
+Puis les défauts caisse ouverts (`bugs.md`) : paiement mixte, `CB`/`cb`, clôture atomique.
 
 ## Ce qui a changé au checkpoint 138
 
