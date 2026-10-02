@@ -117,6 +117,12 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
    service, `''` **retire** le code (`codeBarreServiceAEcrire()` écrit `NULL`), un champ vide
    intouché effacerait donc un code posé entre-temps ; chaque comportement d'écran a son E2E.
    _(Relecture de conception de T-013.)_
+7. **Fiche service : pas de bouton « Générer » en création** (point 5 étendu) : le service n'a pas
+   encore d'identifiant ; le bouton n'existe qu'en modification, champ vide.
+8. **Fiche service : le chemin Services de `services.js` garde sa convention `res.ok` /
+   `res.error`** (`CLAUDE.md` § Enveloppe : « Ne pas uniformiser »). Le critère « appels déballés
+   `(await apiX(…)).data` » ne s'y applique pas ; le 409 s'y lit dans `res.error`, affiché en
+   `textContent`. _(2e relecture de conception de T-013.)_
 
 ## Critères d'acceptation
 
@@ -191,6 +197,7 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-02 (2e P15 de T-012)** — E2E : ouvrir la fiche d'un produit sans code, poser un code par l'API pendant qu'elle est ouverte, modifier le prix puis « Enregistrer » ⇒ le code posé est toujours en base ; et en création, aucun bouton « Générer ».
 - ➕ **Couture ajoutée le 2026-10-02 (P15 de T-013)** — E2E service : « Générer » puis « Enregistrer » ⇒ code toujours en base ; fiche ouverte sans code, code posé par l'API entre-temps, autre champ modifié puis « Enregistrer » ⇒ code toujours en base ; vider volontairement le champ puis « Enregistrer » ⇒ code retiré.
 - ➕ **Couture ajoutée le 2026-10-02 (P15 de T-013)** — E2E service : code d'un autre service saisi ⇒ 409 affiché, service porteur nommé (en `textContent`) ; « Générer » sur un service déjà codé par un autre poste ⇒ 409 « déjà codé » affiché en clair.
+- ➕ **Couture ajoutée le 2026-10-02 (2e P15 de T-013)** — E2E service : en création, aucun bouton « Générer ».
 
 ## Notes
 
