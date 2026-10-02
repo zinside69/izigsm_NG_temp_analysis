@@ -95,6 +95,18 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
    à part, après le mouvement : le bilan dirait « écartée » une ligne déjà appliquée. _(3e relecture
    de conception, 2026-10-01.)_
 
+### Précision du 2026-10-02 — relecture de conception de T-012 (écran produit, P15, 3 constats)
+
+1. **Après « Générer », le `code_barre` rendu par la route est écrit dans le champ de la fiche**
+   (`value`). « Enregistrer » envoie le champ tel qu'affiché : sans cela, `PUT /api/produits/:id`
+   enverrait `''` et effacerait le code qu'on vient de générer (`updateProduit()` : `COALESCE(?,
+   code_barre)`, une chaîne vide n'est pas `NULL`).
+2. **Le bouton « Générer un code maison » est visible dès que le champ Code-barres est vide.**
+   ⊥ une copie de `estEan13Valide()` dans l'écran : le serveur juge la règle « SKU EAN-13 valide »
+   et répond 409 ; l'écran affiche ce 409 en clair. Le critère « visible seulement si ni code-barres
+   ni SKU EAN-13 valide » est barré.
+3. **Chaque comportement d'écran a son E2E**, en plus de « créer, lire, scanner ».
+
 ## Critères d'acceptation
 
 Fonctions pures (`src/lib/codeMaison.ts`, nouveau) :
@@ -132,7 +144,8 @@ Recherche :
 
 Écrans (`stock.js`/`stock.html`, `services.js`/`services.html`) :
 
-- [ ] Fiche produit : champ « Code-barres » (création et modification), code maison affiché ; bouton « Générer un code maison » visible seulement si le produit n'a ni code-barres ni SKU EAN-13 valide
+- ~~[ ] Fiche produit : champ « Code-barres » (création et modification), code maison affiché ; bouton « Générer un code maison » visible seulement si le produit n'a ni code-barres ni SKU EAN-13 valide~~ — barré le 2026-10-02 (P15 de T-012)
+- [ ] Fiche produit : champ « Code-barres » (création et modification), code maison affiché ; bouton « Générer un code maison » visible dès que le champ est vide, le serveur jugeant la règle EAN-13 (409 affiché en clair) ; le code rendu par la route est écrit dans le champ
 - [ ] Fiche service : champ « Code-barres » et bouton « Générer un code maison » visible seulement si le service n'en a pas
 - [ ] Erreur 409 affichée en clair (le produit ou service porteur est nommé) ; appels déballés `(await apiX(…)).data` ; valeurs posées en `value` / `textContent`
 - [ ] Avertissement de pose affiché en clair (`textContent`) : `avertissement_code_maison` après une création, `avertissements` dans le bilan d'import CSV
@@ -160,6 +173,10 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-01 après-midi** — vrai SQLite : `createProduit()` avec `reference_fournisseur` et `fournisseur` renseignés, sans option → code maison posé ; avec `{ sansCodeMaison: true }` → aucun.
 - ➕ **Couture ajoutée le 2026-10-01 après-midi** — routes par `app.request()` : collision à la pose automatique ⇒ `POST /api/produits` répond **201** avec `avertissement_code_maison` nommant le porteur ; l'import CSV répond `avertissements` de longueur 1 et compte la ligne comme importée.
 - ➕ **Couture ajoutée le 2026-10-01 (3e P15)** — vrai SQLite : un CSV met à jour un produit existant sans code avec un `code_barre` déjà porté par un autre produit ⇒ ligne signalée dans le bilan, porteur nommé ; nom, prix et `stock_actuel` inchangés ; aucun nouveau mouvement de stock ; ligne comptée une seule fois en `skipped` (ni `updated` ni `imported`).
+- ➕ **Couture ajoutée le 2026-10-02 (P15 de T-012)** — E2E : « Générer » puis « Enregistrer » sans rien saisir ⇒ le code maison est toujours en base (relu par l'API) et affiché.
+- ➕ **Couture ajoutée le 2026-10-02** — E2E : saisir dans un produit le code-barres d'un autre ⇒ 409 affiché à l'écran, produit porteur nommé.
+- ➕ **Couture ajoutée le 2026-10-02** — E2E : produit au SKU EAN-13 valide ⇒ « Générer » ⇒ 409 affiché en clair, aucun code posé.
+- ➕ **Couture ajoutée le 2026-10-02** — E2E : avertissement de pose après création et `avertissements` du bilan CSV affichés à l'écran, réponse servie par `page.route()` (la collision réelle n'est pas reproductible à l'écran) ; preuve du déballage `r.data.…`.
 
 ## Notes
 
