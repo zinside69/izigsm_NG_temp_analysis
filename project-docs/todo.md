@@ -5,6 +5,7 @@
 - [x] Déploiement selon `current-state.md` § Checkpoint 138 — ✅ fait le 2026-10-02 (0060 à 10:31 UTC, v3.20 aperçu `2381cbeb` puis apex) (Time Travel, FK = 0, `0060` à distance,
       relecture, `npm run deploy` par l'exploitant, aperçu puis apex, ligne au journal des migrations)
 - [ ] Recette restante : import Mobilax `#804` + « Ajouter 1 au stock » ; douchette ; clôture du soir
+- [ ] **Retours de recette** (2026-10-02) : `.scratch/recette-2026-10-02/issues/001-…` — scan dans la recherche de caisse, quantité entière ≥ 1 partout, fenêtre Mobilax — à coder ici
 - [ ] Ensuite (caisse / NF525, ici) : paiement mixte ventilé ; `CB`/`cb` normalisé à l'écriture ;
       clôture atomique (`db.batch()`)
 

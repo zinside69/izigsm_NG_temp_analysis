@@ -1,4 +1,14 @@
-# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 139 — v3.20 et 0060 en production)
+# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 139 + retours de recette à coder)
+
+## ➡ Première action (ajout du 2026-10-02 après-midi, contexte de la session précédente saturé)
+
+Coder **`.scratch/recette-2026-10-02/issues/001-retours-de-recette-caisse-et-mobilax.md`**, ici, avec
+l'exploitant : **A** scan dans « Chercher un produit… » (Entrée → `traiterScan()`), **B** quantité
+entière ≥ 1 partout (écran + serveur, avant toute écriture), **C** fenêtre Mobilax élargie et journal
+sur une ligne. Chacun vu rouge d'abord. Recette déjà validée en production : Intégrité NF525,
+Synthèse comptable, export CSV, **export Excel de septembre** (conforme au CSV : 44,90 €, HT 37,42,
+TVA 7,48). Reste : relire le produit #804 (stock 1, 1 mouvement, `mobilax_id`), douchette, clôture
+du soir.
 
 ## Ce qui a changé au checkpoint 139
 
