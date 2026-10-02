@@ -1141,6 +1141,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-02 (après le checkpoint 141) : DÉPLOYÉ — production en `izigsm-v3.23`, dernière
+migration distante `0060` (aucune nouvelle).** `npm run deploy` lancé par l'exploitant ; relu sur l'apex
+par les noms hashés du manifeste local : `sw.js` v3.23, `caisse.97d78bcb.js` et `stock.70855922.js` en
+JavaScript avec le code du lot et référencés par `/caisse` et `/stock`, `/api/health` 200,
+`/api/catalogue/favoris` et `POST /api/caisse/vente` sans jeton → 401. **Dépôt et production alignés.**
+
 **État au 2026-10-02 (checkpoint 141) : production inchangée (`izigsm-v3.20` / `0060`), dépôt EN
 AVANCE, sans migration.** Recette 001 sur `main`, non poussée : quantité entière (`2cd995f`), caisse
 « Barre unique + favoris » (`fb00702`), fenêtre Mobilax (`2f2236d`), `CACHE_VERSION` `izigsm-v3.23`.

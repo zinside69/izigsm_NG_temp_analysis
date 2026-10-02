@@ -2,6 +2,10 @@
 
 ## Checkpoint 141 — Recette 001 codée (B, A′, C), dépôt EN AVANCE sur la production (2026-10-02, soir)
 
+> **Mise à jour du même soir : DÉPLOYÉ.** `main` poussé (`7cbc429`), `npm run deploy` par l'exploitant,
+> production en **`izigsm-v3.23`** (relu sur l'apex : `sw.js`, `caisse.97d78bcb.js`, `stock.70855922.js`
+> en JavaScript avec le code du lot, routes sans jeton → 401). Reste la recette à l'écran.
+
 **Production inchangée : `izigsm-v3.20`, migration distante `0060`. Sur `main`, non poussé, non
 déployé : trois commits sans migration** — `2cd995f` (B), `fb00702` (A′), `2f2236d` (C),
 `CACHE_VERSION` **`izigsm-v3.23`**. Vitest 1 408 + 2 permanents, tsc 32.
