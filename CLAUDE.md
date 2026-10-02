@@ -1121,6 +1121,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-02 (après le checkpoint 138) : DÉPLOYÉ — production en `izigsm-v3.20`, dernière
+migration distante `0060` (relue, 10:31:18 UTC).** `0060` appliquée à distance **puis** le code
+(aperçu `2381cbeb` puis apex : `sw.js` v3.20, bouton « Export comptable (Excel) » servi, assets du
+manifeste en JavaScript, `/api/stats/export/xlsx` et `/api/caisse/cloture` sans jeton → 401). Point
+Time Travel d'avant `0060` dans `journal-migrations.md`. **Dépôt et production alignés.**
+
 **État au 2026-10-02 (checkpoint 138) : migration `0060` EN ATTENTE, dépôt EN AVANCE** (export
 comptable Excel, `CACHE_VERSION` `izigsm-v3.20`). `0060` **recrée** `clotures_journalieres` (unicité
 par boutique et par jour) : prérequis `pragma_foreign_key_check` = 0, à appliquer à distance

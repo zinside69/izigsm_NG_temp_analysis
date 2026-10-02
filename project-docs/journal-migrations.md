@@ -78,11 +78,17 @@ est inaltérable, la supprimer revient à effacer une partie d'un document léga
 cette colonne** une fois qu'une vente portant un appareil a été émise — vérifier d'abord :
 `SELECT COUNT(*) FROM factures WHERE appareils_snapshot IS NOT NULL`.
 
-**En attente d'application à distance** (au 2026-10-02, checkpoint 138) :
+~~**En attente d'application à distance** (au 2026-10-02, checkpoint 138)~~ — **appliquée le même jour** :
 
-| # | Migration | Effet | R | Inverse |
-|---|---|---|---|---|
-| — | `0060_clotures_unique_par_boutique` | `clotures_journalieres` recréée : unicité `(boutique_id, date_cloture)` au lieu de `date_cloture` seule | R | Time Travel au point relevé juste avant (à noter ici) ; une migration inverse rétablirait le défaut |
+| # | Migration | Appliquée (UTC) | Effet | R | Inverse |
+|---|---|---|---|---|---|
+| 53 | `0060_clotures_unique_par_boutique` | **2026-10-02 10:31:18** | `clotures_journalieres` recréée : unicité `(boutique_id, date_cloture)` au lieu de `date_cloture` seule (0 ligne à recopier) | R | Time Travel au point ci-dessous seulement ; une migration inverse rétablirait le défaut |
+
+Point de restauration relevé juste **avant** `0060` (2026-10-02, lecture seule) :
+`000001cd-00000000-000050f8-06381c1130ab9cc0a9bf614264036856` — défait `0060` **et** toute écriture
+postérieure (ventes, clôtures). Relu après : dernière migration `0060`, index
+`idx_clotures_boutique_date` présent, aucune table `_transit`, 0 violation de clé étrangère. Code
+déployé ensuite (`izigsm-v3.20`, aperçu `2381cbeb` puis apex vérifiés).
 
 Numéros **réservés, pas encore écrits** (le trou 0052–0053 est voulu) : `0052` ticket 05, `0053`
 ticket 06, `0055` 08b, `0056` 09, `0057` 11, `0058` 14 (sans objet), `0059` 16.

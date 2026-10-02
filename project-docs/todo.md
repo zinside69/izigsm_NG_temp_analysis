@@ -2,7 +2,7 @@
 
 ## 🔴 2026-10-02 — Déployer `0060` + export comptable (v3.20) AVANT la clôture du soir
 
-- [ ] Déploiement selon `current-state.md` § Checkpoint 138 (Time Travel, FK = 0, `0060` à distance,
+- [x] Déploiement selon `current-state.md` § Checkpoint 138 — ✅ fait le 2026-10-02 (0060 à 10:31 UTC, v3.20 aperçu `2381cbeb` puis apex) (Time Travel, FK = 0, `0060` à distance,
       relecture, `npm run deploy` par l'exploitant, aperçu puis apex, ligne au journal des migrations)
 - [ ] Recette restante : import Mobilax `#804` + « Ajouter 1 au stock » ; douchette ; clôture du soir
 - [ ] Ensuite (caisse / NF525, ici) : paiement mixte ventilé ; `CB`/`cb` normalisé à l'écriture ;
