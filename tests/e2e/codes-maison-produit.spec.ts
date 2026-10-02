@@ -110,8 +110,10 @@ test('« Générer » puis « Enregistrer » sans rien saisir : le code maison r
   await expect(page.locator('#stock-code-barre')).toHaveValue('')
   await expect(page.locator('#btn-stock-generer-code')).toBeVisible()
   await page.click('#btn-stock-generer-code')
+  // Attendre la réponse de l'API avant de lire : un inputValue() immédiat après le clic recevait
+  // encore le champ vide (la pose n'avait pas eu le temps d'écrire le champ).
+  await expect(page.locator('#stock-code-barre')).toHaveValue(/^21\d{11}$/)
   const code = await page.locator('#stock-code-barre').inputValue()
-  expect(code).toMatch(/^21\d{11}$/)
   await expect(page.locator('#btn-stock-generer-code')).toBeHidden()
 
   // Aucune saisie supplémentaire : « Enregistrer » n'a pas besoin de renvoyer le code déjà posé
