@@ -151,6 +151,18 @@
             <label>SKU / Référence</label>
             <input type="text" id="stock-reference" placeholder="SCR-IPH14-001">
           </div>
+          <!-- Code-barres / code maison (ticket 05 `vente-lit-catalogue`, partie écran produit de
+               T-012) : un produit créé sans code-barres ni SKU EAN-13 valide reçoit un code maison
+               posé par le serveur — ce champ l'affiche et reste modifiable. « Générer » n'existe
+               qu'en modification (pas d'identifiant en création) : masqué par `style.display`,
+               jamais par `hidden` (CLAUDE.md § Barre latérale). -->
+          <div class="form-field">
+            <label>Code-barres</label>
+            <input type="text" id="stock-code-barre" placeholder="EAN, ou code maison généré">
+            <button type="button" class="btn btn-sm btn-outline" id="btn-stock-generer-code" style="display:none;margin-top:6px" onclick="genererCodeMaison()">
+              <i class="fas fa-barcode"></i> Générer un code maison
+            </button>
+          </div>
           <div class="form-field">
             <label>Nom *</label>
             <input type="text" id="stock-name" placeholder="Écran iPhone 14" required>
