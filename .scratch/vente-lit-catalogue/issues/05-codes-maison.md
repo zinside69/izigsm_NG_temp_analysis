@@ -112,6 +112,11 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
    entre-temps par l'import CSV ou un autre poste. _(2e relecture de conception de T-012.)_
 5. **En création, pas de bouton « Générer »** : le produit n'a pas encore d'identifiant, et la pose
    automatique intervient à l'enregistrement. Le bouton n'existe qu'en modification, champ vide.
+6. **Les points 1, 3 et 4 valent pour la fiche service** (T-013) : le code rendu par « Générer » est
+   écrit dans le champ ; « Enregistrer » n'envoie `code_barre` que s'il a été modifié — côté
+   service, `''` **retire** le code (`codeBarreServiceAEcrire()` écrit `NULL`), un champ vide
+   intouché effacerait donc un code posé entre-temps ; chaque comportement d'écran a son E2E.
+   _(Relecture de conception de T-013.)_
 
 ## Critères d'acceptation
 
@@ -184,6 +189,8 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-02** — E2E : produit au SKU EAN-13 valide ⇒ « Générer » ⇒ 409 affiché en clair, aucun code posé.
 - ➕ **Couture ajoutée le 2026-10-02** — E2E : avertissement de pose après création et `avertissements` du bilan CSV affichés à l'écran, réponse servie par `page.route()` (la collision réelle n'est pas reproductible à l'écran) ; preuve du déballage `r.data.…`.
 - ➕ **Couture ajoutée le 2026-10-02 (2e P15 de T-012)** — E2E : ouvrir la fiche d'un produit sans code, poser un code par l'API pendant qu'elle est ouverte, modifier le prix puis « Enregistrer » ⇒ le code posé est toujours en base ; et en création, aucun bouton « Générer ».
+- ➕ **Couture ajoutée le 2026-10-02 (P15 de T-013)** — E2E service : « Générer » puis « Enregistrer » ⇒ code toujours en base ; fiche ouverte sans code, code posé par l'API entre-temps, autre champ modifié puis « Enregistrer » ⇒ code toujours en base ; vider volontairement le champ puis « Enregistrer » ⇒ code retiré.
+- ➕ **Couture ajoutée le 2026-10-02 (P15 de T-013)** — E2E service : code d'un autre service saisi ⇒ 409 affiché, service porteur nommé (en `textContent`) ; « Générer » sur un service déjà codé par un autre poste ⇒ 409 « déjà codé » affiché en clair.
 
 ## Notes
 
