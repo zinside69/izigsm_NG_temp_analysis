@@ -273,6 +273,16 @@
         <label class="form-label">Référence interne</label>
         <input type="text" class="form-control" id="svc-reference" placeholder="Ex : SVC-001">
       </div>
+      <!-- Code-barres / code maison (ticket 05 `vente-lit-catalogue`, partie écran service de
+           T-013) : un service peut recevoir un code pour la planche de codes du comptoir, posé à
+           la demande seulement (⊥ pose automatique à la création, spec « peuvent recevoir »).
+           « Générer » n'existe qu'en modification (pas d'identifiant en création) : masqué par
+           `style.display`, jamais par `hidden` (CLAUDE.md § Barre latérale). -->
+      <div class="form-group">
+        <label class="form-label">Code-barres</label>
+        <input type="text" class="form-control" id="svc-code-barre" placeholder="Code maison généré">
+        <button type="button" class="btn btn-secondary" id="btn-svc-generer-code" style="display:none;margin-top:6px" onclick="genererCodeMaisonService()">Générer un code maison</button>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('modal-service')">Annuler</button>
         <button class="btn btn-primary" onclick="saveService()">Enregistrer</button>

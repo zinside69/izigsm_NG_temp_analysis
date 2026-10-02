@@ -27,6 +27,16 @@ let _services     = [];   // liste plate des services (cache)
 let _filtrecat    = null; // categorie_id actif (null = tous)
 let _search       = '';   // texte recherche local
 
+// Code-barres / code maison (ticket 05 `vente-lit-catalogue`, écran service, T-013) : valeur
+// affichée à l'ouverture de la fiche (ou après « Générer »), pour que saveService() n'envoie
+// `code_barre` que si l'opérateur l'a modifié — un champ vide intouché effacerait un code posé
+// entre-temps par un autre poste (même patron que `stockCodeBarreInitial`, `stock.js`).
+let svcCodeBarreInitial = '';
+// « Générer un code maison » n'existe qu'en modification (pas d'identifiant en création,
+// même règle que pour la fiche produit) — jamais déduit du champ `svc-id` seul, pour rester
+// vrai pendant la réinitialisation du formulaire.
+let modeModificationService = false;
+
 const COULEURS = [
   '#6366f1','#8b5cf6','#ec4899','#ef4444',
   '#f97316','#eab308','#22c55e','#14b8a6',
@@ -42,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateTopbarAvatar(session);
   buildColorGrid();
   await loadCatalogue();
+  document.getElementById('svc-code-barre')?.addEventListener('input', majBoutonGenererCodeService);
 });
 
 /** Met à jour l'avatar topbar */
@@ -305,6 +316,11 @@ async function openModalService(id = null) {
   document.getElementById('svc-duree').value       = '';
   document.getElementById('svc-garantie').value    = '0';
   document.getElementById('svc-reference').value   = '';
+  document.getElementById('svc-code-barre').value  = '';
+  // Création : aucun identifiant de service, donc aucune pose à la demande possible — « Générer »
+  // n'existe qu'en modification
+  svcCodeBarreInitial = '';
+  modeModificationService = false;
 
   if (id) {
     const res = await apiGet(`/api/services/${id}`);
@@ -318,13 +334,56 @@ async function openModalService(id = null) {
       document.getElementById('svc-garantie').value    = s.garantie_jours || 0;
       document.getElementById('svc-reference').value   = s.reference || '';
       document.getElementById('svc-categorie').value   = s.categorie_id || '';
+      document.getElementById('svc-code-barre').value  = s.code_barre || '';
+      svcCodeBarreInitial = s.code_barre || '';
+      modeModificationService = true;
     }
   } else if (_filtrecat) {
     // Pré-sélectionner la catégorie active
     document.getElementById('svc-categorie').value = _filtrecat;
   }
 
+  majBoutonGenererCodeService();
   openModal('modal-service');
+}
+
+// ─── Code-barres / code maison (ticket 05 `vente-lit-catalogue`, écran service, T-013) ─────────
+
+/**
+ * Affiche ou masque « Générer un code maison » : seulement en modification (un service en
+ * création n'a pas encore d'identifiant) et seulement si le champ Code-barres est vide.
+ */
+function majBoutonGenererCodeService() {
+  const bouton = document.getElementById('btn-svc-generer-code');
+  const valeur = document.getElementById('svc-code-barre').value.trim();
+  bouton.style.display = (modeModificationService && !valeur) ? '' : 'none';
+}
+
+/**
+ * Clic sur « Générer un code maison » : pose le code côté serveur puis l'écrit dans le champ —
+ * sans cela, un « Enregistrer » qui suivrait sans modification enverrait `''` et effacerait le
+ * code qu'on vient de poser. La baseline de saveService() est avancée avec : le code est déjà en
+ * base, rien à renvoyer. Garde la convention `res.ok`/`res.error` du chemin Services
+ * (CLAUDE.md § Enveloppe : « Ne pas uniformiser »).
+ */
+async function genererCodeMaisonService() {
+  const id = document.getElementById('svc-id').value;
+  if (!id) return;
+  const bouton = document.getElementById('btn-svc-generer-code');
+  bouton.disabled = true;
+  try {
+    const res = await apiPost(`/api/services/${id}/code-maison`, {});
+    if (!res.ok) { showFlash(res.error || 'Génération du code maison impossible.', 'error'); return; }
+    document.getElementById('svc-code-barre').value = res.data.code_barre;
+    svcCodeBarreInitial = res.data.code_barre;
+    majBoutonGenererCodeService();
+    showFlash('Code maison généré.', 'success');
+  } catch (e) {
+    // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (CLAUDE.md § Envoi d'email)
+    showFlash('Connexion perdue, réessayez.', 'error');
+  } finally {
+    bouton.disabled = false;
+  }
 }
 
 /**
@@ -346,6 +405,13 @@ async function saveService() {
   };
 
   if (!body.nom) { showFlash('Nom obligatoire.', 'error'); return; }
+
+  // `code_barre` envoyé seulement si modifié depuis l'ouverture de la fiche (ou depuis
+  // « Générer », qui avance la baseline) : un champ vide intouché effacerait un code posé
+  // entre-temps par un autre poste (COALESCE côté serveur). Une saisie volontairement vidée
+  // (`''`) est envoyée telle quelle : `codeBarreServiceAEcrire()` l'interprète comme un retrait.
+  const codeBarreActuel = document.getElementById('svc-code-barre').value.trim();
+  if (codeBarreActuel !== svcCodeBarreInitial) body.code_barre = codeBarreActuel;
 
   const res = id
     ? await apiPut(`/api/services/${id}`, body)
