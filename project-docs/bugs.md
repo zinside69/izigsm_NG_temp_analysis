@@ -1,5 +1,21 @@
 # iziGSM — Bugs connus
 
+## 🔴 Clôture NF525 : une seule boutique de la plateforme pouvait clôturer par jour (trouvé le 2026-10-02, CORRIGÉ dans le dépôt — migration `0060` à appliquer)
+
+**Défaut** : `0008_nf525.sql` déclare `date_cloture TEXT NOT NULL UNIQUE` — unicité **plateforme**,
+pas par boutique. La 1re boutique qui clôture un jour bloque toutes les autres (erreur SQL brute).
+Pire : `cloturerJournee()` fait l'`UPDATE journal_nf525 SET est_cloture = 1` **avant** l'`INSERT` —
+la boutique refusée garde ses ventes « clôturées » sans clôture, et un nouvel essai répond « Aucune
+transaction à clôturer ». Latent tant que seul l'admin plateforme passait (rôle `gerant`) ; **exposé
+par le déploiement du 2026-10-02**. Production mesurée : 0 clôture, 3 boutiques actives, 2 avec
+journal. Trouvé par l'E2E `roles-manager.spec.ts` (une 2e boutique clôturant le même jour en local).
+
+**Correctif** : migration **`0060`** (recréation, patron `0040`) → index unique
+`(boutique_id, date_cloture)`. `tests/cloture-par-boutique-sqlite.test.ts` vu rouge
+(« UNIQUE constraint failed: clotures_journalieres.date_cloture »), recopie à l'identique prouvée.
+**Reste ouvert** : l'ordre non atomique `UPDATE` du journal puis `INSERT` de la clôture (à passer
+en `db.batch()` — caisse / NF525, à coder ici).
+
 ## 🟠 Caisse : un paiement « mixte » ne garde pas sa ventilation espèces / CB (trouvé le 2026-10-02, OUVERT)
 
 **Défaut** : `createVente()` (`caisseService.ts`, étape 5) écrit **une seule** ligne `paiements`
