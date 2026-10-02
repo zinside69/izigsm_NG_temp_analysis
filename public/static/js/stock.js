@@ -10,6 +10,15 @@ let allStockCache    = [];
 let stockUseApi      = true;
 let adjustingStockId = null;
 let currentFamilleFilter = '';
+// Code-barres / code maison (ticket 05 `vente-lit-catalogue`, écran produit) : valeur affichée à
+// l'ouverture de la fiche (ou après « Générer »), pour que saveStock() n'envoie `code_barre` que si
+// l'opérateur l'a modifiée — un champ vide intouché effacerait un code posé entre-temps par
+// l'import CSV ou un autre poste (COALESCE côté serveur, décision du 2026-10-02).
+let stockCodeBarreInitial = '';
+// « Générer un code maison » n'existe qu'en modification (pas d'identifiant en création,
+// décision du 2026-10-02, point 5) — jamais déduit du champ `stock-id` seul, pour rester vrai
+// pendant resetStockForm().
+let modeModificationStock = false;
 // Seuil d'alerte par défaut effectif de la boutique (0 = non surveillé tant que rien n'est
 // réglé), chargé par chargerDefautsStock() — pré-remplit le formulaire de création. `null` tant
 // qu'il n'est pas lu : le champ reste alors vide, et un seuil vide n'est pas envoyé — c'est le
@@ -45,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindFilters();
   document.getElementById('filtre-fournisseur').hidden = !fournisseurFiltre;
   ouvrirCreationDepuisScan();
+  document.getElementById('stock-code-barre')?.addEventListener('input', majBoutonGenererCode);
 });
 
 // ─── Création depuis un code inconnu scanné en caisse (ticket 04 `vente-lit-catalogue`) ──
@@ -150,6 +160,7 @@ async function loadStock() {
       // « Notes » de la fiche = colonne `description` (aucune colonne `notes` n'existe)
       notes:           p.description    || '',
       reference_fournisseur: p.reference_fournisseur || '',
+      code_barre:      p.code_barre      || '',
       fournisseur_id:  p.fournisseur_id ?? null,
       // Capacité exposée par le serveur (ticket 05, points 11 et 16) : nom du fournisseur sachant
       // revalider cette pièce (`'Mobilax'` aujourd'hui), ou `null`. Calculé par la même jointure
@@ -401,6 +412,11 @@ function editStock(id) {
   document.getElementById('stock-price-buy').value          = item.prix_achat_ht ?? '';
   document.getElementById('stock-supplier').value           = item.supplier    || '';
   document.getElementById('stock-notes').value              = item.notes       || '';
+  document.getElementById('stock-code-barre').value         = item.code_barre  || '';
+  // Baseline pour saveStock() (décision du 2026-10-02) : « Générer » la met à jour aussi
+  stockCodeBarreInitial = item.code_barre || '';
+  modeModificationStock = true;
+  majBoutonGenererCode();
   // Pièce importée de Mobilax : sa référence chez le grossiste, en lecture seule (textContent)
   const refMobilax = document.getElementById('stock-ref-mobilax');
   if (refMobilax) {
@@ -426,10 +442,15 @@ function editStock(id) {
 
 function resetStockForm() {
   // AVANT (2026-09-30, ticket 07 — champ IMEI remis à zéro lui aussi) : ['stock-name','stock-reference','stock-marque','stock-supplier','stock-notes'].forEach(id => {
-  ['stock-name','stock-reference','stock-marque','stock-imei','stock-supplier','stock-notes'].forEach(id => {
+  ['stock-name','stock-reference','stock-marque','stock-imei','stock-supplier','stock-notes','stock-code-barre'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Création : aucun identifiant de produit, donc aucune pose à la demande possible (point 5 de
+  // la précision du 2026-10-02) — « Générer » n'existe qu'en modification
+  stockCodeBarreInitial = '';
+  modeModificationStock = false;
+  majBoutonGenererCode();
   ['stock-qty','stock-min-qty','stock-price','stock-price-buy'].forEach(id => {
     const el = document.getElementById(id);
     // Seuil : réglage de la boutique ; quantité et prix : 0 (jamais de pièces par mégarde)
@@ -627,6 +648,49 @@ async function actualiserProduitFournisseur() {
   }
 }
 
+// ─── Code-barres / code maison (ticket 05 `vente-lit-catalogue`, écran produit) ────────────────
+/**
+ * Affiche ou masque « Générer un code maison » : seulement en modification (point 5 de la
+ * précision du 2026-10-02 — un produit en création n'a pas encore d'identifiant) et seulement si
+ * le champ Code-barres est vide. La règle EAN-13 elle-même reste jugée par le serveur (⊥ une copie
+ * d'estEan13Valide() ici) : le bouton reste visible sur un SKU EAN-13 valide, et c'est le 409 de
+ * la route qui l'explique à l'écran.
+ */
+function majBoutonGenererCode() {
+  const bouton = document.getElementById('btn-stock-generer-code');
+  const valeur = document.getElementById('stock-code-barre').value.trim();
+  bouton.style.display = (modeModificationStock && !valeur) ? '' : 'none';
+}
+
+/**
+ * Clic sur « Générer un code maison » : pose le code côté serveur puis l'écrit dans le champ
+ * (point 1 de la précision du 2026-10-02) — sans cela, un « Enregistrer » qui suivrait sans
+ * modification enverrait `''` et effacerait le code qu'on vient de poser. La baseline de
+ * saveStock() est mise à jour avec : le code est déjà en base, rien à renvoyer.
+ */
+async function genererCodeMaison() {
+  const id = document.getElementById('stock-id').value;
+  if (!id) return;
+  const bouton = document.getElementById('btn-stock-generer-code');
+  bouton.disabled = true;
+  try {
+    const res = (await apiPost(`/api/produits/${id}/code-maison`, {})).data;
+    if (!res?.success) {
+      showFlash('Erreur: ' + (res?.error || 'Génération du code maison impossible.'), 'error');
+      return;
+    }
+    document.getElementById('stock-code-barre').value = res.code_barre;
+    stockCodeBarreInitial = res.code_barre;
+    majBoutonGenererCode();
+    showFlash('Code maison généré.', 'success');
+  } catch (e) {
+    // Réseau coupé : `api()` ne rattrape pas le rejet de `fetch` (CLAUDE.md § Envoi d'email)
+    showFlash('Erreur: connexion perdue, réessayez.', 'error');
+  } finally {
+    bouton.disabled = false;
+  }
+}
+
 /** Depuis la fiche d'un produit : la ferme et ouvre « Ajuster le stock » sur ce produit. */
 function ajusterDepuisFiche() {
   const id = document.getElementById('stock-id').value;
@@ -665,6 +729,11 @@ async function saveStock() {
     description:          document.getElementById('stock-notes').value.trim()     || undefined,
     boutique_id:          boutiqueId,
   };
+  // `code_barre` envoyé seulement si modifié depuis l'ouverture de la fiche (ou depuis « Générer »,
+  // qui avance la baseline) : un champ vide intouché effacerait un code posé entre-temps par
+  // l'import CSV ou un autre poste (COALESCE côté serveur, décision du 2026-10-02).
+  const codeBarreActuel = document.getElementById('stock-code-barre').value.trim();
+  if (codeBarreActuel !== stockCodeBarreInitial) data.code_barre = codeBarreActuel;
 
   try {
     if (stockUseApi) {
@@ -677,7 +746,10 @@ async function saveStock() {
         result = await apiPost('/api/produits', data);
       }
       if (!result.ok) throw new Error(result.error || 'Erreur API');
-      showFlash(id ? 'Produit mis à jour.' : 'Produit ajouté au stock.', 'success');
+      // Avertissement de pose automatique (collision à la création, ticket 05) : affiché en clair
+      // à la place du message de succès habituel — jamais une exception, la création a réussi.
+      const avertissement = result.data?.avertissement_code_maison;
+      showFlash(avertissement || (id ? 'Produit mis à jour.' : 'Produit ajouté au stock.'), avertissement ? 'info' : 'success');
     } else {
       const legacy = { ...data, name: data.nom, qty: data.stock_actuel, minQty: data.stock_minimum, price: data.prix_vente_ht, supplier: data.fournisseur };
       if (id) { updateInDB('stock', parseInt(id), legacy); showFlash('Produit mis à jour.', 'success'); }
@@ -843,6 +915,7 @@ async function confirmImportCsv() {
             Mis à jour : <strong>${data.updated ?? 0}</strong> &nbsp;|&nbsp;
             Ignorés : <strong>${data.skipped ?? 0}</strong>
             ${data.errors?.length ? `<br><details style="margin-top:8px;"><summary>${data.errors.length} erreur(s)</summary><pre style="font-size:.78rem;white-space:pre-wrap">${escHtml(data.errors.join('\n'))}</pre></details>` : ''}
+            ${data.avertissements?.length ? `<br><details style="margin-top:8px;"><summary>${data.avertissements.length} avertissement(s) — code maison non posé</summary><pre style="font-size:.78rem;white-space:pre-wrap">${escHtml(data.avertissements.join('\n'))}</pre></details>` : ''}
           </div>`;
         showFlash(`Import OK — ${data.imported ?? 0} créés, ${data.updated ?? 0} mis à jour.`, 'success');
         await loadStock();
