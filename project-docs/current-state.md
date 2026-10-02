@@ -1,4 +1,28 @@
-# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 139 — v3.20 et 0060 en production, dépôt et production alignés)
+# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 140 — recette en production, retours cadrés, refonte caisse décidée)
+
+## Checkpoint 140 — Recette en production et retours de l'exploitant (2026-10-02, après-midi)
+
+**Production inchangée depuis le 139 : `izigsm-v3.20`, migration distante `0060`. Aucun code nouveau.**
+`main` = `origin/main` (`38ab8ee`).
+
+- **Recette validée en production** (manager `telnet@bbox.fr`) : Intégrité NF525 ; Synthèse
+  comptable + export CSV ; **export Excel de septembre** relu par `openpyxl` = conforme au CSV (09/09 :
+  24,90 € espèces + 20,00 € CB = 44,90 €, HT 37,42, TVA 7,48). « Ajouter 1 au stock » fait sur
+  `3000000388952` (#804) par l'exploitant — **non relu en base** : lecture distante en **`7403`
+  intermittent** (session OAuth valide, `d1 (write)`) ; à relire en début de session.
+- L'exploitant a lancé un **import de 200 pièces** (« écran Iphone ») : les pièces déjà en stock sont
+  reconnues sans appel Mobilax.
+- **Retours cadrés** — `.scratch/recette-2026-10-02/issues/001-…` (codé ici) :
+  **A′** caisse « Barre unique + favoris » (décision de l'exploitant : barre de scan toujours active,
+  Entrée sur un code → `traiterScan()`, liste aux flèches, tuiles des plus vendus sur 90 jours, ligne
+  libre explicite, panier à droite) — cause du retour : `douchette.js` neutralisée dans le champ de
+  recherche qui a le focus, et aucune action sur Entrée (ligne libre « 3000000388952 » à 0 € faute de
+  mieux) ; **B** quantité entière ≥ 1 partout (écran + serveur, avant toute écriture) ; **C** fenêtre
+  Mobilax élargie, journal sur une ligne.
+- Recette restante : douchette (après A′), **clôture du soir**.
+
+**Prochaine session (contexte frais)** : `/init recover` → ticket recette 001 (A′, B, C), vus rouges
+d'abord ; relire #804 ; puis défauts caisse ouverts (mixte, `CB`/`cb`, clôture atomique).
 
 ## Checkpoint 139 — `0060` et v3.20 déployées (2026-10-02, fin de matinée)
 

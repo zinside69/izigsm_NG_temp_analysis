@@ -1,4 +1,4 @@
-# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 139 + retours de recette à coder)
+# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 140 — coder la recette 001 : caisse « Barre unique + favoris », quantité entière, fenêtre Mobilax)
 
 ## ➡ Première action (ajout du 2026-10-02 après-midi, contexte de la session précédente saturé)
 
