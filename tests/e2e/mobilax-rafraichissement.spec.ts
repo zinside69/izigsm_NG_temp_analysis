@@ -236,8 +236,13 @@ test.describe('Stock — visibilité du bouton Actualiser (rôles et capacité s
   test('technicien : aucun bouton sur un produit rafraîchissable (point 13)', async ({ page, request }) => {
     const nom = `E2E technicien ${Date.now()}`
     const managerHeaders = { Authorization: `Bearer ${await obtenirToken(request, MANAGER)}` }
+    // AVANT (2026-10-02) : mobilaxId: 900007 — identifiant FIXE sur la boutique 1 du seed, partagée
+    // par tous les passages : l'index unique de `0050` refusait le second passage sur une même base
+    // locale (produit du 2026-09-30 encore porteur). Seul test du fichier sur une boutique partagée,
+    // les autres créent leur boutique. Identifiant tiré à chaque passage.
+    //   nom, prix_achat_ht: 9, prix_vente_ht: 22, mobilaxId: 900007,
     await creerProduitMobilaxLocal(request, managerHeaders, 1, {
-      nom, prix_achat_ht: 9, prix_vente_ht: 22, mobilaxId: 900007,
+      nom, prix_achat_ht: 9, prix_vente_ht: 22, mobilaxId: 900_000_000 + (Date.now() % 99_000_000),
     })
 
     await seConnecter(page, TECHNICIEN)
