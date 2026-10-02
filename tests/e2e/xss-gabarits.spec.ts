@@ -84,11 +84,15 @@ test.describe('Gabarits — les données saisies sont échappées', () => {
     await seConnecterAdminPlateforme(page)
     await choisirBoutique(page, nomBoutique)
     await page.goto('/agenda')
+    // (2026-10-02, O62) Attendre la fin de l'initialisation de l'agenda : sinon le clic sur « Liste »
+    // part avant elle, la vue semaine est réaffichée ensuite et la carte reste masquée (vu sur T-012).
+    await page.waitForLoadState('networkidle')
 
     // Le téléphone n'apparaît que dans le **détail** du rendez-vous : s'arrêter à la vue
     // liste rendrait ce test vert sans avoir jamais atteint le gabarit fautif. On ouvre
     // donc la carte, et on vérifie d'abord qu'elle est bien là.
     await page.click('#btn-vue-liste')
+    await expect(page.locator('#vue-liste')).toBeVisible()
     const carte = page.locator('.rdv-card').first()
     await expect(carte).toBeVisible({ timeout: 15_000 })
     await carte.click()
