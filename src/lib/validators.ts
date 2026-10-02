@@ -199,3 +199,29 @@ export function validateGarantie(body: any): string | null {
     return 'ticket_id invalide.'
   return null
 }
+
+// ─── Lignes de documents (vente, devis, facture, avoir) ───────────────────────
+
+/**
+ * Quantité d'une ligne : nombre ENTIER ≥ 1 (décision de l'exploitant du 2026-10-02, recette 001
+ * partie B — la caisse acceptait `0,98`). Seul point de cette règle : caisse, devis, factures et
+ * avoirs l'appellent AVANT toute écriture, pour qu'un refus ne consomme aucun numéro de série ni
+ * aucune ligne du journal NF525.
+ *
+ * Accepte un nombre ou une chaîne décimale (`"3"`) ; refuse booléens, `null`, vide, virgule.
+ * Ne dit rien d'une liste vide : l'obligation d'au moins une ligne reste à l'appelant.
+ *
+ * @param lignes  Lignes du corps de requête
+ * @returns       null si toutes valides, sinon un message nommant la première ligne fautive
+ */
+export function quantiteLigneInvalide(lignes: Array<{ quantite?: unknown }> | undefined): string | null {
+  for (const [i, l] of (lignes ?? []).entries()) {
+    const brute = l?.quantite
+    const q = typeof brute === 'number' ? brute
+            : typeof brute === 'string' && brute.trim() !== '' ? Number(brute)
+            : NaN
+    if (!Number.isInteger(q) || q < 1)
+      return `Ligne ${i + 1} : quantité invalide (nombre entier ≥ 1).`
+  }
+  return null
+}

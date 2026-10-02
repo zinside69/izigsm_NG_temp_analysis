@@ -840,13 +840,15 @@ function addAvoirLine() {
   if (!tbody) return;
   const tr     = document.createElement('tr');
   tr.id        = 'al-row-' + lid;
+  // AVANT (jusqu'au 2026-10-02), champ quantité : min="0.01" step="0.01"
+  // Quantité entière ≥ 1 (recette 001 B) ; le serveur refuse le reste (400, message affiché).
   tr.innerHTML = `
     <td style="padding:4px 8px;">
       <input type="text" id="al-desc-${lid}" placeholder="Description…"
         style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;font:inherit;font-size:0.88rem;">
     </td>
     <td style="padding:4px 8px;">
-      <input type="number" id="al-qty-${lid}" value="1" min="0.01" step="0.01"
+      <input type="number" id="al-qty-${lid}" value="1" min="1" step="1"
         style="width:65px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateAvoirLineTotals(${lid})">
     </td>

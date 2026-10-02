@@ -633,13 +633,15 @@ function addLine(prefill = null) {
 
   const tr = document.createElement('tr');
   tr.id = 'dl-row-' + safeId;
+  // AVANT (jusqu'au 2026-10-02), champ quantité : min="0.01" step="0.01"
+  // Quantité entière ≥ 1 (recette 001 B) ; le serveur refuse le reste (400, message affiché).
   tr.innerHTML = `
     <td style="padding:6px 8px;">
       <input type="text" id="dl-desc-${safeId}" value="${esc(desc)}" placeholder="Description…"
         style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font:inherit;font-size:0.88rem;">
     </td>
     <td style="padding:6px 6px;">
-      <input type="number" id="dl-qty-${safeId}" value="${qty}" min="0.01" step="0.01"
+      <input type="number" id="dl-qty-${safeId}" value="${qty}" min="1" step="1"
         style="width:64px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 6px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateLineTotals('${safeId}')">
     </td>

@@ -34,6 +34,7 @@ import {
   listClotures,
 } from '../services/caisseService'
 import type { Database } from '../ports/database'
+import { quantiteLigneInvalide } from '../lib/validators'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,11 +83,17 @@ function validateVente(body: any): string | null {
   if (!body.mode_paiement || !modesValides.includes(body.mode_paiement))
     return `mode_paiement obligatoire (${modesValides.join(', ')}).`
 
+  // Quantité entière ≥ 1 sur chaque ligne — règle commune à tous les documents (recette 001 B).
+  const errQuantite = quantiteLigneInvalide(body.lignes)
+  if (errQuantite) return errQuantite
+
   for (const [i, l] of (body.lignes as any[]).entries()) {
     if (!l.designation?.trim())
       return `Ligne ${i + 1} : désignation obligatoire.`
-    if (l.quantite === undefined || isNaN(Number(l.quantite)) || Number(l.quantite) <= 0)
-      return `Ligne ${i + 1} : quantité invalide (> 0).`
+    // AVANT (jusqu'au 2026-10-02) — une quantité décimale passait (`0,98` en recette 001) :
+    // if (l.quantite === undefined || isNaN(Number(l.quantite)) || Number(l.quantite) <= 0)
+    //   return `Ligne ${i + 1} : quantité invalide (> 0).`
+    // Entier ≥ 1 : vérifié avant cette boucle, par `quantiteLigneInvalide()`.
     if (l.prix_unitaire_ht === undefined || isNaN(Number(l.prix_unitaire_ht)) || Number(l.prix_unitaire_ht) < 0)
       return `Ligne ${i + 1} : prix_unitaire_ht invalide (≥ 0).`
     if (l.tva_taux === undefined || isNaN(Number(l.tva_taux)) || ![0, 5.5, 10, 20].includes(Number(l.tva_taux)))

@@ -457,6 +457,9 @@
     container.innerHTML = state.lignes.map(l => {
       const ht  = l.quantite * l.prix_unitaire_ht * (1 - l.remise_pct / 100)
       const ttc = ht * (1 + l.tva_taux / 100)
+      // AVANT (jusqu'au 2026-10-02), champ quantité :
+      //        type="number" min="0.01" step="0.01" value="${l.quantite}"
+      // Quantité entière ≥ 1 (recette 001 B) : min="1" step="1", refus à l'encaissement.
       return `
       <div class="grid grid-cols-12 gap-1 items-center linha-row" data-idx="${l.idx}">
         <input class="col-span-4 input-field text-xs py-1.5 px-2"
@@ -465,7 +468,7 @@
                oninput="CaisseApp._updateLigne(${l.idx},'designation',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-center"
                data-field="quantite" data-idx="${l.idx}"
-               type="number" min="0.01" step="0.01" value="${l.quantite}"
+               type="number" min="1" step="1" value="${l.quantite}"
                oninput="CaisseApp._updateLigne(${l.idx},'quantite',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-right"
                data-field="prix_unitaire_ht" data-idx="${l.idx}"
@@ -777,7 +780,13 @@
     // Valider chaque ligne
     for (const l of state.lignes) {
       if (!l.designation.trim()) { toast('Chaque ligne doit avoir une désignation.', 'warn'); return }
-      if (l.quantite <= 0)        { toast('Quantité invalide (doit être > 0).', 'warn'); return }
+      // AVANT (jusqu'au 2026-10-02) — `0,98` passait (recette 001 B) :
+      // if (l.quantite <= 0)        { toast('Quantité invalide (doit être > 0).', 'warn'); return }
+      if (!Number.isInteger(l.quantite) || l.quantite < 1) {
+        toast(`Quantité de « ${esc(l.designation)} » : nombre entier ≥ 1.`, 'warn')
+        document.querySelector(`[data-field="quantite"][data-idx="${l.idx}"]`)?.focus()
+        return
+      }
       if (prixManquant(l)) {
         toast(`Saisissez le prix de « ${esc(l.designation)} » avant de valider.`, 'warn')
         document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${l.idx}"]`)?.focus()

@@ -7,6 +7,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole, getBoutiqueId, assertBoutiqueOwnership } from '../lib/middleware'
 import { parsePagination } from '../lib/db'
+import { quantiteLigneInvalide } from '../lib/validators'
 import {
   listDevis, getDevis, createDevis, updateDevis,
   updateStatutDevis, convertirDevis, getStatsDevis,
@@ -83,6 +84,9 @@ facturation.post('/devis', async (c) => {
 
   if (!body.client_id || !body.lignes?.length)
     return c.json({ success: false, error: 'client_id et lignes obligatoires.' }, 400)
+  // Quantité entière ≥ 1 (recette 001 B), avant toute écriture.
+  const errQuantite = quantiteLigneInvalide(body.lignes)
+  if (errQuantite) return c.json({ success: false, error: errQuantite }, 400)
 
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
@@ -126,6 +130,10 @@ facturation.put('/devis/:id', requireRole('admin', 'manager'), async (c) => {
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
   const body = await c.req.json()
+
+  // Quantité entière ≥ 1 (recette 001 B) — seulement si les lignes sont remplacées.
+  const errQuantite = body.lignes ? quantiteLigneInvalide(body.lignes) : null
+  if (errQuantite) return c.json({ success: false, error: errQuantite }, 400)
 
   try {
     await updateDevis(c.env.DB, id, user.sub, body)
@@ -372,6 +380,10 @@ facturation.post('/factures', requireRole('admin', 'manager'), async (c) => {
     return c.json({ success: false, error: `action invalide (${ACTIONS.join(' | ')}).` }, 400)
   if (!body.devis_id && !body.lignes?.length)
     return c.json({ success: false, error: 'lignes obligatoires sans devis source.' }, 400)
+  // Quantité entière ≥ 1 (recette 001 B), avant toute écriture : aucun numéro consommé sur refus.
+  // Avec un devis source, les lignes du corps sont ignorées — celles du devis ont été vérifiées à sa saisie.
+  const errQuantite = body.devis_id ? null : quantiteLigneInvalide(body.lignes)
+  if (errQuantite) return c.json({ success: false, error: errQuantite }, 400)
   if (body.action === 'emettre_encaisser' && !body.mode_paiement)
     return c.json({ success: false, error: 'mode_paiement obligatoire pour encaisser.' }, 400)
 
@@ -608,6 +620,10 @@ facturation.post('/avoirs', requireRole('admin', 'manager'), async (c) => {
   if (!body.facture_id) return c.json({ success: false, error: 'facture_id obligatoire.' }, 400)
   if (!body.motif)      return c.json({ success: false, error: 'motif obligatoire.' }, 400)
   if (!body.lignes?.length) return c.json({ success: false, error: 'Au moins une ligne obligatoire.' }, 400)
+  // Quantité entière ≥ 1 (recette 001 B) — avant `createAvoir()`, qui réserve le numéro d'avoir
+  // avant tout calcul : un refus plus tardif brûlerait un numéro de la série NF525.
+  const errQuantite = quantiteLigneInvalide(body.lignes)
+  if (errQuantite) return c.json({ success: false, error: errQuantite }, 400)
 
   // Isolation multi-tenant : l'avoir hérite de la boutique de sa facture support
   // (createAvoir()), donc c'est l'appartenance de cette facture qui fait foi.
