@@ -106,6 +106,12 @@ _Mis au format du modèle le 2026-09-30. Ancien en-tête : `**Status:** ready-fo
    et répond 409 ; l'écran affiche ce 409 en clair. Le critère « visible seulement si ni code-barres
    ni SKU EAN-13 valide » est barré.
 3. **Chaque comportement d'écran a son E2E**, en plus de « créer, lire, scanner ».
+4. **« Enregistrer » n'envoie `code_barre` que si l'utilisateur l'a modifié** par rapport à la
+   valeur affichée à l'ouverture de la fiche (ou après « Générer ») : clé absente sinon, donc code
+   inchangé en base (`COALESCE`). ⊥ renvoyer un champ vide intouché : il effacerait un code posé
+   entre-temps par l'import CSV ou un autre poste. _(2e relecture de conception de T-012.)_
+5. **En création, pas de bouton « Générer »** : le produit n'a pas encore d'identifiant, et la pose
+   automatique intervient à l'enregistrement. Le bouton n'existe qu'en modification, champ vide.
 
 ## Critères d'acceptation
 
@@ -177,6 +183,7 @@ Commun :
 - ➕ **Couture ajoutée le 2026-10-02** — E2E : saisir dans un produit le code-barres d'un autre ⇒ 409 affiché à l'écran, produit porteur nommé.
 - ➕ **Couture ajoutée le 2026-10-02** — E2E : produit au SKU EAN-13 valide ⇒ « Générer » ⇒ 409 affiché en clair, aucun code posé.
 - ➕ **Couture ajoutée le 2026-10-02** — E2E : avertissement de pose après création et `avertissements` du bilan CSV affichés à l'écran, réponse servie par `page.route()` (la collision réelle n'est pas reproductible à l'écran) ; preuve du déballage `r.data.…`.
+- ➕ **Couture ajoutée le 2026-10-02 (2e P15 de T-012)** — E2E : ouvrir la fiche d'un produit sans code, poser un code par l'API pendant qu'elle est ouverte, modifier le prix puis « Enregistrer » ⇒ le code posé est toujours en base ; et en création, aucun bouton « Générer ».
 
 ## Notes
 
