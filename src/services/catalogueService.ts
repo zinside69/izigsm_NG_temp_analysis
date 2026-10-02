@@ -89,7 +89,8 @@ export async function rechercherCatalogue(
 
 /**
  * Cherche un article par un **code scanné** (ticket 04 — douchette) : égalité stricte sur le
- * code-barres **ou** le SKU, produits actifs de la boutique.
+ * code-barres **ou** le SKU, produits actifs de la boutique. Depuis le ticket 05, cherche aussi les
+ * **services** actifs par leur code-barres (code maison compris, migration 0052).
  *
  * Le SKU compte parce que la fiche produit n'a pas de champ code-barres : l'EAN du fournisseur y
  * est tapé comme SKU (décision de l'exploitant du 2026-09-30). ⊥ le `LIKE %…%` de
@@ -101,23 +102,35 @@ export async function rechercherCatalogue(
  * @param db          Port Database
  * @param boutiqueId  Boutique consultée — aucune autre n'est lue
  * @param code        Code scanné, déjà nettoyé (`routerScan()`)
- * @returns           Au plus `PLAFOND_RECHERCHE_CATALOGUE` produits
+ * @returns           Au plus `PLAFOND_RECHERCHE_CATALOGUE` produits et services (typés)
  */
 export async function rechercherParCode(
   db:         Database,
   boutiqueId: number,
   code:       string,
 ): Promise<ResultatCatalogue[]> {
-  const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
-    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
-    FROM   produits
-    WHERE  boutique_id = ? AND actif = 1
-      AND  (code_barre = ? OR sku = ?)
-    ORDER  BY nom ASC
-    LIMIT  ?
-  `, [boutiqueId, code, code, PLAFOND_RECHERCHE_CATALOGUE])
+  const [produits, services] = await Promise.all([
+    db.all<Omit<ResultatProduit, 'type'>>(`
+      SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+      FROM   produits
+      WHERE  boutique_id = ? AND actif = 1
+        AND  (code_barre = ? OR sku = ?)
+      ORDER  BY nom ASC
+      LIMIT  ?
+    `, [boutiqueId, code, code, PLAFOND_RECHERCHE_CATALOGUE]),
+    db.all<Omit<ResultatService, 'type'>>(`
+      SELECT id, nom, reference, prix_ht, tva_taux
+      FROM   services
+      WHERE  boutique_id = ? AND actif = 1 AND code_barre = ?
+      ORDER  BY nom ASC
+      LIMIT  ?
+    `, [boutiqueId, code, PLAFOND_RECHERCHE_CATALOGUE]),
+  ])
 
-  return (lignes ?? []).map(versResultatProduit)
+  return [
+    ...(produits ?? []).map(versResultatProduit),
+    ...(services ?? []).map(versResultatService),
+  ]
 }
 
 /**
@@ -160,6 +173,18 @@ function versResultatProduit(p: Omit<ResultatProduit, 'type'>): ResultatProduit 
   }
 }
 
+/** Mapping explicite d'une ligne service : le contrat de sortie ne dépend pas des colonnes lues. */
+function versResultatService(s: Omit<ResultatService, 'type'>): ResultatService {
+  return {
+    type:      'service',
+    id:        s.id,
+    nom:       s.nom,
+    reference: s.reference,
+    prix_ht:   s.prix_ht,
+    tva_taux:  s.tva_taux,
+  }
+}
+
 async function chercherProduits(db: Database, boutiqueId: number, motif: string): Promise<ResultatProduit[]> {
   const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
     SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
@@ -184,23 +209,18 @@ async function chercherProduits(db: Database, boutiqueId: number, motif: string)
 }
 
 async function chercherServices(db: Database, boutiqueId: number, motif: string): Promise<ResultatService[]> {
+  // Code-barres compris (ticket 05 `vente-lit-catalogue`, migration 0052) : un service codé se
+  // retrouve aussi en tapant son code dans la recherche texte, pas seulement au scan.
   const lignes = await db.all<Omit<ResultatService, 'type'>>(`
     SELECT id, nom, reference, prix_ht, tva_taux
     FROM   services
     WHERE  boutique_id = ? AND actif = 1
-      AND  (nom LIKE ? ESCAPE '\\' OR reference LIKE ? ESCAPE '\\')
+      AND  (nom LIKE ? ESCAPE '\\' OR reference LIKE ? ESCAPE '\\' OR code_barre LIKE ? ESCAPE '\\')
     ORDER  BY nom ASC
     LIMIT  ?
-  `, [boutiqueId, motif, motif, PLAFOND_RECHERCHE_CATALOGUE])
+  `, [boutiqueId, motif, motif, motif, PLAFOND_RECHERCHE_CATALOGUE])
 
-  return (lignes ?? []).map(s => ({
-    type:      'service' as const,
-    id:        s.id,
-    nom:       s.nom,
-    reference: s.reference,
-    prix_ht:   s.prix_ht,
-    tva_taux:  s.tva_taux,
-  }))
+  return (lignes ?? []).map(versResultatService)
 }
 
 /**

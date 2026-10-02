@@ -60,6 +60,7 @@ import {
   listMarques, createMarque, updateMarque, deleteMarque,
   listModeles, createModele, updateModele, deleteModele,
   getServicesByModele, linkServiceModele, unlinkServiceModele, getModeleWithServices,
+  poserCodeMaisonService, ErreurServiceCodeEnDoublon, ErreurServiceDejaCode,
 } from '../services/servicesService'
 import {
   syncBrands, syncModelesByBrand, syncSelectedBrands,
@@ -323,9 +324,22 @@ services.post('/services', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const id = await createService(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
-  return c.json({ success: true, id, message: 'Service créé.' }, 201)
+  try {
+    const id = await createService(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+    return c.json({ success: true, id, message: 'Service créé.' }, 201)
+  } catch (err: any) {
+    if (err instanceof ErreurServiceCodeEnDoublon) return reponseDoublonService(c, err)
+    throw err
+  }
 })
+
+/**
+ * 409 d'un code-barres de service déjà porté : le message nomme le service, et son identifiant
+ * permet à l'écran d'y renvoyer l'opérateur (même patron que `reponseDoublon()`, `routes/stocks.ts`).
+ */
+function reponseDoublonService(c: any, err: ErreurServiceCodeEnDoublon) {
+  return c.json({ success: false, error: err.message, service_id: err.service.id }, 409)
+}
 
 /**
  * PUT /api/services/:id
@@ -353,8 +367,45 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const deny = assertBoutiqueOwnership(user, existing, 'Service')
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
-  await updateService(c.env.DB, id, body, user.sub)
-  return c.json({ success: true, message: 'Service mis à jour.' })
+  try {
+    await updateService(c.env.DB, id, body, user.sub)
+    return c.json({ success: true, message: 'Service mis à jour.' })
+  } catch (err: any) {
+    if (err instanceof ErreurServiceCodeEnDoublon) return reponseDoublonService(c, err)
+    throw err
+  }
+})
+
+/**
+ * POST /api/services/:id/code-maison
+ * Génère un code maison (ticket 05 `vente-lit-catalogue`) : refuse si le service a déjà un
+ * code-barres (409), ou si un autre service porte déjà exactement ce code (409, collision
+ * improbable). Réservé admin/manager.
+ *
+ * @param id  Identifiant numérique du service
+ * @returns 200 `{ success: true, code_barre, message }`
+ * @returns 404 si service introuvable (id inexistant, inactif, ou absent de cette boutique côté
+ *          admin plateforme)
+ * @returns 403 si un manager/admin de boutique vise un service d'une autre boutique
+ *          (`assertBoutiqueOwnership()`, CLAUDE.md § Invariants isolation multi-tenant)
+ * @returns 409 si déjà codé, ou collision
+ */
+services.post('/services/:id/code-maison', requireRole('admin', 'manager'), async (c) => {
+  const user = c.get('user')
+  const id   = parseInt(c.req.param('id'), 10)
+
+  const service = await getService(c.get('db'), id)
+  const deny = assertBoutiqueOwnership(user, service, 'Service')
+  if (deny) return c.json({ success: false, error: deny.error }, deny.status)
+
+  try {
+    const { code } = await poserCodeMaisonService(c.get('db'), service!.boutique_id, id)
+    return c.json({ success: true, code_barre: code, message: 'Code maison généré.' })
+  } catch (err: any) {
+    if (err instanceof ErreurServiceDejaCode) return c.json({ success: false, error: err.message }, 409)
+    if (err instanceof ErreurServiceCodeEnDoublon) return reponseDoublonService(c, err)
+    throw err
+  }
 })
 
 /**

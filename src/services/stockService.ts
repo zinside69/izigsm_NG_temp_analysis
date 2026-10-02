@@ -23,6 +23,7 @@ import { parsePagination, auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
 import { luhnValide } from '../lib/scan'
+import { codeMaison, estEan13Valide } from '../lib/codeMaison'
 // Seul point de résolution des valeurs par défaut de stock (`CLAUDE.md` § Stock). Pas de cycle :
 // boutiqueService n'importe de ce fichier qu'un type.
 import { resoudreDefautsStock, type DefautsStock, type DefautsStockEffectifs } from './boutiqueService'
@@ -95,6 +96,11 @@ export interface CreateProduitData {
  */
 export interface CreateProduitOptions {
   fournisseur_id?: number | null
+  /**
+   * Import fournisseur (Mobilax) : ne pose jamais de code maison, même sans EAN — ticket 05
+   * `vente-lit-catalogue`, P15 du 2026-10-01. Seul `importerProduitMobilax()` le passe.
+   */
+  sansCodeMaison?: boolean
 }
 
 export interface UpdateProduitData {
@@ -393,6 +399,125 @@ async function leverSiCodeEnDoublon(
   if (porteur) throw new ErreurCodeEnDoublon(champ, porteur)
 }
 
+// ─── Code maison (ticket 05 `vente-lit-catalogue`) ─────────────────────────────
+
+/**
+ * Dispense de code maison (décision de l'exploitant du 2026-09-30) : un code-barres déjà saisi, ou
+ * un SKU qui est l'EAN-13 du fournisseur (clé de contrôle juste), couvre déjà le scan — poser un
+ * code maison en plus donnerait deux codes au même article.
+ */
+function dispenseDeCodeMaison(donnees: { code_barre?: string | null; sku?: string | null }): boolean {
+  if (donnees.code_barre && donnees.code_barre.trim()) return true
+  if (donnees.sku && estEan13Valide(donnees.sku.trim())) return true
+  return false
+}
+
+/**
+ * Pose un code maison automatique sur un produit (type 1) qui vient d'être créé, si la dispense ne
+ * s'applique pas (`dispenseDeCodeMaison()`). Fonction commune à `createProduit()` et à l'INSERT de
+ * l'import CSV — jamais à l'import Mobilax (`CreateProduitOptions.sansCodeMaison`).
+ *
+ * Non atomique avec l'INSERT par nécessité : l'identifiant du produit n'existe qu'après (conception
+ * du 2026-09-30) — un échec laisse le produit sans code, jamais un produit au code faux. Écriture
+ * conditionnelle en une seule requête (précision P15 du 2026-10-01) : ne réécrit jamais un code
+ * déjà présent (la `WHERE` est le garde-fou réel, le test `dispenseDeCodeMaison()` n'étant qu'une
+ * optimisation qui évite l'écriture quand elle est inutile).
+ *
+ * La pose automatique ne lève **jamais** d'exception (P15, 2026-10-01) : une collision (un autre
+ * produit actif de la boutique porte déjà exactement ce code — improbable mais possible si un code
+ * a été saisi à la main) laisse le produit sans code et renvoie un avertissement nommant le porteur ;
+ * l'action « Générer un code maison » (`poserCodeMaisonProduit()`) la rattrape ensuite.
+ *
+ * @param db          Instance D1Database
+ * @param boutiqueId  Boutique du produit
+ * @param produitId   Produit qui vient d'être créé (le code est calculé sur CET identifiant)
+ * @param donnees     `code_barre`/`sku` tels qu'écrits à l'instant — décident si la pose est due
+ * @returns           Avertissement si la pose était due mais a échoué (collision), sinon rien
+ */
+async function poserCodeMaisonAutomatique(
+  db: D1Database, boutiqueId: number, produitId: number,
+  donnees: { code_barre?: string | null; sku?: string | null }
+): Promise<string | undefined> {
+  if (dispenseDeCodeMaison(donnees)) return undefined
+
+  const code = codeMaison(1, produitId)
+  try {
+    await db.prepare(
+      `UPDATE produits SET code_barre = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`
+    ).bind(code, produitId, boutiqueId).run()
+    return undefined
+  } catch {
+    const porteur = await db.prepare(
+      `SELECT id, nom FROM produits WHERE boutique_id = ? AND code_barre = ? AND actif = 1 AND id <> ? LIMIT 1`
+    ).bind(boutiqueId, code, produitId).first<{ id: number; nom: string }>()
+    return porteur
+      ? `Code maison ${code} non posé : déjà utilisé par « ${porteur.nom} » (produit n° ${porteur.id}). Corrigez ce doublon puis utilisez « Générer un code maison ».`
+      : `Code maison ${code} non posé (collision détectée).`
+  }
+}
+
+/** Refus de poser un code maison sur un produit qui a déjà un code-barres ou un SKU EAN-13 valide. */
+export class ErreurDejaCode extends Error {
+  constructor() {
+    super('Ce produit a déjà un code-barres (ou un SKU qui en tient lieu).')
+    this.name = 'ErreurDejaCode'
+  }
+}
+
+/**
+ * Pose un code maison à la demande (route `POST /produits/:id/code-maison`) : refuse si le SKU est
+ * un EAN-13 valide (dispense) ; sinon tente `codeMaison(1, id)` par l'écriture conditionnelle
+ * commune. Ici l'écriture est **demandée** : une collision est convertie en `ErreurCodeEnDoublon`
+ * nommant le porteur, jamais avalée (P15, 2026-10-01 — le 409 ne vaut que pour une écriture
+ * demandée).
+ *
+ * Le 409 « déjà codé » se lit sur le résultat de l'UPDATE (`changes = 0`), jamais sur une lecture
+ * préalable du `code_barre` (rejet de revue du 2026-10-02) : lire puis écrire laisserait une
+ * fenêtre entre les deux où un autre appel pourrait poser un code, rendant le refus menteur (la
+ * lecture dirait « libre » pendant que l'écriture aurait déjà échoué faute de ligne à modifier).
+ * La dispense par SKU reste une lecture préalable légitime : elle ne porte pas sur `code_barre` et
+ * n'a donc pas cette fenêtre de validité.
+ *
+ * @param db          Port Database
+ * @param boutiqueId  Boutique du produit (celle de la ressource — l'appelant a déjà vérifié
+ *                    l'appartenance via `assertBoutiqueOwnership()`)
+ * @param produitId   Produit cible
+ * @returns           Le code posé
+ * @throws            ErreurDejaCode si le produit a déjà un code-barres (UPDATE sans effet) ou un
+ *                     SKU EAN-13 valide ; ErreurCodeEnDoublon si un autre produit actif porte déjà
+ *                     exactement ce code ; Error('Produit introuvable.') si absent de cette boutique
+ */
+export async function poserCodeMaisonProduit(
+  db: Database, boutiqueId: number, produitId: number
+): Promise<{ code: string }> {
+  const produit = await db.get<{ sku: string | null }>(
+    'SELECT sku FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1',
+    [produitId, boutiqueId]
+  )
+  if (!produit) throw new Error('Produit introuvable.')
+  if (produit.sku && estEan13Valide(produit.sku.trim())) throw new ErreurDejaCode()
+
+  const code = codeMaison(1, produitId)
+  let resultat: { changes: number }
+  try {
+    resultat = await db.run(
+      `UPDATE produits SET code_barre = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`,
+      [code, produitId, boutiqueId]
+    )
+  } catch (err) {
+    const porteur = await db.get<{ id: number; nom: string }>(
+      'SELECT id, nom FROM produits WHERE boutique_id = ? AND code_barre = ? AND actif = 1 AND id <> ? LIMIT 1',
+      [boutiqueId, code, produitId]
+    )
+    if (porteur) throw new ErreurCodeEnDoublon('code_barre', porteur)
+    throw err
+  }
+  if (resultat.changes === 0) throw new ErreurDejaCode()
+  return { code }
+}
+
 /**
  * Coût moyen d'un produit à sa création (règle « sur tous les chemins », `decisions.md`) : des
  * pièces déjà en rayon valent leur prix d'achat ; sans pièce, 0 (`DEFAULT` de la colonne).
@@ -465,7 +590,7 @@ export async function createProduit(
   userId: number,
   data: CreateProduitData,
   options: CreateProduitOptions = {}
-): Promise<{ id: number }> {
+): Promise<{ id: number; avertissement_code_maison?: string }> {
   // Toute validation précède l'écriture : rien n'est inséré pour un prix ou une quantité refusés
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
   // Entier ≥ 0 exigé : un « abc » donnait NaN, que `NaN < 0` laissait passer ; 1.5 aussi
@@ -544,7 +669,13 @@ export async function createProduit(
     entite_id:   produitId,
   })
 
-  return { id: produitId }
+  // Code maison posé après le mouvement « Stock initial » et l'audit (P15, 2026-10-01) ; jamais
+  // pour l'import Mobilax (`sansCodeMaison`, ticket 05).
+  const avertissement_code_maison = options.sansCodeMaison
+    ? undefined
+    : await poserCodeMaisonAutomatique(db, boutiqueId, produitId, { code_barre: data.code_barre, sku: data.sku })
+
+  return avertissement_code_maison ? { id: produitId, avertissement_code_maison } : { id: produitId }
 }
 
 /**
@@ -1152,7 +1283,7 @@ export async function importCatalogueCsv(
   boutiqueId: number,
   userId:     number,
   csvText:    string
-): Promise<{ imported: number; updated: number; skipped: number; errors: string[] }> {
+): Promise<{ imported: number; updated: number; skipped: number; errors: string[]; avertissements: string[] }> {
   const lines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
   if (lines.length < 2) throw new Error('CSV vide ou sans données.')
 
@@ -1189,6 +1320,9 @@ export async function importCatalogueCsv(
   const iMarque  = idx('marque')
   const iFourn   = idx('fournisseur')
   const iSeuil   = idx('stock_minimum')
+  // Défaut ouvert de bugs.md (2026-09-17), corrigé au ticket 05 `vente-lit-catalogue` : la colonne
+  // était documentée mais jamais lue — un produit importé avec son EAN recevait un code maison à tort.
+  const iCodeBarre = idx('code_barre')
 
   if (iNom === -1) throw new Error('Colonne "nom" obligatoire introuvable dans le CSV.')
 
@@ -1199,6 +1333,7 @@ export async function importCatalogueCsv(
 
   let imported = 0, updated = 0, skipped = 0
   const errors: string[] = []
+  const avertissements: string[] = []
 
   for (let li = 0; li < dataLines.length; li++) {
     const row = parseLine(dataLines[li])
@@ -1218,6 +1353,7 @@ export async function importCatalogueCsv(
       const fourn   = iFourn  >= 0 ? row[iFourn]?.trim()  || null : null
       const famRaw  = iFamille >= 0 ? row[iFamille]?.trim().toLowerCase() : ''
       const famille = FAMILLES.includes(famRaw as FamilleProduit) ? (famRaw as FamilleProduit) : 'piece'
+      const codeBarre = iCodeBarre >= 0 && row[iCodeBarre]?.trim() ? row[iCodeBarre].trim() : null
 
       if (sku) {
         const existing = await db
@@ -1226,6 +1362,9 @@ export async function importCatalogueCsv(
           .first<{ id: number; stock_actuel: number }>()
 
         if (existing) {
+          // `code_barre` complété dans ce même UPDATE, jamais écrasé (ticket 05, 3e précision P15
+          // du 2026-10-01) : un doublon fait échouer CET UPDATE seul, avant tout mouvement de
+          // stock — la ligne est rejetée en entier, sans écriture partielle.
           await db.prepare(`
             UPDATE produits SET
               nom           = ?,
@@ -1235,9 +1374,14 @@ export async function importCatalogueCsv(
               tva_taux      = ?,
               marque        = COALESCE(?, marque),
               fournisseur   = COALESCE(?, fournisseur),
+              code_barre    = CASE WHEN code_barre IS NULL OR TRIM(code_barre) = '' THEN ? ELSE code_barre END,
               updated_at    = CURRENT_TIMESTAMP
             WHERE id = ?
-          `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, existing.id).run()
+          `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, codeBarre, existing.id).run()
+            .catch(async (err) => {
+              await leverSiCodeEnDoublon(db, err, { code_barre: codeBarre }, { produitId: existing.id })
+              throw err
+            })
 
           if (stock > 0 && stock !== existing.stock_actuel) {
             await db.prepare(`
@@ -1266,16 +1410,22 @@ export async function importCatalogueCsv(
       if (qte === null) { skipped++; errors.push(`Ligne ${num} : quantité invalide — ignorée.`); continue }
 
       // INSERT nouveau produit — coût moyen au prix d'achat de la ligne si des pièces sont
-      // déclarées (valeur du stock juste dès l'import), 0 sinon (`DEFAULT` de la colonne)
+      // déclarées (valeur du stock juste dès l'import), 0 sinon (`DEFAULT` de la colonne).
+      // `code_barre` lu et enregistré (ticket 05 `vente-lit-catalogue` : défaut ouvert de
+      // bugs.md corrigé) — un doublon devient `ErreurCodeEnDoublon`, nommé dans le bilan.
       const res = await db.prepare(`
         INSERT INTO produits
           (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-           tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump, code_barre)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id
       `).bind(boutiqueId, sku, nom, marque, famille, paHt, pvHt, tva, qte, seuil, fourn,
-              coutMoyenInitial(qte, paHt))
+              coutMoyenInitial(qte, paHt), codeBarre)
         .first<{ id: number }>()
+        .catch(async (err) => {
+          await leverSiCodeEnDoublon(db, err, { sku, code_barre: codeBarre }, { boutiqueId })
+          throw err
+        })
 
       // Motif « Stock initial », commun à tous les chemins de création (decisions.md, story 25 —
       // tranché le 2026-09-12) ; la mise à jour d'un SKU existant garde « Import catalogue CSV »
@@ -1285,6 +1435,13 @@ export async function importCatalogueCsv(
             (produit_id, boutique_id, type_mouvement, quantite, stock_avant, stock_apres, user_id, motif)
           VALUES (?, ?, 'entree', ?, 0, ?, ?, 'Stock initial')
         `).bind(res.id, boutiqueId, qte, qte, userId).run()
+      }
+
+      // Code maison automatique (ticket 05) : jamais sur une écrasement, jamais une exception —
+      // une ligne dont la pose a échoué reste comptée comme importée (P15, 2026-10-01).
+      if (res) {
+        const avertissement = await poserCodeMaisonAutomatique(db, boutiqueId, res.id, { code_barre: codeBarre, sku })
+        if (avertissement) avertissements.push(`Ligne ${num} : ${avertissement}`)
       }
 
       imported++
@@ -1302,7 +1459,7 @@ export async function importCatalogueCsv(
     details:     JSON.stringify({ imported, updated, skipped }),
   })
 
-  return { imported, updated, skipped, errors }
+  return { imported, updated, skipped, errors, avertissements }
 }
 
 // ─── KPIs stock ───────────────────────────────────────────────────────────────

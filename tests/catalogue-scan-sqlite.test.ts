@@ -14,6 +14,9 @@ import { rechercherParCode } from '../src/services/catalogueService'
  * boutiques — un mock accepterait n'importe quelle requête (`CLAUDE.md`, § Bons de commande).
  */
 
+// `services` ajoutée au ticket 05 (`vente-lit-catalogue`) : `rechercherParCode()` cherche
+// désormais aussi les services par code-barres — sans cette table, la requête échoue (« no such
+// table »), migration 0052 non répliquée ici (schéma minimal, indépendant de `migrations/`).
 const SCHEMA = `
   CREATE TABLE produits (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +28,16 @@ const SCHEMA = `
     tva_taux       REAL    NOT NULL DEFAULT 20,
     stock_actuel   INTEGER NOT NULL DEFAULT 0,
     actif          INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE TABLE services (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    boutique_id INTEGER NOT NULL,
+    nom         TEXT    NOT NULL,
+    reference   TEXT,
+    code_barre  TEXT,
+    prix_ht     REAL    NOT NULL DEFAULT 0,
+    tva_taux    REAL    NOT NULL DEFAULT 20,
+    actif       INTEGER NOT NULL DEFAULT 1
   );
 `
 
@@ -50,6 +63,13 @@ function produit(p: Partial<{ boutique_id: number; nom: string; sku: string | nu
   return Number(sqlite.prepare(
     'INSERT INTO produits (boutique_id, nom, sku, code_barre, actif) VALUES (?, ?, ?, ?, ?)',
   ).run(v.boutique_id, v.nom, v.sku, v.code_barre, v.actif).lastInsertRowid)
+}
+
+function service(p: Partial<{ boutique_id: number; nom: string; code_barre: string | null; actif: number }>): number {
+  const v = { boutique_id: 1, nom: 'Service', code_barre: null, actif: 1, ...p }
+  return Number(sqlite.prepare(
+    'INSERT INTO services (boutique_id, nom, code_barre, actif) VALUES (?, ?, ?, ?)',
+  ).run(v.boutique_id, v.nom, v.code_barre, v.actif).lastInsertRowid)
 }
 
 beforeEach(() => {
@@ -92,5 +112,38 @@ describe('rechercherParCode() — égalité stricte sur code-barres ou SKU', () 
     const a = produit({ nom: 'Coque noire', code_barre: EAN })
     const b = produit({ nom: 'Coque bleue', sku: EAN })
     expect((await rechercherParCode(db, 1, EAN)).map(r => r.id).sort()).toEqual([a, b].sort())
+  })
+})
+
+// ─── Services (ticket 05 `vente-lit-catalogue`) ────────────────────────────────
+
+describe('rechercherParCode() — services par code-barres (ticket 05)', () => {
+  it('trouve un service par son code-barres, typé "service"', async () => {
+    const id = service({ nom: 'Pose de film', code_barre: EAN })
+    const res = await rechercherParCode(db, 1, EAN)
+    expect(res.map(r => r.id)).toEqual([id])
+    expect(res[0].type).toBe('service')
+  })
+
+  it('rend produit ET service quand ils partagent le même code (improbable, mais aucun choix)', async () => {
+    const idP = produit({ nom: 'Coque', code_barre: EAN })
+    const idS = service({ nom: 'Pose de film', code_barre: EAN })
+    const res = await rechercherParCode(db, 1, EAN)
+    expect(res.map(r => r.id).sort()).toEqual([idP, idS].sort())
+  })
+
+  it('ignore un service inactif', async () => {
+    service({ code_barre: EAN, actif: 0 })
+    expect(await rechercherParCode(db, 1, EAN)).toEqual([])
+  })
+
+  it('ne lit jamais le service d\'une autre boutique', async () => {
+    service({ boutique_id: 2, code_barre: EAN })
+    expect(await rechercherParCode(db, 1, EAN)).toEqual([])
+  })
+
+  it('ne trouve pas un service dont le code ne fait que contenir les chiffres (égalité stricte)', async () => {
+    service({ nom: 'Contient dans le code', code_barre: `${EAN}0` })
+    expect(await rechercherParCode(db, 1, EAN)).toEqual([])
   })
 })
