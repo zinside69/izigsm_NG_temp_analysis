@@ -1563,6 +1563,12 @@ function journaliserImport(texte, couleur) {
   const ligne = document.createElement('div');
   ligne.textContent = texte;
   ligne.style.color = couleur;
+  // Recette 001 C (2026-10-02) : une entrée = une ligne, même pour un long nom de pièce — tronqué
+  // « … », texte complet au survol (`title` : attribut, jamais interprété comme du HTML)
+  ligne.style.whiteSpace   = 'nowrap';
+  ligne.style.overflow     = 'hidden';
+  ligne.style.textOverflow = 'ellipsis';
+  ligne.title = texte;
   journal.appendChild(ligne);
   journal.scrollTop = journal.scrollHeight;
 }

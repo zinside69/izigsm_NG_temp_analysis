@@ -20,7 +20,8 @@
 // AVANT (2026-10-02, export comptable Excel — stats.html) : const CACHE_VERSION  = 'izigsm-v3.19'
 // AVANT (2026-10-02, recette 001 B — quantité entière : caisse.js, devis.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.20'
 // AVANT (2026-10-02, recette 001 A′ — caisse « Barre unique + favoris » : caisse.html, caisse.js) : const CACHE_VERSION  = 'izigsm-v3.21'
-const CACHE_VERSION  = 'izigsm-v3.22'
+// AVANT (2026-10-02, recette 001 C — fenêtre Mobilax élargie, journal sur une ligne : stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.22'
+const CACHE_VERSION  = 'izigsm-v3.23'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

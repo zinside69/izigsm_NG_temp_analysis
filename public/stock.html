@@ -309,7 +309,9 @@
   <!-- Modal Recherche Mobilax (tickets 03-04, chantier integration-mobilax) — recherche, puis
        « Importer » par résultat (importerMobilax()). Rempli par chercherMobilax(). -->
   <div class="modal-overlay" id="modal-mobilax">
-    <div class="modal" style="max-width:780px;">
+    <!-- AVANT (2026-10-02, recette 001 C — noms de pièces illisibles pendant un gros import) :
+    <div class="modal" style="max-width:780px;"> -->
+    <div class="modal" style="max-width:1100px;">
       <div class="modal-header">
         <h2>Chercher une pièce chez Mobilax</h2>
         <button class="modal-close" onclick="closeModal('modal-mobilax')">✕</button>
@@ -389,7 +391,8 @@
             <table>
               <!-- « Tout cocher » (ticket 03) : page affichée seulement — majToutCocher(). `hidden` sur
                    l'enveloppe : masquée tant qu'aucune ligne ne porte de case (technicien, aucun résultat) -->
-              <thead><tr><th><span id="mobilax-tout-cocher-zone" hidden><input type="checkbox" id="mobilax-tout-cocher"
+              <!-- AVANT (2026-10-02, recette 001 C — colonne « Pièce » élargie) : <thead><tr><th><span id="mobilax-tout-cocher-zone" hidden> -->
+              <thead><tr><th style="width:45%"><span id="mobilax-tout-cocher-zone" hidden><input type="checkbox" id="mobilax-tout-cocher"
                      aria-label="Tout cocher — page affichée" style="margin:0 8px 0 0;vertical-align:middle;"></span>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
               <tbody id="mobilax-resultats"></tbody>
             </table>
