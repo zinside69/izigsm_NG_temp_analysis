@@ -28,6 +28,35 @@ reste). ⊥ une seconde implémentation du routage.
 **E2E** : vraie D1 locale, produit à EAN connu ; focus dans le champ, `type()` du code puis Entrée
 (comme une douchette) → la ligne du produit s'ajoute, à son prix ; deux fois → quantité 2 ; vu rouge.
 
+### A′ — Décision de l'exploitant du 2026-10-02 : « Barre unique + favoris » (remplace et élargit A)
+
+Retour de l'exploitant : « pas très intuitif, il faut chercher — trouve une UI plus fonctionnelle ».
+Disposition retenue pour la fenêtre « Nouvelle vente » :
+
+```
+┌─ Nouvelle vente ───────────────────────────────┬─────────────┐
+│ [🔎 Scanner ou taper un article…            ]  │ PANIER      │
+│ Favoris                                        │ Verre trempé│
+│ [Verre trempé 9,90][Coque 14,90][Câble 12,90]… │  2 × 9,90   │
+│ [+ Ligne libre]                                │ TOTAL 34,70 │
+│                                                │ [Esp][CB]…  │
+└────────────────────────────────────────────────┴─────────────┘
+```
+
+- **Une seule barre**, focus permanent (rendu après chaque ajout) : un code (13 / 15 chiffres) +
+  Entrée → `traiterScan()` (A) ; du texte → liste navigable **aux flèches**, Entrée = 1er (ou
+  sélectionné) résultat ajouté ; **un résultat unique** pour un code exact s'ajoute seul. Échap vide.
+- **Favoris** : 8 à 12 tuiles = articles et services **les plus vendus de la boutique** sur 90 jours
+  (`lignes_document` des factures émises, par `produit_id` / `service_id`), lus par une route dédiée
+  (SQL dans un service, isolation boutique) ; un clic = une ligne (quantité + 1 si déjà au panier) ;
+  boutique sans historique → pas de bloc (⊥ tuiles vides). Prix = prix de vente courant.
+- **Ligne libre** : bouton explicite « + Ligne libre » (la saisie libre reste possible, ⊥ par défaut).
+- **Panier à droite**, total et modes de paiement en dessous ; largeur de fenêtre augmentée.
+- Garder : prix bloqué à 0 € (`prixManquant()`), `stock_insuffisant` affiché, admin plateforme sans
+  douchette, appels déballés, échappement des noms (tuiles comprises).
+- E2E : scan dans la barre → ligne ; texte + flèches + Entrée → ligne ; clic favori ×2 → quantité 2 ;
+  vente encaissée de bout en bout (vraie D1 locale). Vus rouges d'abord.
+
 ## B — Quantité entière ≥ 1 partout (décision de l'exploitant du 2026-10-02)
 
 **Constat** : la caisse accepte `0,98` (capture). Décision : **entier ≥ 1, partout** — caisse, devis,
