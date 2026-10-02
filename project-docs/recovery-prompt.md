@@ -3,7 +3,9 @@
 ## ➡ Première action (ajout du 2026-10-02 après-midi, contexte de la session précédente saturé)
 
 Coder **`.scratch/recette-2026-10-02/issues/001-retours-de-recette-caisse-et-mobilax.md`**, ici, avec
-l'exploitant : **A** scan dans « Chercher un produit… » (Entrée → `traiterScan()`), **B** quantité
+l'exploitant : **A′** refonte « Barre unique + favoris » de la Nouvelle vente (décision du 2026-10-02 —
+barre de scan toujours active, tuiles des articles les plus vendus, ligne libre explicite, panier à
+droite ; inclut **A**, Entrée sur un code → `traiterScan()`), **B** quantité
 entière ≥ 1 partout (écran + serveur, avant toute écriture), **C** fenêtre Mobilax élargie et journal
 sur une ligne. Chacun vu rouge d'abord. Recette déjà validée en production : Intégrité NF525,
 Synthèse comptable, export CSV, **export Excel de septembre** (conforme au CSV : 44,90 €, HT 37,42,
