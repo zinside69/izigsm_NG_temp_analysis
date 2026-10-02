@@ -15,7 +15,8 @@ import { authMiddleware, getBoutiqueId } from '../lib/middleware'
 import type { Database } from '../ports/database'
 // AVANT (2026-09-30, ticket 04 `vente-lit-catalogue` — ajout de la recherche par code scanné) : import { rechercherCatalogue } from '../services/catalogueService'
 // AVANT (2026-09-30, ticket 07 — recherche par IMEI) : import { rechercherCatalogue, rechercherParCode } from '../services/catalogueService'
-import { rechercherCatalogue, rechercherParCode, rechercherParImei } from '../services/catalogueService'
+// AVANT (2026-10-02, recette 001 A′ — tuiles « Favoris » de la caisse) : import { rechercherCatalogue, rechercherParCode, rechercherParImei } from '../services/catalogueService'
+import { rechercherCatalogue, rechercherParCode, rechercherParImei, lireFavorisVente } from '../services/catalogueService'
 // AVANT (2026-09-30, ticket 07 — contrôle de Luhn avant toute requête) : import { routerScan } from '../lib/scan'
 import { routerScan, luhnValide } from '../lib/scan'
 
@@ -67,6 +68,24 @@ catalogue.get('/catalogue/recherche', async (c) => {
   if (!texte) return c.json({ success: false, error: 'Texte de recherche obligatoire.' }, 400)
 
   const data = await rechercherCatalogue(c.get('db'), boutiqueId, texte)
+  return c.json({ success: true, data })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/catalogue/favoris
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tuiles « Favoris » de la fenêtre de vente (recette 001 A′) : articles et services les plus
+ * vendus de la boutique consultée sur 90 jours, au format de la recherche. Lecture seule ; le SQL
+ * et l'isolation vivent dans `lireFavorisVente()`.
+ * @returns 200 { success, data: (ResultatProduit | ResultatService)[] } — `[]` sans historique
+ */
+catalogue.get('/catalogue/favoris', async (c) => {
+  const boutiqueId = getBoutiqueId(c.get('user'), c.req.query('boutique_id'))
+  if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
+
+  const data = await lireFavorisVente(c.get('db'), boutiqueId)
   return c.json({ success: true, data })
 })
 

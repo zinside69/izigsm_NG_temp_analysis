@@ -250,3 +250,74 @@ function repartirPlafond<T>(listes: T[][]): T[] {
   }
   return listes.flatMap((liste, i) => liste.slice(0, retenus[i]))
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Favoris de la caisse
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Nombre de tuiles « Favoris » de la fenêtre de vente (recette 001 A′ : 8 à 12). */
+export const PLAFOND_FAVORIS_VENTE = 12
+
+/** Période de vente lue pour les favoris, en jours. */
+const PERIODE_FAVORIS_JOURS = 90
+
+/**
+ * Articles et services les plus vendus de la boutique sur 90 jours (recette 001 A′, décision de
+ * l'exploitant du 2026-10-02) : tuiles « Favoris » de la fenêtre de vente.
+ *
+ * Source : lignes des factures **émises** (`locked = 1`, hors `annulee`) de la boutique, par
+ * `produit_id` / `service_id` — une ligne libre ne compte pas. Classées par quantité vendue, puis
+ * par nom. Rendues au format de la recherche (`ResultatProduit` / `ResultatService`) avec le prix
+ * **courant** de la fiche : un clic ajoute la ligne comme un résultat de recherche. Fiche
+ * désactivée exclue ; la fiche est jointe sur la boutique de la facture (isolation).
+ *
+ * @returns Au plus `PLAFOND_FAVORIS_VENTE` résultats ; `[]` pour une boutique sans historique
+ */
+export async function lireFavorisVente(
+  db:         Database,
+  boutiqueId: number,
+): Promise<(ResultatProduit | ResultatService)[]> {
+  const periode = `-${PERIODE_FAVORIS_JOURS} days`
+  // Filtre commun aux deux lectures : facture émise, non annulée, de la boutique, sur la période
+  const factureRetenue = `
+        ld.document_type = 'facture'
+    AND f.boutique_id = ? AND f.locked = 1 AND f.statut <> 'annulee'
+    AND f.issued_at >= datetime('now', ?)`
+
+  const [produits, services] = await Promise.all([
+    db.all<Omit<ResultatProduit, 'type'> & { vendus: number }>(`
+      SELECT p.id, p.nom, p.sku, p.code_barre, p.prix_vente_ht, p.tva_taux, p.stock_actuel,
+             SUM(ld.quantite) AS vendus
+      FROM   lignes_document ld
+      JOIN   factures f ON f.id = ld.document_id
+      JOIN   produits p ON p.id = ld.produit_id AND p.boutique_id = f.boutique_id AND p.actif = 1
+      WHERE  ${factureRetenue}
+      GROUP  BY p.id
+    `, [boutiqueId, periode]),
+    db.all<Omit<ResultatService, 'type'> & { vendus: number }>(`
+      SELECT s.id, s.nom, s.reference, s.prix_ht, s.tva_taux,
+             SUM(ld.quantite) AS vendus
+      FROM   lignes_document ld
+      JOIN   factures f ON f.id = ld.document_id
+      JOIN   services s ON s.id = ld.service_id AND s.boutique_id = f.boutique_id AND s.actif = 1
+      WHERE  ${factureRetenue}
+      GROUP  BY s.id
+    `, [boutiqueId, periode]),
+  ])
+
+  // Mapping explicite : le contrat de sortie est celui de la recherche, sans `vendus`
+  const tous = [
+    ...(produits ?? []).map(p => ({ vendus: p.vendus, r: {
+      type: 'produit' as const, id: p.id, nom: p.nom, sku: p.sku, code_barre: p.code_barre,
+      prix_vente_ht: p.prix_vente_ht, tva_taux: p.tva_taux, stock_actuel: p.stock_actuel,
+    } })),
+    ...(services ?? []).map(s => ({ vendus: s.vendus, r: {
+      type: 'service' as const, id: s.id, nom: s.nom, reference: s.reference,
+      prix_ht: s.prix_ht, tva_taux: s.tva_taux,
+    } })),
+  ]
+  return tous
+    .sort((a, b) => b.vendus - a.vendus || a.r.nom.localeCompare(b.r.nom, 'fr'))
+    .slice(0, PLAFOND_FAVORIS_VENTE)
+    .map(x => x.r)
+}

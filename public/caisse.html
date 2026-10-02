@@ -205,9 +205,14 @@
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <!-- Modal : Nouvelle vente POS                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<div id="modal-vente" class="fixed inset-0 z-50 hidden">
+<!-- AVANT (2026-10-02, recette 001 A′) : <div id="modal-vente" class="fixed inset-0 z-50 hidden">
+     Élargie, la fenêtre passait sous la barre latérale (z-index 100) : z-index 500, règle des
+     fenêtres de saisie du dépôt (barre 100, bandeau plateforme 900). -->
+<div id="modal-vente" class="fixed inset-0 hidden" style="z-index: 500">
   <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="CaisseApp.closeModal()"></div>
-  <div class="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
+  <!-- AVANT (2026-10-02, recette 001 A′ — fenêtre élargie pour deux colonnes) :
+  <div class="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden"> -->
+  <div class="absolute right-0 top-0 bottom-0 w-full max-w-6xl bg-white shadow-2xl flex flex-col overflow-hidden">
     <!-- Header modal -->
     <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
       <div>
@@ -220,6 +225,41 @@
     </div>
 
     <!-- Contenu scrollable -->
+    <!-- AVANT (2026-10-02) : ce commentaire précédait la colonne unique ; elle est devenue la
+         colonne droite ci-dessous. -->
+    <!-- Deux colonnes (recette 001 A′, « Barre unique + favoris ») : à gauche ce qu'on ajoute,
+         à droite le panier. Empilées sur un petit écran. -->
+    <div class="flex-1 overflow-hidden flex flex-col lg:flex-row">
+
+    <!-- Colonne gauche : barre unique, favoris, ligne libre -->
+    <div class="lg:w-5/12 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-gray-100 px-6 py-4 space-y-4 overflow-y-auto">
+
+      <!-- Barre unique (tickets 02-04 `vente-lit-catalogue`, recette 001 A′) : focus à l'ouverture
+           et après chaque ajout. Code + Entrée → `traiterScan()` (le serveur route le code) ;
+           texte → liste aux flèches, Entrée ajoute le résultat choisi ; Échap vide la barre.
+           Un dossier SAV choisi s'ouvre dans sa page, sans toucher au panier. -->
+      <div class="relative">
+        <label for="vente-produit-search" class="label-field">Article</label>
+        <input type="text" id="vente-produit-search" autocomplete="off"
+               placeholder="🔎 Scanner ou taper un article…"
+               class="input-field w-full text-base py-3" oninput="CaisseApp.debouncedSearchProduit()">
+        <div id="vente-produit-results" class="hidden mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-72 overflow-y-auto"></div>
+      </div>
+
+      <!-- Favoris : articles et services les plus vendus sur 90 jours (`GET /api/catalogue/favoris`).
+           Aucun historique → bloc masqué, jamais de tuiles vides. -->
+      <div id="vente-favoris-zone" class="hidden">
+        <label class="label-field">Favoris</label>
+        <div id="vente-favoris" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+      </div>
+
+      <button type="button" onclick="CaisseApp.ajouterLigne()" id="btn-ligne-libre"
+              class="w-full border-2 border-dashed border-gray-300 rounded-xl py-2 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-700">
+        <i class="fas fa-plus mr-1"></i>Ligne libre
+      </button>
+    </div>
+
+    <!-- Colonne droite : panier (contenu scrollable d'origine) -->
     <div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
 
       <!-- Client (optionnel) -->
@@ -242,6 +282,13 @@
       <!-- Lignes de vente -->
       <div>
         <div class="flex items-center justify-between mb-2">
+          <label class="label-field mb-0">Panier</label>
+        </div>
+
+        <!-- AVANT (2026-10-02, recette 001 A′) : bouton « Ajouter une ligne » ici et recherche sous
+             le titre « Articles / Prestations » ; remplacés par la colonne gauche (barre unique,
+             « + Ligne libre »). Contenu inerte, jamais rendu, gardé pour mémoire. -->
+        <template data-avant="2026-10-02 recette 001 A′">
           <label class="label-field mb-0">Articles / Prestations</label>
           <button onclick="CaisseApp.ajouterLigne()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
             <i class="fas fa-plus mr-1"></i>Ajouter une ligne
@@ -257,6 +304,7 @@
                  class="input-field w-full text-sm" oninput="CaisseApp.debouncedSearchProduit()">
           <div id="vente-produit-results" class="hidden mt-1 border border-gray-200 rounded-lg bg-white shadow-lg max-h-48 overflow-y-auto"></div>
         </div>
+        </template>
 
         <!-- En-têtes colonnes lignes -->
         <div class="grid grid-cols-12 gap-1 text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 px-1">
@@ -338,6 +386,7 @@
       </div>
 
     </div><!-- /scrollable -->
+    </div><!-- /deux colonnes (recette 001 A′) -->
 
     <!-- Footer modal -->
     <div class="px-6 py-4 border-t border-gray-100 flex gap-3 bg-gray-50">
@@ -388,7 +437,9 @@
 </div>
 
 <!-- Toast notification -->
-<div id="toast" class="fixed bottom-6 right-6 z-[100] hidden">
+<!-- AVANT (2026-10-02, recette 001 A′) : <div id="toast" class="fixed bottom-6 right-6 z-[100] hidden">
+     La fenêtre de vente passe à z-index 500 : le toast, qui y porte les refus, doit rester au-dessus. -->
+<div id="toast" class="fixed bottom-6 right-6 hidden" style="z-index: 600">
   <div id="toast-inner" class="px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 max-w-sm"></div>
 </div>
 

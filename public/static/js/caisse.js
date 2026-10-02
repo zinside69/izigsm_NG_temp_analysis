@@ -52,6 +52,8 @@
     produitTimer: null,
     produits:     new Map(),       // id → produit des derniers résultats de recherche catalogue
     services:     new Map(),       // id → service des derniers résultats de recherche catalogue
+    favoris:      new Map(),       // « produit:12 » / « service:3 » → résultat des tuiles Favoris (A′)
+    selection:    -1,              // rang du résultat choisi aux flèches dans la barre, -1 = aucun (A′)
     ligneIdx:     0,
   }
 
@@ -133,6 +135,16 @@
         window.location.href = `/sav?dossier=${Number(btn.dataset.savId)}`
       }
     })
+
+    // Tuiles « Favoris » (recette 001 A′) : même écouteur unique, la clé est lue sur la tuile
+    document.getElementById('vente-favoris')?.addEventListener('click', (e) => {
+      const tuile = e.target.closest('[data-favori]')
+      const r = tuile && state.favoris.get(tuile.dataset.favori)
+      if (r) ajouterOuIncrementer(r)
+    })
+
+    // Barre unique (recette 001 A′) : Entrée, flèches, Échap
+    document.getElementById('vente-produit-search')?.addEventListener('keydown', surToucheBarre)
 
     // Douchette (ticket 04) : un scan hors champ de saisie ajoute l'article, sans aucun clic.
     // Pas pour l'admin plateforme, qui ne vend pas (son bouton de vente est retiré ci-dessus).
@@ -377,6 +389,9 @@
     updateTotaux()
     showEl('modal-vente')
     document.getElementById('modal-vente')?.classList.remove('hidden')
+    // Recette 001 A′ : la barre a le focus dès l'ouverture — un scan y tombe et s'ajoute
+    focusBarre()
+    chargerFavoris()
   }
 
   function closeModal() {
@@ -446,10 +461,12 @@
     if (!container) return
 
     if (state.lignes.length === 0) {
+      // AVANT (jusqu'au 2026-10-02, bouton renommé en recette 001 A′) :
+      //     Aucun article — cliquez "Ajouter une ligne"
       container.innerHTML = `
         <div class="text-center py-4 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl">
           <i class="fas fa-shopping-cart mb-1 block text-lg"></i>
-          Aucun article — cliquez "Ajouter une ligne"
+          Aucun article — scannez, cherchez ou touchez un favori
         </div>`
       return
     }
@@ -580,6 +597,7 @@
       const parType = (type) => new Map(res.data.filter(r => r.type === type).map(r => [r.id, r]))
       state.produits = parType('produit')
       state.services = parType('service')
+      state.selection = -1   // nouvelle liste : aucun résultat choisi aux flèches (A′)
       results.classList.remove('hidden')
       results.innerHTML = res.data.length === 0
         ? `<div class="px-3 py-2 text-sm text-gray-500">Aucun résultat.</div>`
@@ -641,6 +659,106 @@
     hideEl('vente-produit-results')
     renderLignes()
     updateTotaux()
+    focusBarre()   // recette 001 A′ : la barre reprend le focus après chaque ajout
+  }
+
+  // ── Barre unique et favoris (recette 001 A′) ────────────────────────────────
+
+  /** Rend le focus à la barre unique de la fenêtre de vente. */
+  function focusBarre() {
+    document.getElementById('vente-produit-search')?.focus()
+  }
+
+  /** Résultats ajoutables ou ouvrables de la liste affichée, dans l'ordre d'affichage. */
+  function resultatsAffiches() {
+    // Liste masquée (après un ajout, Échap) = aucune : ses anciens boutons restent dans le DOM, et
+    // un Entrée tapé avant la recherche suivante rejouerait sinon le choix précédent.
+    const zone = document.getElementById('vente-produit-results')
+    if (!zone || zone.classList.contains('hidden')) return []
+    return [...zone.querySelectorAll('[data-produit-id], [data-service-id], [data-sav-id]')]
+  }
+
+  /** Marque le résultat de rang `rang` comme choisi (aria-selected + surlignage), les autres non. */
+  function choisirResultat(rang) {
+    const items = resultatsAffiches()
+    if (items.length === 0) { state.selection = -1; return }
+    state.selection = Math.max(0, Math.min(rang, items.length - 1))
+    items.forEach((el, i) => {
+      const choisi = i === state.selection
+      el.setAttribute('aria-selected', choisi ? 'true' : 'false')
+      el.classList.toggle('bg-blue-100', choisi)
+      if (choisi) el.scrollIntoView({ block: 'nearest' })
+    })
+  }
+
+  /**
+   * Clavier de la barre unique :
+   *   - Entrée : le résultat choisi aux flèches s'il y en a un, sinon la saisie part par
+   *     `traiterScan()` — le serveur la route (code-barres, IMEI ou texte) ; un texte ajoute le
+   *     premier résultat, comme le premier de la liste affichée ;
+   *   - ↓ / ↑ : parcourt la liste affichée ;
+   *   - Échap : vide la barre et ferme la liste, sans fermer la vente.
+   * La recherche différée en cours est annulée sur Entrée : sa réponse ne doit pas rouvrir une
+   * liste après l'ajout (elle serait de toute façon écartée, la barre ayant été vidée).
+   */
+  function surToucheBarre(e) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (resultatsAffiches().length === 0) return
+      e.preventDefault()
+      choisirResultat(e.key === 'ArrowDown' ? state.selection + 1 : state.selection - 1)
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      clearTimeout(state.produitTimer)
+      clearEl('vente-produit-search')
+      hideEl('vente-produit-results')
+      state.selection = -1
+      return
+    }
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const saisie = e.target.value.trim()
+    if (!saisie) return
+    clearTimeout(state.produitTimer)
+    const choisi = state.selection >= 0 ? resultatsAffiches()[state.selection] : null
+    state.selection = -1   // le choix est consommé : il ne survit pas à cet ajout
+    if (choisi) { choisi.click(); return }
+    traiterScan(saisie, { premier: true })
+  }
+
+  /**
+   * Tuiles « Favoris » : articles et services les plus vendus de la boutique sur 90 jours
+   * (`GET /api/catalogue/favoris`). Aucun historique → bloc masqué. Un échec de lecture masque
+   * aussi le bloc : les favoris sont un raccourci, la barre reste pleinement utilisable.
+   */
+  async function chargerFavoris() {
+    const zone   = document.getElementById('vente-favoris-zone')
+    const grille = document.getElementById('vente-favoris')
+    if (!zone || !grille) return
+    state.favoris = new Map()
+    grille.innerHTML = ''
+    zone.classList.add('hidden')
+
+    let res
+    try { res = (await apiGet('/api/catalogue/favoris')).data } catch { return }
+    if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) return
+
+    for (const r of res.data) state.favoris.set(`${r.type}:${Number(r.id)}`, r)
+    grille.innerHTML = res.data.map(renderTuileFavori).join('')
+    zone.classList.remove('hidden')
+  }
+
+  /** Une tuile : nom échappé et prix TTC courant. La clé est lue par l'écouteur, jamais en `onclick`. */
+  function renderTuileFavori(r) {
+    const prixHt = r.type === 'produit' ? r.prix_vente_ht : r.prix_ht
+    const ttc    = Number(prixHt || 0) * (1 + Number(r.tva_taux || 0) / 100)
+    return `
+          <button type="button" data-favori="${r.type}:${Number(r.id)}"
+                  class="text-left px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50">
+            <span class="block text-sm font-medium text-gray-800 truncate" title="${esc(r.nom)}">${esc(r.nom)}</span>
+            <span class="block text-xs text-blue-700 font-semibold">${eur(ttc)}</span>
+          </button>`
   }
 
   // ── Douchette (ticket 04 `vente-lit-catalogue`) ─────────────────────────────
@@ -655,7 +773,13 @@
    *     cet IMEI » ;
    *   - saisie texte → liste, comme la recherche (jamais d'ajout automatique).
    */
-  async function traiterScan(code) {
+  // AVANT (2026-10-02, recette 001 A′ — option `premier` de la barre unique) : async function traiterScan(code) {
+  /**
+   * @param {string} code
+   * @param {{ premier?: boolean }} [options] `premier` (Entrée dans la barre unique, A′) : une saisie
+   *   texte ajoute le premier article de la liste. Sans elle (douchette), un texte n'ajoute jamais rien.
+   */
+  async function traiterScan(code, options = {}) {
     if (document.getElementById('modal-vente')?.classList.contains('hidden')) openNouvelleVente()
     const results = document.getElementById('vente-produit-results')
     if (!results) return
@@ -685,6 +809,11 @@
       ajouterOuIncrementer(ajoutables[0])
       return
     }
+    // Barre unique (A′) : texte + Entrée sans résultat choisi → le premier article de la liste
+    if (type_scan === 'texte' && options.premier && ajoutables.length > 0) {
+      ajouterOuIncrementer(ajoutables[0])
+      return
+    }
     if (resultats.length === 0) {
       afficherMessageScan(type_scan === 'code_barre'
         ? `Code inconnu : ${esc(code)} — <a href="/stock?nouveau=1&code=${encodeURIComponent(code)}" target="_blank" rel="noopener" class="text-blue-600 underline">Créer la fiche</a>`
@@ -695,6 +824,7 @@
     const parType = (type) => new Map(resultats.filter(r => r.type === type).map(r => [r.id, r]))
     state.produits = parType('produit')
     state.services = parType('service')
+    state.selection = -1   // nouvelle liste : aucun résultat choisi aux flèches (A′)
     results.classList.remove('hidden')
     results.innerHTML = resultats.map(renderResultatCatalogue).join('')
   }
@@ -718,9 +848,11 @@
       (lien.produit_id && l.produit_id === lien.produit_id) || (lien.service_id && l.service_id === lien.service_id))
     if (existante) {
       existante.quantite += 1
+      clearEl('vente-produit-search')   // A′ : la barre se vide aussi au rescan (ajout : `ajouterLigneCatalogue()`)
       hideEl('vente-produit-results')
       renderLignes()
       updateTotaux()
+      focusBarre()
       return
     }
     if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, r.prix_vente_ht, r.tva_taux)

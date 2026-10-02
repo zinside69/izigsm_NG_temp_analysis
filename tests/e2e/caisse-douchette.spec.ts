@@ -116,7 +116,8 @@ test('frappe dans la désignation d\'une ligne : rien n\'est capté, le texte re
   await creerProduit(request, tenant, { nom: 'E2E Batterie', code_barre: '3700000000062' })
   await ouvrirCaisse(page, tenant)
   await page.click('#btn-nouvelle-vente')
-  await page.getByRole('button', { name: /Ajouter une ligne/ }).click()
+  // AVANT (2026-10-02, bouton renommé « + Ligne libre » en recette 001 A′) : await page.getByRole('button', { name: /Ajouter une ligne/ }).click()
+  await page.getByRole('button', { name: /Ligne libre/ }).click()
   const designation = lignes(page).first().locator('[data-field="designation"]')
   await expect(designation).toBeFocused()
 

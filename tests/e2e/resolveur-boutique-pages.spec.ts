@@ -325,7 +325,8 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     await expect(page.locator('#kpi-nb-tx')).toHaveText('0', { timeout: 15_000 })
 
     await page.click('button:has-text("Nouvelle vente")')
-    await page.click('button:has-text("Ajouter une ligne")')
+    // AVANT (2026-10-02, bouton renommé « + Ligne libre » en recette 001 A′) : await page.click('button:has-text("Ajouter une ligne")')
+    await page.click('#btn-ligne-libre')
     await page.fill('[data-field="designation"]', 'Vitre arrière')
     // La ligne n'expose que `designation` en `data-field` ; les trois champs numériques
     // sont, dans l'ordre du gabarit : quantité, prix unitaire HT, remise.

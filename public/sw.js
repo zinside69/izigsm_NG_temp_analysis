@@ -19,7 +19,8 @@
 // AVANT (2026-10-01, formulaires à email conformes, ✏️/🗑 du référentiel réservés à l'admin plateforme — settings.html, personnel.html/js, services.js) : const CACHE_VERSION  = 'izigsm-v3.18'
 // AVANT (2026-10-02, export comptable Excel — stats.html) : const CACHE_VERSION  = 'izigsm-v3.19'
 // AVANT (2026-10-02, recette 001 B — quantité entière : caisse.js, devis.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.20'
-const CACHE_VERSION  = 'izigsm-v3.21'
+// AVANT (2026-10-02, recette 001 A′ — caisse « Barre unique + favoris » : caisse.html, caisse.js) : const CACHE_VERSION  = 'izigsm-v3.21'
+const CACHE_VERSION  = 'izigsm-v3.22'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

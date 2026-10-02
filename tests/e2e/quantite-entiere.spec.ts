@@ -163,6 +163,9 @@ test('caisse, écran : 0.98 en quantité est refusé avant tout envoi, 1 passe',
   await quantite.fill('0.98')
   await page.click('#btn-submit-vente')
   await expect(page.locator('#toast-inner')).toContainText('entier', { timeout: 5_000 })
+  // Le refus doit se VOIR : le toast n'est pas recouvert par la fenêtre de vente (clic d'essai =
+  // Playwright vérifie que c'est bien lui qui reçoit le pointeur)
+  await page.locator('#toast-inner').click({ trial: true, timeout: 2_000 })
   expect(envois, 'aucune vente ne doit partir avec une quantité décimale').toEqual([])
 
   await quantite.fill('1')
