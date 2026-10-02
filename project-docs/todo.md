@@ -5,7 +5,7 @@
 - [x] **B** quantité entière ≥ 1 partout (`2cd995f`) — dont `POST /avoirs`, qui n'avait aucun contrôle
 - [x] **A′** caisse « Barre unique + favoris » (`fb00702`)
 - [x] **C** fenêtre Mobilax élargie, journal sur une ligne (`2f2236d`)
-- [ ] Pousser (sur demande), puis déployer v3.23 **sans migration** (exploitant, aperçu puis apex)
+- [x] Pousser (sur demande), puis déployer v3.23 **sans migration** (exploitant, aperçu puis apex) — ✅ fait le 2026-10-02 au soir, relu sur l'apex
 - [ ] Recette à l'écran : nouvelle caisse + douchette ; « Ajouter 1 au stock » par la fenêtre Mobilax
       (`ajouts_stock_import` vide en production) ; clôture du soir
 - [ ] 🟠 Préproduction Mobilax lente le 2026-10-02 au soir (5 E2E réels rouges, avec ou sans C) — à

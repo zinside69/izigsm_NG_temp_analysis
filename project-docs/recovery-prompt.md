@@ -1,6 +1,18 @@
 # Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 141 — recette 001 codée, v3.23 à pousser et déployer)
 
-## ➡ Première action (checkpoint 141)
+## ➡ Première action (fin de session du 2026-10-02 au soir — remplace la liste du checkpoint 141)
+
+**v3.23 DÉPLOYÉE et relue sur l'apex** (recette 001 B, A′, C en production ; `0060`, aucune migration
+nouvelle). Il ne reste que la **recette à l'écran** avec `telnet@bbox.fr` (Ctrl+F5 d'abord) :
+1. Caisse : barre au focus, scan `3000000388952` → ligne, rescan → quantité 2 ; texte + flèches ;
+   favoris visibles ; `0,98` refusé (toast visible).
+2. Mobilax : vérifier qu'une recherche répond (préprod lente le 2026-10-02) ; puis « Ajouter 1 au
+   stock » sur #804 **par la fenêtre Mobilax** → relire en base le mouvement « Import fournisseur —
+   déjà en stock » et une ligne `ajouts_stock_import` (`--remote`, `CLOUDFLARE_API_TOKEN` vidé).
+3. Clôture du soir par le manager → relire `clotures_journalieres`.
+Ensuite (caisse / NF525, ici) : paiement mixte ventilé, `CB`/`cb`, clôture atomique.
+
+## Checkpoint 141 (historique — les étapes 1 et 2 sont faites)
 
 Les trois parties du ticket recette 001 sont **commitées sur `main`, non poussées, non déployées**
 (`2cd995f` B quantité entière, `fb00702` A′ caisse « Barre unique + favoris », `2f2236d` C fenêtre
