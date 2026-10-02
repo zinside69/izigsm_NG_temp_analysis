@@ -1,4 +1,23 @@
-# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 140 — coder la recette 001 : caisse « Barre unique + favoris », quantité entière, fenêtre Mobilax)
+# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 141 — recette 001 codée, v3.23 à pousser et déployer)
+
+## ➡ Première action (checkpoint 141)
+
+Les trois parties du ticket recette 001 sont **commitées sur `main`, non poussées, non déployées**
+(`2cd995f` B quantité entière, `fb00702` A′ caisse « Barre unique + favoris », `2f2236d` C fenêtre
+Mobilax ; `CACHE_VERSION` v3.23, **aucune migration**). Production : v3.20 / `0060`.
+
+1. `git fetch origin` puis `git log --oneline origin/main..HEAD` (3 commits attendus, peut-être
+   poussés entre-temps par un `sync push` d'une autre fenêtre) ; pousser **sur demande**.
+2. Déployer **sur décision de l'exploitant** : `npm run deploy` (aucune migration), aperçu **puis**
+   apex (`sw.js` v3.23, `caisse.*.js` / `stock.*.js` du manifeste en JavaScript, `/api/catalogue/favoris`
+   sans jeton → 401).
+3. Recette à l'écran avec `telnet@bbox.fr` : nouvelle caisse (scan dans la barre, flèches, favoris,
+   ligne libre), saisie `0,98` refusée, douchette ; « Ajouter 1 au stock » **par la fenêtre Mobilax**
+   (jamais exercé en production : `ajouts_stock_import` vide) — la préproduction Mobilax répondait
+   trop lentement le 2026-10-02 au soir, la vérifier d'abord ; clôture du soir.
+4. Ensuite (caisse / NF525, ici) : paiement mixte ventilé, `CB`/`cb`, clôture atomique.
+
+⚠ Poste : après chaque arrêt de wrangler, `Get-Process workerd | Stop-Process -Force` (orphelins).
 
 ## ➡ Première action (ajout du 2026-10-02 après-midi, contexte de la session précédente saturé)
 

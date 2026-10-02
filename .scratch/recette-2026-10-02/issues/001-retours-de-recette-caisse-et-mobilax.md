@@ -87,3 +87,14 @@ de défilement horizontal. `CACHE_VERSION` +1.
   fournisseur — déjà en stock », `mobilax_id` posé (lecture distante en `7403` intermittent le
   2026-10-02 après-midi — réessayer).
 - Douchette en caisse (après A) et **clôture du soir** par le manager.
+
+## Livraison (2026-10-02 au soir, checkpoint 141) — codé, non poussé, non déployé
+
+- **B** `2cd995f` — `quantiteLigneInvalide()` sur caisse (422), devis, factures, **avoirs** (400 ; ce
+  dernier n'avait aucun contrôle). E2E `quantite-entiere.spec.ts`, vitest `quantite-entiere.test.ts`.
+- **A′** `fb00702` — `GET /api/catalogue/favoris` (`lireFavorisVente()`), barre unique, tuiles,
+  « + Ligne libre » (`#btn-ligne-libre`). E2E `caisse-barre-favoris.spec.ts`, vitest
+  `catalogue-favoris-sqlite.test.ts`. Fenêtre à z-index 500, toast à 600.
+- **C** `2f2236d` — fenêtre 1 100 px, journal une ligne. E2E `mobilax-fenetre-large.spec.ts`.
+- `CACHE_VERSION` v3.23, aucune migration. Reste humain : déploiement, recette à l'écran (douchette,
+  « Ajouter 1 au stock » par la fenêtre Mobilax, clôture du soir) → `done`.

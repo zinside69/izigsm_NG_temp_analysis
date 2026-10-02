@@ -1,5 +1,33 @@
 # iziGSM — Bugs connus
 
+## ✅ 🔴 Avoir à quantité décimale émis, numéro NF525 consommé (trouvé le 2026-10-02, CORRIGÉ le même jour, non déployé)
+
+**Défaut** : `POST /api/avoirs` et `createAvoir()` ne contrôlaient **aucune** quantité de ligne ; la
+caisse, les devis et les factures acceptaient toute quantité > 0 (`0,98` saisi en caisse en recette).
+Un avoir à `0.5` était accepté, son numéro réservé par `nextNumero()` et inscrit au journal NF525.
+**Mesuré en production** : aucune quantité non entière en base (lignes de documents, lignes d'avoir).
+**Correctif** (`2cd995f`, recette 001 B) : `quantiteLigneInvalide()` (`validators.ts`), appelée par les
+cinq routes **avant** le service ; E2E `quantite-entiere.spec.ts` vu rouge (201 reçu), puis la pièce
+valide suivante prend le n° 1.
+
+## ✅ 🟠 Caisse : la recherche ne recevait pas un scan, ligne libre à 0 € (trouvé en recette le 2026-10-02, CORRIGÉ le même jour, non déployé)
+
+**Défaut** : à l'ouverture d'une vente, le focus est dans la recherche ; `douchette.js` se tait dans
+tout champ de saisie (voulu) et ce champ n'avait **aucune action sur Entrée**. Un scan de
+`3000000388952` n'ajoutait rien : l'exploitant a fini par une ligne libre à 0 € désignée par le code.
+**Correctif** (`fb00702`, recette 001 A′) : barre unique — Entrée → `traiterScan()`. Trois défauts
+trouvés en codant, corrigés : fenêtre élargie **sous la barre latérale** (z-index 50 < 100) ; toast
+**sous la fenêtre** (100 < 500) ; Entrée rapide rejouant le choix aux flèches d'une **liste masquée**
+(`resultatsAffiches()` lisait les boutons cachés).
+
+## 🟠 Préproduction Mobilax trop lente : recherches figées (constaté le 2026-10-02 au soir, OUVERT)
+
+Cinq E2E qui appellent la vraie préproduction échouent sur « Recherche en cours chez Mobilax… »
+(`mobilax-recherche-stock` ×2, `mobilax-fiche-pagination` ×2, `mobilax-generation` « iPhone 17 »
+une fois sur deux) — identiques avec et sans le correctif C. **La production pointe cette
+préproduction** (`MOBILAX_API_BASE`) : à remesurer avant toute recette Mobilax. Cause non mesurée
+(lenteur, quota ou panne côté Mobilax).
+
 ## 🔴 Clôture NF525 : une seule boutique de la plateforme pouvait clôturer par jour (trouvé le 2026-10-02, CORRIGÉ dans le dépôt — migration `0060` à appliquer)
 
 **Défaut** : `0008_nf525.sql` déclare `date_cloture TEXT NOT NULL UNIQUE` — unicité **plateforme**,

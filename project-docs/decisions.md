@@ -1,5 +1,23 @@
 # iziGSM — Décisions
 
+## 2026-10-02 — Quantité de ligne : entier ≥ 1, partout ; caisse « Barre unique + favoris »
+
+**Décisions de l'exploitant** (recette 001) : une quantité est un **entier ≥ 1** dans la caisse, les
+devis, les factures et les avoirs, lignes libres comprises. La fenêtre « Nouvelle vente » devient
+« Barre unique + favoris » : barre au focus permanent, tuiles des articles les plus vendus sur 90 jours,
+ligne libre explicite, panier à droite.
+
+**Choix de réalisation** :
+- Une seule règle, `quantiteLigneInvalide()`, vérifiée par les **routes** avant le service — pour
+  `createAvoir()`, qui réserve son numéro avant tout calcul, c'est la seule place sûre. La caisse
+  répond 422 (code de validation de sa route), les autres 400.
+- Favoris = lignes des factures **émises** (`locked = 1`, hors `annulee`), par `produit_id` /
+  `service_id`, fiche active jointe sur la boutique de la facture, classées par quantité vendue puis
+  par nom, 12 au plus, au prix **courant**. Une ligne libre ne compte pas. Aucun historique → aucun bloc.
+- Entrée dans la barre : le serveur route (`traiterScan()`, `?scan=`), jamais le navigateur ; un texte
+  ajoute le premier article (option `premier`) — la douchette hors champ, elle, n'ajoute jamais un texte.
+- Les fenêtres de saisie de la caisse passent au-dessus de la barre latérale (500) ; le toast à 600.
+
 ## 2026-10-02 — Le lot 1 ne part plus en bloc : `main` est déployé tel quel
 
 **Décision de l'exploitant** (voie « a » posée le 2026-10-01 au soir) : déployer `main` en l'état —

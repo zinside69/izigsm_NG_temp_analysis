@@ -1,11 +1,22 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 2026-10-02 (soir, checkpoint 141) — Recette 001 codée : pousser, déployer, recetter
+
+- [x] **B** quantité entière ≥ 1 partout (`2cd995f`) — dont `POST /avoirs`, qui n'avait aucun contrôle
+- [x] **A′** caisse « Barre unique + favoris » (`fb00702`)
+- [x] **C** fenêtre Mobilax élargie, journal sur une ligne (`2f2236d`)
+- [ ] Pousser (sur demande), puis déployer v3.23 **sans migration** (exploitant, aperçu puis apex)
+- [ ] Recette à l'écran : nouvelle caisse + douchette ; « Ajouter 1 au stock » par la fenêtre Mobilax
+      (`ajouts_stock_import` vide en production) ; clôture du soir
+- [ ] 🟠 Préproduction Mobilax lente le 2026-10-02 au soir (5 E2E réels rouges, avec ou sans C) — à
+      remesurer ; la production pointe cette préproduction (`MOBILAX_API_BASE`)
+
 ## 🔴 2026-10-02 — Déployer `0060` + export comptable (v3.20) AVANT la clôture du soir
 
 - [x] Déploiement selon `current-state.md` § Checkpoint 138 — ✅ fait le 2026-10-02 (0060 à 10:31 UTC, v3.20 aperçu `2381cbeb` puis apex) (Time Travel, FK = 0, `0060` à distance,
       relecture, `npm run deploy` par l'exploitant, aperçu puis apex, ligne au journal des migrations)
 - [ ] Recette restante : import Mobilax `#804` + « Ajouter 1 au stock » ; douchette ; clôture du soir
-- [ ] **Retours de recette** (2026-10-02) : `.scratch/recette-2026-10-02/issues/001-…` — scan dans la recherche de caisse, quantité entière ≥ 1 partout, fenêtre Mobilax — à coder ici
+- [x] **Retours de recette** (2026-10-02) : `.scratch/recette-2026-10-02/issues/001-…` — scan dans la recherche de caisse, quantité entière ≥ 1 partout, fenêtre Mobilax — à coder ici — ✅ codé le soir même (checkpoint 141), non déployé
 - [ ] Ensuite (caisse / NF525, ici) : paiement mixte ventilé ; `CB`/`cb` normalisé à l'écriture ;
       clôture atomique (`db.batch()`)
 

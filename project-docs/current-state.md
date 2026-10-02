@@ -1,4 +1,42 @@
-# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 140 — recette en production, retours cadrés, refonte caisse décidée)
+# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 141 — recette 001 codée : quantité entière, caisse « Barre unique + favoris », fenêtre Mobilax)
+
+## Checkpoint 141 — Recette 001 codée (B, A′, C), dépôt EN AVANCE sur la production (2026-10-02, soir)
+
+**Production inchangée : `izigsm-v3.20`, migration distante `0060`. Sur `main`, non poussé, non
+déployé : trois commits sans migration** — `2cd995f` (B), `fb00702` (A′), `2f2236d` (C),
+`CACHE_VERSION` **`izigsm-v3.23`**. Vitest 1 408 + 2 permanents, tsc 32.
+
+- **B — quantité entière ≥ 1 partout** (`2cd995f`) : `quantiteLigneInvalide()` (`validators.ts`),
+  seul point de la règle, appelée **avant toute écriture** par `POST /caisse/vente` (422, code de
+  validation de cette route), `POST`/`PUT /devis` (400), `POST /factures` (400), `POST /avoirs` (400).
+  Écran : `min="1" step="1"` (caisse, devis, avoir) ; la caisse refuse avant l'envoi. **Défaut trouvé
+  en plus** : `POST /avoirs` n'avait **aucun** contrôle de quantité — un avoir à 0,5 était émis, son
+  numéro NF525 consommé. Production mesurée : aucune quantité non entière en base. Vitest 19 + E2E 5
+  vus rouges ; « aucun numéro consommé sur refus » prouvé (la pièce valide suivante prend le n° 1).
+- **A′ — caisse « Barre unique + favoris »** (`fb00702`) : fenêtre en deux colonnes (`max-w-6xl`) ;
+  barre au focus permanent (code + Entrée → `traiterScan()`, texte → flèches + Entrée, 1er résultat
+  sans flèche, Échap) ; tuiles Favoris `GET /api/catalogue/favoris` → `lireFavorisVente()` (plus
+  vendus sur 90 jours, factures émises non annulées, fiches actives, isolation boutique, 12 au plus) ;
+  « + Ligne libre » ; panier à droite. **Défauts trouvés par les tests et corrigés** : fenêtre élargie
+  **sous la barre latérale** (z-50 < 100 → z-index 500) ; toast **sous la fenêtre** (z-100 → 600, il
+  aurait caché les refus de B) ; Entrée rapide qui **rejouait le choix aux flèches** d'une liste
+  masquée. Vitest 5 (SQLite réel) + E2E 7 vus rouges, mutation vue rouge ; 64 E2E voisins verts.
+- **C — fenêtre Mobilax** (`2f2236d`) : 780 → 1 100 px, colonne Pièce 45 %, journal une ligne par
+  entrée (ellipsis, texte complet en `title`). E2E vu rouge (780 px, entrée 34 px), 51 Mobilax simulés verts.
+- **5 E2E rouges hors périmètre** : ceux qui appellent la **vraie préproduction Mobilax**
+  (`mobilax-recherche-stock` ×2, `mobilax-fiche-pagination` ×2, `mobilax-generation` « iPhone 17 »
+  intermittent) — recherche figée sur « Recherche en cours chez Mobilax… », identique **sans** C.
+  ⚠ La production pointe cette préproduction (`MOBILAX_API_BASE`).
+- **Recette #804 relue en production** : stock 1, `mobilax_id` 45362, **mais** le seul mouvement est un
+  « Ajustement manuel » (bouton « Ajuster le stock ») ; `ajouts_stock_import` = 0 ligne en production :
+  **« Ajouter N au stock » n'y a jamais été exercé**. Lecture distante rétablie (plus de `7403`).
+- **Poste** : arrêter wrangler par son port laisse des `workerd` orphelins (12 à la fois, 2 Go libres,
+  serveur muet) — arrêter aussi `Get-Process workerd` (mémoire `feedback_workerd_orphelins.md`).
+
+**Prochaine action** : pousser puis déployer v3.23 (aucune migration ; `modop-deploiement.md`,
+aperçu puis apex, exploitant) — sur décision de l'exploitant ; recette à l'écran de la nouvelle
+caisse, douchette comprise ; « Ajouter 1 au stock » par le vrai chemin d'import (préprod Mobilax à
+vérifier d'abord) ; clôture du soir. Puis défauts caisse (mixte, `CB`/`cb`, clôture atomique).
 
 ## Checkpoint 140 — Recette en production et retours de l'exploitant (2026-10-02, après-midi)
 

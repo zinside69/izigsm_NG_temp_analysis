@@ -834,6 +834,26 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **Les compteurs suivent la liste affichée** (décision B du 2026-09-15) : `renderStock()` appelle
   `renderKPIs(filtered)` — un seul filtrage pour les lignes et les compteurs, liste vide → 0.
 
+## Quantité de ligne et caisse « Barre unique + favoris » (depuis 2026-10-02, recette 001)
+
+- **Une quantité de ligne est un entier ≥ 1** — caisse, devis, factures, avoirs, lignes libres
+  comprises. **`quantiteLigneInvalide()` (`validators.ts`) est le seul point de la règle**, appelé par
+  les **routes** avant le service : `createAvoir()` réserve son numéro avant tout calcul, un refus plus
+  tardif brûlerait un numéro NF525. ⊥ un nouveau point d'entrée de lignes sans cet appel.
+- **La barre de la fenêtre de vente (`#vente-produit-search`) a le focus** à l'ouverture et après
+  chaque ajout ; **Entrée y passe par `traiterScan()`** — le serveur route le code, jamais le
+  navigateur. `douchette.js` reste muet dans un champ : c'est la barre qui reçoit le scan.
+- **`resultatsAffiches()` ne lit que la liste visible** : une liste masquée garde ses boutons dans le
+  DOM, un Entrée rapide rejouait l'ancien choix aux flèches.
+- **Favoris = `lireFavorisVente()`** (`catalogueService.ts`, `GET /api/catalogue/favoris`) : factures
+  émises non annulées, 90 jours, fiches actives jointes sur la boutique de la facture, 12 au plus, au
+  format de la recherche. Aucun historique → bloc masqué (⊥ tuiles vides).
+- **Fenêtres de la caisse à z-index 500, toast à 600** : élargie, la vente passait sous la barre
+  latérale (100), et le toast (100) sous la vente — les refus devenaient invisibles. Prouver un message
+  visible par un clic d'essai (`click({ trial: true })`), jamais par `toContainText` seul.
+- Blocs HTML déplacés ou retirés gardés dans un **`<template data-avant="…">`** (inerte, hors du DOM
+  interrogé) : un commentaire HTML ne peut pas contenir les commentaires qu'ils portent.
+
 ## Douchette, IMEI et appareils vendus (depuis 2026-09-30, tickets 04 et 07 `vente-lit-catalogue`)
 
 - **Un scan se route côté serveur** : `routerScan()` (`src/lib/scan.ts`, pure) — 13 chiffres →
@@ -1120,6 +1140,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-02 (checkpoint 141) : production inchangée (`izigsm-v3.20` / `0060`), dépôt EN
+AVANCE, sans migration.** Recette 001 sur `main`, non poussée : quantité entière (`2cd995f`), caisse
+« Barre unique + favoris » (`fb00702`), fenêtre Mobilax (`2f2236d`), `CACHE_VERSION` `izigsm-v3.23`.
+`npm run deploy` suffit, puis aperçu **avant** l'apex (`sw.js` v3.23, `caisse.*.js` et `stock.*.js` du
+manifeste en JavaScript, `/api/catalogue/favoris` sans jeton → 401).
 
 **État au 2026-10-02 (après le checkpoint 138) : DÉPLOYÉ — production en `izigsm-v3.20`, dernière
 migration distante `0060` (relue, 10:31:18 UTC).** `0060` appliquée à distance **puis** le code
