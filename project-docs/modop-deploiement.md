@@ -31,6 +31,12 @@ aucune session parallèle sur ce dépôt, jusqu'à la fin de l'étape 8.
 ## 5. Migrations à distance
 `npx wrangler d1 migrations apply DB --remote` — la sortie doit dire **`Resource location: remote`**.
 « No migrations to apply » sans cette ligne = faux succès sur la base locale.
+- **Avant** d'appliquer (ajouté le 2026-10-02) : relever le point de restauration Time Travel
+  courant (`npx wrangler d1 time-travel info DB`, lecture seule).
+- **Après** : consigner dans **`project-docs/journal-migrations.md`** une ligne par migration
+  (date lue dans `d1_migrations` distant, effet, SQL inverse) et le point de restauration relevé —
+  c'est ce qui permet de revenir en arrière (inverse ciblé ou Time Travel, conditions dans le
+  journal).
 
 ## 6. Relire la base distante APRÈS — avant tout code
 Dernière ligne de `d1_migrations` distant = dernière migration du lot ; colonnes et tables nouvelles

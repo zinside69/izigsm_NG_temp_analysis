@@ -1121,6 +1121,14 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-02 : DÉPLOYÉ — production en `izigsm-v3.19`, dernière migration distante `0054`
+(relue).** Décision de l'exploitant : `main` déployé tel quel, règle « lot 1 en bloc » levée
+(`decisions.md`). `0048` → `0051` et `0054` appliquées à distance à 07:35 UTC **puis** le code
+(aperçu `0e426f1b` vérifié **avant** l'apex). Relu sur l'apex : `sw.js` v3.19, 7 assets hashés du
+manifeste en JavaScript avec le code du lot, `/api/health` 200, routes sensibles sans jeton → 401.
+**Marche arrière** : `project-docs/journal-migrations.md` (SQL inverses, points Time Travel). Restent
+à venir, chacun avec ses migrations réservées : tickets 05, 06, 08b, 08c, 09, lot 2.
+
 **État au 2026-10-01 (checkpoint 137) : production inchangée (`izigsm-v3.11`), migrations en attente
 inchangées.** Sur `main`, en plus du 136 : garde-fous (appels non lus, formulaires à email, rôles
 existants), ✏️/🗑 du référentiel réservés à l'admin plateforme, **rôle `gerant` remplacé par
