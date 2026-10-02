@@ -159,8 +159,13 @@ fi
 # skill de revue designe. Ligne d'origine citee ici : un commentaire ne peut pas
 # s'inserer entre les lignes continuees (\) de la commande ci-dessous.
 # AVANT :   --allowed-tools "Read,Grep,Glob" \
+# (2026-10-02, défaut 105, O66) Le prompt part par l'entrée standard. En argument,
+# un diff de plus de 128 Ko (limite Linux MAX_ARG_STRLEN par argument) faisait
+# échouer l'exec : « Argument list too long », code 126, escalade L4 P5 trompeuse
+# (T-009 d'iziGSM, diff de 152 Ko). Test W5.
+# AVANT : claude -p "$PROMPT" \
 set +e
-claude -p "$PROMPT" \
+printf '%s' "$PROMPT" | claude -p \
   --agent reviewer-diff \
   --model "$MODELE_REVIEWER" \
   --permission-mode plan \
@@ -168,7 +173,9 @@ claude -p "$PROMPT" \
   --output-format json \
   --allowed-tools "$OUTILS_REVUE" \
   >"$STATE.reviewer.json" 2>"$STATE.reviewer.err"
-RC=$?
+# AVANT : RC=$?
+# (2026-10-02, défaut 105) Code de claude, pas du printf (pipefail).
+RC=${PIPESTATUS[1]}
 set -e
 # (2026-09-22, defaut 7) Cout du relecteur au journal des couts, meme si sa
 # sortie est ensuite refusee (P4) : la depense a eu lieu.
