@@ -39,6 +39,19 @@ async function produitDe(request: APIRequestContext, tenant: TenantAdmin, id: nu
   return (await res.json()).data
 }
 
+/**
+ * Vide le code-barres d'un produit créé sans dispense (`createProduit()` lui pose un code maison
+ * automatique, T-009) : certains scénarios ont besoin d'ouvrir une fiche dont le champ est
+ * réellement vide, pas déjà codé par la pose automatique.
+ */
+async function viderCode(request: APIRequestContext, tenant: TenantAdmin, id: number) {
+  const res = await request.put(`/api/produits/${id}`, {
+    headers: { Authorization: `Bearer ${tenant.accessToken}` },
+    data:    { code_barre: '' },
+  })
+  expect(res.status(), await res.text()).toBe(200)
+}
+
 async function ouvrirStock(page: Page, tenant: TenantAdmin) {
   await seConnecter(page, { email: tenant.email, password: tenant.password })
   await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
@@ -90,6 +103,7 @@ test('créer un produit sans code à la main : code maison affiché dans sa fich
 test('« Générer » puis « Enregistrer » sans rien saisir : le code maison reste en base et affiché', async ({ page, request }) => {
   const tenant = await createTenantAdmin(request)
   const id = await creerProduit(request, tenant, { nom: 'E2E Générer puis enregistrer' })
+  await viderCode(request, tenant, id)
   await ouvrirStock(page, tenant)
   await ouvrirFiche(page, 'E2E Générer puis enregistrer')
 
@@ -152,6 +166,7 @@ test('SKU EAN-13 valide : « Générer » est refusé en clair, aucun code n\'es
 test('ouvrir une fiche sans code, le poser par l\'API pendant qu\'elle est ouverte, modifier le prix puis Enregistrer : le code posé reste', async ({ page, request }) => {
   const tenant = await createTenantAdmin(request)
   const id = await creerProduit(request, tenant, { nom: 'E2E Pose concurrente', prix_vente_ht: 10 })
+  await viderCode(request, tenant, id)
   await ouvrirStock(page, tenant)
   await ouvrirFiche(page, 'E2E Pose concurrente')
   await expect(page.locator('#stock-code-barre')).toHaveValue('')
