@@ -466,34 +466,42 @@ export class ErreurDejaCode extends Error {
 }
 
 /**
- * Pose un code maison à la demande (route `POST /produits/:id/code-maison`) : refuse si le produit
- * a déjà un code-barres ou un SKU EAN-13 valide (même dispense que la pose automatique) ; sinon pose
- * `codeMaison(1, id)` par la même écriture conditionnelle. Ici l'écriture est **demandée** : une
- * collision est convertie en `ErreurCodeEnDoublon` nommant le porteur, jamais avalée (P15,
- * 2026-10-01 — le 409 ne vaut que pour une écriture demandée).
+ * Pose un code maison à la demande (route `POST /produits/:id/code-maison`) : refuse si le SKU est
+ * un EAN-13 valide (dispense) ; sinon tente `codeMaison(1, id)` par l'écriture conditionnelle
+ * commune. Ici l'écriture est **demandée** : une collision est convertie en `ErreurCodeEnDoublon`
+ * nommant le porteur, jamais avalée (P15, 2026-10-01 — le 409 ne vaut que pour une écriture
+ * demandée).
+ *
+ * Le 409 « déjà codé » se lit sur le résultat de l'UPDATE (`changes = 0`), jamais sur une lecture
+ * préalable du `code_barre` (rejet de revue du 2026-10-02) : lire puis écrire laisserait une
+ * fenêtre entre les deux où un autre appel pourrait poser un code, rendant le refus menteur (la
+ * lecture dirait « libre » pendant que l'écriture aurait déjà échoué faute de ligne à modifier).
+ * La dispense par SKU reste une lecture préalable légitime : elle ne porte pas sur `code_barre` et
+ * n'a donc pas cette fenêtre de validité.
  *
  * @param db          Port Database
  * @param boutiqueId  Boutique du produit (celle de la ressource — l'appelant a déjà vérifié
  *                    l'appartenance via `assertBoutiqueOwnership()`)
  * @param produitId   Produit cible
  * @returns           Le code posé
- * @throws            ErreurDejaCode si le produit a déjà un code-barres ou un SKU EAN-13 valide ;
- *                     ErreurCodeEnDoublon si un autre produit actif porte déjà exactement ce code ;
- *                     Error('Produit introuvable.') si absent de cette boutique
+ * @throws            ErreurDejaCode si le produit a déjà un code-barres (UPDATE sans effet) ou un
+ *                     SKU EAN-13 valide ; ErreurCodeEnDoublon si un autre produit actif porte déjà
+ *                     exactement ce code ; Error('Produit introuvable.') si absent de cette boutique
  */
 export async function poserCodeMaisonProduit(
   db: Database, boutiqueId: number, produitId: number
 ): Promise<{ code: string }> {
-  const produit = await db.get<{ code_barre: string | null; sku: string | null }>(
-    'SELECT code_barre, sku FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1',
+  const produit = await db.get<{ sku: string | null }>(
+    'SELECT sku FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1',
     [produitId, boutiqueId]
   )
   if (!produit) throw new Error('Produit introuvable.')
-  if (dispenseDeCodeMaison(produit)) throw new ErreurDejaCode()
+  if (produit.sku && estEan13Valide(produit.sku.trim())) throw new ErreurDejaCode()
 
   const code = codeMaison(1, produitId)
+  let resultat: { changes: number }
   try {
-    await db.run(
+    resultat = await db.run(
       `UPDATE produits SET code_barre = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`,
       [code, produitId, boutiqueId]
@@ -506,6 +514,7 @@ export async function poserCodeMaisonProduit(
     if (porteur) throw new ErreurCodeEnDoublon('code_barre', porteur)
     throw err
   }
+  if (resultat.changes === 0) throw new ErreurDejaCode()
   return { code }
 }
 

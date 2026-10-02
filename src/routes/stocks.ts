@@ -277,7 +277,11 @@ stocks.post('/produits/:id/mouvement', async (c) => {
  * code-barres ou un SKU EAN-13 valide (409), ou si un autre produit porte déjà exactement ce code
  * maison (409, collision improbable). Réservé admin/manager.
  * @param id — ID du produit
- * @returns { success, code_barre, message }
+ * @returns 200 { success, code_barre, message }
+ * @returns 404 si produit introuvable (id inexistant, inactif, ou absent de cette boutique côté
+ *          admin plateforme)
+ * @returns 403 si un manager/admin de boutique vise le produit d'une autre boutique
+ *          (`assertBoutiqueOwnership()`, CLAUDE.md § Invariants isolation multi-tenant)
  */
 stocks.post('/produits/:id/code-maison', requireRole('admin', 'manager'), async (c) => {
   const { user, dbPort } = ctx(c)

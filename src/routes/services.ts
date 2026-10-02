@@ -384,7 +384,10 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
  *
  * @param id  Identifiant numérique du service
  * @returns 200 `{ success: true, code_barre, message }`
- * @returns 404 si service introuvable ou d'une autre boutique
+ * @returns 404 si service introuvable (id inexistant, inactif, ou absent de cette boutique côté
+ *          admin plateforme)
+ * @returns 403 si un manager/admin de boutique vise un service d'une autre boutique
+ *          (`assertBoutiqueOwnership()`, CLAUDE.md § Invariants isolation multi-tenant)
  * @returns 409 si déjà codé, ou collision
  */
 services.post('/services/:id/code-maison', requireRole('admin', 'manager'), async (c) => {

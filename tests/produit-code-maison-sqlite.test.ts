@@ -168,10 +168,15 @@ describe('importCatalogueCsv() — code maison', () => {
   })
 
   it('import Mobilax (sansCodeMaison) → jamais de code maison, même sans EAN', async () => {
-    // importCatalogueCsv() n'est pas le chemin Mobilax ; cette assertion vit dans
-    // produit-code-maison-sqlite.test.ts > createProduit() (`sansCodeMaison`) ci-dessus — gardée
-    // ici seulement comme repère de couture pour qui cherche la couverture CSV vs Mobilax.
-    expect(true).toBe(true)
+    // importCatalogueCsv() n'est pas le chemin Mobilax : c'est createProduit() avec l'option
+    // sansCodeMaison (passée par mobilaxService.ts) qui porte cette règle — reproduite ici en
+    // conditions réalistes (aucun code_barre, SKU absent, donc aucune dispense par ailleurs).
+    const { id } = await createProduit(
+      base.d1, 1, 1,
+      { nom: 'Pièce Mobilax sans EAN', fournisseur: 'Mobilax', reference_fournisseur: 'REF-CSV', stock_minimum: 0 },
+      { sansCodeMaison: true },
+    )
+    expect(codeBarreDe(id)).toBeNull()
   })
 
   it('collision à la pose automatique (ligne CSV sans code) : produit créé, sans code, compté comme importé, avertissement présent', async () => {

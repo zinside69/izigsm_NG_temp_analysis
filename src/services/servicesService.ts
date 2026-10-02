@@ -270,6 +270,21 @@ export async function getService(
 
 // ─── Code-barres / code maison (ticket 05 `vente-lit-catalogue`, migration 0052) ───────────────
 
+/**
+ * `code_barre` d'un service tel qu'il sera écrit, à trois états (rejet de revue du 2026-10-02,
+ * même patron que `imeiAEcrire()` dans `stockService.ts`) : absent du corps (`undefined`) = champ
+ * non fourni, `COALESCE` le laisse inchangé ; chaîne vide ou blanche = retrait explicite (`NULL`) ;
+ * sinon la valeur nettoyée. `COALESCE` seul ne sait pas distinguer « absent » de « vidé » : une
+ * chaîne vide y vaudrait une valeur non nulle et s'écrirait telle quelle au lieu de retirer le code.
+ *
+ * @param saisie  `data.code_barre` tel que reçu du corps de requête
+ */
+function codeBarreServiceAEcrire(saisie: unknown): string | null | undefined {
+  if (saisie === undefined) return undefined
+  const valeur = saisie == null ? '' : String(saisie).trim()
+  return valeur ? valeur : null
+}
+
 /** Refus d'une écriture qui donnerait à un service le code-barres d'un autre (index de 0052). */
 export class ErreurServiceCodeEnDoublon extends Error {
   constructor(readonly service: { id: number; nom: string }) {
@@ -312,33 +327,37 @@ async function leverSiServiceCodeEnDoublon(
 }
 
 /**
- * Pose un code maison à la demande (route `POST /services/:id/code-maison`) : refuse si le service
- * a déjà un code-barres ; sinon pose `codeMaison(2, id)` par une écriture conditionnelle (même
- * patron que `poserCodeMaisonProduit()`, `stockService.ts`) — jamais de code maison automatique à
- * la création d'un service (spec : « peuvent recevoir », génération à la demande seulement).
+ * Pose un code maison à la demande (route `POST /services/:id/code-maison`) : tente
+ * `codeMaison(2, id)` par une écriture conditionnelle (même patron que `poserCodeMaisonProduit()`,
+ * `stockService.ts`) — jamais de code maison automatique à la création d'un service (spec :
+ * « peuvent recevoir », génération à la demande seulement).
+ *
+ * Le 409 « déjà codé » se lit sur le résultat de l'UPDATE (`changes = 0`), jamais sur une lecture
+ * préalable de `code_barre` (rejet de revue du 2026-10-02) : lire puis écrire laisserait une
+ * fenêtre entre les deux où un autre appel pourrait poser un code, rendant le refus menteur.
  *
  * @param db          Port Database
  * @param boutiqueId  Boutique du service (celle de la ressource — l'appelant a déjà vérifié
  *                    l'appartenance via `assertBoutiqueOwnership()`)
  * @param serviceId   Service cible
  * @returns           Le code posé
- * @throws            ErreurServiceDejaCode si le service a déjà un code-barres ;
+ * @throws            ErreurServiceDejaCode si le service a déjà un code-barres (UPDATE sans effet) ;
  *                     ErreurServiceCodeEnDoublon si un autre service actif porte déjà ce code ;
  *                     Error('Service introuvable.') si absent de cette boutique
  */
 export async function poserCodeMaisonService(
   db: Database, boutiqueId: number, serviceId: number
 ): Promise<{ code: string }> {
-  const service = await db.get<{ code_barre: string | null }>(
-    'SELECT code_barre FROM services WHERE id = ? AND boutique_id = ? AND actif = 1',
+  const service = await db.get<{ id: number }>(
+    'SELECT id FROM services WHERE id = ? AND boutique_id = ? AND actif = 1',
     [serviceId, boutiqueId]
   )
   if (!service) throw new Error('Service introuvable.')
-  if (service.code_barre && service.code_barre.trim()) throw new ErreurServiceDejaCode()
 
   const code = codeMaison(2, serviceId)
+  let resultat: { changes: number }
   try {
-    await db.run(
+    resultat = await db.run(
       `UPDATE services SET code_barre = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND boutique_id = ? AND (code_barre IS NULL OR TRIM(code_barre) = '')`,
       [code, serviceId, boutiqueId]
@@ -351,6 +370,7 @@ export async function poserCodeMaisonService(
     if (porteur) throw new ErreurServiceCodeEnDoublon(porteur)
     throw err
   }
+  if (resultat.changes === 0) throw new ErreurServiceDejaCode()
   return { code }
 }
 
@@ -389,9 +409,9 @@ export async function createService(
     data.duree_minutes   ?? null,
     data.reference       ?? null,
     data.garantie_jours  ?? 0,
-    data.code_barre      ?? null,
+    codeBarreServiceAEcrire(data.code_barre) ?? null,
   ).first<{ id: number }>().catch(async (err) => {
-    await leverSiServiceCodeEnDoublon(db, err, data.code_barre, { boutiqueId: data.boutique_id })
+    await leverSiServiceCodeEnDoublon(db, err, codeBarreServiceAEcrire(data.code_barre), { boutiqueId: data.boutique_id })
     throw err
   })
 
@@ -419,6 +439,11 @@ export async function updateService(
   },
   userId: number
 ): Promise<void> {
+  // code_barre à trois états (`codeBarreServiceAEcrire()`) : absent → inchangé, vide → retiré
+  // (NULL), sinon posé — `COALESCE` seul ne sait pas retirer (rejet de revue du 2026-10-02, même
+  // patron que l'IMEI produit dans `stockService.ts`).
+  const codeBarre = codeBarreServiceAEcrire(data.code_barre)
+
   await db.prepare(`
     UPDATE services SET
       categorie_id    = COALESCE(?, categorie_id),
@@ -429,7 +454,7 @@ export async function updateService(
       duree_minutes   = COALESCE(?, duree_minutes),
       reference       = COALESCE(?, reference),
       garantie_jours  = COALESCE(?, garantie_jours),
-      code_barre      = COALESCE(?, code_barre),
+      code_barre      = CASE WHEN ? = 1 THEN ? ELSE code_barre END,
       updated_at      = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
@@ -441,10 +466,11 @@ export async function updateService(
     data.duree_minutes  ?? null,
     data.reference      ?? null,
     data.garantie_jours ?? null,
-    data.code_barre     ?? null,
+    codeBarre === undefined ? 0 : 1,
+    codeBarre ?? null,
     id
   ).run().catch(async (err) => {
-    await leverSiServiceCodeEnDoublon(db, err, data.code_barre, { serviceId: id })
+    await leverSiServiceCodeEnDoublon(db, err, codeBarre, { serviceId: id })
     throw err
   })
   await auditLog(db, { user_id: userId, action: 'UPDATE_SERVICE', entite_type: 'service', entite_id: id })

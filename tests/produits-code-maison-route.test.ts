@@ -85,6 +85,16 @@ describe('POST /api/produits/:id/code-maison', () => {
     expect(row.code_barre).toBe('3700275472140') // inchangé
   })
 
+  // ─── Mutation (ADR 0003) ────────────────────────────────────────────────────
+  // Mutant : dans `poserCodeMaisonProduit()` (src/services/stockService.ts), retirer `if
+  // (resultat.changes === 0) throw new ErreurDejaCode()` (toujours `return { code }`). Rouge
+  // observé sur le test ci-dessus : `expected 409 to be 200` — un produit déjà codé se voyait
+  // répondre un succès sans que rien n'ait changé en base. Mutation restaurée, test revérifié vert
+  // (voir compte rendu). Choix de conception (rejet de revue du 2026-10-02) : le refus se lit sur
+  // le résultat de l'UPDATE conditionnel (`changes`), jamais sur une lecture préalable de
+  // `code_barre` — une lecture puis écriture laisserait une fenêtre où un autre appel concurrent
+  // pourrait poser un code entre les deux, rendant le refus menteur.
+
   it('403 : manager d\'une autre boutique (assertBoutiqueOwnership, CLAUDE.md § Invariants isolation)', async () => {
     const id = produitDirect({ nom: 'Autre boutique', boutique_id: 2 })
     const res = await poserCodeMaison(id, await jeton('manager', 1))

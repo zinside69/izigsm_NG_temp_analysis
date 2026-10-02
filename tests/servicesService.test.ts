@@ -225,6 +225,8 @@ describe('updateService()', () => {
     db = createMockD1()
     // AVANT (2026-10-01, ticket 05 `vente-lit-catalogue` — `code_barre` ajouté avant `updated_at`,
     // `WHERE id = ?` reste le dernier paramètre) : même requête sans la ligne `code_barre = …`
+    // AVANT (2026-10-02, rejet de revue — code_barre à trois états) : `code_barre = COALESCE(?,
+    // code_barre)` au lieu du `CASE WHEN ? = 1 …` ci-dessous
     db.__setResponse(
       `UPDATE services SET
       categorie_id    = COALESCE(?, categorie_id),
@@ -235,7 +237,7 @@ describe('updateService()', () => {
       duree_minutes   = COALESCE(?, duree_minutes),
       reference       = COALESCE(?, reference),
       garantie_jours  = COALESCE(?, garantie_jours),
-      code_barre      = COALESCE(?, code_barre),
+      code_barre      = CASE WHEN ? = 1 THEN ? ELSE code_barre END,
       updated_at      = CURRENT_TIMESTAMP
     WHERE id = ?`, null)
     db.__setResponse('INSERT INTO audit_logs', null)
