@@ -66,6 +66,9 @@ fi
 # relecteur a suivi la premiere, l'a trouvee illisible et conclu desaccord sans
 # juger le code ; sur T-003 a T-006 il avait pris la seconde. Le verdict
 # dependait du modele. Une seule entree desormais, nommee opposable. Test W4.
+# (2026-10-03, defaut 110, O73) Derniere ligne de la consigne : citer avec « ». Sur
+# T-009 (iziGSM), une citation entre guillemets droits non echappes a rendu le JSON
+# du relecteur illisible, d'ou une P4 trompeuse. Meme regle que conception.sh. Test GQ1.
 PROMPT="$(cat <<EOF
 Relis le diff ci-dessous contre la déclaration de tâche, puis produis ton jugement JSON.
 
@@ -82,6 +85,7 @@ ${ARCHITECTURE_DECLAREE}
 RAPPEL : tu ne connais pas la session qui a produit ce diff et tu ne dois pas chercher
 à la reconstituer. Juge uniquement le contenu du diff contre ce qui précède.
 Réponds par un objet JSON unique, sans aucun texte autour.
+Dans les textes, cite avec « », jamais avec des guillemets droits (ils cassent le JSON).
 EOF
 )"
 
