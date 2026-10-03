@@ -1,5 +1,17 @@
 # iziGSM — Décisions
 
+## 2026-10-03 (soir) — Prix de vente en TTC pour toute pièce et tout service
+
+**Décision de l'exploitant** : « mettre le prix en TTC dans tous les endroits où cela est nécessaire :
+ticket, devis, SAV hors garantie, stock, reconditionnement, QualiRépar, etc. », puis « **toute pièce
+ou service, pas seulement les écrans** ». Le technicien et le manager raisonnent en TTC (prix payé par
+le client) ; la saisie en HT les oblige à diviser de tête.
+
+**Non encore cadré** : modèle de données (stocker le TTC ou non), règle d'arrondi pour que la facture
+retombe sur le TTC saisi, sort du prix d'achat fournisseur (HT par nature), base de la marge des pièces
+importées. Questions et écrans recensés : `todo.md`. **Invariant qui ne bouge pas** : le journal NF525
+porte HT, TVA et TTC calculés ; ses données hashées ne changent pas de format.
+
 ## 2026-10-03 — Styles de page contre socle ; ajout au stock depuis le bilan d'un lot
 
 **Décisions de l'exploitant** :

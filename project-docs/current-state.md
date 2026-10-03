@@ -1,4 +1,18 @@
-# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 144 — styles @apply réparés, ajout au stock depuis le bilan d'un lot)
+# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 145 — chantier « prix TTC » décidé, à cadrer)
+
+## Checkpoint 145 — Décision : prix TTC de référence pour toute pièce et tout service (2026-10-03, soir)
+
+**Production inchangée : `izigsm-v3.26`, migration `0061`. Aucun code.** Dépôt et production alignés.
+
+- Constat de l'exploitant (capture de la Nouvelle vente) : le technicien et le manager raisonnent
+  **toujours en TTC**, la caisse fait saisir le P.U. **HT**.
+- **Décision** : le prix en TTC partout où c'est nécessaire — ticket, devis, SAV hors garantie, stock,
+  reconditionnement, QualiRépar, etc. — et **pour toute pièce et tout service** (les fiches et leurs
+  données, pas seulement l'affichage). Inscrit au `todo.md` 🟠 avec le recensement des écrans et les
+  questions de cadrage (stocker le TTC ou non, arrondi, prix d'achat fournisseur, base de la marge).
+- Cadrage à faire par l'exploitant : `/mattpocock-skills:grill-with-docs` → `/to-spec` → `/to-tickets`.
+
+**Prochaine action** : la recette à l'écran du checkpoint 144, puis le cadrage du chantier TTC.
 
 ## Checkpoint 144 — Clôture prouvée, styles réparés, ajout au bilan d'un import en lot (2026-10-03, soir)
 

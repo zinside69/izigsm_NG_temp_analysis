@@ -1,4 +1,14 @@
-# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 144 — v3.26 en production)
+# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 145 — v3.26 en production, chantier TTC à cadrer)
+
+## ➡ Ajout du checkpoint 145 (lire aussi la « Première action » du 144 ci-dessous)
+
+Après la recette à l'écran du 144 : **cadrer le chantier « prix TTC »** (décision de l'exploitant du
+2026-10-03 au soir) — le prix de vente de toute pièce et de tout service devient un TTC de référence,
+partout où il se saisit ou s'affiche (ticket, devis, SAV hors garantie, stock, reconditionnement,
+QualiRépar, caisse…). Détail, écrans recensés et questions : `todo.md` § 🟠 « Caisse : saisir les prix
+en TTC ». Le cadrage passe par `/mattpocock-skills:grill-with-docs`, que l'exploitant tape lui-même
+(l'outil Skill refuse ces skills : ⊥ les rejouer à la main). Touche la facturation (caisse / NF525) :
+se code ici, pas au socle.
 
 ## ➡ Première action (checkpoint 144 — remplace celle du 143)
 
