@@ -216,6 +216,14 @@ caisse.post('/caisse/vente', async (c) => {
       montant_especes: body.montant_especes  ? Number(body.montant_especes)  : undefined,
       montant_cb:      body.montant_cb       ? Number(body.montant_cb)       : undefined,
       montant_cheque:  body.montant_cheque   ? Number(body.montant_cheque)   : undefined,
+      // Recette 002 B : les deux parts d'un paiement mixte. Contrôlées par `ventilerPaiements()`
+      // (service), avant toute écriture ; un refus revient ici en 400 par le `catch`.
+      paiements:       Array.isArray(body.paiements)
+                         ? body.paiements.map((part: any) => ({
+                             mode_paiement: String(part?.mode_paiement ?? ''),
+                             montant:       Number(part?.montant),
+                           }))
+                         : undefined,
       note:            body.note,
     })
     return c.json({ success: true, data: result }, 201)

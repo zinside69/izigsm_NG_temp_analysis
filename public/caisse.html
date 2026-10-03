@@ -361,11 +361,43 @@
             <span class="text-xs font-medium text-gray-700">Mixte</span>
           </button>
         </div>
+
+        <!-- Mixte : deux parts (recette 002 B, décision du 2026-10-03). On choisit les deux modes et le
+             montant de la première part ; la seconde se calcule (total − première). Remplie et vérifiée
+             par CaisseApp.majMixte() ; le serveur refait le contrôle (ventilerPaiements()). -->
+        <div id="mixte-zone" class="hidden mt-3 p-3 rounded-xl bg-purple-50 space-y-2">
+          <div class="flex items-center gap-2">
+            <label for="mixte-mode-1" class="text-xs text-gray-600 w-20">1re part</label>
+            <select id="mixte-mode-1" class="input-field w-32 text-sm" onchange="CaisseApp.majMixte()">
+              <option value="especes">Espèces</option>
+              <option value="cb">CB</option>
+              <option value="cheque">Chèque</option>
+              <option value="virement">Virement</option>
+            </select>
+            <input type="number" id="mixte-montant-1" min="0" step="0.01" placeholder="0,00"
+                   class="input-field w-28 text-right" oninput="CaisseApp.majMixte()">
+            <span class="text-gray-400">€</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="mixte-mode-2" class="text-xs text-gray-600 w-20">2e part</label>
+            <select id="mixte-mode-2" class="input-field w-32 text-sm" onchange="CaisseApp.majMixte()">
+              <option value="especes">Espèces</option>
+              <option value="cb" selected>CB</option>
+              <option value="cheque">Chèque</option>
+              <option value="virement">Virement</option>
+            </select>
+            <span id="mixte-montant-2" class="w-28 text-right font-semibold text-gray-800">0,00 €</span>
+            <span class="text-xs text-gray-400">(calculée)</span>
+          </div>
+          <p id="mixte-message" class="text-xs text-red-600"></p>
+        </div>
       </div>
 
       <!-- Rendu monnaie (espèces) -->
       <div id="rendu-monnaie-zone" class="space-y-2">
-        <label class="label-field">Montant remis par le client</label>
+        <!-- AVANT (2026-10-03, recette 002 C — en mixte, le montant remis ne porte que sur la part en espèces) :
+        <label class="label-field">Montant remis par le client</label> -->
+        <label class="label-field">Montant remis en espèces par le client</label>
         <div class="flex items-center gap-3">
           <input type="number" id="montant-remis" min="0" step="0.01"
                  placeholder="0,00" class="input-field w-36 text-right text-lg font-bold"

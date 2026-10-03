@@ -1102,6 +1102,31 @@ async function _fetchFacturePrintData(id) {
  * @param {string} printCssHref - URL résolue (hashée) de print.css, voir `_resolveStaticHref()` (app.js)
  * @returns {string} HTML complet prêt à être injecté dans #print-root
  */
+/**
+ * Recette 002 C (2026-10-03) : sous un règlement en espèces, le montant remis par le client et la
+ * monnaie rendue, s'ils ont été saisis en caisse (colonnes `paiements.montant_remis` et
+ * `paiements.rendu_monnaie`, migration 0061). Rien pour un autre règlement.
+ * AVANT (2026-10-03) : chaque règlement se fermait par `</div>`).join('')}`, sans ces deux lignes.
+ * @param {object} paiement  Ligne `paiements` telle que l'API la renvoie
+ * @returns {string} HTML (montants seulement : rien à échapper)
+ */
+function _lignesRemisEtRendu(paiement) {
+  const remis = Number(paiement.montant_remis);
+  const unMontantAEteRemis = paiement.montant_remis !== null && paiement.montant_remis !== undefined && remis > 0;
+  if (!unMontantAEteRemis) return '';
+
+  const rendu = Number(paiement.rendu_monnaie) || 0;
+  return `
+        <div class="print-paiement-row" style="font-size:0.9em;color:#555;">
+          <span>&nbsp;&nbsp;Espèces remis</span>
+          <span>${formatMoney(remis)}</span>
+        </div>
+        <div class="print-paiement-row" style="font-size:0.9em;color:#555;">
+          <span>&nbsp;&nbsp;Rendu</span>
+          <span>${formatMoney(rendu)}</span>
+        </div>`;
+}
+
 function _buildFactureHTML(d, printCssHref) {
   // Identités affichées : snapshot figé si la facture est émise, sinon jointure vivante.
   const ach = d.acheteurFige;
@@ -1171,7 +1196,7 @@ function _buildFactureHTML(d, printCssHref) {
         <div class="print-paiement-row">
           <span>${_fmtDate(p.date_paiement)} — ${esc(p.mode_paiement || '—')}</span>
           <span>${formatMoney(p.montant)}</span>
-        </div>`).join('')}
+        </div>${_lignesRemisEtRendu(p)}`).join('')}
       <div class="print-solde">
         <span>Reste à payer</span>
         <span style="color:${d.reste <= 0 ? '#22c55e' : '#ef4444'};">${formatMoney(d.reste)}</span>

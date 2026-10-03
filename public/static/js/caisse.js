@@ -381,6 +381,7 @@
     hideEl('vente-produit-results')
     clearEl('vente-note')
     clearEl('montant-remis')
+    clearEl('mixte-montant-1')   // recette 002 B : une nouvelle vente repart sans ventilation
     hideEl('vente-client-results')
     hideEl('vente-client-selected')
     setEl('rendu-montant', '0,00 €')
@@ -517,24 +518,61 @@
 
   // ── Totaux ──────────────────────────────────────────────────────────────────
 
-  function updateTotaux() {
-    let ht = 0, tva = 0
+  /** Arrondit un montant au centime (même règle que le serveur : `Math.round(x * 100) / 100`). */
+  function arrondiAuCentime(montant) {
+    return Math.round(montant * 100) / 100
+  }
+
+  /**
+   * Totaux de la vente, calculés EXACTEMENT comme le serveur (`calculLignes()`, `lib/db.ts`, appelé
+   * par `createVente()`) : chaque ligne est arrondie (HT, puis sa TVA) avant d'être additionnée.
+   *
+   * Pourquoi (défaut trouvé le 2026-10-03, recette 002 B) : l'écran additionnait les montants exacts
+   * et n'arrondissait qu'à la fin. Trois lignes à 0,03 € HT affichaient 0,11 € TTC, la facture en
+   * portait 0,12 €. Invisible en paiement simple, mais un « mixte » saisi sur le total affiché était
+   * refusé par le serveur, qui exige la somme des parts au centime près.
+   *
+   * @returns {{ ht: number, tva: number, ttc: number }}
+   */
+  function calculerTotauxCommeLeServeur() {
+    let totalHt = 0, totalTva = 0, totalTtc = 0
 
     for (const l of state.lignes) {
-      const ligneHt  = l.quantite * l.prix_unitaire_ht * (1 - l.remise_pct / 100)
-      const ligneTva = ligneHt * (l.tva_taux / 100)
-      ht  += ligneHt
-      tva += ligneTva
+      // La remise s'applique au prix unitaire, comme dans `createVente()` (étape 1)
+      const prixUnitaireRemise = l.prix_unitaire_ht * (1 - (l.remise_pct || 0) / 100)
+      const ligneHt  = arrondiAuCentime(l.quantite * prixUnitaireRemise)
+      const ligneTva = arrondiAuCentime(ligneHt * (l.tva_taux / 100))
+
+      totalHt  = arrondiAuCentime(totalHt + ligneHt)
+      totalTva = arrondiAuCentime(totalTva + ligneTva)
+      totalTtc = arrondiAuCentime(totalTtc + ligneHt + ligneTva)
     }
+    return { ht: totalHt, tva: totalTva, ttc: totalTtc }
+  }
 
-    const ttc = ht + tva
-    ht  = Math.round(ht  * 100) / 100
-    tva = Math.round(tva * 100) / 100
-    const ttcR = Math.round(ttc * 100) / 100
+  function updateTotaux() {
+    // AVANT (2026-10-03, recette 002 B — total affiché ≠ total facturé, voir calculerTotauxCommeLeServeur) :
+    //   let ht = 0, tva = 0
+    //   for (const l of state.lignes) {
+    //     const ligneHt  = l.quantite * l.prix_unitaire_ht * (1 - l.remise_pct / 100)
+    //     const ligneTva = ligneHt * (l.tva_taux / 100)
+    //     ht  += ligneHt
+    //     tva += ligneTva
+    //   }
+    //   const ttc = ht + tva
+    //   ht  = Math.round(ht  * 100) / 100
+    //   tva = Math.round(tva * 100) / 100
+    //   const ttcR = Math.round(ttc * 100) / 100
+    //   setEl('total-ht-vente',  eur(ht))
+    //   setEl('total-tva-vente', eur(tva))
+    //   setEl('total-ttc-vente', eur(ttcR))
+    const totaux = calculerTotauxCommeLeServeur()
+    setEl('total-ht-vente',  eur(totaux.ht))
+    setEl('total-tva-vente', eur(totaux.tva))
+    setEl('total-ttc-vente', eur(totaux.ttc))
 
-    setEl('total-ht-vente',  eur(ht))
-    setEl('total-tva-vente', eur(tva))
-    setEl('total-ttc-vente', eur(ttcR))
+    // Recette 002 B : en mixte, la seconde part suit le total
+    if (state.mode === 'mixte') majMixte()
 
     calcRendu()
   }
@@ -555,16 +593,107 @@
       }
     })
 
-    // Afficher rendu monnaie uniquement si espèces ou mixte
+    // AVANT (2026-10-03, recette 002 B — en mixte, le rendu ne vaut que s'il y a une part en espèces) :
+    //   // Afficher rendu monnaie uniquement si espèces ou mixte
+    //   const zone = document.getElementById('rendu-monnaie-zone')
+    //   if (zone) zone.classList.toggle('hidden', mode === 'cb' || mode === 'virement' || mode === 'cheque')
+    const zoneMixte = document.getElementById('mixte-zone')
+    if (zoneMixte) zoneMixte.classList.toggle('hidden', mode !== 'mixte')
+
+    // `majMixte()` décide du bouton « Valider » et de la zone « montant remis » en mixte ;
+    // hors mixte, le bouton est libre et la zone n'existe que pour les espèces.
+    if (mode === 'mixte') {
+      majMixte()
+    } else {
+      autoriserValidation(true)
+      afficherZoneMontantRemis(mode === 'especes')
+    }
+    calcRendu()
+  }
+
+  // ── Mixte : deux parts (recette 002 B) ───────────────────────────────────────
+
+  /** Montre ou cache la zone « montant remis en espèces » et son rendu. */
+  function afficherZoneMontantRemis(visible) {
     const zone = document.getElementById('rendu-monnaie-zone')
-    if (zone) zone.classList.toggle('hidden', mode === 'cb' || mode === 'virement' || mode === 'cheque')
+    if (zone) zone.classList.toggle('hidden', !visible)
+  }
+
+  /** Active ou bloque le bouton « Valider la vente ». */
+  function autoriserValidation(autorise) {
+    const bouton = document.getElementById('btn-submit-vente')
+    if (bouton) bouton.disabled = !autorise
+  }
+
+  /**
+   * Lit la ventilation mixte saisie et dit si elle est possible. Mêmes règles que le serveur
+   * (`ventilerPaiements()`) : deux modes différents, première part > 0 et < total.
+   * La seconde part n'est jamais saisie : c'est le total moins la première.
+   *
+   * @returns {{ valide: boolean, raison: string, parts: {mode_paiement: string, montant: number}[] }}
+   */
+  function lireVentilationMixte() {
+    const total = calculerTotauxCommeLeServeur().ttc
+    const mode1 = document.getElementById('mixte-mode-1')?.value || ''
+    const mode2 = document.getElementById('mixte-mode-2')?.value || ''
+    const montant1 = arrondiAuCentime(parseFloat(document.getElementById('mixte-montant-1')?.value || '0') || 0)
+    const montant2 = arrondiAuCentime(total - montant1)
+
+    const parts = [
+      { mode_paiement: mode1, montant: montant1 },
+      { mode_paiement: mode2, montant: montant2 },
+    ]
+
+    if (mode1 === mode2) {
+      return { valide: false, raison: 'Choisissez deux modes différents.', parts }
+    }
+    if (montant1 <= 0) {
+      return { valide: false, raison: 'Saisissez le montant de la 1re part.', parts }
+    }
+    if (montant1 >= total) {
+      return { valide: false, raison: 'La 1re part doit être inférieure au total de la vente.', parts }
+    }
+    return { valide: true, raison: '', parts }
+  }
+
+  /** Met à jour l'affichage du mixte : seconde part, raison d'un blocage, bouton, montant remis. */
+  function majMixte() {
+    if (state.mode !== 'mixte') return
+    const ventilation = lireVentilationMixte()
+
+    const seconde = ventilation.parts[1].montant
+    setEl('mixte-montant-2', eur(Math.max(0, seconde)))
+    setEl('mixte-message', ventilation.raison)
+    autoriserValidation(ventilation.valide)
+
+    // Le montant remis n'a de sens que si une des deux parts est en espèces
+    const unePartEnEspeces = ventilation.parts.some(part => part.mode_paiement === 'especes')
+    afficherZoneMontantRemis(unePartEnEspeces)
+    calcRendu()
+  }
+
+  /**
+   * Somme due en espèces : le total en mode « espèces », la part en espèces en mixte, 0 sinon.
+   * C'est sur elle que se calcule le rendu.
+   */
+  function sommeDueEnEspeces() {
+    if (state.mode === 'especes') return calculerTotauxCommeLeServeur().ttc
+    if (state.mode === 'mixte') {
+      const partEnEspeces = lireVentilationMixte().parts.find(part => part.mode_paiement === 'especes')
+      return partEnEspeces ? partEnEspeces.montant : 0
+    }
+    return 0
   }
 
   function calcRendu() {
-    const ttcStr = document.getElementById('total-ttc-vente')?.textContent || '0'
-    const ttc = parseFloat(ttcStr.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0
+    // AVANT (2026-10-03, recette 002 B et C — le rendu se calcule sur la somme due en espèces) :
+    //   const ttcStr = document.getElementById('total-ttc-vente')?.textContent || '0'
+    //   const ttc = parseFloat(ttcStr.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0
+    //   const remis = parseFloat(document.getElementById('montant-remis')?.value || '0') || 0
+    //   const rendu = Math.max(0, Math.round((remis - ttc) * 100) / 100)
+    const dueEnEspeces = sommeDueEnEspeces()
     const remis = parseFloat(document.getElementById('montant-remis')?.value || '0') || 0
-    const rendu = Math.max(0, Math.round((remis - ttc) * 100) / 100)
+    const rendu = Math.max(0, arrondiAuCentime(remis - dueEnEspeces))
     setEl('rendu-montant', eur(rendu))
     const el = document.getElementById('rendu-montant')
     if (el) el.className = `ml-2 text-xl font-bold ${rendu > 0 ? 'text-green-600' : 'text-gray-400'}`
@@ -958,6 +1087,14 @@
       }
     }
 
+    // Recette 002 B : un mixte impossible ne part pas (le bouton est déjà bloqué ; ceci couvre un
+    // appel direct à submitVente)
+    let ventilationMixte = null
+    if (state.mode === 'mixte') {
+      ventilationMixte = lireVentilationMixte()
+      if (!ventilationMixte.valide) { toast(ventilationMixte.raison, 'warn'); return }
+    }
+
     const btn = document.getElementById('btn-submit-vente')
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Enregistrement…' }
 
@@ -976,7 +1113,11 @@
         remise_pct:        l.remise_pct || 0,
       })),
       mode_paiement:  state.mode,
-      montant_especes: (state.mode === 'especes' || state.mode === 'mixte') ? montantRemis : undefined,
+      // AVANT (2026-10-03, recette 002 C — en mixte, le montant remis n'est envoyé que s'il y a une part en espèces) :
+      // montant_especes: (state.mode === 'especes' || state.mode === 'mixte') ? montantRemis : undefined,
+      montant_especes: sommeDueEnEspeces() > 0 ? montantRemis : undefined,
+      // Recette 002 B : les deux parts, contrôlées à nouveau par le serveur (`ventilerPaiements()`)
+      paiements:      ventilationMixte ? ventilationMixte.parts : undefined,
       note,
     }
 
@@ -1105,6 +1246,7 @@
     supprimerLigne,
     calcRendu,
     selectMode,
+    majMixte,      // recette 002 B — appelée par la zone mixte de caisse.html
     submitVente,
     debouncedSearchClient,
     debouncedSearchProduit,

@@ -57,10 +57,126 @@ export interface VentePOSData {
   client_id?:     number
   lignes:         LignePOS[]
   mode_paiement:  'especes' | 'cb' | 'virement' | 'cheque' | 'mixte'
-  montant_especes?: number  // pour calcul rendu monnaie
-  montant_cb?:      number
-  montant_cheque?:  number
+  // AVANT (2026-10-03, recette 002 C — le montant remis est désormais conservé) :
+  // montant_especes?: number  // pour calcul rendu monnaie
+  // montant_cb?:      number
+  // montant_cheque?:  number
+  montant_especes?: number  // montant REMIS par le client en espèces (rendu = remis − part en espèces)
+  montant_cb?:      number  // ⚠ plus lu depuis la recette 002 B : la ventilation passe par `paiements`
+  montant_cheque?:  number  // ⚠ plus lu depuis la recette 002 B : la ventilation passe par `paiements`
+  /** Mode « mixte » seulement : les deux parts du paiement (recette 002 B). */
+  paiements?:      { mode_paiement: string; montant: number }[]
   note?:           string
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Ventilation du paiement d'une vente — recette 002 B et C (décisions du 2026-10-03)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/** Modes qu'une part de paiement peut prendre. « mixte » n'en est pas un : c'est un assemblage. */
+export const MODES_DE_PAIEMENT_SIMPLES = ['especes', 'cb', 'cheque', 'virement'] as const
+
+/** Nombre de parts d'un paiement « mixte » (décision de l'exploitant : deux, pas plus). */
+export const NOMBRE_DE_PARTS_MIXTE = 2
+
+/** Une ligne `paiements` à écrire pour une vente. */
+export interface PartDePaiement {
+  mode_paiement: string
+  montant:       number         // somme due pour cette part (jamais le montant remis)
+  montant_remis: number | null  // espèces remises par le client — part en espèces seulement
+  rendu_monnaie: number | null  // monnaie rendue — part en espèces seulement
+}
+
+/** Un montant en euros converti en centimes entiers, pour comparer sans erreur d'arrondi. */
+function enCentimes(montantEnEuros: number): number {
+  return Math.round(montantEnEuros * 100)
+}
+
+/**
+ * Décide des lignes `paiements` d'une vente, ou refuse — **avant toute écriture** : un refus ne
+ * doit consommer aucun numéro de facture (`createVente()` l'appelle avant `nextNumero()`).
+ *
+ * Règles :
+ *  - paiement simple (espèces, CB, chèque, virement) : une part, du montant total ;
+ *  - « mixte » : exactement deux parts, chacune dans un mode simple, modes différents, montants
+ *    positifs, somme égale au total au centime près ;
+ *  - montant remis (`montant_especes`) : seulement s'il y a une part en espèces, et au moins égal à
+ *    cette part. Le rendu est la différence. Les deux sont gardés sur la part en espèces.
+ *
+ * @param demande   Mode choisi, parts (mixte), montant remis éventuel
+ * @param totalTtc  Total TTC de la vente, en euros
+ * @returns         Les parts à écrire, dans l'ordre reçu
+ * @throws          Error au message lisible par le vendeur si la demande est refusée
+ */
+export function ventilerPaiements(
+  demande: { mode_paiement: string; paiements?: { mode_paiement: string; montant: number }[]; montant_especes?: number },
+  totalTtc: number,
+): PartDePaiement[] {
+  const estMixte = demande.mode_paiement === 'mixte'
+
+  // ── 1. Les parts, avant le montant remis ─────────────────────────────────────
+  let parts: PartDePaiement[]
+
+  if (!estMixte) {
+    // Paiement simple : des parts envoyées n'ont pas de sens, on refuse plutôt que d'en ignorer
+    if (demande.paiements !== undefined) {
+      throw new Error('Les parts de paiement ne s\'envoient qu\'avec le mode « mixte ».')
+    }
+    parts = [{ mode_paiement: demande.mode_paiement, montant: totalTtc, montant_remis: null, rendu_monnaie: null }]
+  } else {
+    const partsDemandees = demande.paiements ?? []
+    if (partsDemandees.length !== NOMBRE_DE_PARTS_MIXTE) {
+      throw new Error(`Un paiement mixte se fait en ${NOMBRE_DE_PARTS_MIXTE} parts exactement.`)
+    }
+
+    const modesDejaVus: string[] = []
+    for (const part of partsDemandees) {
+      const modeConnu = (MODES_DE_PAIEMENT_SIMPLES as readonly string[]).includes(part.mode_paiement)
+      if (!modeConnu) {
+        throw new Error(`Mode de paiement inconnu pour une part du mixte : « ${part.mode_paiement} ».`)
+      }
+      if (modesDejaVus.includes(part.mode_paiement)) {
+        throw new Error('Les deux parts d\'un paiement mixte doivent être dans deux modes différents.')
+      }
+      modesDejaVus.push(part.mode_paiement)
+
+      const montantValide = typeof part.montant === 'number' && Number.isFinite(part.montant) && part.montant > 0
+      if (!montantValide) {
+        throw new Error('Chaque part d\'un paiement mixte doit être un montant supérieur à 0.')
+      }
+    }
+
+    // La somme des parts doit être exactement le total, comparée en centimes (0,1 + 0,2 = 0,30)
+    let sommeEnCentimes = 0
+    for (const part of partsDemandees) sommeEnCentimes += enCentimes(part.montant)
+    if (sommeEnCentimes !== enCentimes(totalTtc)) {
+      throw new Error(`Les deux parts (${(sommeEnCentimes / 100).toFixed(2)} €) ne font pas le total de la vente (${totalTtc.toFixed(2)} €).`)
+    }
+
+    parts = partsDemandees.map(part => ({
+      mode_paiement: part.mode_paiement,
+      montant:       part.montant,
+      montant_remis: null,
+      rendu_monnaie: null,
+    }))
+  }
+
+  // ── 2. Le montant remis et le rendu, sur la part en espèces ──────────────────
+  const montantRemis = demande.montant_especes
+  const unMontantEstRemis = typeof montantRemis === 'number' && montantRemis > 0
+  if (!unMontantEstRemis) return parts
+
+  const partEnEspeces = parts.find(part => part.mode_paiement === 'especes')
+  if (!partEnEspeces) {
+    throw new Error('Un montant remis n\'a de sens que si une partie est payée en espèces.')
+  }
+  if (enCentimes(montantRemis) < enCentimes(partEnEspeces.montant)) {
+    throw new Error(`Le montant remis (${montantRemis.toFixed(2)} €) est inférieur à la part en espèces (${partEnEspeces.montant.toFixed(2)} €).`)
+  }
+  partEnEspeces.montant_remis = montantRemis
+  partEnEspeces.rendu_monnaie = (enCentimes(montantRemis) - enCentimes(partEnEspeces.montant)) / 100
+
+  return parts
 }
 
 /**
@@ -324,6 +440,11 @@ export async function createVente(
   }))
   const totaux = calculLignes(lignesCalculees)
 
+  // ── 1a. Ventilation du paiement (recette 002 B et C) ──────────────────────
+  // Vérifiée ICI, avant le numéro de facture (étape 2) : une ventilation refusée ne doit
+  // consommer aucun numéro de la série ni rien écrire.
+  const partsDePaiement = ventilerPaiements(data, totaux.total_ttc)
+
   // ── 1b. Client par défaut si non fourni (vente comptoir anonyme) ─────────
   let clientId = data.client_id ?? null
   if (!clientId) {
@@ -443,30 +564,43 @@ export async function createVente(
   }
 
   // ── 5. Créer le paiement ──────────────────────────────────────────────────
-  const modePaiementPrincipal = data.mode_paiement === 'mixte' ? 'mixte' : data.mode_paiement
-
-  await db.prepare(`
-    INSERT INTO paiements
-      (facture_id, boutique_id, montant, mode_paiement, date_paiement, user_id)
-    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-  `).bind(
-    facture.id,
-    boutiqueId,
-    totaux.total_ttc,
-    modePaiementPrincipal,
-    userId
-  ).run()
-
-  // ── 6. Calcul rendu monnaie (si espèces) ──────────────────────────────────
-  let renduMonnaie: number | undefined
-  if (data.montant_especes && data.montant_especes > 0) {
-    const montantEspeces = data.montant_especes
-    const autresPaiements = (data.montant_cb ?? 0) + (data.montant_cheque ?? 0)
-    const resteEnEspeces = totaux.total_ttc - autresPaiements
-    if (montantEspeces > resteEnEspeces) {
-      renduMonnaie = Math.round((montantEspeces - resteEnEspeces) * 100) / 100
-    }
+  // AVANT (2026-10-03, recette 002 B — un paiement « mixte » perdait sa ventilation) : une seule
+  // ligne, du montant total, au mode `mixte` :
+  //   const modePaiementPrincipal = data.mode_paiement === 'mixte' ? 'mixte' : data.mode_paiement
+  //   INSERT INTO paiements (facture_id, boutique_id, montant, mode_paiement, date_paiement, user_id)
+  //   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?) — avec totaux.total_ttc et modePaiementPrincipal
+  // Désormais : une ligne PAR PART décidée par `ventilerPaiements()` (étape 1a), chacune dans son
+  // mode ; la part en espèces porte le montant remis et le rendu (migration 0061, recette 002 C).
+  for (const part of partsDePaiement) {
+    await db.prepare(`
+      INSERT INTO paiements
+        (facture_id, boutique_id, montant, mode_paiement, date_paiement, user_id,
+         montant_remis, rendu_monnaie)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+    `).bind(
+      facture.id,
+      boutiqueId,
+      part.montant,
+      part.mode_paiement,
+      userId,
+      part.montant_remis,
+      part.rendu_monnaie,
+    ).run()
   }
+
+  // ── 6. Rendu monnaie (si espèces) ─────────────────────────────────────────
+  // AVANT (2026-10-03, recette 002 C — le rendu est calculé une seule fois, par la ventilation) :
+  //   let renduMonnaie: number | undefined
+  //   if (data.montant_especes && data.montant_especes > 0) {
+  //     const montantEspeces = data.montant_especes
+  //     const autresPaiements = (data.montant_cb ?? 0) + (data.montant_cheque ?? 0)
+  //     const resteEnEspeces = totaux.total_ttc - autresPaiements
+  //     if (montantEspeces > resteEnEspeces) {
+  //       renduMonnaie = Math.round((montantEspeces - resteEnEspeces) * 100) / 100
+  //     }
+  //   }
+  const partEnEspeces = partsDePaiement.find(part => part.mode_paiement === 'especes')
+  const renduMonnaie: number | undefined = partEnEspeces?.rendu_monnaie ?? undefined
 
   // ── 7. Entrée Journal NF525 avec hash chaîné ──────────────────────────────
   // Requête dupliquée de getHashPrecedent() (migrée vers le port Database) —

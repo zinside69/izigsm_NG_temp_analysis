@@ -1,5 +1,20 @@
 # iziGSM — Bugs connus
 
+## ✅ 🟠 Caisse : total affiché ≠ total facturé, à un centime près (trouvé le 2026-10-03, CORRIGÉ le même jour, non déployé)
+
+**Défaut** : l'écran de vente additionnait les montants exacts et n'arrondissait qu'à la fin ; le
+serveur (`calculLignes()`) arrondit chaque ligne (HT, puis sa TVA) avant de les additionner. Trois
+lignes à 0,03 € HT : écran 0,11 € TTC, facture 0,12 €. Invisible en paiement simple (la facture
+fait foi), bloquant pour un « mixte » saisi sur le total affiché (le serveur exige la somme des parts
+au centime). **Correctif** (recette 002 B) : `calculerTotauxCommeLeServeur()` (`caisse.js`) reprend
+la règle du serveur ; E2E `caisse-mixte-rendu.spec.ts` vu rouge (« 0,11 € »).
+
+## ✅ (mise à jour) Paiement « mixte » non ventilé — CORRIGÉ le 2026-10-03, non déployé
+
+L'entrée 🟠 du 2026-10-02 ci-dessous est corrigée par la recette 002 B : deux parts au choix,
+une ligne `paiements` par part, contrôle `ventilerPaiements()` avant toute écriture. Montant remis et
+rendu conservés sur la part en espèces (C, migration `0061`).
+
 ## ✅ 🔴 Avoir à quantité décimale émis, numéro NF525 consommé (trouvé le 2026-10-02, CORRIGÉ le même jour, non déployé)
 
 **Défaut** : `POST /api/avoirs` et `createAvoir()` ne contrôlaient **aucune** quantité de ligne ; la
