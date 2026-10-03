@@ -126,7 +126,8 @@
       if (!btn) return
       if (btn.dataset.produitId) {
         const p = state.produits.get(Number(btn.dataset.produitId))
-        if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, p.prix_vente_ht, p.tva_taux)
+        // AVANT (2026-10-03, recette 002 D — fiche à 0 € : dernier prix vendu) : if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, p.prix_vente_ht, p.tva_taux)
+        if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, prixHtProduit(p), p.tva_taux)
       } else if (btn.dataset.serviceId) {
         const s = state.services.get(Number(btn.dataset.serviceId))
         if (s) ajouterLigneCatalogue({ service_id: s.id }, s.nom, s.prix_ht, s.tva_taux)
@@ -477,6 +478,9 @@
       // AVANT (jusqu'au 2026-10-02), champ quantité :
       //        type="number" min="0.01" step="0.01" value="${l.quantite}"
       // Quantité entière ≥ 1 (recette 001 B) : min="1" step="1", refus à l'encaissement.
+      // AVANT (2026-10-03, recette 002 A — « 0,98 » restait affiché) :
+      //        type="number" min="1" step="1" value="${l.quantite}"
+      // Entiers seulement à la saisie : `data-entier` (`app.js`), champ texte à pavé numérique.
       return `
       <div class="grid grid-cols-12 gap-1 items-center linha-row" data-idx="${l.idx}">
         <input class="col-span-4 input-field text-xs py-1.5 px-2"
@@ -485,7 +489,7 @@
                oninput="CaisseApp._updateLigne(${l.idx},'designation',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-center"
                data-field="quantite" data-idx="${l.idx}"
-               type="number" min="1" step="1" value="${l.quantite}"
+               type="text" inputmode="numeric" pattern="[0-9]*" data-entier value="${l.quantite}"
                oninput="CaisseApp._updateLigne(${l.idx},'quantite',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-right"
                data-field="prix_unitaire_ht" data-idx="${l.idx}"
@@ -573,6 +577,30 @@
    * bloquée à l'écran tant qu'un prix n'est pas saisi. Le serveur, lui, garde « prix ≥ 0 » —
    * une ligne gratuite reste légitime ailleurs (spec, décision « Vente en caisse »).
    */
+  /**
+   * Prix HT proposé pour un produit du catalogue (recette 002 D, décision du 2026-10-03) : celui de la
+   * fiche s'il est > 0, sinon le dernier prix HT vendu (`dernier_prix_vendu_ht`, serveur), sinon 0 —
+   * la ligne reste alors « prix à saisir » (`prixManquant()`). La fiche n'est jamais modifiée.
+   */
+  function prixHtProduit(r) {
+    const prixDeLaFiche = Number(r.prix_vente_ht) || 0
+    const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+
+    if (prixDeLaFiche > 0) return prixDeLaFiche        // la fiche a un prix : il fait foi
+    if (dernierPrixVendu > 0) return dernierPrixVendu  // sinon, le prix de la dernière vente
+    return 0                                           // sinon, prix à saisir par le vendeur
+  }
+
+  /** « (dern.) » quand le prix affiché vient de la dernière vente et non de la fiche. */
+  function marqueDernierPrix(r) {
+    const prixDeLaFiche = Number(r.prix_vente_ht) || 0
+    const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+
+    const prixVientDeLaDerniereVente = prixDeLaFiche === 0 && dernierPrixVendu > 0
+    if (!prixVientDeLaDerniereVente) return ''
+    return ' <span class="text-gray-500 font-normal">(dern.)</span>'
+  }
+
   function prixManquant(ligne) {
     return !!(ligne.produit_id || ligne.service_id) && !(ligne.prix_unitaire_ht > 0)
   }
@@ -627,7 +655,8 @@
     if (!nature) return ''
     const badge = `<span class="text-xs px-1.5 py-0.5 rounded ${nature.classe} mr-2" data-nature="${r.type}">${nature.libelle}</span>`
     const [attribut, titre, detail, droite] =
-      r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(r.prix_vente_ht)} HT · stock ${Number(r.stock_actuel)}`]
+      // AVANT (2026-10-03, recette 002 D) : r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(r.prix_vente_ht)} HT · stock ${Number(r.stock_actuel)}`]
+      r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(prixHtProduit(r))} HT${marqueDernierPrix(r)} · stock ${Number(r.stock_actuel)}`]
       : r.type === 'service' ? ['data-service-id', r.nom, r.reference, `${eur(r.prix_ht)} HT`]
       : ['data-sav-id', r.numero, r.client, `${esc(STATUT_SAV[r.statut] ?? r.statut)} · ouvrir`]
     return `
@@ -751,13 +780,15 @@
 
   /** Une tuile : nom échappé et prix TTC courant. La clé est lue par l'écouteur, jamais en `onclick`. */
   function renderTuileFavori(r) {
-    const prixHt = r.type === 'produit' ? r.prix_vente_ht : r.prix_ht
+    // AVANT (2026-10-03, recette 002 D) : const prixHt = r.type === 'produit' ? r.prix_vente_ht : r.prix_ht
+    const prixHt = r.type === 'produit' ? prixHtProduit(r) : r.prix_ht
     const ttc    = Number(prixHt || 0) * (1 + Number(r.tva_taux || 0) / 100)
     return `
           <button type="button" data-favori="${r.type}:${Number(r.id)}"
                   class="text-left px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50">
             <span class="block text-sm font-medium text-gray-800 truncate" title="${esc(r.nom)}">${esc(r.nom)}</span>
-            <span class="block text-xs text-blue-700 font-semibold">${eur(ttc)}</span>
+            <!-- AVANT (2026-10-03, recette 002 D) : <span class="block text-xs text-blue-700 font-semibold">${eur(ttc)}</span> -->
+            <span class="block text-xs text-blue-700 font-semibold">${eur(ttc)}${r.type === 'produit' ? marqueDernierPrix(r) : ''}</span>
           </button>`
   }
 
@@ -855,7 +886,8 @@
       focusBarre()
       return
     }
-    if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, r.prix_vente_ht, r.tva_taux)
+    // AVANT (2026-10-03, recette 002 D) : if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, r.prix_vente_ht, r.tva_taux)
+    if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, prixHtProduit(r), r.tva_taux)
     else                      ajouterLigneCatalogue(lien, r.nom, r.prix_ht, r.tva_taux)
   }
 

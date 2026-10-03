@@ -61,6 +61,8 @@ test('recherche catalogue : un produit se trouve par nom, SKU et code-barres, r√
       prix_vente_ht: 24.92,
       tva_taux:      20,
       stock_actuel:  4,
+      // Recette 002 D (2026-10-03) : prix de la derni√®re vente, `null` pour un produit jamais vendu
+      dernier_prix_vendu_ht: null,
     }])
   }
 })

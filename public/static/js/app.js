@@ -39,6 +39,71 @@ function echapperHtml(valeur) {
   ));
 }
 
+// ════════════════════════════════════════════════════════════════════════════════
+// Champs « entier ≥ 1 » — recette 002 A (décision de l'exploitant du 2026-10-03)
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// « Sur Qté : il faut afficher que des entiers. » Tout `<input data-entier>` (quantité de ligne :
+// caisse, devis, factures, avoirs) ne garde que des chiffres — virgule, point, signe et lettres
+// retirés à la frappe comme au collage, zéros de tête retirés — et vaut 1 quand on le quitte vide
+// ou à 0. Un écouteur unique, en **capture** : il passe avant le `oninput` de la ligne, qui lit donc
+// déjà la valeur nettoyée. ⊥ `type="number"` pour ces champs : sa valeur devient vide dès qu'on y
+// tape une virgule, il n'y a alors plus rien à nettoyer (vu sur v3.23 : « 0,98 » restait affiché).
+// Le serveur garde son propre refus (`quantiteLigneInvalide()`).
+/**
+ * Vrai si l'élément est un champ « entier ≥ 1 » (porte l'attribut `data-entier`).
+ * @param {EventTarget|null} element
+ */
+function estChampEntier(element) {
+  if (!element) return false;
+  if (element.tagName !== 'INPUT') return false;
+  return element.hasAttribute('data-entier');
+}
+
+/**
+ * Garde uniquement les chiffres d'une saisie, puis retire les zéros placés devant.
+ * Exemples : « 0,98 » → « 98 » ; « -1.5 » → « 15 » ; « 007 » → « 7 » ; « 0 » → « 0 ».
+ * @param {string} saisie
+ * @returns {string}
+ */
+function garderLesChiffres(saisie) {
+  let resultat = '';
+  for (const caractere of saisie) {
+    const estUnChiffre = caractere >= '0' && caractere <= '9';
+    if (estUnChiffre) resultat += caractere;
+  }
+  // Zéros de tête retirés, mais un « 0 » seul est gardé (il deviendra 1 en quittant le champ)
+  while (resultat.length > 1 && resultat.startsWith('0')) {
+    resultat = resultat.slice(1);
+  }
+  return resultat;
+}
+
+// Pendant la frappe (et au collage) : on ne garde que les chiffres.
+document.addEventListener('input', function (evenement) {
+  const champ = evenement.target;
+  if (!estChampEntier(champ)) return;
+
+  const valeurNettoyee = garderLesChiffres(champ.value);
+  if (valeurNettoyee !== champ.value) {
+    champ.value = valeurNettoyee;
+  }
+}, true);
+
+// En quittant le champ : vide ou 0 devient 1.
+document.addEventListener('focusout', function (evenement) {
+  const champ = evenement.target;
+  if (!estChampEntier(champ)) return;
+
+  const quantite = parseInt(champ.value, 10);   // NaN si le champ est vide
+  const quantiteValide = quantite >= 1;          // faux pour 0 comme pour NaN
+  if (quantiteValide) return;
+
+  champ.value = '1';
+  // La page recalcule ses totaux sur l'événement `input` : on le relance avec la valeur corrigée
+  champ.dispatchEvent(new Event('input', { bubbles: true }));
+}, true);
+
 // ======================== SIDEBAR ========================
 function buildSidebar(activePage) {
   const session = requireAuth();

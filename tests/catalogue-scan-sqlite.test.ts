@@ -26,6 +26,9 @@ const SCHEMA = `
     stock_actuel   INTEGER NOT NULL DEFAULT 0,
     actif          INTEGER NOT NULL DEFAULT 1
   );
+  -- Lues par la sous-requête du dernier prix vendu (recette 002 D, 2026-10-03), vides ici
+  CREATE TABLE factures (id INTEGER PRIMARY KEY, boutique_id INTEGER, locked INTEGER, statut TEXT, issued_at TEXT);
+  CREATE TABLE lignes_document (id INTEGER PRIMARY KEY, document_type TEXT, document_id INTEGER, produit_id INTEGER, prix_unitaire_ht REAL);
 `
 
 const EAN = '3760123456789'

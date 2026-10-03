@@ -153,19 +153,31 @@ test('caisse, écran : 0.98 en quantité est refusé avant tout envoi, 1 passe',
   await page.goto('/caisse')
   await expect(page.locator('#kpi-nb-tx')).toHaveText('0', { timeout: 15_000 })
   await page.click('#btn-nouvelle-vente')
+
+  // Recette 002 A (2026-10-03) : un refus de la caisse doit se VOIR — le toast n'est pas recouvert
+  // par la fenêtre de vente (clic d'essai = Playwright vérifie qu'il reçoit le pointeur). Prouvé ici
+  // sur le panier vide : la quantité décimale ne s'écrit plus, elle n'atteint plus ce refus.
+  await page.click('#btn-submit-vente')
+  await expect(page.locator('#toast-inner')).toContainText('au moins une ligne', { timeout: 5_000 })
+  await page.locator('#toast-inner').click({ trial: true, timeout: 2_000 })
+
   await page.fill('#vente-produit-search', '3700275472119')
   const resultat = page.locator('#vente-produit-results [data-produit-id]').first()
   await expect(resultat).toBeVisible({ timeout: 10_000 })
   await resultat.click()
 
   const quantite = page.locator('#lignes-container .linha-row [data-field="quantite"]')
-  await expect(quantite).toHaveAttribute('step', '1')
+  // AVANT (2026-10-03, recette 002 A — « afficher que des entiers ») :
+  // // Le refus doit se VOIR : le toast n'est pas recouvert par la fenêtre de vente (clic d'essai =
+  // // Playwright vérifie que c'est bien lui qui reçoit le pointeur)
+  // await expect(quantite).toHaveAttribute('step', '1')
+  // await quantite.fill('0.98')
+  // await page.click('#btn-submit-vente')
+  // await expect(page.locator('#toast-inner')).toContainText('entier', { timeout: 5_000 })
+  // await page.locator('#toast-inner').click({ trial: true, timeout: 2_000 })
+  await expect(quantite).toHaveAttribute('data-entier', '')
   await quantite.fill('0.98')
-  await page.click('#btn-submit-vente')
-  await expect(page.locator('#toast-inner')).toContainText('entier', { timeout: 5_000 })
-  // Le refus doit se VOIR : le toast n'est pas recouvert par la fenêtre de vente (clic d'essai =
-  // Playwright vérifie que c'est bien lui qui reçoit le pointeur)
-  await page.locator('#toast-inner').click({ trial: true, timeout: 2_000 })
+  await expect(quantite, 'virgule et point retirés à la saisie').toHaveValue('98')
   expect(envois, 'aucune vente ne doit partir avec une quantité décimale').toEqual([])
 
   await quantite.fill('1')

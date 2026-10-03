@@ -842,13 +842,15 @@ function addAvoirLine() {
   tr.id        = 'al-row-' + lid;
   // AVANT (jusqu'au 2026-10-02), champ quantité : min="0.01" step="0.01"
   // Quantité entière ≥ 1 (recette 001 B) ; le serveur refuse le reste (400, message affiché).
+  // AVANT (2026-10-03, recette 002 A) : type="number" min="1" step="1" — « 0,98 » restait affiché.
+  // Entiers seulement à la saisie : `data-entier` (`app.js`), champ texte à pavé numérique.
   tr.innerHTML = `
     <td style="padding:4px 8px;">
       <input type="text" id="al-desc-${lid}" placeholder="Description…"
         style="width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;font:inherit;font-size:0.88rem;">
     </td>
     <td style="padding:4px 8px;">
-      <input type="number" id="al-qty-${lid}" value="1" min="1" step="1"
+      <input type="text" inputmode="numeric" pattern="[0-9]*" data-entier id="al-qty-${lid}" value="1"
         style="width:65px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateAvoirLineTotals(${lid})">
     </td>
@@ -1298,13 +1300,15 @@ function addFactureLine() {
 
   const tr = document.createElement('tr');
   tr.id    = 'fl-row-' + lid;
+  // AVANT (2026-10-03, recette 002 A) : type="number" min="1" step="1" — « 0,98 » restait affiché.
+  // Entiers seulement à la saisie : `data-entier` (`app.js`), champ texte à pavé numérique.
   tr.innerHTML = `
     <td style="padding:6px 8px;">
       <input type="text" id="fl-desc-${lid}" placeholder="Description de la prestation ou du produit…"
         style="width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font:inherit;font-size:0.88rem;">
     </td>
     <td style="padding:6px 8px;">
-      <input type="number" id="fl-qty-${lid}" value="1" min="1" step="1"
+      <input type="text" inputmode="numeric" pattern="[0-9]*" data-entier id="fl-qty-${lid}" value="1"
         style="width:70px;border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateFactureLineTotals(${lid})">
     </td>

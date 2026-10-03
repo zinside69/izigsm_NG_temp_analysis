@@ -330,7 +330,9 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     await page.fill('[data-field="designation"]', 'Vitre arrière')
     // La ligne n'expose que `designation` en `data-field` ; les trois champs numériques
     // sont, dans l'ordre du gabarit : quantité, prix unitaire HT, remise.
-    await page.locator('.linha-row input[type="number"]').nth(1).fill('50')
+    // AVANT (2026-10-03, recette 002 A — la quantité n'est plus un champ `number`, le 2e serait la
+    // remise) : await page.locator('.linha-row input[type="number"]').nth(1).fill('50')
+    await page.locator('.linha-row [data-field="prix_unitaire_ht"]').fill('50')
     await page.fill('#montant-remis', '100')
     await page.click('#btn-submit-vente')
 

@@ -30,6 +30,35 @@ export interface ResultatProduit {
   prix_vente_ht: number
   tva_taux:      number
   stock_actuel:  number
+  /**
+   * Prix HT de la vente la plus récente de ce produit (facture émise non annulée de la boutique),
+   * `null` s'il n'a jamais été vendu. L'écran le prend quand la fiche est à 0 (recette 002 D).
+   */
+  dernier_prix_vendu_ht: number | null
+}
+
+/**
+ * Sous-requête du dernier prix vendu d'un produit (recette 002 D, 2026-10-03) — seule définition,
+ * partagée par les quatre lectures de produits. Même périmètre que les favoris : factures émises
+ * (`locked = 1`) non annulées, **de la boutique de la fiche** (isolation), ligne la plus récente.
+ * @param alias  Table ou alias des produits dans la requête appelante
+ */
+function sqlDernierPrixVendu(alias: string): string {
+  // Lecture : « le prix unitaire HT de la ligne de facture la plus récente qui vend ce produit ».
+  // Les noms `ligne_vendue` / `facture_vendue` évitent toute confusion avec les tables de la
+  // requête appelante (`ld`, `f` dans les favoris).
+  return `(
+    SELECT ligne_vendue.prix_unitaire_ht
+    FROM   lignes_document AS ligne_vendue
+    JOIN   factures        AS facture_vendue ON facture_vendue.id = ligne_vendue.document_id
+    WHERE  ligne_vendue.document_type   = 'facture'               -- une ligne de facture, pas de devis
+      AND  ligne_vendue.produit_id      = ${alias}.id              -- ce produit
+      AND  facture_vendue.boutique_id   = ${alias}.boutique_id     -- de la même boutique (isolation)
+      AND  facture_vendue.locked        = 1                        -- facture émise (pas un brouillon)
+      AND  facture_vendue.statut       <> 'annulee'                -- et pas annulée
+    ORDER  BY facture_vendue.issued_at DESC, ligne_vendue.id DESC  -- la plus récente d'abord
+    LIMIT  1
+  ) AS dernier_prix_vendu_ht`
 }
 
 /** Un service (prestation) trouvé, avec ce qu'il faut pour préremplir une ligne de vente. */
@@ -109,7 +138,8 @@ export async function rechercherParCode(
   code:       string,
 ): Promise<ResultatCatalogue[]> {
   const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
-    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    -- AVANT (2026-10-02, recette 002 D — dernier prix vendu) : SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel, ${sqlDernierPrixVendu('produits')}
     FROM   produits
     WHERE  boutique_id = ? AND actif = 1
       AND  (code_barre = ? OR sku = ?)
@@ -136,7 +166,8 @@ export async function rechercherParImei(
   imei:       string,
 ): Promise<ResultatCatalogue[]> {
   const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
-    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    -- AVANT (2026-10-02, recette 002 D — dernier prix vendu) : SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel, ${sqlDernierPrixVendu('produits')}
     FROM   produits
     WHERE  boutique_id = ? AND actif = 1 AND imei = ?
     ORDER  BY nom ASC
@@ -157,12 +188,14 @@ function versResultatProduit(p: Omit<ResultatProduit, 'type'>): ResultatProduit 
     prix_vente_ht: p.prix_vente_ht,
     tva_taux:      p.tva_taux,
     stock_actuel:  p.stock_actuel,
+    dernier_prix_vendu_ht: p.dernier_prix_vendu_ht ?? null,
   }
 }
 
 async function chercherProduits(db: Database, boutiqueId: number, motif: string): Promise<ResultatProduit[]> {
   const lignes = await db.all<Omit<ResultatProduit, 'type'>>(`
-    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    -- AVANT (2026-10-02, recette 002 D — dernier prix vendu) : SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel
+    SELECT id, nom, sku, code_barre, prix_vente_ht, tva_taux, stock_actuel, ${sqlDernierPrixVendu('produits')}
     FROM   produits
     WHERE  boutique_id = ? AND actif = 1
       AND  (nom LIKE ? ESCAPE '\\' OR sku LIKE ? ESCAPE '\\' OR code_barre LIKE ? ESCAPE '\\')
@@ -180,6 +213,7 @@ async function chercherProduits(db: Database, boutiqueId: number, motif: string)
     prix_vente_ht: p.prix_vente_ht,
     tva_taux:      p.tva_taux,
     stock_actuel:  p.stock_actuel,
+    dernier_prix_vendu_ht: p.dernier_prix_vendu_ht ?? null,
   }))
 }
 
@@ -286,7 +320,8 @@ export async function lireFavorisVente(
 
   const [produits, services] = await Promise.all([
     db.all<Omit<ResultatProduit, 'type'> & { vendus: number }>(`
-      SELECT p.id, p.nom, p.sku, p.code_barre, p.prix_vente_ht, p.tva_taux, p.stock_actuel,
+      -- AVANT (2026-10-02, recette 002 D) : SELECT p.id, p.nom, p.sku, p.code_barre, p.prix_vente_ht, p.tva_taux, p.stock_actuel,
+      SELECT p.id, p.nom, p.sku, p.code_barre, p.prix_vente_ht, p.tva_taux, p.stock_actuel, ${sqlDernierPrixVendu('p')},
              SUM(ld.quantite) AS vendus
       FROM   lignes_document ld
       JOIN   factures f ON f.id = ld.document_id
@@ -310,6 +345,7 @@ export async function lireFavorisVente(
     ...(produits ?? []).map(p => ({ vendus: p.vendus, r: {
       type: 'produit' as const, id: p.id, nom: p.nom, sku: p.sku, code_barre: p.code_barre,
       prix_vente_ht: p.prix_vente_ht, tva_taux: p.tva_taux, stock_actuel: p.stock_actuel,
+      dernier_prix_vendu_ht: p.dernier_prix_vendu_ht ?? null,
     } })),
     ...(services ?? []).map(s => ({ vendus: s.vendus, r: {
       type: 'service' as const, id: s.id, nom: s.nom, reference: s.reference,
