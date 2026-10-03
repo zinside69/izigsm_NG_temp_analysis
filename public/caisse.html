@@ -16,7 +16,13 @@
        Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
        bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
   <link rel="stylesheet" href="/static/css/main.css">
-  <style>
+  <!-- AVANT (jusqu'au 2026-10-03) : <style>
+       Les règles ci-dessous sont écrites en `@apply` (syntaxe Tailwind). Dans un <style> ordinaire, le
+       navigateur les ignorait toutes, en silence, depuis la création de la page (juin) : journal du jour
+       sans colonnes, onglets, cartes et pastilles sans style. Le Tailwind du CDN (chargé plus haut) ne
+       traite `@apply` que dans une balise `type="text/tailwindcss"`. Prouvé par
+       tests/e2e/caisse-styles-journal.spec.ts (« display: block » au lieu de « grid »). -->
+  <style type="text/tailwindcss">
     /* ── Caisse POS styles ── */
     .ligne-row:hover { background: #f0f9ff; }
     /* Prix d'une ligne venue du catalogue à 0 € : à saisir avant de valider */
