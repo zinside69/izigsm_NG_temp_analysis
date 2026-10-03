@@ -1,4 +1,38 @@
-# iziGSM — État courant (MàJ : 2026-10-02, checkpoint 141 — recette 001 codée : quantité entière, caisse « Barre unique + favoris », fenêtre Mobilax)
+# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 142 — recette 002 en production : entiers, mixte ventilé, rendu conservé, dernier prix vendu)
+
+## Checkpoint 142 — Recette 002 codée, déployée, vérifiée en base (2026-10-03)
+
+**Production : `izigsm-v3.24`, dernière migration distante `0061` (relue, 12:25:31 UTC). Dépôt et
+production alignés.** Vitest 1 433 + 2 permanents, tsc 32.
+
+- **Recette à l'écran de la v3.23** (manager `telnet@bbox.fr`) : la quantité `0,98` restait saisissable
+  (refus seulement au clic « Valider ») ; « Mixte » sans ventilation ; rendu non conservé ; favoris et
+  pièces importées à 0,00 €. Décisions de l'exploitant → ticket `.scratch/recette-2026-10-03/issues/002-…`
+  (`8617e4e`).
+- **A** (`1a98170`) : champs quantité (caisse, devis, avoirs, factures) en texte à pavé numérique
+  `data-entier` ; `app.js` ne garde que les chiffres, vide ou 0 → 1 en quittant le champ.
+- **D** (`1a98170`) : `dernier_prix_vendu_ht` sur les résultats produit (recherche, code, IMEI,
+  favoris), une seule sous-requête `sqlDernierPrixVendu()` ; la caisse le prend quand la fiche est à 0
+  (« (dern.) »).
+- **B** (`63a5ec7`) : mixte = deux parts dans deux modes au choix, seconde calculée à l'écran ;
+  `ventilerPaiements()` (pure) contrôle **avant le numéro** ; une ligne `paiements` par part.
+- **C** (`63a5ec7`, migration **`0061`**) : `paiements.montant_remis` / `rendu_monnaie` sur la part en
+  espèces, imprimés sous le règlement de la facture.
+- **Défaut trouvé en codant B** : total affiché arrondi autrement que le serveur (3 × 0,03 € HT : 0,11
+  contre 0,12 €) — `calculerTotauxCommeLeServeur()`.
+- **Déploiement** : `0061` à distance **avant** le code (Time Travel d'avant
+  `000001dc-00000000-000050f9-4e497c4c100779cc94bbbcc477ee9d70`, `journal-migrations.md`), puis
+  `npm run deploy` (exploitant) ; aperçu `e1c51ca1` et apex conformes (assets v3.24 en JavaScript avec
+  le code du lot, `#mixte-zone`, routes 401). ⚠ L'apex a été relu **avant** l'aperçu (URL non fournie),
+  le script de déploiement l'ayant déjà interrogé ; rien de figé.
+- **Preuve en base** : vente de test `FAC-2026-00007` (boutique 2) — espèces 6,80 (remis 10,00, rendu
+  3,20) + CB 100,00 = 106,80 TTC, quantité 1, facture verrouillée `payee`, journal NF525 chaîné.
+- **Règle de code** (demande de l'exploitant) : code lisible par un humain, jamais compact — mémoire
+  `feedback_code_lisible_humain.md` (3 index) et `~/.claude/CLAUDE.md` global.
+
+**Prochaine action** : recette restante — dernier prix vu à l'écran sur #804 (scan `3000000388952` →
+220 € HT « (dern.) ») ; « Ajouter 1 au stock » par la fenêtre Mobilax (préprod à vérifier) ; clôture
+du soir. Puis : clôture non atomique (`db.batch()`), lot 2, ticket 15.
 
 ## Checkpoint 141 — Recette 001 codée (B, A′, C), dépôt EN AVANCE sur la production (2026-10-02, soir)
 

@@ -854,6 +854,24 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - Blocs HTML déplacés ou retirés gardés dans un **`<template data-avant="…">`** (inerte, hors du DOM
   interrogé) : un commentaire HTML ne peut pas contenir les commentaires qu'ils portent.
 
+## Paiements en caisse, quantités et prix proposés (depuis 2026-10-03, recette 002)
+
+- **`ventilerPaiements()` (`caisseService.ts`, pure) décide des lignes `paiements` d'une vente**, appelée
+  par `createVente()` **avant `nextNumero()`** : un refus ne consomme aucun numéro. Mixte = **deux parts**
+  exactement, modes simples différents (`especes`, `cb`, `cheque`, `virement`), somme = total **en
+  centimes**. **Le mode `mixte` n'est plus écrit en base** : une ligne `paiements` par part. ⊥ revenir à
+  une ligne unique « mixte » (l'export comptable et la clôture perdraient la ventilation).
+- **`paiements.montant_remis` / `rendu_monnaie`** (`0061`) : sur la part en **espèces** seulement ;
+  `montant` reste la somme due, jamais le montant remis. Remis < part en espèces → refus.
+- **L'écran calcule le total comme le serveur** (`calculerTotauxCommeLeServeur()` ⇔ `calculLignes()` :
+  arrondi par ligne). ⊥ un second calcul de total dans la caisse — un centime d'écart fait refuser un mixte.
+- **Champs quantité = `data-entier`** (texte à pavé numérique, `app.js` : chiffres seuls, vide ou 0 → 1).
+  ⊥ `type="number"` pour une quantité : sa valeur devient vide dès qu'on tape une virgule.
+- **Prix proposé d'un produit** : fiche si > 0, sinon `dernier_prix_vendu_ht` (une seule sous-requête,
+  `sqlDernierPrixVendu()`, factures émises non annulées de la boutique), sinon à saisir (`prixHtProduit()`).
+- **Code lisible par un humain** (règle de l'exploitant, tout projet) : noms parlants, conditions nommées,
+  pas de regex compacte ni de double négation, alias SQL parlants et un commentaire par condition.
+
 ## Douchette, IMEI et appareils vendus (depuis 2026-09-30, tickets 04 et 07 `vente-lit-catalogue`)
 
 - **Un scan se route côté serveur** : `routerScan()` (`src/lib/scan.ts`, pure) — 13 chiffres →
@@ -1140,6 +1158,13 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-03 (checkpoint 142) : DÉPLOYÉ — production en `izigsm-v3.24`, dernière migration
+distante `0061` (relue, 12:25:31 UTC).** Recette 002 : entiers à la saisie, dernier prix vendu, mixte
+ventilé en deux parts, montant remis et rendu conservés. `0061` appliquée **avant** le code (point Time
+Travel dans `journal-migrations.md`) ; aperçu `e1c51ca1` et apex relus (assets v3.24 en JavaScript avec le
+code du lot, `#mixte-zone`, routes sans jeton → 401). Preuve en base : `FAC-2026-00007` (espèces 6,80
+remis 10,00 rendu 3,20 + CB 100,00). **Dépôt et production alignés.**
 
 **État au 2026-10-02 (après le checkpoint 141) : DÉPLOYÉ — production en `izigsm-v3.23`, dernière
 migration distante `0060` (aucune nouvelle).** `npm run deploy` lancé par l'exploitant ; relu sur l'apex

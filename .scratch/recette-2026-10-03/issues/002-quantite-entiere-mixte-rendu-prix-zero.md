@@ -60,3 +60,14 @@ sinon dernier prix). Tuile marquée « (dern.) ». La fiche produit n'est **pas*
 - C : rendu sur une vente mixte espèces + CB ; remis < part espèces refusé ; réimpression du ticket.
 - D : produit vendu à deux prix → le plus récent ; produit d'une autre boutique jamais lu ; facture
   annulée ignorée.
+
+## Livraison (2026-10-03, checkpoint 142) — EN PRODUCTION (`izigsm-v3.24`, `0061`)
+
+- **A + D** `1a98170` — `data-entier` (`app.js`) ; `sqlDernierPrixVendu()` + `prixHtProduit()`.
+  E2E `caisse-entiers-dernier-prix.spec.ts`, vitest `catalogue-dernier-prix-sqlite.test.ts`.
+- **B + C** `63a5ec7` — `ventilerPaiements()` avant `nextNumero()`, une ligne `paiements` par part,
+  `0061` ; `calculerTotauxCommeLeServeur()` (défaut d'arrondi trouvé). E2E `caisse-mixte-rendu.spec.ts`,
+  vitest `caisse-ventilation-paiements.test.ts`, `vente-paiements-sqlite.test.ts`.
+- Déploiement : `0061` (12:25:31 UTC) puis code ; aperçu `e1c51ca1` et apex relus. Preuve en base :
+  `FAC-2026-00007` — espèces 6,80 (remis 10,00, rendu 3,20) + CB 100,00 = 106,80, journal chaîné.
+- Reste humain avant `done` : #804 au dernier prix vu à l'écran.

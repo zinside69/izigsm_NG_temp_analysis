@@ -1,5 +1,23 @@
 # iziGSM — Décisions
 
+## 2026-10-03 — Caisse : entiers à la saisie, mixte en deux parts, rendu conservé, dernier prix vendu
+
+**Décisions de l'exploitant** (recette 002, après essai de la v3.23 à l'écran) :
+- **Quantité** : « plus simple : afficher que des entiers » — le champ n'accepte que des chiffres
+  (pas de refus après coup) ; vide ou 0 → 1.
+- **Mixte** : « combinaison entre toutes les possibilités de paiement », **deux parts au maximum**,
+  modes différents ; la seconde part se calcule (total − première).
+- **Montant remis et rendu** : conservés sur la vente (part en espèces) et imprimés.
+- **Fiche à 0,00 €** : le dernier prix HT vendu de ce produit dans la boutique ; sans vente passée,
+  prix à saisir. La fiche n'est pas modifiée.
+- **Code** : lisible par un humain, jamais optimisé (« on risque de ne plus savoir ce qui a été
+  codé ») — règle étendue à tout projet (`~/.claude/CLAUDE.md`).
+
+**Choix de réalisation** : la ventilation est une fonction pure (`ventilerPaiements()`), appelée par
+`createVente()` **avant** `nextNumero()` ; le mode `mixte` n'est plus écrit en base, chaque part a sa
+ligne `paiements` (export comptable et clôture voient les vrais modes) ; un montant remis inférieur à
+la part en espèces est refusé (il était ignoré). L'écran calcule le total exactement comme le serveur.
+
 ## 2026-10-02 — Quantité de ligne : entier ≥ 1, partout ; caisse « Barre unique + favoris »
 
 **Décisions de l'exploitant** (recette 001) : une quantité est un **entier ≥ 1** dans la caisse, les

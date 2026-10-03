@@ -1,4 +1,21 @@
-# Recovery Prompt — iziGSM — 2026-10-02 (checkpoint 141 — recette 001 codée, v3.23 à pousser et déployer)
+# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 142 — recette 002 en production, v3.24 / 0061)
+
+## ➡ Première action (checkpoint 142)
+
+**Production `izigsm-v3.24`, migration `0061`, dépôt aligné.** Recette 002 (quantité en entiers,
+dernier prix vendu, mixte ventilé en deux parts, montant remis et rendu conservés) déployée et prouvée
+en base par la vente `FAC-2026-00007`. Reste, avec `telnet@bbox.fr` (Ctrl+F5) :
+1. Scan de `3000000388952` (#804) en caisse → 220 € HT marqué « (dern.) ».
+2. Mobilax : une recherche répond ? puis « Ajouter 1 au stock » sur #804 **par la fenêtre Mobilax** →
+   relire le mouvement « Import fournisseur — déjà en stock » et `ajouts_stock_import`.
+3. Clôture du soir → relire `clotures_journalieres` (aucune encore en production).
+Ensuite (caisse / NF525, ici) : clôture atomique (`db.batch()`) ; lot 2 ; ticket 15.
+
+⚠ **Code lisible par un humain** (règle de l'exploitant, 2026-10-03) : noms parlants, conditions
+nommées, pas de regex compacte ni de double négation, un commentaire par condition SQL.
+⚠ Poste : `Get-Process workerd | Stop-Process -Force` avant chaque relance de wrangler.
+
+## Checkpoint 141 (historique)
 
 ## ➡ Première action (fin de session du 2026-10-02 au soir — remplace la liste du checkpoint 141)
 

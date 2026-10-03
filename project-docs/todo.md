@@ -1,5 +1,16 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 2026-10-03 (checkpoint 142) — Recette 002 en production, recette à finir
+
+- [x] **A** quantité en entiers à la saisie (`1a98170`)
+- [x] **D** dernier prix vendu pour une fiche à 0 € (`1a98170`)
+- [x] **B** mixte ventilé en deux parts (`63a5ec7`) — règle aussi le paiement `mixte` non ventilé
+- [x] **C** montant remis et rendu conservés (`63a5ec7`, `0061`)
+- [x] Déployé : `0061` à distance puis v3.24 (aperçu `e1c51ca1` et apex relus) ; vente de test en base
+- [ ] Recette : #804 au dernier prix à l'écran ; « Ajouter 1 au stock » par la fenêtre Mobilax ; clôture du soir
+- [ ] Caisse / NF525 (ici) : clôture non atomique → `db.batch()` ; `CB`/`cb` historique (l'écriture
+      est désormais en minuscules par `ventilerPaiements()` / validation de route)
+
 ## 🔴 2026-10-02 (soir, checkpoint 141) — Recette 001 codée : pousser, déployer, recetter
 
 - [x] **B** quantité entière ≥ 1 partout (`2cd995f`) — dont `POST /avoirs`, qui n'avait aucun contrôle
