@@ -6,6 +6,19 @@
 en TTC** — le prix affiché en boutique, celui que paie le client — alors que la caisse fait saisir le
 **P.U. HT** (colonne « P.U. HT », ligne libre à 0 en HT). Il doit donc diviser de tête par 1,2.
 
+**Décision de l'exploitant (2026-10-03, soir)** : « mettre le prix en TTC dans **tous les endroits où
+cela est nécessaire** : ticket, devis, SAV hors garantie, stock, reconditionnement, QualiRépar, etc. »
+→ chantier transversal, à cadrer par `/mattpocock-skills:grill-with-docs` puis `/to-spec` et
+`/to-tickets` (tapés par l'exploitant).
+
+Écrans qui saisissent ou affichent un prix HT (recensement du 2026-10-03, occurrences « HT ») :
+tickets (`tickets.js` 66, `tickets.html` 28), caisse (`caisse.js` 63), factures (`factures.js` 57),
+devis (`devis.js` 40, `devis-public.html`), catalogue services (`services.html` 36, `services.js`),
+stock (`stock.js` 21, `stock.html`), fournisseurs / bons de commande (`fournisseurs.js` 21),
+reconditionnement (`reconditionnement.js`, `.html`), rachats (`rachats.js`, `.html`), QualiRépar
+(`qualirepar.html`), SAV (`sav.html`), statistiques et tableau de bord (affichage), RDV public.
+Le **prix d'achat fournisseur** (Mobilax, bons de commande) est un prix HT par nature : à trancher.
+
 - [ ] Cadrer avec l'exploitant avant de coder (caisse / NF525, ici) :
   - saisie en TTC partout (caisse, ligne libre) ou au choix HT / TTC ;
   - le HT stocké reste calculé (`prix_unitaire_ht` = TTC ÷ (1 + TVA)) : **règle d'arrondi** à fixer
