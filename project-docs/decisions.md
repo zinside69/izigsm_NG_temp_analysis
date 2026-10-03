@@ -1,5 +1,16 @@
 # iziGSM — Décisions
 
+## 2026-10-03 — Écritures « tout ou rien » : `batch()` sur le port `Database`
+
+**Décision de l'exploitant** (choix parmi trois : `batch()` sur le port, repasser la clôture sur D1
+brut, ou inverser l'ordre des écritures) : le port gagne `batch(requetes)` — une liste de requêtes
+jouées en **une transaction D1**, qui rend pour chacune les lignes de son `RETURNING`.
+
+**Pourquoi** : la clôture NF525 doit marquer le journal et s'enregistrer ensemble ; repasser sur D1
+brut aurait sorti un service de plus de l'architecture Ports & Adapters, et inverser l'ordre n'aurait
+pas rendu l'opération atomique. `batch()` est réutilisable (la vente POS, encore sur D1 brut, en
+relèvera le jour où elle sera portée). Toute implémentation du port doit désormais l'avoir.
+
 ## 2026-10-03 — Caisse : entiers à la saisie, mixte en deux parts, rendu conservé, dernier prix vendu
 
 **Décisions de l'exploitant** (recette 002, après essai de la v3.23 à l'écran) :

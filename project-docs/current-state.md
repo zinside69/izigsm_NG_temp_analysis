@@ -1,4 +1,25 @@
-# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 142 — recette 002 en production : entiers, mixte ventilé, rendu conservé, dernier prix vendu)
+# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 143 — clôture NF525 « tout ou rien » en production)
+
+## Checkpoint 143 — Clôture de caisse atomique, `batch()` sur le port (2026-10-03, après-midi)
+
+**Production : `izigsm-v3.24` (inchangée côté écran), dernière migration `0061`, clôture atomique
+déployée. Dépôt et production alignés** (`d712a74`). Vitest 1 434 + 2 permanents, tsc 32.
+
+- **Défaut corrigé** (ouvert le 2026-10-02) : `cloturerJournee()` marquait le journal puis
+  enregistrait la clôture ; un échec du second laissait les ventes « clôturées » sans clôture, journée
+  bloquée. **Décision de l'exploitant** : `batch()` ajouté au port `Database` (`RequeteDeLot`,
+  `D1DatabaseAdapter` → `db.batch()`), les deux écritures partent en un lot.
+- Preuves : `tests/cloture-atomique-sqlite.test.ts` vu rouge (déclencheur qui fait échouer l'INSERT :
+  la vente restait marquée), vert ensuite ; E2E `roles-manager.spec.ts` (clôture d'un manager sur la
+  vraie D1 locale) vert. Doublures complétées : `d1Sqlite` rend les lignes RETURNING d'un lot,
+  `createMockDatabase.batch`, sept adaptateurs locaux de test avec un `batch()` qui refuse.
+- Déploiement (`npm run deploy`, exploitant) : aperçu `503b933e` **puis** apex — `sw.js` v3.24,
+  `caisse.d6d5fd05.js` en JavaScript, `/api/health` 200, clôture et vente sans jeton → 401.
+- ⚠ La clôture atomique n'est **pas encore exercée en production** (aucune clôture enregistrée) :
+  preuve attendue à la clôture du soir.
+
+**Prochaine action** : relire en base la clôture du soir (`clotures_journalieres` + `est_cloture`) ;
+#804 au dernier prix à l'écran ; « Ajouter 1 au stock » par la fenêtre Mobilax. Puis lot 2, ticket 15.
 
 ## Checkpoint 142 — Recette 002 codée, déployée, vérifiée en base (2026-10-03)
 

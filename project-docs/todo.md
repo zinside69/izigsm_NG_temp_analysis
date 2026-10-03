@@ -8,6 +8,8 @@
 - [x] **C** montant remis et rendu conservés (`63a5ec7`, `0061`)
 - [x] Déployé : `0061` à distance puis v3.24 (aperçu `e1c51ca1` et apex relus) ; vente de test en base
 - [ ] Recette : #804 au dernier prix à l'écran ; « Ajouter 1 au stock » par la fenêtre Mobilax ; clôture du soir
+- [x] Clôture non atomique → `batch()` sur le port (`d712a74`, déployé le 2026-10-03) — preuve en
+      production attendue à la clôture du soir
 - [ ] Caisse / NF525 (ici) : clôture non atomique → `db.batch()` ; `CB`/`cb` historique (l'écriture
       est désormais en minuscules par `ventilerPaiements()` / validation de route)
 

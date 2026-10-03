@@ -1000,6 +1000,14 @@ variante (`btn-primary`…) + taille (`btn-sm`).
 
 ## Port `Database` — portabilité driver uniquement, pas dialecte SQL
 
+**`batch()` (depuis le 2026-10-03, décision de l'exploitant)** : le port joue une liste de requêtes
+en **une transaction** (`D1DatabaseAdapter` → `db.batch()`) et rend, pour chacune, les lignes de son
+`RETURNING`. Toute écriture qui doit réussir ou échouer avec une autre passe par lui — premier usage :
+`cloturerJournee()` (marquage du journal + clôture). **Toute implémentation du port doit l'avoir** :
+un adaptateur de test qui ne s'en sert pas le déclare par un `batch()` qui lève une erreur, jamais
+un faux succès silencieux. Le « tout ou rien » se prouve contre un vrai SQLite
+(`tests/cloture-atomique-sqlite.test.ts`), la doublure `createMockDatabase` ne simule aucune transaction.
+
 Le port `Database` (SQL brut, `all/get/run`) abstrait le driver de connexion (D1 →
 Postgres à terme) mais **pas le dialecte SQL**. Le SQL existant contient des
 constructions SQLite-only (`julianday()`, `datetime('now', '-N days')`, `||`,
@@ -1158,6 +1166,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-03 (checkpoint 143) : DÉPLOYÉ — clôture NF525 « tout ou rien » (`d712a74`), sans
+migration ni écran** (`izigsm-v3.24` / `0061` inchangés). Aperçu `503b933e` **puis** apex relus :
+`sw.js` v3.24, `caisse.d6d5fd05.js` en JavaScript, `/api/health` 200, clôture et vente sans jeton → 401.
+Preuve fonctionnelle attendue : la première clôture réelle (relire `clotures_journalieres` et
+`est_cloture`). **Dépôt et production alignés.**
 
 **État au 2026-10-03 (checkpoint 142) : DÉPLOYÉ — production en `izigsm-v3.24`, dernière migration
 distante `0061` (relue, 12:25:31 UTC).** Recette 002 : entiers à la saisie, dernier prix vendu, mixte

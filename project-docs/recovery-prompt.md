@@ -1,6 +1,14 @@
-# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 142 — recette 002 en production, v3.24 / 0061)
+# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 143 — clôture NF525 atomique en production)
 
-## ➡ Première action (checkpoint 142)
+## ➡ Première action (checkpoint 143 — complète la liste du 142 ci-dessous)
+
+**Production `izigsm-v3.24` / `0061` + clôture « tout ou rien » (`batch()` sur le port `Database`,
+`d712a74`), dépôt aligné.** Avant toute chose : relire en base la **clôture du soir** si elle a eu
+lieu — une ligne `clotures_journalieres` pour la boutique, et toutes ses ventes du jour à
+`est_cloture = 1` (aucune clôture n'existait encore en production au 2026-10-03 après-midi).
+Ensuite la liste du 142 (#804, Mobilax), puis lot 2 et ticket 15.
+
+## Checkpoint 142 (historique — reste valable)
 
 **Production `izigsm-v3.24`, migration `0061`, dépôt aligné.** Recette 002 (quantité en entiers,
 dernier prix vendu, mixte ventilé en deux parts, montant remis et rendu conservés) déployée et prouvée
