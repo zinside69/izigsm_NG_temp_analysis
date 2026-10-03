@@ -936,34 +936,74 @@ export async function cloturerJournee(
   const donneesHashCloture = `cloture|${targetDate}|${transactions.length}|${Math.round(totaux.total_ttc * 100)}|${tousLesHash}|${hashPrecedentCloture}`
   const hashCloture = await sha256(donneesHashCloture)
 
-  // Marquer les transactions comme clôturées
-  await db.run(`
-    UPDATE journal_nf525
-    SET    est_cloture = 1, periode_cloture = ?
-    WHERE  boutique_id = ?
-      AND  DATE(date_transaction) = ?
-      AND  est_cloture = 0
-  `, [targetDate, boutiqueId, targetDate])
+  // AVANT (2026-10-03 — deux écritures séparées : un échec de la seconde laissait les ventes
+  // « clôturées » sans clôture, et la journée ne pouvait plus jamais être clôturée) :
+  //   // Marquer les transactions comme clôturées
+  //   await db.run(`
+  //     UPDATE journal_nf525
+  //     SET    est_cloture = 1, periode_cloture = ?
+  //     WHERE  boutique_id = ?
+  //       AND  DATE(date_transaction) = ?
+  //       AND  est_cloture = 0
+  //   `, [targetDate, boutiqueId, targetDate])
+  //
+  //   // Insérer la clôture
+  //   const cloture = await db.get<ClotureSummary>(`
+  //     INSERT INTO clotures_journalieres
+  //       (boutique_id, date_cloture, nb_transactions,
+  //        total_ht, total_tva, total_ttc,
+  //        hash_cloture, hash_precedent, user_id)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //     RETURNING *
+  //   `, [
+  //     boutiqueId,
+  //     targetDate,
+  //     transactions.length,
+  //     totaux.total_ht,
+  //     totaux.total_tva,
+  //     totaux.total_ttc,
+  //     hashCloture,
+  //     hashPrecedentCloture,
+  //     userId
+  //   ])
+  //
+  // Désormais les deux écritures partent dans UN SEUL lot `batch()` (transaction D1) : soit le
+  // marquage du journal ET la clôture sont enregistrés, soit aucun des deux (décision du 2026-10-03).
+  const marquageDuJournal = {
+    sql: `
+      UPDATE journal_nf525
+      SET    est_cloture = 1, periode_cloture = ?
+      WHERE  boutique_id = ?
+        AND  DATE(date_transaction) = ?
+        AND  est_cloture = 0`,
+    params: [targetDate, boutiqueId, targetDate],
+  }
+  const enregistrementDeLaCloture = {
+    sql: `
+      INSERT INTO clotures_journalieres
+        (boutique_id, date_cloture, nb_transactions,
+         total_ht, total_tva, total_ttc,
+         hash_cloture, hash_precedent, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING *`,
+    params: [
+      boutiqueId,
+      targetDate,
+      transactions.length,
+      totaux.total_ht,
+      totaux.total_tva,
+      totaux.total_ttc,
+      hashCloture,
+      hashPrecedentCloture,
+      userId,
+    ],
+  }
 
-  // Insérer la clôture
-  const cloture = await db.get<ClotureSummary>(`
-    INSERT INTO clotures_journalieres
-      (boutique_id, date_cloture, nb_transactions,
-       total_ht, total_tva, total_ttc,
-       hash_cloture, hash_precedent, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING *
-  `, [
-    boutiqueId,
-    targetDate,
-    transactions.length,
-    totaux.total_ht,
-    totaux.total_tva,
-    totaux.total_ttc,
-    hashCloture,
-    hashPrecedentCloture,
-    userId
-  ])
+  const lignesRenvoyees = await db.batch([marquageDuJournal, enregistrementDeLaCloture])
+
+  // La 2e requête du lot (l'INSERT … RETURNING) rend la ligne de clôture créée
+  const lignesDeLaCloture = lignesRenvoyees[1] ?? []
+  const cloture = lignesDeLaCloture[0] as ClotureSummary | undefined
 
   if (!cloture) throw new Error('Échec enregistrement clôture NF525.')
   return cloture

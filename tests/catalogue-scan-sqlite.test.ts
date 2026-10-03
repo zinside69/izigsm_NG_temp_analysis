@@ -41,6 +41,8 @@ function portSur(base: any): Database {
   return {
     async all<T>(sql: string, params: unknown[] = []) { return base.prepare(sql).all(...params) as T[] },
     async get<T>(sql: string, params: unknown[] = []) { return (base.prepare(sql).get(...params) ?? null) as T | null },
+    // Port enrichi de batch() le 2026-10-03 (clôture NF525) : ce test ne l'utilise pas
+    async batch(): Promise<unknown[][]> { throw new Error('batch() non utilisé par ce test') },
     async run(sql: string, params: unknown[] = []) {
       const r = base.prepare(sql).run(...params)
       return { id: Number(r.lastInsertRowid), changes: Number(r.changes) }

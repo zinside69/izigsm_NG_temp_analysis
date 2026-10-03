@@ -1,5 +1,14 @@
 # iziGSM — Bugs connus
 
+## ✅ (mise à jour) Clôture NF525 non atomique — CORRIGÉ le 2026-10-03, non déployé
+
+Le « Reste ouvert » de l'entrée 🔴 du 2026-10-02 (`UPDATE` du journal avant l'`INSERT` de la
+clôture) est corrigé : décision de l'exploitant, **`batch()` ajouté au port `Database`**
+(`D1DatabaseAdapter` → `db.batch()`, une transaction D1) ; `cloturerJournee()` envoie le marquage et
+l'enregistrement dans un seul lot. `tests/cloture-atomique-sqlite.test.ts` vu rouge (un déclencheur
+fait échouer l'INSERT : la vente restait marquée), vert ensuite, et un nouvel essai réussit. E2E
+`roles-manager.spec.ts` (clôture par un manager, vraie D1 locale) vert. Aucune migration.
+
 ## ✅ 🟠 Caisse : total affiché ≠ total facturé, à un centime près (trouvé le 2026-10-03, CORRIGÉ le même jour, non déployé)
 
 **Défaut** : l'écran de vente additionnait les montants exacts et n'arrondissait qu'à la fin ; le

@@ -90,6 +90,26 @@ export function createMockDatabase() {
       }
       return { id: null, changes: 1 }
     },
+
+    /**
+     * Lot `batch()` (ajouté au port le 2026-10-03) : chaque requête est consignée comme un appel,
+     * et rend la réponse configurée pour son SQL (`__setResponse` / `__setResponseFn`) dans une
+     * liste d'une ligne — ou une liste vide si rien n'est configuré. Aucune transaction simulée :
+     * le « tout ou rien » se prouve contre un vrai SQLite (`cloture-atomique-sqlite.test.ts`).
+     */
+    async batch(requetes: { sql: string; params?: unknown[] }[]): Promise<unknown[][]> {
+      const lignesParRequete: unknown[][] = []
+      for (const requete of requetes) {
+        const params = requete.params ?? []
+        const normalSql = normalizeSQL(requete.sql)
+        calls.push({ sql: normalSql, params: [...params] })
+
+        const fn = responseFns.get(normalSql)
+        const reponse = fn ? fn(params) : singleResponses.get(normalSql)
+        lignesParRequete.push(reponse ? [reponse] : [])
+      }
+      return lignesParRequete
+    },
   }
 
   return Object.assign(db, {

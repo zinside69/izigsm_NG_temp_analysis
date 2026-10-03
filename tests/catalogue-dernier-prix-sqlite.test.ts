@@ -21,6 +21,8 @@ function portSur(sqlite: any): Database {
   return {
     async all<T>(sql: string, params: unknown[] = []) { return sqlite.prepare(sql).all(...params) as T[] },
     async get<T>(sql: string, params: unknown[] = []) { return (sqlite.prepare(sql).get(...params) ?? null) as T | null },
+    // Port enrichi de batch() le 2026-10-03 (clôture NF525) : ce test ne l'utilise pas
+    async batch(): Promise<unknown[][]> { throw new Error('batch() non utilisé par ce test') },
     async run(sql: string, params: unknown[] = []) {
       const r = sqlite.prepare(sql).run(...params)
       return { id: Number(r.lastInsertRowid), changes: Number(r.changes) }

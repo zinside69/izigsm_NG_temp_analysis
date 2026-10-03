@@ -63,6 +63,15 @@ function versD1(sqlite: any): D1Database {
         return { results: sqlite.prepare(sql).all(...params.map(normaliser)) as T[], success: true, meta: {} }
       },
       async run() {
+        // AVANT (2026-10-03 — un lot `batch()` perdait les lignes d'un INSERT … RETURNING) :
+        //   const r = sqlite.prepare(sql).run(...params.map(normaliser))
+        //   return { success: true, results: [], meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } }
+        // Comme D1 : une instruction avec RETURNING rend ses lignes dans `results`.
+        const renvoieDesLignes = /\bRETURNING\b/i.test(sql)
+        if (renvoieDesLignes) {
+          const lignes = sqlite.prepare(sql).all(...params.map(normaliser))
+          return { success: true, results: lignes, meta: { last_row_id: null, changes: lignes.length } }
+        }
         const r = sqlite.prepare(sql).run(...params.map(normaliser))
         return { success: true, results: [], meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } }
       },

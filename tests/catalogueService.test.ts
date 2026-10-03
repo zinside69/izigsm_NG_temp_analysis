@@ -24,6 +24,8 @@ function fausseBase(tables: Tables) {
       return (table ? tables[table] ?? [] : []) as T[]
     },
     async get() { return null },
+    // Port enrichi de batch() le 2026-10-03 (clôture NF525) : ce test ne l'utilise pas
+    async batch(): Promise<unknown[][]> { throw new Error('batch() non utilisé par ce test') },
     async run() { return { id: null, changes: 0 } },
   }
   return { db, appels }
