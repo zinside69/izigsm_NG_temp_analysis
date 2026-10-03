@@ -29,10 +29,14 @@
     [data-prix-manquant="1"] { border-color: #dc2626 !important; box-shadow: 0 0 0 2px #fecaca; }
     .btn-mode { transition: all .15s; }
     .btn-mode.active { @apply ring-2 ring-blue-500 bg-blue-50; }
+    /* AVANT (jusqu'au 2026-10-03) — règles neutralisées, décision de l'exploitant : `.kpi-card` et
+       `.tab-btn` sont déjà définies par le socle `main.css` ; les activer ici (balise text/tailwindcss)
+       aurait remplacé le style commun à toutes les pages (onglets soulignés, cartes du socle) :
     .kpi-card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1; }
     .tab-btn { @apply px-4 py-2 rounded-lg text-sm font-medium transition-colors; }
     .tab-btn.active { @apply bg-blue-600 text-white; }
     .tab-btn:not(.active) { @apply bg-gray-100 text-gray-600 hover:bg-gray-200; }
+    */
     .journal-row { @apply grid grid-cols-6 gap-2 px-3 py-2 border-b border-gray-50 text-sm hover:bg-gray-50; }
     #rendu-monnaie-zone { transition: all .2s; }
     .badge-type { @apply text-xs font-semibold px-2 py-0.5 rounded-full; }

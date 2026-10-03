@@ -16,7 +16,11 @@
        Sans lui, la barre est injectée sans style — un bloc pleine largeur de liens
        bruts au-dessus du contenu (constaté en production le 2026-08-01). -->
   <link rel="stylesheet" href="/static/css/main.css">
-  <style>
+  <!-- AVANT (jusqu'au 2026-10-03) : <style>
+       `.badge` est écrite en `@apply` (syntaxe Tailwind) : dans un <style> ordinaire, le navigateur
+       l'ignorait — pastilles de statut sans forme. Le Tailwind du CDN ne traite `@apply` que dans
+       `type="text/tailwindcss"`. Prouvé par tests/e2e/styles-tailwind-pages.spec.ts. -->
+  <style type="text/tailwindcss">
     /* ── Badges statut ────────────────────────────── */
     .badge { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium; }
     .badge-active    { background:#dcfce7; color:#166534; }
@@ -38,9 +42,12 @@
     .modal-box      { background:#fff; border-radius:12px; padding:28px; width:min(560px,95vw); max-height:90vh; overflow-y:auto; position:relative; z-index:50; }
 
     /* ── Tabs ─────────────────────────────────────── */
+    /* AVANT (jusqu'au 2026-10-03) — règles neutralisées, décision de l'exploitant : `.tab-btn` est déjà
+       définie par le socle `main.css` (violet du thème) ; l'activer ici l'aurait remplacée par l'indigo :
     .tab-btn { @apply px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors cursor-pointer; }
     .tab-btn.active { @apply border-indigo-600 text-indigo-600 bg-indigo-50; }
     .tab-btn:not(.active) { @apply border-transparent text-gray-500 hover:text-gray-700; }
+    */
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
