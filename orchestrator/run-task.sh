@@ -209,6 +209,10 @@ for GATE_N in "${GATES_TACHE[@]}"; do
     && GATE_C="$(jq -r --arg g "$GATE_N" '.gates[$g] // empty' "$ROOT/orchestrator/gates.json" 2>/dev/null || true)"
   COMMANDES_GATES+="  - $GATE_N : ${GATE_C:-commande non déclarée dans gates.json}"$'\n'
 done
+# (2026-10-03, ADR 0004 D2.3) Derniere puce : la regle de lisibilite de l'utilisateur.
+# Elle vit dans son CLAUDE.md global sous Windows, que les agents ne lisent pas : ils
+# tournent sous WSL (/home/said) ou sur une autre machine. La consigne la porte donc
+# elle-meme, quelle que soit la machine. Test DC1.
 cat >>"$WT/.claude-task.md" <<EOF
 
 ## Méthode (ADR 0004)
@@ -221,6 +225,11 @@ ${COMMANDES_GATES}  Lance le typecheck souvent, la suite complète avant de conc
   CLAUDE.md du projet, et les motifs du code voisin (structure, nommage, gestion
   d'erreur, commentaires). Toute nouvelle abstraction se justifie dans « ecarts » de ton compte
   rendu. Le relecteur rejette un écart à l'architecture déclarée (R11).
+- Lisibilité (règle de l'utilisateur, 2026-10-03) : écris un code qu'un humain comprend
+  à la première lecture, même s'il est plus long. Jamais d'écriture optimisée ou compacte :
+  des noms qui disent ce qu'ils portent, une condition nommée plutôt qu'une double négation,
+  une boucle simple plutôt qu'une regex à lookahead, une fonction courte par idée, des alias
+  SQL parlants avec un commentaire par condition.
 EOF
 if [[ -n "$CONSIGNE_H" ]]; then
   printf '\n## CONSIGNE DE L'"'"'HUMAIN (prioritaire)\n%s\n' "$CONSIGNE_H" >>"$WT/.claude-task.md"
@@ -383,8 +392,24 @@ if [[ -f "$WT/$COMPTE_RENDU_AGENT" ]]; then
   fi
   rm -f "$WT/$COMPTE_RENDU_AGENT"
 else
-  rm -f "$CR_ETAT"
-  log "Aucun compte rendu de l'agent"
+  # AVANT :   rm -f "$CR_ETAT"
+  # AVANT :   log "Aucun compte rendu de l'agent"
+  #   (2026-10-03, defaut 107, O74, T-009 et T-012 iziGSM) Un passage de l'agent sans
+  #   compte rendu effacait celui du passage precedent : le relecteur rejetait alors
+  #   « aucun compte rendu ». Un compte rendu lisible est garde et marque repris ; un
+  #   compte rendu illisible est efface comme avant. Tests RP1, RP2.
+  compte_rendu_precedent_lisible=false
+  if [[ -f "$CR_ETAT" ]] && jq -e 'type == "object" and (.invalide != true)' "$CR_ETAT" >/dev/null 2>&1; then
+    compte_rendu_precedent_lisible=true
+  fi
+  if [[ "$compte_rendu_precedent_lisible" == true ]]; then
+    jq '. + {repris_d_un_passage_precedent: true}' "$CR_ETAT" >"$CR_ETAT.tmp"
+    mv "$CR_ETAT.tmp" "$CR_ETAT"
+    log "Aucun compte rendu de l'agent : celui du passage precedent est garde (marque repris)"
+  else
+    rm -f "$CR_ETAT"
+    log "Aucun compte rendu de l'agent"
+  fi
 fi
 # (2026-09-22, defaut 7) Cout, tokens, tours et duree de l'auteur au journal des
 # couts, AVANT la porte : une tache rouge ou en panne a quand meme depense.

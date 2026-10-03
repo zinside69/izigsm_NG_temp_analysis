@@ -115,6 +115,12 @@ if [[ -s "$CR_AUTEUR" ]]; then
 else
   CR_TEXTE='AUCUN COMPTE RENDU FOURNI PAR L AUTEUR — il devait en rendre un ; signale-le.'
 fi
+# (2026-10-03, defaut 107, O74) Compte rendu garde d'un passage precedent : le
+# relecteur est prevenu qu'il peut ne pas decrire les derniers changements. Test RP2.
+if [[ -s "$CR_AUTEUR" ]] && jq -e '.repris_d_un_passage_precedent == true' "$CR_AUTEUR" >/dev/null 2>&1; then
+  CR_TEXTE="ATTENTION : compte rendu d'un passage PRECEDENT de l'auteur (il n'en a pas rendu a ce passage) — il peut ne pas decrire les derniers changements du diff.
+$CR_TEXTE"
+fi
 PROMPT="$PROMPT
 
 COMPTE RENDU DE L'AUTEUR — déclaration à VÉRIFIER contre le diff, point par point (critères,
