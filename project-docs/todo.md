@@ -1,5 +1,20 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 2026-10-03 (soir) — Caisse : saisir les prix en TTC (demande de l'exploitant, à cadrer)
+
+**Constat** (capture de la Nouvelle vente, v3.26) : le technicien ou le manager raisonne **toujours
+en TTC** — le prix affiché en boutique, celui que paie le client — alors que la caisse fait saisir le
+**P.U. HT** (colonne « P.U. HT », ligne libre à 0 en HT). Il doit donc diviser de tête par 1,2.
+
+- [ ] Cadrer avec l'exploitant avant de coder (caisse / NF525, ici) :
+  - saisie en TTC partout (caisse, ligne libre) ou au choix HT / TTC ;
+  - le HT stocké reste calculé (`prix_unitaire_ht` = TTC ÷ (1 + TVA)) : **règle d'arrondi** à fixer
+    pour que le TTC de la facture retombe exactement sur le TTC saisi (sinon 9,90 € saisi peut
+    devenir 9,89 ou 9,91 sur la facture) — le serveur arrondit par ligne (`calculLignes()`) ;
+  - devis et factures concernés ou non ; fiches produit (`prix_vente_ht`) et services (`prix_ht`)
+    affichées en TTC ou non ; favoris et résultats déjà affichés en TTC dans les tuiles.
+- [ ] Ne pas toucher aux données hashées NF525 : le journal porte HT, TVA, TTC calculés.
+
 ## 🔴 2026-10-03 (checkpoint 144) — v3.26 en production, recette à l'écran
 
 - [x] Clôture « tout ou rien » prouvée en production (clôture n° 1, boutique 2)
