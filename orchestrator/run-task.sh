@@ -370,6 +370,9 @@ if [[ -f "$WT/$COMPTE_RENDU_AGENT" ]]; then
     #   autres restent lisibles dans le compte rendu remis au relecteur. Test EC12.
     jq '[(.demandes_ecriture // [])[] | select((.fichier // "") != "" and ((.diff // "") | test("@@")))
          | . + {origine: "agent"}]' "$CR_ETAT" >"$STATE_DIR/$TASK_ID.demandes.json"
+    # (2026-10-03, defaut 109, O70) Chaque demande retenue est verifiee contre le
+    # worktree : en-tete de hunk recompte, ou demande marquee inapplicable. Tests DA1, DA2.
+    verifier_demandes_ecriture "$WT" "$STATE_DIR/$TASK_ID.demandes.json"
     DEM_ECARTEES="$(jq '[(.demandes_ecriture // [])[]] | length' "$CR_ETAT")"
     DEM_ECARTEES=$(( DEM_ECARTEES - $(jq length "$STATE_DIR/$TASK_ID.demandes.json") ))
     (( DEM_ECARTEES == 0 )) || log "Demande(s) d'ecriture ecartee(s) faute de diff : $DEM_ECARTEES"

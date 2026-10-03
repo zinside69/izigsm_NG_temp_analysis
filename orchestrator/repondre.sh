@@ -301,11 +301,32 @@ appliquer_demandes() {
   local dem="$STATE_DIR/$TASK_ID.demandes.json" p base f
   local -a fichiers
   [[ -d "$WT_T" ]] || die "approuver : worktree $WT_T absent — escalade maintenue"
+  # (2026-10-03, defaut 109, O70) Une demande marquee inapplicable a la reception
+  # (verifier_demandes_ecriture, lib.sh) est refusee ici, avant tout changement :
+  # l'alerte l'a dit, approuver ne peut rien ecrire. Test DA2.
+  local demandes_inapplicables
+  local -a options_de_git_apply=()
+  demandes_inapplicables="$(jq -r '[.[] | select(.applicable == false) | .fichier] | join(", ")' "$dem")"
+  if [[ -n "$demandes_inapplicables" ]]; then
+    die "approuver : demande(s) qui ne s'appliquent pas ($demandes_inapplicables) — refuser, ou relancer en demandant un diff corrige ; escalade maintenue"
+  fi
+  # Un en-tete de hunk recompte a la reception s'applique avec --recount : seuls les
+  # compteurs de l'en-tete changent, jamais les lignes ecrites. Test DA1.
+  if jq -e 'any(.[]; .en_tete_recompte == true)' "$dem" >/dev/null; then
+    options_de_git_apply=(--recount)
+  fi
   p="$(mktemp)"
-  jq -r '.[].diff' "$dem" >"$p"
-  git -C "$WT_T" apply --check "$p" 2>>"$LOG_DIR/pipeline-$TASK_ID.log" \
+  # AVANT :   jq -r '.[].diff' "$dem" >"$p"
+  #   (2026-10-03, defaut 109) « jq -r » ajoute un saut de ligne apres chaque diff, qui
+  #   en a deja un : la ligne vide obtenue est lue par --recount comme une ligne de
+  #   contexte (« depends on old contents »). Chaque diff finit par exactement un saut
+  #   de ligne ; sans --recount, le resultat est le meme qu'avant. Test DA1.
+  jq -j '.[].diff | if endswith("\n") then . else . + "\n" end' "$dem" >"$p"
+  # AVANT :   git -C "$WT_T" apply --check "$p" 2>>"$LOG_DIR/pipeline-$TASK_ID.log" \
+  git -C "$WT_T" apply --check "${options_de_git_apply[@]}" "$p" 2>>"$LOG_DIR/pipeline-$TASK_ID.log" \
     || die "approuver : une demande ne s'applique pas telle quelle — escalade maintenue ($dem)"
-  git -C "$WT_T" apply --index "$p"
+  # AVANT :   git -C "$WT_T" apply --index "$p"
+  git -C "$WT_T" apply --index "${options_de_git_apply[@]}" "$p"
   rm -f "$p"
   mapfile -t fichiers < <(jq -r '.[].fichier' "$dem")
   git -C "$WT_T" -c user.name=harnais-orchestrateur -c user.email=harnais@local \

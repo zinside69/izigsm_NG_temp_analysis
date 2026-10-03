@@ -291,9 +291,57 @@ empreinte_tache() {
 # (ADR 0002 : ce que l'humain a lu est ce qui est ecrit). Avant, le detail
 # s'arretait a la justification. Tests EP1 a EP3.
 escalade_demandes_ecriture() {
-  jq -c '{raisons: ["P12:demande-ecriture(\(length))"],
-          detail: (map("- \(.fichier) : \(.besoin // "") — justification : \(.justification // "aucune")\n  Diff exact (ecrit tel quel si approuve) :\n\(.diff // "(aucun)")") | join("\n"))}' \
+  # (2026-10-03, defaut 109, O70) Filtre precedent, sans l'etat de verification de
+  # chaque demande (verifier_demandes_ecriture) :
+  # AVANT :   jq -c '{raisons: ["P12:demande-ecriture(\(length))"],
+  # AVANT :           detail: (map("- \(.fichier) : \(.besoin // "") — justification : \(.justification // "aucune")\n  Diff exact (ecrit tel quel si approuve) :\n\(.diff // "(aucun)")") | join("\n"))}' \
+  # AVANT :     "$1"
+  # Sous chaque demande, une ligne dit si son en-tete a ete recompte ou si elle ne
+  # s'applique pas. Les textes passent par --arg : ils contiennent une apostrophe.
+  jq -c \
+    --arg texte_recompte "  En-tête de hunk faux, recompté par le harnais : contenu inchangé." \
+    --arg texte_inapplicable "  NE S'APPLIQUE PAS : refuser, ou relancer en demandant un diff corrigé. Raison (git) : " \
+    'def etat_de_verification:
+       if .applicable == false then $texte_inapplicable + (.raison_git // "inconnue") + "\n"
+       elif .en_tete_recompte == true then $texte_recompte + "\n"
+       else "" end;
+     {raisons: ["P12:demande-ecriture(\(length))"],
+      detail: (map("- \(.fichier) : \(.besoin // "") — justification : \(.justification // "aucune")\n"
+                   + etat_de_verification
+                   + "  Diff exact (ecrit tel quel si approuve) :\n\(.diff // "(aucun)")") | join("\n"))}' \
     "$1"
+}
+
+# verifier_demandes_ecriture <worktree> <demandes.json>
+# (2026-10-03, defaut 109, O70) Une demande d'ecriture se verifie a la reception :
+# sur T-009 (iziGSM), un en-tete « +1,17 » pour 14 lignes n'a ete vu qu'a
+# l'approbation (« ne s'applique pas telle quelle »). Une demande qui ne passe que
+# par --recount (compteurs de l'en-tete faux, contenu juste) est marquee
+# en_tete_recompte ; une demande qui ne passe pas du tout est marquee
+# applicable: false, avec la raison donnee par git. Tests DA1, DA2.
+verifier_demandes_ecriture() {
+  local worktree="$1" demandes="$2"
+  local nombre_de_demandes index fichier_du_diff raison_donnee_par_git
+  nombre_de_demandes="$(jq length "$demandes")"
+  fichier_du_diff="$(mktemp)"
+  for (( index = 0; index < nombre_de_demandes; index++ )); do
+    # Exactement un saut de ligne final : « jq -r » en ajoute un apres le diff, et
+    # la ligne vide obtenue serait lue par --recount comme une ligne de contexte.
+    jq -j --argjson i "$index" \
+      '.[$i].diff | if endswith("\n") then . else . + "\n" end' "$demandes" >"$fichier_du_diff"
+    if git -C "$worktree" apply --check "$fichier_du_diff" >/dev/null 2>&1; then
+      continue    # la demande s'applique telle quelle
+    fi
+    if git -C "$worktree" apply --check --recount "$fichier_du_diff" >/dev/null 2>&1; then
+      jq --argjson i "$index" '.[$i].en_tete_recompte = true' "$demandes" >"$demandes.tmp"
+    else
+      raison_donnee_par_git="$(git -C "$worktree" apply --check --recount "$fichier_du_diff" 2>&1 | head -3 || true)"
+      jq --argjson i "$index" --arg raison "$raison_donnee_par_git" \
+        '.[$i].applicable = false | .[$i].raison_git = $raison' "$demandes" >"$demandes.tmp"
+    fi
+    mv "$demandes.tmp" "$demandes"
+  done
+  rm -f "$fichier_du_diff"
 }
 
 # curl_prive <url> [en-tete secret ...] -- [option curl ...]
