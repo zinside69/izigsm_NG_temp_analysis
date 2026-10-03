@@ -1,5 +1,21 @@
 # iziGSM — Bugs connus
 
+## ✅ 🟠 Styles en `@apply` ignorés sur Caisse, SAV, Personnel (trouvé le 2026-10-03, CORRIGÉ et déployé, v3.26)
+
+**Défaut** : ces pages posaient leurs classes maison en `@apply` dans un `<style>` ordinaire — le
+navigateur les ignorait toutes, depuis juin : journal du jour sans colonnes (capture de l'exploitant),
+pastilles de statut sans forme. Le Tailwind du CDN ne traite `@apply` que dans
+`<style type="text/tailwindcss">`. **Correctif** : balise corrigée (`f9710e2`, `3dafb76`) ; `.tab-btn` et
+`.kpi-card`, déjà définies par `main.css`, gardent le style du socle (règles de page neutralisées).
+**Piège révélé en codant** : activer la caisse seule transformait ses onglets en pastilles bleues — un
+test qui ne mesure que l'élément réparé ne voit pas ce qu'on change à côté.
+
+## ✅ 🟡 Import Mobilax en lot : quantité saisie ignorée sans le dire (trouvé en recette le 2026-10-03, CORRIGÉ et déployé, v3.26)
+
+Une pièce déjà en stock cochée avec « Qté en rayon » = 1 finissait sur « 1 déjà dans votre stock »,
+sans offre d'ajout (elle n'existait qu'après l'import d'une seule pièce). Le bilan propose désormais
+« Ajouter N au stock », un bouton par pièce (`a0d52c7`).
+
 ## ✅ (mise à jour) Clôture NF525 non atomique — CORRIGÉ le 2026-10-03, non déployé
 
 Le « Reste ouvert » de l'entrée 🔴 du 2026-10-02 (`UPDATE` du journal avant l'`INSERT` de la

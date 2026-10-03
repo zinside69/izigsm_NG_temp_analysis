@@ -980,6 +980,13 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - ⚠ `updateStatutBonCommande()` ne contrôle **aucune** transition (un bon reçu peut être annulé
   par l'API, sans retour du stock). L'écran ne le propose plus ; le serveur l'accepte encore.
 
+**Styles de page en `@apply` (depuis le 2026-10-03)** : une règle `@apply` n'est comprise que dans
+`<style type="text/tailwindcss">` (Tailwind du CDN) ; dans un `<style>` ordinaire, le navigateur
+l'ignore **en silence** (caisse, SAV, personnel : de juin au 2026-10-03). **Une classe déjà définie
+par `main.css`** (`.tab-btn`, `.kpi-card`…) **garde le style du socle** : ne pas la redéfinir en
+`@apply` dans une page (décision de l'exploitant). Prouver un style par le style **calculé**
+(`toHaveCSS`), et mesurer aussi ce qu'on ne voulait pas changer à côté.
+
 **Vocabulaire CSS des pages hors socle.** `fournisseurs.html` employait 15 classes définies
 nulle part (`modal-backdrop`, `input-field`, `td-cell`, `badge-*`…) et `btn-primary` sans `btn` :
 boutons en texte brut, fenêtre rendue dans le flux sous la barre latérale. Elles sont désormais
@@ -1166,6 +1173,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-03 (checkpoint 144) : DÉPLOYÉ — production en `izigsm-v3.26`, migration `0061`.**
+Styles `@apply` réparés (caisse, SAV, personnel), ajout au stock depuis le bilan d'un lot Mobilax.
+Aperçu `461dcf1e` **puis** apex relus : `sw.js` v3.26, `stock.84e27ea9.js` en JavaScript avec l'ajout
+au bilan, trois pages en `text/tailwindcss`, routes 401. Clôture « tout ou rien » prouvée en production
+(clôture n° 1, boutique 2). **Dépôt et production alignés.**
 
 **État au 2026-10-03 (checkpoint 143) : DÉPLOYÉ — clôture NF525 « tout ou rien » (`d712a74`), sans
 migration ni écran** (`izigsm-v3.24` / `0061` inchangés). Aperçu `503b933e` **puis** apex relus :

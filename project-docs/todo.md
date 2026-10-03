@@ -1,5 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 2026-10-03 (checkpoint 144) — v3.26 en production, recette à l'écran
+
+- [x] Clôture « tout ou rien » prouvée en production (clôture n° 1, boutique 2)
+- [x] Styles `@apply` réparés : caisse, SAV, personnel (`f9710e2`, `3dafb76`) ; onglets et cartes au style du socle
+- [x] « Ajouter N au stock » dans le bilan d'un import en lot (`a0d52c7`)
+- [ ] Recette : journal en colonnes ; ajout depuis le bilan d'un lot (relire la base) ; #804 au dernier prix
+- [ ] Autres pages : rechercher d'autres `@apply` hors `text/tailwindcss` si de nouvelles pages en ajoutent
+      (garde-fou statique possible : vitest qui refuse `@apply` dans un `<style>` sans ce type)
+
 ## 🔴 2026-10-03 (checkpoint 142) — Recette 002 en production, recette à finir
 
 - [x] **A** quantité en entiers à la saisie (`1a98170`)

@@ -1,4 +1,22 @@
-# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 143 — clôture NF525 atomique en production)
+# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 144 — v3.26 en production)
+
+## ➡ Première action (checkpoint 144 — remplace celle du 143)
+
+**Production `izigsm-v3.26` / `0061`, dépôt aligné.** La clôture « tout ou rien » est prouvée en
+production (clôture n° 1, boutique 2, 370,80 €). Reste la recette à l'écran avec `telnet@bbox.fr`
+(Ctrl+F5) :
+1. Caisse : journal du jour en colonnes, onglets toujours soulignés (style du socle).
+2. Mobilax : cocher une pièce déjà en stock, « Qté en rayon » 1, « Importer la sélection » → le bilan
+   propose « Ajouter 1 au stock » → relire `ajouts_stock_import` et le mouvement « Import fournisseur —
+   déjà en stock » (`--remote`, `CLOUDFLARE_API_TOKEN` vidé ; `7403` intermittent : réessayer).
+3. #804 au dernier prix (scan `3000000388952` → 220 € HT « (dern.) »).
+Ensuite : lot 2, ticket 15 (NF525, ici).
+
+⚠ Code lisible par un humain ; `Get-Process workerd | Stop-Process -Force` avant chaque relance de wrangler.
+⚠ Une classe définie à la fois par `main.css` et par une page en `@apply` : le socle l'emporte
+(décision du 2026-10-03) — neutraliser la règle de page.
+
+## Checkpoint 143 (historique)
 
 ## ➡ Première action (checkpoint 143 — complète la liste du 142 ci-dessous)
 

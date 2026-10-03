@@ -1,5 +1,16 @@
 # iziGSM — Décisions
 
+## 2026-10-03 — Styles de page contre socle ; ajout au stock depuis le bilan d'un lot
+
+**Décisions de l'exploitant** :
+- **Une classe définie à la fois par le socle `main.css` et par une page en `@apply`** (`.tab-btn`,
+  `.kpi-card`) **garde le style du socle** : commun à toute l'application. La règle de page est
+  neutralisée (commentée), les autres règles de page s'activent (`<style type="text/tailwindcss">`).
+- **Import Mobilax en lot** d'une pièce déjà en stock avec une quantité saisie : le **bilan propose**
+  « Ajouter N au stock », un bouton par pièce, même route et même clé d'idempotence que la fiche. Rien
+  ne s'ajoute sans clic (règle du 2026-09-12 inchangée) ; l'ajout automatique a été écarté (double
+  import compté deux fois).
+
 ## 2026-10-03 — Écritures « tout ou rien » : `batch()` sur le port `Database`
 
 **Décision de l'exploitant** (choix parmi trois : `batch()` sur le port, repasser la clôture sur D1

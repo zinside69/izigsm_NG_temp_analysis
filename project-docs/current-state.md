@@ -1,4 +1,31 @@
-# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 143 — clôture NF525 « tout ou rien » en production)
+# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 144 — styles @apply réparés, ajout au stock depuis le bilan d'un lot)
+
+## Checkpoint 144 — Clôture prouvée, styles réparés, ajout au bilan d'un import en lot (2026-10-03, soir)
+
+**Production : `izigsm-v3.26`, dernière migration `0061`. Dépôt et production alignés** (`3dafb76`).
+Vitest 1 434 + 2 permanents, tsc 32.
+
+- **Clôture « tout ou rien » prouvée en production** : première clôture de la plateforme (boutique 2,
+  2026-10-03, 13:30:37 UTC) — 2 transactions, 370,80 € TTC, les deux ventes `est_cloture = 1`, aucune
+  restante.
+- **Styles en `@apply` ignorés depuis juin** (`f9710e2`, `3dafb76`) : `caisse.html`, `sav.html`,
+  `personnel.html` les posaient dans un `<style>` ordinaire — balise passée en
+  `<style type="text/tailwindcss">`. Journal du jour en colonnes, pastilles de statut mises en forme.
+  **Décision de l'exploitant** : `.tab-btn` et `.kpi-card`, déjà définies par `main.css`, gardent le
+  style du socle — leurs règles de page sont neutralisées (sinon les onglets de caisse devenaient des
+  pastilles bleues, effet de bord de `f9710e2` attrapé par un test). E2E `caisse-styles-journal`,
+  `styles-tailwind-pages` vus rouges puis verts.
+- **« Ajouter N au stock » dans le bilan d'un import Mobilax en lot** (`a0d52c7`) : constat de recette —
+  la case cochée + « Importer la sélection » ignorait la quantité saisie d'une pièce déjà en stock sans
+  le dire. Décision de l'exploitant : le bilan liste ces pièces, un bouton par pièce, même route et même
+  clé d'idempotence que la fiche, rien sans clic. E2E `mobilax-ajout-bilan-lot` vu rouge puis vert.
+- **Préproduction Mobilax** : répond de nouveau (recherches de l'exploitant à l'écran).
+- Déploiement : aperçu `461dcf1e` **puis** apex — `sw.js` v3.26, `stock.84e27ea9.js` en JavaScript avec
+  l'ajout au bilan, les trois pages en `text/tailwindcss`, routes 401.
+
+**Prochaine action** : recette à l'écran — journal en colonnes, onglets inchangés ; « Ajouter 1 au
+stock » depuis le bilan d'un lot (relire `ajouts_stock_import` et le mouvement) ; #804 au dernier prix.
+Puis lot 2, ticket 15.
 
 ## Checkpoint 143 — Clôture de caisse atomique, `batch()` sur le port (2026-10-03, après-midi)
 
