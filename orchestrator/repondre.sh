@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # repondre.sh — applique une reponse humaine a une escalade, avant ou apres expiration.
 # AVANT : # Usage : repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter> [message]
-# Usage : repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier> [message]
+# AVANT : # Usage : repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier> [message]
+# Usage : repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier|rejouer> [message]
 #         repondre.sh --help
 #
 # (2026-09-22, O11) « republier » : apres une publication ratee (P9), relance
@@ -35,6 +36,8 @@ Usage:
 Applique une decision a une tache PARKED ou BLOCKED et ferme l'escalade ouverte.
 « republier » : apres une publication ratee (P9) seulement ; relance la
 publication seule, puis PUBLISHED.
+« rejouer » : rejoue les controles, la revue et la decision SANS relancer
+l'agent, sur le travail deja commite de sa branche (O72).
 EOF
 }
 
@@ -59,7 +62,9 @@ done
 # AVANT : [[ -n "$TASK_ID" && -n "$DECISION_H" ]] || die "usage: repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter> [message]"
 # AVANT : [[ -n "$TASK_ID" && -n "$DECISION_H" ]] || die "usage: repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier> [message]"
 #   (2026-09-24, ADR 0002) nettoyer et relancer : reponses a une violation (P13).
-[[ -n "$TASK_ID" && -n "$DECISION_H" ]] || die "usage: repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier|nettoyer|relancer> [message]"
+# AVANT : [[ -n "$TASK_ID" && -n "$DECISION_H" ]] || die "usage: repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier|nettoyer|relancer> [message]"
+#   (2026-10-03, O72) rejouer : controles, revue et decision sans agent.
+[[ -n "$TASK_ID" && -n "$DECISION_H" ]] || die "usage: repondre.sh [--dry-run] T-NNN <approuver|refuser|modifier|reporter|republier|nettoyer|relancer|rejouer> [message]"
 ENVF="$ETAT_DIR/taches/$TASK_ID.env"
 [[ -f "$ENVF" ]] || die "tache inconnue : $TASK_ID"
 
@@ -80,6 +85,7 @@ case "$DECISION_H" in
   republier) CIBLE="PUBLISHED" ;;
   nettoyer)  CIBLE="READY" ;;
   relancer)  CIBLE="READY" ;;
+  rejouer)   CIBLE="READY" ;;
   *) die "decision inconnue : $DECISION_H" ;;
 esac
 
@@ -195,6 +201,26 @@ PREUVES_F="$STATE_DIR/$TASK_ID.preuves.json"
 if (( PREUVE_OUV == 1 )) && [[ "$DECISION_H" == approuver || "$DECISION_H" == refuser ]]; then
   [[ -n "$MESSAGE" ]] || die "$DECISION_H d'une preuve a fournir (P16) : donner le compte rendu (vert : ..., ou la sortie rouge)"
   if [[ "$DECISION_H" == approuver ]]; then MODE_APPROUVER="preuve"; CIBLE="PUBLISHED"; else CIBLE="READY"; fi
+fi
+
+# (2026-10-03, O72) « rejouer » : controles, revue et decision rejoues SANS agent, sur le
+# travail deja commite. Aucune reponse ne le permettait : sans escalade ouverte (fermee par
+# « reporter »), « approuver » publiait sans revue ; sur une P11 instable, approuver et
+# modifier relancaient l'agent, et un passage sans compte rendu effacait le precedent (O74).
+# Vu sur T-009 et T-012 d'iziGSM. Refuse sur une violation (P13) ou une demande d'ecriture
+# (P12) ouvertes, et sans travail commite. Place avant --dry-run : la simulation refuse aussi.
+# Tests RJ1, RJ2.
+if [[ "$DECISION_H" == rejouer ]]; then
+  if (( VIOLATION == 1 )); then
+    die "rejouer refuse sur une violation (P13) : repondre nettoyer, relancer ou refuser"
+  fi
+  if (( DEMANDE_OUV == 1 )); then
+    die "rejouer refuse : une demande d'ecriture (P12) attend sa decision (approuver ou refuser)"
+  fi
+  COMMITS_A_REJOUER="$(git -C "$ROOT" rev-list "$INTEGRATION_BRANCH..$AGENT_BRANCH_PREFIX/$TASK_ID" 2>/dev/null || true)"
+  if [[ -z "$COMMITS_A_REJOUER" ]]; then
+    die "rejouer : aucun travail commite sur $AGENT_BRANCH_PREFIX/$TASK_ID"
+  fi
 fi
 
 if (( DRY_RUN == 1 )); then
@@ -325,6 +351,11 @@ if [[ "$MODE_APPROUVER" == controles ]]; then
   } >>"$STATE_DIR/$TASK_ID.depassements-acceptes"
   sort -u -o "$STATE_DIR/$TASK_ID.depassements-acceptes" "$STATE_DIR/$TASK_ID.depassements-acceptes"
   log "$TASK_ID : depassement accepte par l'humain ($(tr '\n' ' ' <"$STATE_DIR/$TASK_ID.depassements-acceptes")) — reprise sans agent vers la revue"
+  REPRISE_SANS_AGENT=1
+fi
+# (2026-10-03, O72) Reprise sans agent pour « rejouer » (gardes plus haut, avant --dry-run).
+if [[ "$DECISION_H" == rejouer ]]; then
+  log "$TASK_ID : controles, revue et decision rejoues sans agent"
   REPRISE_SANS_AGENT=1
 fi
 
