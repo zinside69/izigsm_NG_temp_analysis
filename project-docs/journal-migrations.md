@@ -93,6 +93,17 @@ déployé ensuite (`izigsm-v3.20`, aperçu `2381cbeb` puis apex vérifiés).
 Numéros **réservés, pas encore écrits** (le trou 0052–0053 est voulu) : `0052` ticket 05, `0053`
 ticket 06, `0055` 08b, `0056` 09, `0057` 11, `0058` 14 (sans objet), `0059` 16.
 
+### 2026-10-03 — `0061` (recette 002 C : montant remis et rendu conservés)
+
+| # | Migration | Appliquée (UTC) | Effet | R | Inverse |
+|---|---|---|---|---|---|
+| 54 | `0061_paiements_remis_rendu` | **2026-10-03 12:25:31** | `paiements` + `montant_remis REAL`, `rendu_monnaie REAL` (NULL par défaut ; 7 paiements existants intacts, à NULL) | I | `ALTER TABLE paiements DROP COLUMN rendu_monnaie; ALTER TABLE paiements DROP COLUMN montant_remis;` — **code revenu à `izigsm-v3.23` d'abord** (le code v3.24 écrit ces colonnes à chaque vente) ; détruit les montants remis et rendus saisis depuis |
+
+Point de restauration relevé juste **avant** `0061` (2026-10-03, lecture seule) :
+`000001dc-00000000-000050f9-4e497c4c100779cc94bbbcc477ee9d70`. Relu avant : dernière migration
+`0060`, 7 paiements, colonnes absentes. Relu après : dernière migration `0061`, deux colonnes `REAL`
+présentes, 7 paiements, aucun montant remis. Code (`izigsm-v3.24`) à déployer **après**.
+
 ## Vérification d'état (lecture seule, à rejouer à tout moment)
 
 ```
