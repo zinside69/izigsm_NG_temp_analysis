@@ -11,6 +11,15 @@ cela est nécessaire** : ticket, devis, SAV hors garantie, stock, reconditionnem
 → chantier transversal, à cadrer par `/mattpocock-skills:grill-with-docs` puis `/to-spec` et
 `/to-tickets` (tapés par l'exploitant).
 
+**Précision de l'exploitant (même soir)** : « **toute pièce ou service, pas seulement les écrans** ».
+Le prix de vente de **chaque pièce** (`produits.prix_vente_ht`, ~800 fiches, dont les imports Mobilax)
+et de **chaque service** (`services.prix_ht`, référentiel et liaisons modèle ↔ service) devient un prix
+**TTC de référence** — fiche, import CSV, import fournisseur (prix de vente issu de la marge), devis,
+ticket, caisse. Question de modèle à trancher au cadrage : stocker le TTC (nouvelle colonne, migration,
+reprise des fiches existantes ; le HT dérivé) ou garder le HT stocké et ne saisir/afficher que du TTC —
+la première option seule garantit qu'un prix rond (9,90 €) reste rond. La marge fournisseur s'applique
+aujourd'hui au **prix d'achat HT** (`resoudreTauxMarge()`) : sa base est à revoir avec le reste.
+
 Écrans qui saisissent ou affichent un prix HT (recensement du 2026-10-03, occurrences « HT ») :
 tickets (`tickets.js` 66, `tickets.html` 28), caisse (`caisse.js` 63), factures (`factures.js` 57),
 devis (`devis.js` 40, `devis-public.html`), catalogue services (`services.html` 36, `services.js`),
