@@ -23,7 +23,8 @@
 // AVANT (2026-10-02, recette 001 C — fenêtre Mobilax élargie, journal sur une ligne : stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.22'
 // AVANT (2026-10-03, recette 002 A et D — entiers seulement, dernier prix vendu : app.js, caisse.js, devis.js, factures.js) : const CACHE_VERSION  = 'izigsm-v3.23'
 // AVANT (2026-10-03, styles de la page Caisse enfin appliqués — caisse.html) : const CACHE_VERSION  = 'izigsm-v3.24'
-const CACHE_VERSION  = 'izigsm-v3.25'
+// AVANT (2026-10-03, « Ajouter N au stock » dans le bilan d'un import en lot — stock.js) : const CACHE_VERSION  = 'izigsm-v3.25'
+const CACHE_VERSION  = 'izigsm-v3.26'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

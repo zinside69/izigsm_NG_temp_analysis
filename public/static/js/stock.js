@@ -1619,7 +1619,11 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
   // Confirmation renforcée, quel que soit l'import qui l'a ouverte : l'import part, elle n'a plus d'objet
   afficherConfirmation(null);
   // `idsTraites` : identifiants importés ou déjà en stock — l'import d'une sélection les décoche
-  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance, idsTraites: [] };
+  // AVANT (2026-10-03 — le bilan garde aussi les ajouts à proposer) :
+  // const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance, idsTraites: [] };
+  // `ajoutsAProposer` : pièces déjà en stock pour lesquelles une quantité était saisie — le bilan
+  // propose de l'ajouter, un clic par pièce (décision de l'exploitant du 2026-10-03).
+  const bilan = { importes: 0, deja, echecs: [], familles: {}, fournisseurId, relance, idsTraites: [], ajoutsAProposer: [] };
 
   importEnCours = true;
   interruptionDemandee = false;
@@ -1687,6 +1691,13 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
         bilan.deja++;
         bilan.idsTraites.push(article.mobilax_id);
         journaliserImport(`= ${article.nom} — déjà dans votre stock`, '#6b7280');
+        // Une quantité était saisie pour cette pièce : elle n'est pas ajoutée (règle du 2026-09-12),
+        // mais le bilan le dit et propose de l'ajouter d'un clic (décision du 2026-10-03)
+        const quantiteSaisie = Number(article.quantite) || 0;
+        const produitExistant = Number(res.data?.produit_id) || 0;
+        if (quantiteSaisie > 0 && produitExistant > 0) {
+          bilan.ajoutsAProposer.push({ produitId: produitExistant, nom: article.nom, quantite: quantiteSaisie });
+        }
       } else if (connexionPerdue || res?.code === 'indisponible' || res?.code === 'quota') {
         // Arrêt (ticket 04) : fournisseur injoignable, connexion perdue, ou quota sans délai
         // connu — jamais de nouvelle tentative à l'aveugle. Cet article et les suivants restent
@@ -1727,7 +1738,9 @@ async function importerArticles(articles, { deja, fournisseurId, relance }) {
  * sur arrêt (`arret` : motif, restants — ticket 04), « Import arrêté » et ce qu'il reste à importer ;
  * sur « Interrompre » (`interruption` : restants), « Import interrompu », distinct d'un incident.
  */
-function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relance, arret, interruption }) {
+// AVANT (2026-10-03 — ajout de `ajoutsAProposer`) :
+// function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relance, arret, interruption }) {
+function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relance, arret, interruption, ajoutsAProposer = [] }) {
   const zone = document.getElementById('mobilax-bilan');
   zone.replaceChildren();
   const ajouter = (parent, balise, texte) => {
@@ -1758,11 +1771,67 @@ function afficherBilan({ importes, deja, echecs, familles, fournisseurId, relanc
     const liste = ajouter(zone, 'ul', '');
     for (const e of echecs) ajouter(liste, 'li', `${e.nom} — ${e.motif}`);
   }
+  // Pièces déjà en stock avec une quantité saisie : un bouton « Ajouter N au stock » par pièce
+  if (ajoutsAProposer.length) {
+    ajouter(zone, 'p', 'Déjà en stock, quantité saisie non ajoutée :');
+    for (const offre of ajoutsAProposer) afficherOffreAjoutDansBilan(zone, offre);
+  }
   if (Number(fournisseurId) > 0) {
     const lien = ajouter(zone, 'a', 'Voir les produits de ce fournisseur dans le stock');
     lien.href = `/stock?fournisseur_id=${Number(fournisseurId)}`;
   }
   zone.hidden = false;
+}
+
+/**
+ * Une ligne du bilan : le nom de la pièce et son bouton « Ajouter N au stock » (décision du
+ * 2026-10-03). Même route et même garantie que l'offre de la fiche (`ajouterAuStockDepuisImport()`) :
+ * une clé d'ajout tirée ici, une fois, renvoyée à chaque essai — le serveur ne compte jamais deux fois.
+ * Construite en nœuds DOM (`textContent`) : le nom vient du fournisseur, jamais interprété en HTML.
+ *
+ * @param {HTMLElement} zone   Le bilan
+ * @param {{ produitId: number, nom: string, quantite: number }} offre
+ */
+function afficherOffreAjoutDansBilan(zone, offre) {
+  const cle = crypto.randomUUID();
+
+  const ligne = document.createElement('div');
+  ligne.style.cssText = 'display:flex;align-items:center;gap:10px;margin:4px 0;';
+  const nom = document.createElement('span');
+  nom.textContent = offre.nom;
+  const bouton = document.createElement('button');
+  bouton.type = 'button';
+  bouton.className = 'btn btn-primary btn-sm';
+  bouton.textContent = `Ajouter ${offre.quantite} au stock`;
+  const message = document.createElement('span');
+  message.style.fontSize = '.85rem';
+  ligne.append(nom, bouton, message);
+  zone.appendChild(ligne);
+
+  bouton.addEventListener('click', async () => {
+    bouton.disabled = true;
+    try {
+      // Déballage au point d'appel : `data` est le corps JSON complet (CLAUDE.md § enveloppe)
+      const reponse = (await apiPost(`/api/mobilax/produits/${offre.produitId}/ajout-stock`, { quantite: offre.quantite, cle })).data;
+
+      if (!reponse?.success) {
+        message.textContent = reponse?.error || 'Ajout au stock impossible.';
+        // Ajout déjà en cours côté serveur : on ne propose pas de le relancer d'ici
+        if (reponse?.code === 'cle_en_cours') bouton.remove();
+        else bouton.disabled = false;
+        return;
+      }
+
+      bouton.remove();
+      const pluriel = offre.quantite > 1 ? 's' : '';
+      message.textContent = `${offre.quantite} ajouté${pluriel} au stock : ${reponse.data.stock_avant} → ${reponse.data.stock_apres}.`;
+      await loadStock();
+    } catch (e) {
+      // Réseau coupé : on peut réessayer, la même clé repart et rien n'est compté deux fois
+      message.textContent = 'Connexion perdue : l\'ajout n\'a pas pu être confirmé. Vous pouvez réessayer.';
+      bouton.disabled = false;
+    }
+  });
 }
 
 document.getElementById('mobilax-series-liste')?.addEventListener('change', recalculerApercu);
