@@ -217,7 +217,16 @@ for GATE_N in "${GATES_TACHE[@]}"; do
   GATE_C=""
   [[ -f "$ROOT/orchestrator/gates.json" ]] \
     && GATE_C="$(jq -r --arg g "$GATE_N" '.gates[$g] // empty' "$ROOT/orchestrator/gates.json" 2>/dev/null || true)"
-  COMMANDES_GATES+="  - $GATE_N : ${GATE_C:-commande non déclarée dans gates.json}"$'\n'
+  # AVANT :   COMMANDES_GATES+="  - $GATE_N : ${GATE_C:-commande non déclarée dans gates.json}"$'\n'
+  # (2026-10-04, defaut 113, O58) La commande est recopiee de gates.json telle quelle :
+  # « bash "$ROOT/orchestrator/e2e-gate.sh" » ne marchait pas chez l'agent, dont le
+  # shell n'a pas de variable ROOT (T-007 a monte un serveur a la main, ~40 tours).
+  # $ROOT et ${ROOT} sont remplaces par le chemin reel du projet. Test DC4.
+  # shellcheck disable=SC2016  # motifs litteraux « ${ROOT} » et « $ROOT » : voulu
+  commande_pour_l_agent="${GATE_C//'${ROOT}'/$ROOT}"
+  # shellcheck disable=SC2016
+  commande_pour_l_agent="${commande_pour_l_agent//'$ROOT'/$ROOT}"
+  COMMANDES_GATES+="  - $GATE_N : ${commande_pour_l_agent:-commande non déclarée dans gates.json}"$'\n'
 done
 # (2026-10-03, ADR 0004 D2.3) Derniere puce : la regle de lisibilite de l'utilisateur.
 # Elle vit dans son CLAUDE.md global sous Windows, que les agents ne lisent pas : ils
