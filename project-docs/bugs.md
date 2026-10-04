@@ -9,7 +9,7 @@ jamais été ouverte au manager. En local, avec l'admin du seed, AT&T passait (2
 l'exploitant : ouvrir au manager) : `requireRole('admin', 'manager')` sur les 4 routes ; résumé de la fenêtre en
 échec (❌ / ⚠️) avec une ligne « Marque — motif » par erreur. Tests vus rouges : `roles-manager-routes` (4 routes),
 E2E `services-synchro-resume`. Boucle rejouée avec le manager du seed : Apple, 152 modèles ajoutés.
-**Reste ouvert** : le bouton est montré au technicien (refusé, désormais en rouge et nommé).
+~~**Reste ouvert** : le bouton est montré au technicien (refusé, désormais en rouge et nommé).~~ — **fermé le 2026-10-04** (`5137373`) : chaque bouton du référentiel n'est montré qu'aux rôles que le serveur accepte ; « ＋ Marque » et « ＋ Modèle » étaient aussi refusés au manager.
 
 ### Constat initial (historique)
 

@@ -19,7 +19,7 @@ fiche fournisseur (pays, n° TVA), bons de commande sans TVA avec mention, expor
 - [x] Relever la réponse réelle de la route de synchro (statut, corps, erreur nommée) — 403 au manager — `bugs.md` 🟠 du 2026-10-04
 - [x] Corriger la cause mesurée (test vu rouge d'abord) — synchro ouverte au manager (décision du 2026-10-04)
 - [x] Fenêtre de synchro : un résultat avec erreur(s) et 0 ok ne s'affiche plus en succès vert ; l'erreur est nommée
-- [ ] Bouton « Synchroniser API » (et ＋ Marque / ＋ Modèle) montrés au technicien, qui sera refusé — à masquer
+- [x] Bouton « Synchroniser API » (et ＋ Marque / ＋ Modèle) montrés au technicien, qui sera refusé — à masquer — **fait le 2026-10-04** (`5137373`, v3.31, non déployé) : ＋ Marque / ＋ Modèle au seul rôle admin (le manager était refusé lui aussi), Synchroniser API à admin et manager
 
 ## 🟠 2026-10-03 (soir) — Caisse : saisir les prix en TTC (demande de l'exploitant, à cadrer)
 
