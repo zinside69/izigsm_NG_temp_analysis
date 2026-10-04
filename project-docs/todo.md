@@ -1,5 +1,11 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 2026-10-04 — Catalogue services : la synchro phone-specs-api ne récupère plus de modèles
+
+- [ ] Relever la réponse réelle de la route de synchro (statut, corps, erreur nommée) — `bugs.md` 🟠 du 2026-10-04
+- [ ] Corriger la cause mesurée (test vu rouge d'abord)
+- [ ] Fenêtre de synchro : un résultat avec erreur(s) et 0 ok ne s'affiche plus en succès vert ; l'erreur est nommée
+
 ## 🟠 2026-10-03 (soir) — Caisse : saisir les prix en TTC (demande de l'exploitant, à cadrer)
 
 **Constat** (capture de la Nouvelle vente, v3.26) : le technicien ou le manager raisonne **toujours

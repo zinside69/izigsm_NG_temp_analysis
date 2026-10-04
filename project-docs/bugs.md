@@ -1,5 +1,20 @@
 # iziGSM — Bugs connus
 
+## 🟠 OUVERT — Catalogue services : « Synchroniser API » ne récupère plus aucun modèle (signalé le 2026-10-04)
+
+**Symptôme** (capture de l'exploitant, production v3.29, compte admin plateforme, `/services` onglet
+« Marques & Modèles », marque AT&T sélectionnée) : la fenêtre « Synchroniser depuis phone-specs-api »
+affiche **« Synchronisation terminée »** avec une coche verte, et dessous « 0 modèle(s) ajouté(s) ·
+0 marque(s) ok · 1 erreur(s) ». Aucun modèle récupéré.
+**Second défaut visible sur la même capture** : un échec total (0 ok, 1 erreur) est présenté comme un
+succès (coche verte, « terminée ») et l'erreur n'est pas nommée — l'opérateur ne peut rien en faire.
+**Mesuré le 2026-10-04** : `https://phone-specs-api.vercel.app/` et `/brands` répondent 200 en JSON
+(< 1 s). La disponibilité de l'API n'est donc pas en cause **pour ces deux chemins** ; la route
+appelée par la synchro (`POST /api/services/catalog/sync-modeles/:slug` ou `sync-selected`,
+`src/routes/services.ts` l. 384-450, `src/services/phoneCatalogService.ts`) et le détail de l'erreur
+restent à relever. ⊥ annoncer une cause avant d'avoir lu la réponse réelle de la route (règle
+« cause après mesure »).
+
 ## ✅ 🟡 Mobilax : import d'une ligne et import en lot pouvaient tourner à la fois (trouvé en recette le 2026-10-04, CORRIGÉ et déployé, v3.28)
 
 **Défaut** : `importerMobilax()` (import d'une ligne) refusait de partir pendant un lot, mais ne posait
