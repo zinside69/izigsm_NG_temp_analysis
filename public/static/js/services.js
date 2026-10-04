@@ -896,6 +896,8 @@ async function startSync() {
   let   done   = 0;
   let   totalAdded = 0;
   let   totalErrors = 0;
+  // Erreurs nommées pour le résumé : « Marque — motif du serveur » (2026-10-04)
+  const erreursNommees = [];
 
   const _log = (msg, color = '#374151') => {
     logEl.innerHTML += `<div style="color:${color};padding:1px 0;">${escHtml(msg)}</div>`;
@@ -922,10 +924,12 @@ async function startSync() {
       } else {
         totalErrors++;
         _log(`  ✗ ${marqueNom} — ${res.error || 'erreur inconnue'}`, '#ef4444');
+        erreursNommees.push(`${marqueNom} — ${res.error || 'erreur inconnue'}`);
       }
     } catch (err) {
       totalErrors++;
       _log(`  ✗ ${marqueNom} — exception: ${err.message}`, '#ef4444');
+      erreursNommees.push(`${marqueNom} — ${err.message}`);
     }
 
     done++;
@@ -941,12 +945,50 @@ async function startSync() {
   _syncInProgress = false;
   document.getElementById('sync-summary-text').textContent =
     `${totalAdded} modèle(s) ajouté(s) · ${total - totalErrors} marque(s) ok · ${totalErrors} erreur(s)`;
+  afficherResultatSynchro(totalErrors, total, erreursNommees);
   _showSyncStep('done');
   document.getElementById('sync-btn-close').style.display = '';
 
   // Rafraîchir les listes
   await loadMarques();
   if (_selectedMarque) await loadModeles(_selectedMarque);
+}
+
+/**
+ * Icône, titre et erreurs du résumé de synchro selon le résultat (2026-10-04) : la fenêtre affichait
+ * une coche verte et « Synchronisation terminée » même quand toutes les marques avaient échoué.
+ * @param nombreErreurs  marques en échec
+ * @param nombreMarques  marques demandées
+ * @param erreursNommees une ligne « Marque — motif » par échec
+ */
+function afficherResultatSynchro(nombreErreurs, nombreMarques, erreursNommees) {
+  const toutEchoue   = nombreErreurs > 0 && nombreErreurs === nombreMarques;
+  const unePartieEchoue = nombreErreurs > 0 && nombreErreurs < nombreMarques;
+
+  let icone = '✅';
+  let titre = 'Synchronisation terminée';
+  let couleur = '#059669';
+  if (toutEchoue) {
+    icone = '❌';
+    titre = 'Synchronisation échouée';
+    couleur = '#b42318';
+  } else if (unePartieEchoue) {
+    icone = '⚠️';
+    titre = 'Synchronisation terminée avec des erreurs';
+    couleur = '#b45309';
+  }
+  document.getElementById('sync-resume-icone').textContent = icone;
+  const titreEl = document.getElementById('sync-resume-titre');
+  titreEl.textContent = titre;
+  titreEl.style.color = couleur;
+
+  // textContent ligne par ligne : un motif renvoyé par le serveur n'est jamais interprété en HTML
+  const listeEl = document.getElementById('sync-resume-erreurs');
+  listeEl.replaceChildren(...erreursNommees.map(texte => {
+    const ligne = document.createElement('div');
+    ligne.textContent = texte;
+    return ligne;
+  }));
 }
 
 /** Ferme la modale sync et remet en état initial */

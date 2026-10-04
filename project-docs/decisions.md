@@ -1,5 +1,13 @@
 # iziGSM — Décisions
 
+## 2026-10-04 — Synchro phone-specs-api ouverte au manager
+
+**Décision de l'exploitant**, après diagnostic (« la synchro ne fonctionne plus ») : le manager peut
+lancer la synchro du référentiel marques / modèles. Elle ne fait qu'**ajouter** au référentiel commun
+(`INSERT OR IGNORE`). Revient, pour ce seul geste, sur la règle du 2026-10-01 « référentiel global à la
+plateforme » ; la création / modification / suppression manuelle reste à l'admin plateforme.
+Option écartée : masquer le bouton au manager.
+
 ## 2026-10-04 — Prix TTC : cadrage (grilling de l'exploitant)
 
 Complète l'entrée du 2026-10-03 ci-dessous. Réponses de l'exploitant, Q1 à Q21 :

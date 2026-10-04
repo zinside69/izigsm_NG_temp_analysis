@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // @ts-ignore node:fs types not available without @types/node
 import { readdirSync, readFileSync } from 'node:fs'
 // @ts-ignore node:path types not available without @types/node
@@ -94,6 +94,35 @@ describe('le manager dirige sa boutique — routes qui le refusaient à tort', (
     expect(appels).toMatch(/SELECT \* FROM employes/i)
     expect(appels).not.toMatch(/UPDATE employes/i)
   })
+})
+
+describe('synchro phone-specs-api ouverte au manager (décision de l\'exploitant du 2026-10-04)', () => {
+  // Le bouton « Synchroniser API » était proposé au manager, et chaque marque échouait en 403
+  // « Rôles requis : admin » — affiché en succès vert. La synchro n'AJOUTE qu'au référentiel
+  // commun (INSERT OR IGNORE), jamais n'écrase : l'exploitant l'ouvre au manager.
+  const ROUTES_DE_SYNCHRO: [string, string, unknown?][] = [
+    ['GET',  '/api/services/catalog/sync-status'],
+    ['POST', '/api/services/catalog/sync-brands', {}],
+    ['POST', '/api/services/catalog/sync-modeles/apple-phones-48', {}],
+    ['POST', '/api/services/catalog/sync-selected', { slugs: ['apple-phones-48'] }],
+  ]
+
+  // Aucun appel réel à l'API externe : elle répond « indisponible », le handler s'arrête vite
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => new Response('indisponible', { status: 503 }))) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  for (const [methode, chemin, corps] of ROUTES_DE_SYNCHRO) {
+    it(`${methode} ${chemin} : un manager n'est pas refusé pour son rôle`, async () => {
+      const { texte } = await appeler(MANAGER, methode, chemin, corps)
+      expect(refusDeRole(texte), texte).toBe(false)
+    })
+
+    it(`${methode} ${chemin} : le technicien reste refusé`, async () => {
+      const { res, texte } = await appeler(TECHNICIEN, methode, chemin, corps)
+      expect(res.status).toBe(403)
+      expect(refusDeRole(texte)).toBe(true)
+    })
+  }
 })
 
 describe('aucun requireRole() ne cite un rôle qui n\'existe pas', () => {

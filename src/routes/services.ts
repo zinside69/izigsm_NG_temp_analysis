@@ -396,9 +396,11 @@ services.get('/services/catalog/stats', async (c) => {
 /**
  * GET /api/services/catalog/sync-status
  * Statut de sync par marque (dernière sync, nb modèles, erreurs éventuelles).
- * Admin uniquement.
+ * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
-services.get('/services/catalog/sync-status', requireRole('admin'), async (c) => {
+// AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
+// que par INSERT OR IGNORE, jamais n'écrase) : services.get('/services/catalog/sync-status', requireRole('admin'), async (c) => {
+services.get('/services/catalog/sync-status', requireRole('admin', 'manager'), async (c) => {
   const data = await getLastSyncStatus(c.get('db'))
   return c.json({ success: true, data })
 })
@@ -407,9 +409,11 @@ services.get('/services/catalog/sync-status', requireRole('admin'), async (c) =>
  * POST /api/services/catalog/sync-brands
  * Importe toutes les marques depuis phone-specs-api (sans modèles).
  * Idempotent — INSERT OR IGNORE sur brand_slug.
- * Admin uniquement.
+ * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
-services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) => {
+// AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
+// que par INSERT OR IGNORE, jamais n'écrase) : services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) => {
+services.post('/services/catalog/sync-brands', requireRole('admin', 'manager'), async (c) => {
   const result = await syncBrands(c.get('db'))
   return c.json({ success: true, data: result, message: `${result.inserted} marques ajoutées, ${result.skipped} existantes.` })
 })
@@ -418,11 +422,13 @@ services.post('/services/catalog/sync-brands', requireRole('admin'), async (c) =
  * POST /api/services/catalog/sync-modeles/:slug
  * Synchronise les modèles d'une marque depuis phone-specs-api.
  * Récupère toutes les pages en parallèle (pattern PHP legacy).
- * Admin uniquement.
+ * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  *
  * @param slug  brand_slug ex: "apple-phones-48"
  */
-services.post('/services/catalog/sync-modeles/:slug', requireRole('admin'), async (c) => {
+// AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
+// que par INSERT OR IGNORE, jamais n'écrase) : services.post('/services/catalog/sync-modeles/:slug', requireRole('admin'), async (c) => {
+services.post('/services/catalog/sync-modeles/:slug', requireRole('admin', 'manager'), async (c) => {
   const slug   = c.req.param('slug')
   const result = await syncModelesByBrand(c.get('db'), slug)
 
@@ -440,9 +446,11 @@ services.post('/services/catalog/sync-modeles/:slug', requireRole('admin'), asyn
  * POST /api/services/catalog/sync-selected
  * Synchronise les modèles d'une sélection de marques.
  * Body : { slugs: string[] }
- * Admin uniquement.
+ * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
-services.post('/services/catalog/sync-selected', requireRole('admin'), async (c) => {
+// AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
+// que par INSERT OR IGNORE, jamais n'écrase) : services.post('/services/catalog/sync-selected', requireRole('admin'), async (c) => {
+services.post('/services/catalog/sync-selected', requireRole('admin', 'manager'), async (c) => {
   const body = await c.req.json()
   if (!Array.isArray(body.slugs) || body.slugs.length === 0) {
     return c.json({ success: false, error: 'slugs[] requis.' }, 400)

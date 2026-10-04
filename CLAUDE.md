@@ -116,6 +116,10 @@ qu'un filtre en amont suffit.
   laissé un manager désactiver l'employé d'une autre boutique.
 - **Restent à la plateforme** : création de boutique, référentiel global marques / modèles (partagé
   par toutes les boutiques), expiration des devis en lot (`decisions.md`).
+- **Exception (2026-10-04, décision de l'exploitant)** : la **synchro phone-specs-api**
+  (`/services/catalog/sync-*`) est ouverte au **manager** — elle n'**ajoute** au référentiel commun que
+  par `INSERT OR IGNORE`, jamais n'écrase. Création, modification et suppression manuelles d'une marque
+  ou d'un modèle restent à l'admin plateforme. Le technicien reste refusé.
 
 ## Invariants isolation multi-tenant — routes par ID (depuis 2026-07-31)
 

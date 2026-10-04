@@ -27,7 +27,8 @@
 // AVANT (2026-10-04, message d'une pièce déjà en stock aligné sur le bouton de la fiche — stock.js) : const CACHE_VERSION  = 'izigsm-v3.26'
 // AVANT (2026-10-04, bouton « Importer » d'une ligne Mobilax rendu après un import unitaire — stock.js) : const CACHE_VERSION  = 'izigsm-v3.27'
 // AVANT (2026-10-04, en-tête « Qté en rayon » au-dessus du champ — stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.28'
-const CACHE_VERSION  = 'izigsm-v3.29'
+// AVANT (2026-10-04, synchro phone-specs-api : résumé en échec et erreurs nommées — services.html, services.js) : const CACHE_VERSION  = 'izigsm-v3.29'
+const CACHE_VERSION  = 'izigsm-v3.30'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

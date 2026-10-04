@@ -1,6 +1,17 @@
 # iziGSM — Bugs connus
 
-## 🟠 OUVERT — Catalogue services : « Synchroniser API » ne récupère plus aucun modèle (signalé le 2026-10-04)
+## ✅ 🟠 Catalogue services : « Synchroniser API » ne récupère plus aucun modèle (signalé le 2026-10-04, CORRIGÉ le même jour, non déployé)
+
+**Cause mesurée** (rejoué en production avec Claude in Chrome, compte manager, marque Apple) : chaque marque
+répondait **403 « Accès refusé. Rôles requis : admin. Votre rôle : manager. »** — les routes `/services/catalog/sync-*`
+étaient réservées à l'admin, le bouton proposé à tous. La synchro n'avait pas « cessé de marcher » : elle n'avait
+jamais été ouverte au manager. En local, avec l'admin du seed, AT&T passait (200). **Correctif** (décision de
+l'exploitant : ouvrir au manager) : `requireRole('admin', 'manager')` sur les 4 routes ; résumé de la fenêtre en
+échec (❌ / ⚠️) avec une ligne « Marque — motif » par erreur. Tests vus rouges : `roles-manager-routes` (4 routes),
+E2E `services-synchro-resume`. Boucle rejouée avec le manager du seed : Apple, 152 modèles ajoutés.
+**Reste ouvert** : le bouton est montré au technicien (refusé, désormais en rouge et nommé).
+
+### Constat initial (historique)
 
 **Symptôme** (capture de l'exploitant, production v3.29, compte admin plateforme, `/services` onglet
 « Marques & Modèles », marque AT&T sélectionnée) : la fenêtre « Synchroniser depuis phone-specs-api »
