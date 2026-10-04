@@ -29,7 +29,20 @@ export WRANGLER_SEND_METRICS=false
 [[ -e .dev.vars ]] || ln -s "$ROOT/.dev.vars" .dev.vars
 
 # Specs de la tache : ajoutees ou modifiees depuis la base d'integration.
-mapfile -t SPECS < <(git diff --name-only --diff-filter=AM "$(git merge-base "$BASE" HEAD)" HEAD -- 'tests/e2e/*.spec.ts')
+# AVANT : mapfile -t SPECS < <(git diff --name-only --diff-filter=AM "$(git merge-base "$BASE" HEAD)" HEAD -- 'tests/e2e/*.spec.ts')
+#   (2026-10-04, O58, socle v3.95) L'agent ne commite plus (ADR 0004) : sa spec neuve
+#   n'etait jamais jouee quand il lancait ce controle pendant son travail. S'ajoutent
+#   les specs non commitees du worktree (nouvelles ou modifiees). Lance par le harnais
+#   apres son commit, la liste reste celle du diff, comme avant.
+mapfile -t SPECS_COMMITEES < <(git diff --name-only --diff-filter=AM "$(git merge-base "$BASE" HEAD)" HEAD -- 'tests/e2e/*.spec.ts')
+mapfile -t SPECS_NON_COMMITEES < <(git ls-files --others --modified --exclude-standard -- 'tests/e2e/*.spec.ts')
+SPECS=()
+while read -r spec; do
+  # Une spec supprimee dans le worktree est listee par --modified : on l'ecarte.
+  if [[ -n "$spec" && -f "$spec" ]]; then
+    SPECS+=("$spec")
+  fi
+done < <(printf '%s\n' "${SPECS_COMMITEES[@]}" "${SPECS_NON_COMMITEES[@]}" | sort -u)
 echo "specs de la tache : ${#SPECS[@]} ${SPECS[*]:-}"
 
 # 1. Base D1 locale neuve.
