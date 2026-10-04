@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 147 — chantier TTC cadré, v3.31 en production)
+# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 148 — ticket 11 TTC livré, v3.32 en production)
+
+## Checkpoint 148 — Ticket 11 du chantier prix TTC livré (2026-10-04, nuit)
+
+**Production : `izigsm-v3.32`, dernière migration `0061`. Dépôt et production alignés** (`c0f024c`).
+Vitest 1 444 + 2 permanents, tsc 32.
+
+- **Ticket 11 `done`** (`3307ebb`) : CA HT à côté du TTC — tableau de bord (« CA ce mois (TTC) » + ligne
+  HT) et statistiques (« CA ce mois » et « CA 12 mois »). Service : `ca_mois_ht`, `ca_mois_precedent_ht`,
+  `total_12_mois_ht` ; alias SQL `ca` → `ca_ttc`. **Décisions de l'exploitant** : CA = factures
+  **payées seulement** (filtre existant, figé par test) ; HT sur les **encarts seuls** (moyenne,
+  graphique, écart restent en TTC). Tests vus rouges : `stats-ca-ht-ttc-sqlite` (vrai SQLite), E2E
+  `ca-ht-ttc`. Revue à deux axes appliquée (JSDoc, noms, alias, « — » si montant absent).
+- Déploiement : aperçu `d484f700` **puis** apex relus (`sw.js` v3.32, assets en JavaScript, 401 sans jeton).
+
+**Prochaine action** : ticket **01** du chantier TTC, **session neuve** :
+`/mattpocock-skills:implement .scratch/prix-ttc/issues/01-prix-de-vente-ttc-des-pieces.md`.
 
 ## Checkpoint 147 — Chantier « prix TTC » cadré, synchro du référentiel réparée (2026-10-04, soir)
 

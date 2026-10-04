@@ -1,4 +1,13 @@
-# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 147 — v3.31 en production, chantier TTC cadré, 11 tickets prêts)
+# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 148 — v3.32 en production, ticket 11 TTC livré)
+
+## ➡ Première action (checkpoint 148 — complète celle du 147 ci-dessous)
+
+**Production `izigsm-v3.32` / `0061`, dépôt aligné (`c0f024c`).** Ticket **11** du chantier prix TTC
+livré et déployé (CA HT et TTC, factures payées seulement, encarts seuls). Reste du chantier : **ticket 01**
+en premier, dans une **session neuve** (tout le reste en dépend) — voir l'ordre et les règles du 147.
+Recette rapide à l'écran (Ctrl+F5) : « HT : … » sous le CA du tableau de bord et des statistiques.
+
+## Checkpoint 147 (historique)
 
 ## ➡ Première action (checkpoint 147 — remplace celle du 146)
 
