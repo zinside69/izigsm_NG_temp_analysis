@@ -133,9 +133,15 @@
           </div>
           <!-- Boutons Modèles -->
           <div id="btns-modeles" style="display:none;gap:8px;">
+            <!-- AVANT (2026-10-04 — boutons sans id, montrés à tous les rôles, refusés à coup sûr au technicien) :
             <button class="btn btn-secondary" onclick="openModalMarque()">＋ Marque</button>
             <button class="btn btn-primary"   onclick="openModalModele()">＋ Modèle</button>
             <button class="btn" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="openModalSync()">🔄 Synchroniser API</button>
+            -->
+            <!-- Visibilité par rôle posée par afficherBoutonsReferentiel() (services.js) -->
+            <button class="btn btn-secondary" id="btn-ajout-marque"  onclick="openModalMarque()">＋ Marque</button>
+            <button class="btn btn-primary"   id="btn-ajout-modele"  onclick="openModalModele()">＋ Modèle</button>
+            <button class="btn" id="btn-synchro-api" style="background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="openModalSync()">🔄 Synchroniser API</button>
           </div>
           <div class="topbar-avatar" id="topbar-avatar">U</div>
         </div>

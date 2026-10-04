@@ -454,8 +454,25 @@ function switchTab(tab) {
   document.getElementById('btns-modeles').style.display  = isServices ? 'none' : 'flex';
   document.getElementById('tab-services').classList.toggle('active', isServices);
   document.getElementById('tab-modeles').classList.toggle('active', !isServices);
+  afficherBoutonsReferentiel();
 
   if (!isServices && !_marquesLoaded) loadMarques();
+}
+
+/**
+ * Boutons du référentiel marques / modèles : chacun n'est montré qu'aux rôles que le serveur accepte
+ * (2026-10-04) — un geste proposé ne doit pas échouer à coup sûr.
+ *   ＋ Marque, ＋ Modèle : rôle admin (référentiel commun, création réservée à la plateforme) ;
+ *   Synchroniser API     : admin et manager (ajout seul, décision de l'exploitant du 2026-10-04).
+ * `style.display` et non `hidden` : le `display` de `.btn` l'emporterait sur l'attribut.
+ */
+function afficherBoutonsReferentiel() {
+  const role = sessionCourante()?.role;
+  const peutCreerAuReferentiel = role === 'admin';
+  const peutSynchroniser       = role === 'admin' || role === 'manager';
+  document.getElementById('btn-ajout-marque').style.display = peutCreerAuReferentiel ? '' : 'none';
+  document.getElementById('btn-ajout-modele').style.display = peutCreerAuReferentiel ? '' : 'none';
+  document.getElementById('btn-synchro-api').style.display  = peutSynchroniser ? '' : 'none';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
