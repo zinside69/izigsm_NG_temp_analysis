@@ -388,9 +388,23 @@ if [[ "$DECISION_H" == "republier" ]]; then
   log "Publication relancee : $TASK_ID ($VERDICT_PRIS)"
 fi
 
+# (2026-10-04, defaut 112, O57) La fiche T-NNN.env est un fichier « une cle par
+# ligne » : une consigne sur plusieurs lignes y laissait des lignes parasites, et
+# run-task.sh n'en lisait que la 1re (T-007 d'iziGSM). La consigne ENTIERE va dans
+# un fichier a part, lu par run-task.sh puis consomme ; la fiche n'en garde qu'une
+# version sur une ligne (pour l'affichage). Tests CH1, CH2.
+CONSIGNE_COMPLETE_F="$STATE_DIR/$TASK_ID.consigne-humaine.md"
+ecrire_consigne_complete() {  # ecrire_consigne_complete <texte de la consigne>
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$1" >"$CONSIGNE_COMPLETE_F"
+}
+
 python3 - "$ENVF" "$DECISION_H" "$MESSAGE" <<'PY'
 import sys
 p, decision, message = sys.argv[1:4]
+# (2026-10-04, defaut 112, O57) Une seule ligne dans la fiche : les sauts de ligne
+# deviennent des espaces. La consigne entiere est dans son fichier a part.
+message_sur_une_ligne = ' '.join(message.splitlines())
 rows=[]
 for line in open(p, encoding='utf-8'):
     if '=' not in line:
@@ -405,15 +419,29 @@ for line in open(p, encoding='utf-8'):
         # AVANT :         if decision == 'modifier':
         #   (2026-09-24, ADR 0002) « relancer » transmet aussi sa consigne a l'agent.
         if decision in ('modifier', 'relancer'):
-            rows.append('consigne_humaine=' + message + '\n')
+            # AVANT :             rows.append('consigne_humaine=' + message + '\n')
+            rows.append('consigne_humaine=' + message_sur_une_ligne + '\n')
         elif decision == 'reporter' and message:
-            rows.append('consigne_humaine=' + message + '\n')
+            # AVANT :             rows.append('consigne_humaine=' + message + '\n')
+            rows.append('consigne_humaine=' + message_sur_une_ligne + '\n')
         else:
             rows.append(line)
     else:
         rows.append(line)
 open(p,'w',encoding='utf-8').writelines(rows)
 PY
+# (2026-10-04, defaut 112, O57) Memes cas que ci-dessus : la consigne entiere,
+# sauts de ligne compris, pour l'agent.
+consigne_transmise_a_l_agent=false
+if [[ "$DECISION_H" == modifier || "$DECISION_H" == relancer ]]; then
+  consigne_transmise_a_l_agent=true
+fi
+if [[ "$DECISION_H" == reporter && -n "$MESSAGE" ]]; then
+  consigne_transmise_a_l_agent=true
+fi
+if [[ "$consigne_transmise_a_l_agent" == true ]]; then
+  ecrire_consigne_complete "$MESSAGE"
+fi
 
 # Transition gardee : rc 30 si la machine a etats refuse (Phase 5 / P3-a)
 transition_etat "$ENVF" "$CIBLE" repondre
@@ -443,9 +471,14 @@ if (( PREUVE_OUV == 1 )) && [[ "$DECISION_H" == approuver || "$DECISION_H" == re
     python3 - "$ENVF" "Preuve rouge (compte rendu humain) : $MESSAGE" <<'PY'
 import sys
 p, consigne = sys.argv[1:3]
-rows = [('consigne_humaine=' + consigne + '\n') if l.startswith('consigne_humaine=') else l for l in open(p, encoding='utf-8')]
+# AVANT : rows = [('consigne_humaine=' + consigne + '\n') if l.startswith('consigne_humaine=') else l for l in open(p, encoding='utf-8')]
+#   (2026-10-04, defaut 112, O57) Une seule ligne dans la fiche ; le compte rendu
+#   entier va dans le fichier de consigne (ecrit juste apres). Test CH2.
+consigne_sur_une_ligne = ' '.join(consigne.splitlines())
+rows = [('consigne_humaine=' + consigne_sur_une_ligne + '\n') if l.startswith('consigne_humaine=') else l for l in open(p, encoding='utf-8')]
 open(p, 'w', encoding='utf-8').writelines(rows)
 PY
+    ecrire_consigne_complete "Preuve rouge (compte rendu humain) : $MESSAGE"
   fi
   log "$TASK_ID : preuve(s) $STATUT_PREUVE — $MESSAGE"
 fi

@@ -147,7 +147,17 @@ fi
 # l'agent relance repartait sans elle. Elle entre desormais dans la fiche de
 # tache et dans le prompt, prioritaire, puis est consommee apres la session. Test EC13.
 FICHE_TACHE="$ORCH_DIR/etat/taches/$TASK_ID.env"
-CONSIGNE_H="$(sed -n 's/^consigne_humaine=//p' "$FICHE_TACHE" 2>/dev/null | head -1 || true)"
+# AVANT : CONSIGNE_H="$(sed -n 's/^consigne_humaine=//p' "$FICHE_TACHE" 2>/dev/null | head -1 || true)"
+#   (2026-10-04, defaut 112, O57) Une consigne sur plusieurs lignes etait coupee a sa
+#   1re ligne (T-007 d'iziGSM). repondre.sh ecrit desormais la consigne ENTIERE dans
+#   un fichier a part ; la fiche n'en garde qu'une version sur une ligne, lue
+#   seulement en l'absence du fichier (fiche ecrite par un socle plus ancien). Test CH1.
+CONSIGNE_COMPLETE_F="$STATE_DIR/$TASK_ID.consigne-humaine.md"
+if [[ -s "$CONSIGNE_COMPLETE_F" ]]; then
+  CONSIGNE_H="$(cat "$CONSIGNE_COMPLETE_F")"
+else
+  CONSIGNE_H="$(sed -n 's/^consigne_humaine=//p' "$FICHE_TACHE" 2>/dev/null | head -1 || true)"
+fi
 # (2026-09-27, O48) Corrections demandees par le relecteur (boucle de
 # correction, pipeline.sh) : ecrites dans l'etat, remises a l'agent comme la
 # consigne humaine, consommees apres la session. Test BC1.
@@ -350,6 +360,8 @@ CLAUDE_RC=$?
 set -e
 # Consigne consommee : elle ne sera pas redonnee a la relance suivante (EC13).
 [[ -z "$CONSIGNE_H" ]] || sed -i 's/^consigne_humaine=.*/consigne_humaine=/' "$FICHE_TACHE"
+# (2026-10-04, defaut 112, O57) Le fichier de la consigne entiere est consomme aussi.
+rm -f "$CONSIGNE_COMPLETE_F"
 # (2026-09-27, O48) Corrections consommees de meme. Une consigne humaine ouvre un
 # nouveau cycle : le compteur de la boucle de correction repart de zero. Test BC2.
 rm -f "$CORRECTIONS_F"

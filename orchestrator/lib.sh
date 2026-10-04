@@ -460,7 +460,17 @@ correction_eligible() {
   local dec="$1" rev="$2"
   [[ "$(jq -r '.verdict // ""' "$rev" 2>/dev/null)" == desaccord ]] || return 1
   [[ "$(jq -r '.verdict // ""' "$dec" 2>/dev/null)" != PARK ]] || return 1
-  jq -e '(.raisons // []) | map(select(startswith("P") or startswith("M3:risque-high"))) | length == 0' \
+  # AVANT :   jq -e '(.raisons // []) | map(select(startswith("P") or startswith("M3:risque-high"))) | length == 0' \
+  # AVANT :     "$dec" >/dev/null 2>&1
+  #   (2026-10-04, defaut 111, O61, decision de l'operateur, qui revient sur celle du
+  #   27/09 pour P16) Une preuve a fournir (P16) n'est pas un arret : decide.sh ramene
+  #   seulement AUTO_MERGE a PR_READY. Sur T-007 (iziGSM), desaccord + P16 a publie la
+  #   PR avec 3 rejets majeurs, sans correction. Bloquent la boucle : toute autre raison
+  #   P, et le risque eleve. La preuve reste a fournir apres la correction. Tests BC3, BC5.
+  jq -e '(.raisons // [])
+         | map(select(startswith("P16:") | not))
+         | map(select(startswith("P") or startswith("M3:risque-high")))
+         | length == 0' \
     "$dec" >/dev/null 2>&1
 }
 
