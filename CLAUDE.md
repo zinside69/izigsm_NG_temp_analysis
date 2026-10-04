@@ -1183,6 +1183,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-04 (après le checkpoint 146) : DÉPLOYÉ — production en `izigsm-v3.30`, migration `0061`.**
+Synchro phone-specs-api ouverte au manager, résumé en échec avec erreurs nommées (`5114e17`). Aperçu
+`3bd6524b` **puis** apex relus : `sw.js` v3.30, `services.257f8225.js` en JavaScript, route sans jeton → 401 ;
+synchro d'Apple par un manager en production : 6 modèles ajoutés sur 152. **Dépôt et production alignés.**
+
 **État au 2026-10-04 (checkpoint 146) : DÉPLOYÉ — production en `izigsm-v3.29`, migration `0061`
 (aucune nouvelle).** Trois correctifs Mobilax issus de la recette (message d'une pièce déjà en stock,
 verrou commun import d'une ligne / en lot, en-tête « Qté en rayon »). Aperçus `4fe89178` et `8f888b01`

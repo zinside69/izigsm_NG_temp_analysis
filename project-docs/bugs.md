@@ -1,6 +1,6 @@
 # iziGSM — Bugs connus
 
-## ✅ 🟠 Catalogue services : « Synchroniser API » ne récupère plus aucun modèle (signalé le 2026-10-04, CORRIGÉ le même jour, non déployé)
+## ✅ 🟠 Catalogue services : « Synchroniser API » ne récupère plus aucun modèle (signalé le 2026-10-04, CORRIGÉ et déployé le même jour, v3.30 — prouvé en production : manager, Apple, 6 nouveaux / 152)
 
 **Cause mesurée** (rejoué en production avec Claude in Chrome, compte manager, marque Apple) : chaque marque
 répondait **403 « Accès refusé. Rôles requis : admin. Votre rôle : manager. »** — les routes `/services/catalog/sync-*`
