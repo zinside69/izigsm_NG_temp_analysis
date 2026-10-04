@@ -68,6 +68,62 @@ test('SKU déjà existant : le message le précise et nomme le produit, en infor
   await expect(page.locator('#stock-name')).toHaveValue('E2E batterie saisie à la main')
 })
 
+// Recette du 2026-10-04, reproduite en production : pendant l'import d'une ligne, « Importer la
+// sélection » restait actif — le lot partait en parallèle, l'import de la ligne refermait la fenêtre
+// sous lui, et le bouton de la ligne restait « Import… ».
+test('import d\'une ligne en vol : la sélection est figée, puis la ligne redit « Importer »', async ({ page, request }) => {
+  const tenant = await createTenantAdmin(request)
+  const cree = await request.post('/api/produits', {
+    headers: { Authorization: `Bearer ${tenant.accessToken}` },
+    data:    { nom: 'E2E batterie déjà en stock', sku: '3000000000017', stock_minimum: 0 },
+  })
+  expect(cree.status(), await cree.text()).toBe(201)
+  const idExistant = (await cree.json()).id
+
+  await page.route('**/api/mobilax/produits?*', route => route.fulfill({ json: { success: true, data: {
+    fournisseur_id: 3, total: 1, page: 1, pages: 1,
+    produits: [{ mobilax_id: 17, nom: 'Batterie iPhone 12', ean13: '3000000000017', prix_achat_ht: 5.8, stock: 12 }],
+  } } }))
+  // La réponse de l'import est retenue tant que le test ne la libère pas : l'import reste « en vol »
+  let libererImport: () => void = () => {}
+  const importLibere = new Promise<void>(resolve => { libererImport = resolve })
+  let importsRecus = 0
+  await page.route('**/api/mobilax/import*', async route => {
+    importsRecus += 1
+    await importLibere
+    await route.fulfill({
+      status: 409,
+      json:   { success: false, code: 'deja_importe', error: 'Cette pièce est déjà dans votre stock.', data: { produit_id: idExistant } },
+    })
+  })
+
+  await seConnecter(page, { email: tenant.email, password: tenant.password })
+  await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  await page.goto('/stock')
+  await page.click('#btn-mobilax')
+  await page.fill('#mobilax-terme', 'batterie')
+  await page.click('#btn-mobilax-chercher')
+  await expect(page.locator('#mobilax-resultats tr')).toHaveCount(1)
+
+  // La ligne est cochée (sélection active) puis importée seule
+  await page.locator('#mobilax-resultats input[type="checkbox"]').check()
+  await page.locator('#mobilax-resultats input.mobilax-qte').fill('1')
+  const boutonDeLigne = page.locator('#mobilax-resultats button[data-mobilax-id="17"]')
+  await boutonDeLigne.click()
+  await expect.poll(() => importsRecus).toBe(1)
+
+  // Pendant l'import de la ligne : barre de sélection et case figées
+  await expect(page.locator('#btn-selection-importer')).toBeDisabled()
+  await expect(page.locator('#mobilax-resultats input[type="checkbox"]')).toBeDisabled()
+
+  libererImport()
+  await expect(page.locator('#modal-stock')).toHaveCSS('opacity', '1')
+  // Un seul import est parti, et la ligne (fenêtre refermée, résultats gardés) redit « Importer »
+  expect(importsRecus).toBe(1)
+  await expect(boutonDeLigne).toHaveText('Importer')
+  await expect(boutonDeLigne).toBeEnabled()
+})
+
 test('même pièce fournisseur : le texte habituel est conservé', async ({ page, request }) => {
   await importerPieceDejaEnStock(page, request, 'Cette pièce est déjà dans votre stock.')
 

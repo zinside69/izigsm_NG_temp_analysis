@@ -1005,9 +1005,35 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
 /** Message du serveur pour une pièce fournisseur déjà importée (même fiche, même référence). */
 const MESSAGE_PIECE_DEJA_IMPORTEE = 'Cette pièce est déjà dans votre stock.';
 
+/**
+ * Import unitaire d'une ligne, sous le même verrou que l'import en lot (recette du 2026-10-04).
+ * Sans lui, « Importer la sélection » restait actif pendant l'import d'une ligne : le lot partait
+ * en parallèle, l'import unitaire refermait la fenêtre sous lui, et le bouton de la ligne restait
+ * « Import… ». Le verrou fige cases, barre de sélection et autres lignes le temps de l'appel.
+ */
 async function importerMobilax(mobilaxId, bouton) {
-  // Un seul import à la fois : l'import unitaire fermerait la fenêtre sous l'import en cours
+  // Un seul import à la fois, dans les deux sens : un lot en cours refuse la ligne, et la ligne
+  // en cours fige le lot
   if (importEnCours) return;
+  importEnCours = true;
+  basculerSaisieImport(false);
+  try {
+    await importerUnePieceMobilax(mobilaxId, bouton);
+  } finally {
+    // Succès, refus ou réseau coupé : le verrou est toujours levé, et la ligne redit « Importer »
+    // (la fenêtre refermée garde ses résultats)
+    importEnCours = false;
+    basculerSaisieImport(true);
+    bouton.disabled = false;
+    bouton.textContent = 'Importer';
+  }
+}
+
+// AVANT (2026-10-04 — le verrou est désormais posé par importerMobilax(), qui appelle celle-ci) :
+// async function importerMobilax(mobilaxId, bouton) {
+//   // Un seul import à la fois : l'import unitaire fermerait la fenêtre sous l'import en cours
+//   if (importEnCours) return;
+async function importerUnePieceMobilax(mobilaxId, bouton) {
   bouton.disabled = true;
   bouton.textContent = 'Import…';
   // « Qté en rayon » de la ligne (ticket 05) : vide = non envoyée, le serveur applique le stock
