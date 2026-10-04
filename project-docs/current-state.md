@@ -1,4 +1,31 @@
-# iziGSM — État courant (MàJ : 2026-10-03, checkpoint 145 — chantier « prix TTC » décidé, à cadrer)
+# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 146 — recette du 144 bouclée, v3.29 en production)
+
+## Checkpoint 146 — Recette bouclée, trois correctifs Mobilax en production (2026-10-04)
+
+**Production : `izigsm-v3.29`, dernière migration `0061` (aucune nouvelle). Dépôt et production
+alignés** (`9317e7e`, poussé).
+
+- **Recette du checkpoint 144 bouclée** (manager `telnet@bbox.fr`) : journal de caisse en colonnes,
+  onglets au style du socle ; #804 scanné → 220 € HT « (dern.) ».
+- **« Ajouter N au stock » prouvé en base de production, par les deux chemins** sur #686
+  (`3000000296028`) : fiche après import unitaire (`ajouts_stock_import` 14:40:59, mouvement n° 10,
+  0 → 1) puis bilan d'un lot (15:02:09, mouvement n° 11, 1 → 2). Une écriture par clic.
+- **`ec210b6` (v3.27)** : le toast d'une pièce déjà en stock renvoyait à « Ajuster le stock » alors que
+  la fiche ouverte propose « Ajouter N au stock » — texte aligné sur le bouton.
+- **`e30d896` (v3.28)** : **deux imports pouvaient tourner à la fois**. Reproduit en production avec
+  Claude in Chrome : pendant l'import d'une ligne, « Importer la sélection » restait actif, le lot
+  partait, l'import de la ligne refermait la fenêtre sous lui, et le bouton de la ligne restait
+  « Import… ». `importerMobilax()` pose désormais le verrou `importEnCours` (barre, cases et lignes
+  figées) et le lève dans un `finally` ; le corps est `importerUnePieceMobilax()`.
+- **`9317e7e` (v3.29)** : l'en-tête « Qté en rayon » tombait au-dessus du bouton « Importer » — champ
+  et bouton dans deux colonnes, en-tête centré sur le champ (mesuré par `boundingBox()`).
+- Chaque correctif : E2E vu rouge sur le symptôme exact, puis vert ; E2E Mobilax + XSS 78/78.
+  Déploiements par l'exploitant, aperçu (`4fe89178`, `8f888b01`) **puis** apex relus.
+- ⚠ Faux départ évité : un premier test du bouton figé passait par une fenêtre rouverte — qui vide ses
+  résultats ; il ne prouvait rien. Le vrai scénario (imports parallèles) a été mesuré avant d'écrire.
+
+**Prochaine action** : cadrer le chantier « prix TTC » (`/mattpocock-skills:grill-with-docs`, tapé par
+l'exploitant) ; puis lot 2, ticket 15 (NF525).
 
 ## Checkpoint 145 — Décision : prix TTC de référence pour toute pièce et tout service (2026-10-03, soir)
 

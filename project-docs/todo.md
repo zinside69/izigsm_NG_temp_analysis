@@ -42,7 +42,10 @@ Le **prix d'achat fournisseur** (Mobilax, bons de commande) est un prix HT par n
 - [x] Clôture « tout ou rien » prouvée en production (clôture n° 1, boutique 2)
 - [x] Styles `@apply` réparés : caisse, SAV, personnel (`f9710e2`, `3dafb76`) ; onglets et cartes au style du socle
 - [x] « Ajouter N au stock » dans le bilan d'un import en lot (`a0d52c7`)
-- [ ] Recette : journal en colonnes ; ajout depuis le bilan d'un lot (relire la base) ; #804 au dernier prix
+- [x] Recette : journal en colonnes ; ajout depuis le bilan d'un lot (relire la base) ; #804 au dernier prix
+  — **faite le 2026-10-04** (checkpoint 146) : ajouts prouvés en base par la fiche et par le bilan (#686,
+  mouvements n° 10 et 11) ; trois correctifs issus de la recette déployés (`ec210b6`, `e30d896`,
+  `9317e7e`, v3.29)
 - [ ] Autres pages : rechercher d'autres `@apply` hors `text/tailwindcss` si de nouvelles pages en ajoutent
       (garde-fou statique possible : vitest qui refuse `@apply` dans un `<style>` sans ce type)
 

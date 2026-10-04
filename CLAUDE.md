@@ -678,6 +678,11 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
     boucle d'import : `lancerImportGeneration()` et, au ticket 02, l'import d'une sélection
     l'appellent. Articles `{ mobilax_id, nom, quantite? }` — `quantite` non nulle → envoyée en
     `quantite_en_rayon`, sinon rien (stock initial par défaut). ⊥ une seconde boucle.
+  - **Un seul import à la fois, dans les deux sens** (2026-10-04) : l'import d'une ligne
+    (`importerMobilax()`) pose **lui aussi** `importEnCours` et fige la saisie
+    (`basculerSaisieImport(false)`), levés dans un `finally` ; son corps est `importerUnePieceMobilax()`.
+    Sans ce verrou, un lot partait pendant l'import d'une ligne, qui refermait la fenêtre sous lui
+    (mesuré en production). ⊥ un nouveau geste d'import hors de ce verrou.
   - **Elle ne recharge pas le stock** : l'appelant range son état (aperçu, sélection) **puis**
     `await loadStock()`. L'inverse laissait « Importer N articles » cliquable sur un aperçu périmé
     pendant le rechargement (`decisions.md` 2026-09-15).
@@ -1173,6 +1178,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-04 (checkpoint 146) : DÉPLOYÉ — production en `izigsm-v3.29`, migration `0061`
+(aucune nouvelle).** Trois correctifs Mobilax issus de la recette (message d'une pièce déjà en stock,
+verrou commun import d'une ligne / en lot, en-tête « Qté en rayon »). Aperçus `4fe89178` et `8f888b01`
+**puis** apex relus : `sw.js` v3.29, `stock.d0556dfb.js` en JavaScript avec le verrou, en-tête centré
+servi, routes 401. **Dépôt et production alignés** (`9317e7e`, poussé).
 
 **État au 2026-10-03 (checkpoint 144) : DÉPLOYÉ — production en `izigsm-v3.26`, migration `0061`.**
 Styles `@apply` réparés (caisse, SAV, personnel), ajout au stock depuis le bilan d'un lot Mobilax.

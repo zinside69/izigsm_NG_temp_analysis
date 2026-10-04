@@ -1,5 +1,25 @@
 # iziGSM — Bugs connus
 
+## ✅ 🟡 Mobilax : import d'une ligne et import en lot pouvaient tourner à la fois (trouvé en recette le 2026-10-04, CORRIGÉ et déployé, v3.28)
+
+**Défaut** : `importerMobilax()` (import d'une ligne) refusait de partir pendant un lot, mais ne posait
+pas le verrou `importEnCours` lui-même. « Importer la sélection » restait donc actif pendant l'import
+d'une ligne : le lot partait en parallèle, l'import de la ligne refermait la fenêtre sous lui (fiche
+ouverte), et le bouton de la ligne restait « Import… ». **Mesuré en production** avec Claude in Chrome
+(#686), après une capture de l'exploitant. Aucune donnée faussée (serveur `deja_importe`, ajout soumis
+à un clic). **Correctif** (`e30d896`) : verrou posé et levé en `finally` par `importerMobilax()`, corps
+dans `importerUnePieceMobilax()`. E2E « import d'une ligne en vol » (réponse retenue) vu rouge sur
+`#btn-selection-importer` actif.
+**Fausse piste écartée** : « bouton figé après réouverture » — `ouvrirRechercheMobilax()` vide les
+résultats ; la ligne figée n'apparaît que fenêtre rouverte **pendant** un lot.
+
+## ✅ 🟡 Mobilax : message et en-tête trompeurs (trouvé en recette le 2026-10-04, CORRIGÉS et déployés, v3.27 et v3.29)
+
+- Toast d'une pièce déjà en stock : « passez par « Ajuster le stock » » alors que la fiche ouverte
+  propose « Ajouter N au stock » (texte antérieur au ticket 18) — aligné (`ec210b6`).
+- En-tête « Qté en rayon » aligné à droite d'une cellule portant champ **et** bouton : il tombait sur le
+  bouton (écart de 50 px mesuré). Deux colonnes, en-tête centré sur le champ (`9317e7e`).
+
 ## ✅ 🟠 Styles en `@apply` ignorés sur Caisse, SAV, Personnel (trouvé le 2026-10-03, CORRIGÉ et déployé, v3.26)
 
 **Défaut** : ces pages posaient leurs classes maison en `@apply` dans un `<style>` ordinaire — le

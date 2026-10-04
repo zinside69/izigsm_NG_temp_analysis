@@ -1,4 +1,22 @@
-# Recovery Prompt — iziGSM — 2026-10-03 (checkpoint 145 — v3.26 en production, chantier TTC à cadrer)
+# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 146 — v3.29 en production, recette bouclée, chantier TTC à cadrer)
+
+## ➡ Première action (checkpoint 146 — remplace celles du 144 et du 145)
+
+**Production `izigsm-v3.29` / `0061`, dépôt aligné et poussé (`9317e7e`).** La recette du 144 est
+bouclée (caisse, #804 au dernier prix, « Ajouter N au stock » prouvé en base par la fiche **et** par le
+bilan d'un lot). Trois correctifs Mobilax déployés le 2026-10-04 : message d'une pièce déjà en stock,
+**verrou commun import d'une ligne / import en lot**, en-tête « Qté en rayon » au-dessus du champ.
+
+1. **Cadrer le chantier « prix TTC »** : l'exploitant tape `/mattpocock-skills:grill-with-docs`
+   (⊥ le rejouer à la main). Détail et questions : `todo.md` § 🟠 « Caisse : saisir les prix en TTC ».
+   Touche la facturation : se code ici, pas au socle.
+2. Ensuite : lot 2, ticket 15 (NF525, ici).
+
+⚠ Code lisible par un humain ; `Get-Process workerd | Stop-Process -Force` avant chaque relance de wrangler.
+⚠ Commentaire `AVANT :` d'une ligne située **dans un gabarit JS** (`` `…${…}…` ``) : le poser en
+commentaire JS au-dessus du gabarit — un commentaire HTML dans le gabarit exécuterait ses `${…}`.
+
+## Checkpoint 145 (historique)
 
 ## ➡ Ajout du checkpoint 145 (lire aussi la « Première action » du 144 ci-dessous)
 
