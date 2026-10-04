@@ -1183,6 +1183,10 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-04 (soir) : DÉPLOYÉ — production en `izigsm-v3.31`, migration `0061`.** Boutons du
+référentiel selon le rôle (`5137373`). Aperçu `49414f96` **puis** apex relus : `sw.js` v3.31,
+`services.3167796e.js` en JavaScript, boutons identifiés servis. **Dépôt et production alignés.**
+
 **État au 2026-10-04 (après le checkpoint 146) : DÉPLOYÉ — production en `izigsm-v3.30`, migration `0061`.**
 Synchro phone-specs-api ouverte au manager, résumé en échec avec erreurs nommées (`5114e17`). Aperçu
 `3bd6524b` **puis** apex relus : `sw.js` v3.30, `services.257f8225.js` en JavaScript, route sans jeton → 401 ;
