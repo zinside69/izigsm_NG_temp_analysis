@@ -1,4 +1,25 @@
-# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 146 — v3.29 en production, recette bouclée, chantier TTC à cadrer)
+# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 147 — v3.31 en production, chantier TTC cadré, 11 tickets prêts)
+
+## ➡ Première action (checkpoint 147 — remplace celle du 146)
+
+**Production `izigsm-v3.31` / `0061`, dépôt aligné (`e22d8d7`).** Le chantier « prix TTC » est cadré :
+décisions Q1-Q21 (`decisions.md` § 2026-10-04), spec `.scratch/prix-ttc/spec.md`, 11 tickets
+`.scratch/prix-ttc/issues/` (migrations `0062`-`0067` réservées).
+
+1. **Ticket 01** (prix de vente TTC des pièces) dans une **session neuve** : l'exploitant tape
+   `/mattpocock-skills:implement .scratch/prix-ttc/issues/01-prix-de-vente-ttc-des-pieces.md`.
+   Avant la migration : compter en `--remote` les TTC « non ronds » et remettre la liste.
+   Ticket **11** (CA HT/TTC) possible en parallèle, sans bloqueur.
+2. Ordre : 01 → 02 → (03, 04, 06, 09, 10) → 05 → 08 ; 06 → 07. **Déployer 01 + 02 + 03 ensemble** (01 seul
+   afficherait du TTC que la caisse ne calcule pas encore).
+3. Caisse / NF525 : se code ici avec l'exploitant, pas au socle. Ticket 05 et lot 2 touchent les mêmes
+   fichiers (`tickets.js`, `devis.js`) : pas en parallèle.
+
+⚠ Code lisible par un humain ; `Get-Process workerd | Stop-Process -Force` avant chaque relance de wrangler.
+⚠ Un incident « ne fonctionne plus » se rejoue **avec le rôle réel** de qui le signale (synchro : 403 au
+manager, invisible avec l'admin du seed).
+
+## Checkpoint 146 (historique)
 
 ## ➡ Première action (checkpoint 146 — remplace celles du 144 et du 145)
 

@@ -1,4 +1,31 @@
-# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 146 — recette du 144 bouclée, v3.29 en production)
+# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 147 — chantier TTC cadré, v3.31 en production)
+
+## Checkpoint 147 — Chantier « prix TTC » cadré, synchro du référentiel réparée (2026-10-04, soir)
+
+**Production : `izigsm-v3.31`, dernière migration `0061`. Dépôt et production alignés** (`e22d8d7`).
+Vitest 1 442 + 2 permanents, tsc 32.
+
+- **Chantier « prix TTC » cadré** (grilling Q1-Q21, `decisions.md` § 2026-10-04) : prix de vente TTC
+  stocké qui fait foi ; lignes calculées depuis le TTC ; client pro « servi en HT » (fiche + document,
+  calcul HT) ; prix d'achat HT ; arrondi du prix calculé par la marge réglé par boutique (,90 supérieur
+  par défaut) ; reprise au centime ; franchise → TVA 0 ; changement de taux → HT gardé ; CA HT et TTC.
+  **Spec** `.scratch/prix-ttc/spec.md` (50 stories, 5 coutures) ; **11 tickets** `.scratch/prix-ttc/issues/`,
+  migrations **`0062`-`0067` réservées**. Termes au `CONTEXT.md` (prix de vente, prix d'achat, total de
+  ligne, client professionnel). Chantiers séparés inscrits : **régime de la marge** (Q14-Q17 reportées,
+  expert-comptable) et **achats intracommunautaires**.
+- **Synchro phone-specs-api** (`5114e17`, v3.30) : « ne récupère plus de modèles » = **403 au manager**
+  (routes `requireRole('admin')`, bouton montré à tous, échec affiché en succès vert). Mesuré en
+  production via Claude in Chrome avec la session de l'exploitant. **Décision** : synchro ouverte au
+  manager (ajout seul, `INSERT OR IGNORE`) ; résumé ❌ / ⚠️ avec erreurs nommées. Prouvé en production :
+  Apple, 6 modèles ajoutés sur 152.
+- **Boutons du référentiel selon le rôle** (`5137373`, v3.31) : « ＋ Marque » / « ＋ Modèle » au seul
+  rôle admin (le manager était refusé lui aussi), « Synchroniser API » à admin et manager, rien au
+  technicien.
+- Chaque correctif : test vu rouge sur le symptôme, puis vert ; aperçu (`3bd6524b`, `49414f96`) **puis**
+  apex relus avant le push.
+
+**Prochaine action** : ticket **01** du chantier TTC (pièces en TTC) — ou **11** (CA HT/TTC, sans
+bloqueur) — dans une session neuve : `/mattpocock-skills:implement .scratch/prix-ttc/issues/01-…`.
 
 ## Checkpoint 146 — Recette bouclée, trois correctifs Mobilax en production (2026-10-04)
 
