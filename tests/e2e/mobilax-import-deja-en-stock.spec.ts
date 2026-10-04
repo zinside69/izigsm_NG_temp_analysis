@@ -54,8 +54,13 @@ test('SKU déjà existant : le message le précise et nomme le produit, en infor
   const flash = page.locator('.flash').last()
   await expect(flash).toHaveText(
     `Déjà en stock : ce SKU est déjà utilisé par « E2E batterie saisie à la main » (produit n° ${id}) — voici sa fiche.`
-    + ' La quantité saisie (5) n\'a pas été ajoutée : passez par « Ajuster le stock ».',
+    // AVANT (2026-10-04) : le message renvoyait vers « Ajuster le stock », alors que la fiche ouverte
+    // propose « Ajouter N au stock » depuis le ticket 18 — les deux se contredisaient (recette du jour).
+    // + ' La quantité saisie (5) n\'a pas été ajoutée : passez par « Ajuster le stock ».',
+    + ' La quantité saisie (5) n\'a pas été ajoutée : le bouton de la fiche vous propose de l\'ajouter.',
   )
+  // Le bouton annoncé par le message est bien dans la fiche
+  await expect(page.locator('#btn-stock-ajout-import')).toHaveText('Ajouter 5 au stock')
   // Une information, pas un échec
   await expect(flash).toHaveClass(/\binfo\b/)
   // La fiche du produit trouvé s'ouvre

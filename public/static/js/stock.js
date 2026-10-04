@@ -1035,7 +1035,10 @@ async function importerMobilax(mobilaxId, bouton) {
     : MESSAGE_PIECE_DEJA_IMPORTEE.replace(/\.$/, '');
   showFlash(dejaImporte
     ? `${motif} — voici sa fiche.`
-      + (quantite > 0 ? ` La quantité saisie (${quantite}) n'a pas été ajoutée : passez par « Ajuster le stock ».` : '')
+      // AVANT (2026-10-04) : renvoyait vers « Ajuster le stock », alors que la fiche ouverte juste
+      // après propose « Ajouter N au stock » (ticket 18) — les deux se contredisaient (recette du jour).
+      // + (quantite > 0 ? ` La quantité saisie (${quantite}) n'a pas été ajoutée : passez par « Ajuster le stock ».` : '')
+      + (quantite > 0 ? ` La quantité saisie (${quantite}) n'a pas été ajoutée : le bouton de la fiche vous propose de l'ajouter.` : '')
     : quantite > 0
       ? `Pièce importée avec ${quantite} en stock — ajustez le prix de vente ici.`
       : 'Pièce importée — ajustez le prix de vente ici, la quantité par « Ajuster le stock ».',
