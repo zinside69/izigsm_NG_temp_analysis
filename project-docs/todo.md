@@ -1,5 +1,19 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 2026-10-04 — Chantier « régime de la marge » (occasion, reconditionné) — décidé, à cadrer
+
+Décision de l'exploitant (cadrage TTC, Q10) : à prendre en compte, en chantier séparé, sur la base du
+prix de vente TTC. Aujourd'hui aucune trace : un reconditionné est vendu à 20 % sur le prix plein.
+Questions reportées (à faire valider par l'expert-comptable) : Q14 biens concernés (rachats,
+reconditionnement, case manuelle) ; Q15 base (prix de vente TTC − prix d'achat, frais de remise en état
+non déduits, marge ≤ 0 → TVA 0) ; Q16 document sans TVA ventilée + mention art. 297 A ; Q17 vente
+mixte, régime ligne par ligne.
+
+## 🟡 2026-10-04 — Chantier « achats » : achats intracommunautaires — décidé, à cadrer
+
+Décision de l'exploitant (cadrage TTC, Q6) : fournisseur UE, facture sans TVA, autoliquidation —
+fiche fournisseur (pays, n° TVA), bons de commande sans TVA avec mention, export comptable.
+
 ## 🟠 2026-10-04 — Catalogue services : la synchro phone-specs-api ne récupère plus de modèles
 
 - [ ] Relever la réponse réelle de la route de synchro (statut, corps, erreur nommée) — `bugs.md` 🟠 du 2026-10-04

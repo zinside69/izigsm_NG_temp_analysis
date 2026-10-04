@@ -1,5 +1,38 @@
 # iziGSM — Décisions
 
+## 2026-10-04 — Prix TTC : cadrage (grilling de l'exploitant)
+
+Complète l'entrée du 2026-10-03 ci-dessous. Réponses de l'exploitant, Q1 à Q21 :
+
+- **Q1 — le prix de vente TTC est stocké** sur chaque pièce, service et prix par modèle ; le HT en
+  est déduit. Un prix rond reste rond.
+- **Q2 — une ligne se calcule à partir du TTC** : total TTC = prix TTC × quantité, HT = TTC ÷ (1 +
+  taux) arrondi au centime, TVA = TTC − HT. Les documents émis ne bougent pas (NF525).
+- **Q3/Q5 — client professionnel** : écran en TTC par défaut ; un mode « servi en HT » réglé sur la
+  fiche client et modifiable sur chaque document. En mode HT, la ligne se calcule **à partir du HT**
+  (PU HT = TTC de référence ÷ (1 + taux), arrondi au centime ; TVA sur le total HT).
+- **Q4 — le prix d'achat reste HT**, pour tout fournisseur.
+- **Q6 — achats intracommunautaires** (autoliquidation) : **chantier séparé « achats »**.
+- **Q7/Q18 — arrondi du prix calculé par la marge** : réglage par boutique (au centime / au 0,10 €
+  supérieur / **au ,90 supérieur, par défaut**). Prix TTC = achat HT × (1 + marge) × (1 + TVA), puis
+  arrondi. Jamais appliqué à un prix saisi à la main ni à la reprise des fiches.
+- **Q8 — reprise** : TTC = HT × (1 + taux), arrondi au centime, par migration ; ancien HT conservé ;
+  liste des TTC « non ronds » remise à l'exploitant.
+- **Q9 — franchise de TVA** : une boutique en franchise a une TVA de 0 sur **toute** ligne, quel que
+  soit le taux de la fiche (TTC = HT).
+- **Q10 — régime de la marge** (occasion, reconditionné) : **chantier séparé**, à cadrer (questions
+  Q14-Q17 reportées : biens concernés, base, mentions, ventes mixtes — `todo.md`).
+- **Q11 — remise en caisse** : sur le prix TTC unitaire, arrondie au centime, puis × quantité.
+- **Q12 — prix estimé et prix final du ticket** : en TTC.
+- **Q13 — import CSV fournisseur** : prix d'achat HT ; prix de vente TTC calculé par la marge et
+  l'arrondi de la boutique ; une colonne `prix_vente_ttc` présente l'emporte.
+- **Q19 — brouillons existants** (devis, factures) : montants inchangés ; seules les lignes ajoutées
+  ensuite suivent le calcul TTC.
+- **Q20 — changement de taux de TVA d'une fiche : le HT reste fixe**, le TTC est recalculé (arrondi au
+  centime). Exception assumée à « le TTC fait foi ».
+- **Q21 — chiffre d'affaires** (tableau de bord, statistiques) : **HT et TTC côte à côte** ; l'export
+  comptable reste en HT.
+
 ## 2026-10-03 (soir) — Prix de vente en TTC pour toute pièce et tout service
 
 **Décision de l'exploitant** : « mettre le prix en TTC dans tous les endroits où cela est nécessaire :

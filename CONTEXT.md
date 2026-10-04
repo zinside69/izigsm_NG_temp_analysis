@@ -96,6 +96,22 @@ d'origine. `avoirs` + `lignes_avoir`.
 
 **Paiement** — encaissement rattaché à une facture. Table `paiements`.
 
+**Prix de vente** — le prix **TTC** d'une pièce ou d'un service, celui que paie le client et que
+l'on affiche en boutique. C'est lui qui fait foi : le HT et la TVA s'en déduisent, jamais
+l'inverse (tranché le 2026-10-04) — sauf quand le taux de TVA de la fiche change : le HT est alors
+gardé et le prix de vente recalculé.
+_À éviter_ : prix HT (pour parler du prix de vente), prix public.
+
+**Prix d'achat** — le prix **HT** payé à un fournisseur. Il reste en HT : tout fournisseur facture
+en HT, TVA récupérable (tranché le 2026-10-04).
+
+**Total de ligne** — prix de vente × quantité, en TTC ; le HT et la TVA de la ligne en sont
+extraits. Le client paie exactement le prix affiché multiplié par la quantité.
+
+**Client professionnel** — client de type professionnel (raison sociale, SIRET, TVA
+intracommunautaire). Ses documents montrent HT et TVA ; il peut, à la demande, être servi en HT ou
+en TTC — un artisan achète souvent comme un particulier.
+
 ## Caisse & conformité
 
 **NF525** — norme française d'inviolabilité des logiciels de caisse. `journal_nf525`
