@@ -26,7 +26,8 @@
 // AVANT (2026-10-03, « Ajouter N au stock » dans le bilan d'un import en lot — stock.js) : const CACHE_VERSION  = 'izigsm-v3.25'
 // AVANT (2026-10-04, message d'une pièce déjà en stock aligné sur le bouton de la fiche — stock.js) : const CACHE_VERSION  = 'izigsm-v3.26'
 // AVANT (2026-10-04, bouton « Importer » d'une ligne Mobilax rendu après un import unitaire — stock.js) : const CACHE_VERSION  = 'izigsm-v3.27'
-const CACHE_VERSION  = 'izigsm-v3.28'
+// AVANT (2026-10-04, en-tête « Qté en rayon » au-dessus du champ — stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.28'
+const CACHE_VERSION  = 'izigsm-v3.29'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

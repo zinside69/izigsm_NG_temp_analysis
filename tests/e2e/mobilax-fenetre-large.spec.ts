@@ -55,3 +55,30 @@ test('import : fenêtre large, entrée de journal sur une ligne, nom complet au 
   expect(hauteur, `entrée de journal sur une ligne (mesuré ${hauteur} px)`).toBeLessThan(26)
   await expect(entree).toHaveAttribute('title', `= ${NOM_LONG} — déjà dans votre stock`)
 })
+
+// Recette du 2026-10-04 : l'en-tête « Qté en rayon », aligné à droite d'une colonne qui porte le
+// champ ET le bouton « Importer », tombait au-dessus du bouton, pas du champ de saisie.
+test('recherche par article : l\'en-tête « Qté en rayon » est au-dessus du champ de saisie', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.route('**/api/mobilax/produits?*', route => route.fulfill({ json: { success: true, data: {
+    fournisseur_id: 3, total: 1, page: 1, pages: 1,
+    produits: [{ mobilax_id: 17, nom: 'Connecteur de charge Galaxy A53', ean13: '3000000124819', prix_achat_ht: 11.9, stock: 71 }],
+  } } }))
+
+  const tenant = await createTenantAdmin(request)
+  await seConnecter(page, { email: tenant.email, password: tenant.password })
+  await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
+  await page.goto('/stock')
+  await page.click('#btn-mobilax')
+  await page.fill('#mobilax-terme', 'connecteur')
+  await page.click('#btn-mobilax-chercher')
+  await expect(page.locator('#mobilax-resultats tr')).toHaveCount(1)
+
+  const entete = await page.locator('#modal-mobilax th', { hasText: 'Qté en rayon' }).boundingBox()
+  const champ  = await page.locator('#mobilax-resultats input.mobilax-qte').boundingBox()
+  const milieuEntete = entete!.x + entete!.width / 2
+  const milieuChamp  = champ!.x + champ!.width / 2
+  // Le milieu de l'en-tête tombe sur le champ (largeur 64 px) : ni à côté, ni au-dessus du bouton
+  expect(Math.abs(milieuEntete - milieuChamp), `écart entre milieux ${milieuEntete} / ${milieuChamp}`)
+    .toBeLessThan(champ!.width / 2)
+})

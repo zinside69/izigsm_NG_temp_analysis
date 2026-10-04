@@ -392,8 +392,13 @@
               <!-- « Tout cocher » (ticket 03) : page affichée seulement — majToutCocher(). `hidden` sur
                    l'enveloppe : masquée tant qu'aucune ligne ne porte de case (technicien, aucun résultat) -->
               <!-- AVANT (2026-10-02, recette 001 C — colonne « Pièce » élargie) : <thead><tr><th><span id="mobilax-tout-cocher-zone" hidden> -->
+              <!-- AVANT (2026-10-04, recette — « Qté en rayon » tombait au-dessus du bouton « Importer », pas du champ) :
               <thead><tr><th style="width:45%"><span id="mobilax-tout-cocher-zone" hidden><input type="checkbox" id="mobilax-tout-cocher"
                      aria-label="Tout cocher — page affichée" style="margin:0 8px 0 0;vertical-align:middle;"></span>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:right">Qté en rayon</th></tr></thead>
+              -->
+              <!-- Champ et bouton dans deux colonnes : l'en-tête « Qté en rayon » est centré sur le champ -->
+              <thead><tr><th style="width:45%"><span id="mobilax-tout-cocher-zone" hidden><input type="checkbox" id="mobilax-tout-cocher"
+                     aria-label="Tout cocher — page affichée" style="margin:0 8px 0 0;vertical-align:middle;"></span>Pièce</th><th>EAN</th><th style="text-align:right">Prix d'achat HT</th><th style="text-align:right">Dispo. fournisseur</th><th style="text-align:center">Qté en rayon</th><th></th></tr></thead>
               <tbody id="mobilax-resultats"></tbody>
             </table>
           </div>

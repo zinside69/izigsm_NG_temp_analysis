@@ -961,6 +961,11 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
     // nouvelle recherche naissent figées (un seul import à la fois, story 33-34).
     const importer = peutImporterMobilax();
     const fige = importEnCours ? ' disabled' : '';
+    // AVANT (2026-10-04, recette — l'en-tête « Qté en rayon » tombait au-dessus du bouton, pas du
+    // champ) : une seule dernière cellule portait champ ET bouton —
+    //   <td style="text-align:right;white-space:nowrap">${importer ? `<input … class="mobilax-qte" …>
+    //   <button … data-mobilax-id=…>Importer</button>` : ''}</td>
+    // Désormais : une cellule centrée pour le champ, une cellule à droite pour le bouton.
     tbody.innerHTML = produits.map(p => `
       <tr>
         <td>${importer
@@ -973,14 +978,16 @@ async function chercherMobilax(page = 1, depuisNavigation = false) {
         <td style="text-align:right">${p.prix_achat_ht != null
           ? Number(p.prix_achat_ht).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
         <td style="text-align:right">${Number(p.stock) || 0}</td>
-        <td style="text-align:right;white-space:nowrap">${importer ? `
+        <td style="text-align:center;white-space:nowrap">${importer ? `
           <input type="number" min="0" step="1" class="mobilax-qte" aria-label="Qté en rayon"
                  value="${escHtml(qteDeLigne(Number(p.mobilax_id)))}"${
                  // Texte illisible retenu : `value` ne peut le rendre, la ligne revient donc EN ERREUR
                  // (même marque que le refus au lancement), jamais comme un champ vide valide
                  selectionMobilax.get(Number(p.mobilax_id))?.illisible
                    ? ' aria-invalid="true" style="width:64px;margin-right:6px;border-color:#b42318"'
-                   : ' style="width:64px;margin-right:6px"'}>
+                   : ' style="width:64px;margin-right:6px"'}>` : ''}
+        </td>
+        <td style="text-align:right;white-space:nowrap">${importer ? `
           <button type="button" class="btn btn-sm btn-secondary" data-mobilax-id="${Number(p.mobilax_id)}"${fige}>Importer</button>` : ''}
         </td>
       </tr>`).join('');
