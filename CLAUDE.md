@@ -1183,6 +1183,11 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-04 (nuit) : DÉPLOYÉ — production en `izigsm-v3.32`, migration `0061`.** Ticket 11 du
+chantier prix TTC : CA HT et TTC côte à côte (`3307ebb`). Aperçu `d484f700` **puis** apex relus : `sw.js` v3.32,
+`dashboard.9c9cbc13.js` en JavaScript avec la ligne HT, pages tableau de bord et statistiques servies avec
+leurs repères HT, `/api/stats` sans jeton → 401. **Dépôt et production alignés.**
+
 **État au 2026-10-04 (soir) : DÉPLOYÉ — production en `izigsm-v3.31`, migration `0061`.** Boutons du
 référentiel selon le rôle (`5137373`). Aperçu `49414f96` **puis** apex relus : `sw.js` v3.31,
 `services.3167796e.js` en JavaScript, boutons identifiés servis. **Dépôt et production alignés.**
