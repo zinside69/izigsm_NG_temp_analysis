@@ -1,3 +1,4 @@
+// AVANT (2026-10-04 — vi et les crochets servent au bloc de la synchro, appel réseau simulé) : import { describe, it, expect } from 'vitest'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // @ts-ignore node:fs types not available without @types/node
 import { readdirSync, readFileSync } from 'node:fs'

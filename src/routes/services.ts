@@ -396,6 +396,7 @@ services.get('/services/catalog/stats', async (c) => {
 /**
  * GET /api/services/catalog/sync-status
  * Statut de sync par marque (dernière sync, nb modèles, erreurs éventuelles).
+ * AVANT (2026-10-04) : Admin uniquement.
  * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
 // AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
@@ -409,6 +410,7 @@ services.get('/services/catalog/sync-status', requireRole('admin', 'manager'), a
  * POST /api/services/catalog/sync-brands
  * Importe toutes les marques depuis phone-specs-api (sans modèles).
  * Idempotent — INSERT OR IGNORE sur brand_slug.
+ * AVANT (2026-10-04) : Admin uniquement.
  * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
 // AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
@@ -422,6 +424,7 @@ services.post('/services/catalog/sync-brands', requireRole('admin', 'manager'), 
  * POST /api/services/catalog/sync-modeles/:slug
  * Synchronise les modèles d'une marque depuis phone-specs-api.
  * Récupère toutes les pages en parallèle (pattern PHP legacy).
+ * AVANT (2026-10-04) : Admin uniquement.
  * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  *
  * @param slug  brand_slug ex: "apple-phones-48"
@@ -446,6 +449,7 @@ services.post('/services/catalog/sync-modeles/:slug', requireRole('admin', 'mana
  * POST /api/services/catalog/sync-selected
  * Synchronise les modèles d'une sélection de marques.
  * Body : { slugs: string[] }
+ * AVANT (2026-10-04) : Admin uniquement.
  * Admin et manager (décision du 2026-10-04 ; avant : admin uniquement).
  */
 // AVANT (2026-10-04 — synchro ouverte au manager, décision de l'exploitant : elle n'ajoute au référentiel commun
