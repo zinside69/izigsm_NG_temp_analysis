@@ -111,6 +111,10 @@ window.DashApp = (() => {
 
       _setText('kpi-tickets', d.tickets_en_cours ?? '—')
       _setText('kpi-ca',      _money(d.ca_mois ?? 0))
+      // CA HT à côté du TTC, sur les mêmes factures (ticket 11 prix TTC, 2026-10-04)
+      // Montant absent (API d'une version précédente) : « — », jamais un 0 qui aurait l'air vrai
+      const caHtConnu = d.ca_mois_ht !== undefined && d.ca_mois_ht !== null
+      _setText('kpi-ca-ht',   caHtConnu ? `HT : ${_money(d.ca_mois_ht)}` : 'HT : —')
       _setText('kpi-clients', d.nb_clients ?? '—')
       _setText('kpi-stock',   d.stock_bas ?? '—')
 

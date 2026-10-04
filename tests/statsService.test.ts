@@ -347,11 +347,14 @@ describe('getKpisDashboard()', () => {
     // Les 2 requêtes CA (mois courant / mois précédent) partagent le même SQL
     // normalisé — on utilise __setResponseFn pour distinguer via le 2e param (mois lié).
     db.__setResponseFn(
-      `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id=? AND statut='payee' AND strftime('%Y-%m',date_emission)=?`,
+      // AVANT (2026-10-04 — la requête lit aussi le CA HT, ticket 11 prix TTC) :
+      // `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures WHERE boutique_id=? AND statut='payee' AND strftime('%Y-%m',date_emission)=?`,
+      `SELECT COALESCE(SUM(total_ttc),0) as ca_ttc, COALESCE(SUM(total_ht),0) as ca_ht FROM factures WHERE boutique_id=? AND statut='payee' AND strftime('%Y-%m',date_emission)=?`,
       (params: unknown[]) => {
         const mois = params[1] as string
         const currentMonth = todayParis().slice(0, 7)
-        return mois === currentMonth ? { ca: 1500 } : { ca: 1000 }
+        // AVANT (2026-10-04 — alias `ca` renommé `ca_ttc`) : return mois === currentMonth ? { ca: 1500 } : { ca: 1000 }
+        return mois === currentMonth ? { ca_ttc: 1500 } : { ca_ttc: 1000 }
       }
     )
     const result = await getKpisDashboard(db as any, 1)

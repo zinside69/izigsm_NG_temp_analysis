@@ -112,14 +112,28 @@ export async function getKpisDashboard(db: Database, boutiqueId: number) {
        WHERE boutique_id=? AND DATE(created_at)=?`, [boutiqueId, today]
     ),
 
-    db.get<{ ca: number }>(
-      `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
+    // AVANT (2026-10-04 — le CA HT s'ajoute à côté du TTC, ticket 11 prix TTC ; alias `ca` → `ca_ttc`) :
+    // db.get<{ ca: number }>(
+    //   `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
+    //    WHERE boutique_id=? AND statut='payee'
+    //    AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, currentMonth]
+    // ),
+    // Factures PAYÉES seulement (décision de l'exploitant du 2026-10-04, ticket 11) : une facture
+    // émise en attente de paiement n'entre pas au CA
+    db.get<{ ca_ttc: number; ca_ht: number }>(
+      `SELECT COALESCE(SUM(total_ttc),0) as ca_ttc, COALESCE(SUM(total_ht),0) as ca_ht FROM factures
        WHERE boutique_id=? AND statut='payee'
        AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, currentMonth]
     ),
 
-    db.get<{ ca: number }>(
-      `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
+    // AVANT (2026-10-04 — même ajout du CA HT, même renommage d'alias) :
+    // db.get<{ ca: number }>(
+    //   `SELECT COALESCE(SUM(total_ttc),0) as ca FROM factures
+    //    WHERE boutique_id=? AND statut='payee'
+    //    AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, previousMonth]
+    // ),
+    db.get<{ ca_ttc: number; ca_ht: number }>(
+      `SELECT COALESCE(SUM(total_ttc),0) as ca_ttc, COALESCE(SUM(total_ht),0) as ca_ht FROM factures
        WHERE boutique_id=? AND statut='payee'
        AND strftime('%Y-%m',date_emission)=?`, [boutiqueId, previousMonth]
     ),
@@ -164,8 +178,11 @@ export async function getKpisDashboard(db: Database, boutiqueId: number) {
     ),
   ])
 
-  const caMoisVal  = ca_mois?.ca  ?? 0
-  const caPrecVal  = ca_mois_precedent?.ca ?? 0
+  // AVANT (2026-10-04 — alias `ca` renommé `ca_ttc`) :
+  // const caMoisVal  = ca_mois?.ca  ?? 0
+  // const caPrecVal  = ca_mois_precedent?.ca ?? 0
+  const caMoisVal  = ca_mois?.ca_ttc  ?? 0
+  const caPrecVal  = ca_mois_precedent?.ca_ttc ?? 0
   const evolutionCa = caPrecVal > 0
     ? Math.round(((caMoisVal - caPrecVal) / caPrecVal) * 100)
     : null
@@ -176,6 +193,9 @@ export async function getKpisDashboard(db: Database, boutiqueId: number) {
     tickets_aujourd_hui:  tickets_today?.cnt        ?? 0,
     ca_mois:              caMoisVal,
     ca_mois_precedent:    caPrecVal,
+    // CA HT à côté du TTC, sur les mêmes factures (ticket 11 prix TTC, 2026-10-04)
+    ca_mois_ht:           ca_mois?.ca_ht            ?? 0,
+    ca_mois_precedent_ht: ca_mois_precedent?.ca_ht  ?? 0,
     evolution_ca_pct:     evolutionCa,
     stock_bas:            stock_bas?.cnt            ?? 0,
     employes_en_poste:    employes_en_poste?.cnt    ?? 0,
@@ -196,7 +216,8 @@ export async function getKpisDashboard(db: Database, boutiqueId: number) {
  * @param db         - Instance D1Database injectée par le contexte Hono
  * @param boutiqueId - ID de la boutique courante (multi-tenant)
  * @returns { mois: Array<{mois, label, ca_ttc, ca_ht, nb_factures}>,
- *            total_12_mois: number, moyenne_mensuelle: number }
+ *            total_12_mois: number (TTC), total_12_mois_ht: number (HT, depuis le 2026-10-04),
+ *            moyenne_mensuelle: number (TTC) }
  */
 export async function getCaMensuel(db: Database, boutiqueId: number) {
   const today = todayParis()
@@ -234,9 +255,12 @@ export async function getCaMensuel(db: Database, boutiqueId: number) {
   }
 
   const total12mois = result.reduce((s, r) => s + r.ca_ttc, 0)
+  // Total HT des 12 mois, à côté du TTC (ticket 11 prix TTC, 2026-10-04)
+  const total12moisHt = result.reduce((sommeHt, ligneDuMois) => sommeHt + ligneDuMois.ca_ht, 0)
   const moyenne     = total12mois / 12
 
-  return { mois: result, total_12_mois: total12mois, moyenne_mensuelle: moyenne }
+  // AVANT (2026-10-04 — total HT ajouté) : return { mois: result, total_12_mois: total12mois, moyenne_mensuelle: moyenne }
+  return { mois: result, total_12_mois: total12mois, total_12_mois_ht: total12moisHt, moyenne_mensuelle: moyenne }
 }
 
 // ─── Tickets par statut ───────────────────────────────────────────────────────

@@ -39,7 +39,9 @@ Complète l'entrée du 2026-10-03 ci-dessous. Réponses de l'exploitant, Q1 à Q
 - **Q20 — changement de taux de TVA d'une fiche : le HT reste fixe**, le TTC est recalculé (arrondi au
   centime). Exception assumée à « le TTC fait foi ».
 - **Q21 — chiffre d'affaires** (tableau de bord, statistiques) : **HT et TTC côte à côte** ; l'export
-  comptable reste en HT.
+  comptable reste en HT. **Précisé au ticket 11** : le CA compte les factures **payées seulement**
+  (filtre existant gardé) ; le HT est ajouté aux encarts « CA ce mois » et « CA 12 mois » seulement
+  (moyenne, graphique et écart avec le mois précédent restent en TTC).
 
 ## 2026-10-03 (soir) — Prix de vente en TTC pour toute pièce et tout service
 

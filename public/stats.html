@@ -133,13 +133,21 @@
       <!-- KPIs CA -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-5">
+          <!-- AVANT (2026-10-04 — libellé sans TVA, le CA HT s'ajoute à côté, ticket 11 prix TTC) :
           <div class="text-xs text-gray-400 font-semibold uppercase mb-1">CA ce mois</div>
+          -->
+          <div class="text-xs text-gray-400 font-semibold uppercase mb-1">CA ce mois (TTC)</div>
           <div class="kpi-value text-indigo-600" id="kpi-ca-mois">—</div>
+          <div class="text-xs text-gray-500 mt-1" id="kpi-ca-mois-ht">HT : —</div>
           <div class="text-xs mt-1" id="kpi-ca-delta">—</div>
         </div>
         <div class="card p-5">
+          <!-- AVANT (2026-10-04 — même ajout du CA HT) :
           <div class="text-xs text-gray-400 font-semibold uppercase mb-1">CA 12 mois</div>
+          -->
+          <div class="text-xs text-gray-400 font-semibold uppercase mb-1">CA 12 mois (TTC)</div>
           <div class="kpi-value text-gray-800" id="kpi-ca-total">—</div>
+          <div class="text-xs text-gray-500 mt-1" id="kpi-ca-total-ht">HT : —</div>
           <div class="text-xs text-gray-400 mt-1" id="kpi-ca-moy">Moy. mensuelle : —</div>
         </div>
         <div class="card p-5">
@@ -526,6 +534,10 @@
 
         // CA
         document.getElementById('kpi-ca-mois').textContent     = eur(d.ca_mois)
+        // CA HT à côté du TTC, sur les mêmes factures (ticket 11 prix TTC, 2026-10-04)
+        // Montant absent (API d'une version précédente) : « — », jamais un 0 qui aurait l'air vrai
+        const caMoisHtConnu = d.ca_mois_ht !== undefined && d.ca_mois_ht !== null
+        document.getElementById('kpi-ca-mois-ht').textContent  = caMoisHtConnu ? `HT : ${eur(d.ca_mois_ht)}` : 'HT : —'
         document.getElementById('kpi-devis-attente').textContent = d.devis_en_attente ?? 0
         document.getElementById('kpi-factures-retard').textContent = d.factures_en_retard ?? 0
 
@@ -568,9 +580,12 @@
         if (!r.ok) return
         const caData = r.data?.data
         if (!caData) return
-        const { mois, total_12_mois, moyenne_mensuelle } = caData
+        // AVANT (2026-10-04 — total HT lu en plus) : const { mois, total_12_mois, moyenne_mensuelle } = caData
+        const { mois, total_12_mois, total_12_mois_ht, moyenne_mensuelle } = caData
 
         document.getElementById('kpi-ca-total').textContent = eur(total_12_mois)
+        const totalHtConnu = total_12_mois_ht !== undefined && total_12_mois_ht !== null
+        document.getElementById('kpi-ca-total-ht').textContent = totalHtConnu ? `HT : ${eur(total_12_mois_ht)}` : 'HT : —'
         document.getElementById('kpi-ca-moy').textContent   = `Moy. mensuelle : ${eur(moyenne_mensuelle)}`
 
         // Filtrer selon la période sélectionnée

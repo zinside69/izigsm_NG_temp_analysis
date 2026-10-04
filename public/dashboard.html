@@ -152,7 +152,12 @@
               <span class="kpi-badge up" id="kpi-badge-ca">…</span>
             </div>
             <div class="kpi-value" id="kpi-ca">—</div>
+            <!-- AVANT (2026-10-04 — libellé sans TVA, le CA HT s'ajoute à côté, ticket 11 prix TTC) :
             <div class="kpi-label">CA ce mois</div>
+            -->
+            <div class="kpi-label">CA ce mois (TTC)</div>
+            <!-- Style propre (pas `kpi-delta`, qui se lirait comme une variation) -->
+            <div id="kpi-ca-ht" style="font-size:12px;color:var(--muted);margin-top:2px;">HT : —</div>
             <div class="kpi-delta" id="kpi-delta-ca">vs mois dernier</div>
           </div>
 
