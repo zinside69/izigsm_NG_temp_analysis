@@ -428,12 +428,19 @@ export async function convertirDevis(
   if (!facture?.id) throw new Error('Erreur lors de la création de la facture.')
 
   // Copier les lignes devis → facture
+  // AVANT (2026-10-05, ticket 03 prix TTC — chaque ligne garde son PU TTC et son mode, en fin de liste) :
+  //     (document_type, document_id, ordre, description, quantite,
+  //      prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+  //   SELECT 'facture', ?, ordre, description, quantite,
+  //          prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id
   await db.prepare(`
     INSERT INTO lignes_document
       (document_type, document_id, ordre, description, quantite,
-       prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+       prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id,
+       prix_unitaire_ttc, mode_calcul)
     SELECT 'facture', ?, ordre, description, quantite,
-           prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id
+           prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id,
+           prix_unitaire_ttc, mode_calcul
     FROM   lignes_document
     WHERE  document_type = 'devis' AND document_id = ?
   `).bind(facture.id, id).run()

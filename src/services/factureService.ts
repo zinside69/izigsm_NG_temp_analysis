@@ -15,7 +15,9 @@
  * @module factureService
  */
 
-import { nextNumero, auditLog, parsePagination, calculLignes } from '../lib/db'
+// AVANT (2026-10-05, ticket 03 prix TTC — lignes en TTC : prixDeLaLigne(), calculLigne()) :
+// import { nextNumero, auditLog, parsePagination, calculLignes } from '../lib/db'
+import { nextNumero, auditLog, parsePagination, calculLignes, calculLigne, prixDeLaLigne } from '../lib/db'
 import { enregistrerTransaction, assertPeutEcrireAuRegistre } from '../lib/nf525'
 import { todayParis } from '../lib/timezone'
 import type { Database } from '../ports/database'
@@ -25,10 +27,13 @@ import type { Database } from '../ports/database'
 export type StatutFacture = 'brouillon' | 'en_attente' | 'partiellement_payee' | 'payee' | 'annulee'
 export type TypeAvoir     = 'remboursement' | 'bon_achat' | 'echange'
 
+// AVANT (2026-10-05, ticket 03 prix TTC — une ligne d'avoir se saisit en TTC ; le HT seul reste accepté) :
+//   prix_unitaire_ht: number
 export interface LigneInput {
   description:      string
   quantite:         number
-  prix_unitaire_ht: number
+  prix_unitaire_ht?:  number
+  prix_unitaire_ttc?: number  // fait foi quand il est présent
   tva_taux?:        number
 }
 
@@ -433,15 +438,29 @@ export async function createFactureAcompte(
 /** Taux de TVA autorisés sur une ligne de facture (France, 2026). */
 const TVA_TAUX_AUTORISES = [0, 5.5, 10, 20]
 
+/**
+ * Vrai si le prix qui fait foi sur la ligne est absent, illisible ou négatif (ticket 03 prix TTC) :
+ * le PU TTC quand la ligne en porte un, sinon le PU HT (ligne envoyée par une ancienne page).
+ */
+export function prixUnitaireInvalide(ligne: { prix_unitaire_ht?: unknown; prix_unitaire_ttc?: unknown }): boolean {
+  const prixTtcEnvoye = ligne.prix_unitaire_ttc !== undefined && ligne.prix_unitaire_ttc !== null
+  const prixQuiFaitFoi = prixTtcEnvoye ? ligne.prix_unitaire_ttc : ligne.prix_unitaire_ht
+  const prixLisible = typeof prixQuiFaitFoi === 'number' && Number.isFinite(prixQuiFaitFoi)
+  return !prixLisible || (prixQuiFaitFoi as number) < 0
+}
+
 export interface CreateFactureInput {
   boutique_id: number
   client_id:   number
   /** Rattachement optionnel à un ticket de réparation. */
   ticket_id?:  number | null
+  // AVANT (2026-10-05, ticket 03 prix TTC — une ligne se saisit en TTC ; le HT seul reste accepté) :
+  //   prix_unitaire_ht: number
   lignes: Array<{
     description:      string
     quantite:         number
-    prix_unitaire_ht: number
+    prix_unitaire_ht?:  number
+    prix_unitaire_ttc?: number  // fait foi quand il est présent
     tva_taux:         number
   }>
   notes?:      string
@@ -505,8 +524,11 @@ export async function createFacture(
   for (const l of input.lignes) {
     if (typeof l.quantite !== 'number' || isNaN(l.quantite) || l.quantite <= 0)
       throw new Error('quantite doit être positive.')
-    if (typeof l.prix_unitaire_ht !== 'number' || isNaN(l.prix_unitaire_ht) || l.prix_unitaire_ht < 0)
-      throw new Error('prix_unitaire_ht ne peut pas être négatif.')
+    // AVANT (2026-10-05, ticket 03 prix TTC — le prix contrôlé est celui qui fait foi, TTC ou HT) :
+    // if (typeof l.prix_unitaire_ht !== 'number' || isNaN(l.prix_unitaire_ht) || l.prix_unitaire_ht < 0)
+    //   throw new Error('prix_unitaire_ht ne peut pas être négatif.')
+    if (prixUnitaireInvalide(l))
+      throw new Error('Prix unitaire invalide : un prix TTC (ou HT) positif ou nul est attendu.')
     if (!TVA_TAUX_AUTORISES.includes(l.tva_taux))
       throw new Error(`tva_taux invalide : ${l.tva_taux} (autorisés : ${TVA_TAUX_AUTORISES.join(', ')}).`)
   }
@@ -553,16 +575,24 @@ export async function createFacture(
 
   // Totaux par ligne calculés avec calculLignes() sur une ligne isolée : même
   // arrondi comptable que les totaux du document, pas de seconde formule.
+  // AVANT (2026-10-05, ticket 03 prix TTC — PU TTC et mode de calcul ajoutés en fin de liste) :
+  //     (document_type, document_id, ordre, description, quantite,
+  //      prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
+  //   VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+  //   … l.prix_unitaire_ht, l.tva_taux, t.total_ht, t.total_tva, t.total_ttc,
   await db.batch(input.lignes.map((l, i) => {
     const t = calculLignes([l])
+    const prix = prixDeLaLigne(l)
     return db.prepare(`
       INSERT INTO lignes_document
         (document_type, document_id, ordre, description, quantite,
-         prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id)
-      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         prix_unitaire_ht, tva_taux, total_ht, total_tva, total_ttc, produit_id,
+         prix_unitaire_ttc, mode_calcul)
+      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
     `).bind(
       factureId, i + 1, l.description, l.quantite,
-      l.prix_unitaire_ht, l.tva_taux, t.total_ht, t.total_tva, t.total_ttc,
+      prix.prix_unitaire_ht, l.tva_taux, t.total_ht, t.total_tva, t.total_ttc,
+      prix.prix_unitaire_ttc, prix.mode_calcul,
     )
   }))
 
@@ -713,6 +743,15 @@ export async function createAvoir(
     throw new Error('motif obligatoire.')
   if (!input.lignes?.length)
     throw new Error('Au moins une ligne obligatoire.')
+  // Le numéro d'avoir est réservé avant tout calcul (plus bas) : un prix illisible doit être refusé
+  // ICI, sinon il brûlerait un numéro de la série NF525 (ticket 03 prix TTC).
+  if (input.lignes.some(prixUnitaireInvalide))
+    throw new Error('Prix unitaire invalide : un prix TTC (ou HT) positif ou nul est attendu.')
+  // Même liste de taux que la facture (revue du ticket 03) : le calcul depuis le TTC divise par
+  // (100 + taux) — un taux en texte serait concaténé, -100 diviserait par zéro. Absent → 20 %, plus bas.
+  const tauxRefuse = input.lignes.find(l => l.tva_taux !== undefined && !TVA_TAUX_AUTORISES.includes(l.tva_taux))
+  if (tauxRefuse)
+    throw new Error(`tva_taux invalide : ${tauxRefuse.tva_taux} (autorisés : ${TVA_TAUX_AUTORISES.join(', ')}).`)
 
   // Vérifier que la facture existe ET est verrouillée
   const facture = await db.prepare('SELECT * FROM factures WHERE id = ?')
@@ -721,8 +760,13 @@ export async function createAvoir(
   if (!facture.locked)
     throw new Error('Impossible d\'émettre un avoir sur une facture non émise.')
 
+  // Taux absent → 20 %, comme l'a toujours écrit l'INSERT des lignes ; posé AVANT le calcul des totaux
+  // (ticket 03 prix TTC) pour que totaux de l'avoir et totaux de ses lignes partent du même taux.
+  const lignesAvecTaux = input.lignes.map(l => ({ ...l, tva_taux: l.tva_taux ?? 20 }))
+
   const boutiqueId                      = facture.boutique_id
-  const { total_ht, total_tva, total_ttc } = calculLignes(input.lignes)
+  // AVANT (2026-10-05, ticket 03 prix TTC) : const { total_ht, total_tva, total_ttc } = calculLignes(input.lignes)
+  const { total_ht, total_tva, total_ttc } = calculLignes(lignesAvecTaux)
   const numero                          = await nextNumero(db, boutiqueId, 'avoir')
 
   // Insérer l'avoir
@@ -744,17 +788,32 @@ export async function createAvoir(
   const avoirId = result.id
 
   // Insérer les lignes (table lignes_avoir propre aux avoirs)
-  const stmts = input.lignes.map((l, i) => {
-    const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
-    const tva = Math.round(ht * ((l.tva_taux ?? 20) / 100) * 100) / 100
+  // AVANT (2026-10-05, ticket 03 prix TTC — chaque ligne par calculLigne(), qui sait aussi le TTC ;
+  // `lignes_avoir` n'a pas de colonne TTC unitaire : le PU HT déduit y est écrit, les totaux sont exacts) :
+  // const stmts = input.lignes.map((l, i) => {
+  //   const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
+  //   const tva = Math.round(ht * ((l.tva_taux ?? 20) / 100) * 100) / 100
+  //   return db.prepare(`
+  //     INSERT INTO lignes_avoir
+  //       (avoir_id, ordre, description, quantite, prix_unitaire_ht,
+  //        tva_taux, total_ht, total_tva, total_ttc)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //   `).bind(
+  //     avoirId, i + 1, l.description, l.quantite, l.prix_unitaire_ht,
+  //     l.tva_taux ?? 20, ht, tva, ht + tva
+  //   )
+  // })
+  const stmts = lignesAvecTaux.map((l, i) => {
+    const montants = calculLigne(l)
+    const prix     = prixDeLaLigne(l)
     return db.prepare(`
       INSERT INTO lignes_avoir
         (avoir_id, ordre, description, quantite, prix_unitaire_ht,
          tva_taux, total_ht, total_tva, total_ttc)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      avoirId, i + 1, l.description, l.quantite, l.prix_unitaire_ht,
-      l.tva_taux ?? 20, ht, tva, ht + tva
+      avoirId, i + 1, l.description, l.quantite, prix.prix_unitaire_ht,
+      l.tva_taux, montants.ht, montants.tva, montants.ttc
     )
   })
   if (stmts.length > 0) await db.batch(stmts)

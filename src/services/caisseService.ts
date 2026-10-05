@@ -36,7 +36,9 @@
 
 // AVANT (2026-10-05, ticket 02 prix TTC — calculLigne() calcule aussi chaque ligne écrite) :
 // import { nextNumero, calculLignes } from '../lib/db'
-import { nextNumero, calculLignes, calculLigne } from '../lib/db'
+// AVANT (2026-10-05, revue du ticket 03 — ligneEnTtc() partagé avec factures et avoirs) :
+// import { nextNumero, calculLignes, calculLigne } from '../lib/db'
+import { nextNumero, calculLignes, calculLigne, ligneEnTtc } from '../lib/db'
 import { prixHtDepuisTtc } from '../lib/prixVente'
 import { todayParis, currentMonthParis } from '../lib/timezone'
 import { buildCanonicalData, assertPeutEcrireAuRegistre } from '../lib/nf525'
@@ -76,10 +78,11 @@ export interface LigneDeVenteRemisee {
   prix_unitaire_ttc_avant_remise: number | null
 }
 
-/** Vrai si la ligne porte un prix TTC exploitable : elle se calcule alors depuis le TTC. */
-function ligneEnvoyeeEnTtc(ligne: LignePOS): boolean {
-  return typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
-}
+// AVANT (2026-10-05, revue du ticket 03 — une seule définition, `ligneEnTtc()` de lib/db.ts) :
+// /** Vrai si la ligne porte un prix TTC exploitable : elle se calcule alors depuis le TTC. */
+// function ligneEnvoyeeEnTtc(ligne: LignePOS): boolean {
+//   return typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
+// }
 
 /**
  * Applique la remise d'une ligne et dit comment la calculer. Seul point de la remise en caisse :
@@ -100,7 +103,8 @@ export function ligneDeVenteRemisee(ligne: LignePOS): LigneDeVenteRemisee {
   }
   const coefficientDeRemise = 1 - remisePct / 100
 
-  if (ligneEnvoyeeEnTtc(ligne)) {
+  // AVANT (2026-10-05, revue du ticket 03) : if (ligneEnvoyeeEnTtc(ligne)) {
+  if (ligneEnTtc(ligne)) {
     const prixTtc = ligne.prix_unitaire_ttc!
     // AVANT (2026-10-05, revue du ticket 02 — en virgule flottante, 4,35 € − 10 % donnait 3,91 €) :
     // const prixTtcRemiseEnCentimes = Math.round(prixTtc * coefficientDeRemise * 100)

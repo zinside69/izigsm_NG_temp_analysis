@@ -13,7 +13,10 @@
  *  - `auditLog()`      : traçabilité des mutations en base
  *  - Validateurs       : email, IMEI, téléphone (regex)
  *  - `slugify()`       : génération de slug URL-safe (boutiques)
+ *  - `prixDeLaLigne()` : colonnes de prix d'une ligne en TTC ou en HT (ticket 03 prix TTC)
  */
+
+import { prixHtDepuisTtc } from './prixVente'
 
 // ─── Numérotation automatique ─────────────────────────────────────────────────
 
@@ -219,8 +222,10 @@ export interface LigneACalculer {
  *   TVA = HT × taux ; TTC = HT + TVA.
  */
 export function calculLigne(ligne: LigneACalculer): { ht: number; tva: number; ttc: number } {
-  const ligneEnTtc = typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
-  if (ligneEnTtc) {
+  // AVANT (2026-10-05, ticket 03 prix TTC — test partagé avec prixDeLaLigne(), par ligneEnTtc()) :
+  // const ligneEnTtc = typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
+  // if (ligneEnTtc) {
+  if (ligneEnTtc(ligne)) {
     const ttcCentimes = Math.round(ligne.quantite * ligne.prix_unitaire_ttc! * 100)
     const htCentimes  = Math.round((ttcCentimes * 100) / (100 + ligne.tva_taux))
     return { ht: htCentimes / 100, tva: (ttcCentimes - htCentimes) / 100, ttc: ttcCentimes / 100 }
@@ -228,6 +233,36 @@ export function calculLigne(ligne: LigneACalculer): { ht: number; tva: number; t
   const ht  = Math.round(ligne.quantite * (ligne.prix_unitaire_ht ?? 0) * 100) / 100
   const tva = Math.round(ht * (ligne.tva_taux / 100) * 100) / 100
   return { ht, tva, ttc: Math.round((ht + tva) * 100) / 100 }
+}
+
+/** Prix unitaires à écrire sur une ligne de document, et le mode de calcul qu'elle a suivi. */
+export interface PrixDeLaLigne {
+  prix_unitaire_ht:  number
+  prix_unitaire_ttc: number | null
+  mode_calcul:       'ttc' | 'ht'
+}
+
+/** Vrai si la ligne porte un prix unitaire TTC exploitable : elle se calcule alors depuis le TTC. */
+export function ligneEnTtc(ligne: LigneACalculer): boolean {
+  return typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
+}
+
+/**
+ * Colonnes de prix d'une ligne de document sans remise (facture manuelle, avoir — ticket 03 du chantier
+ * prix TTC). Ligne en TTC : le PU TTC est gardé tel que saisi, le PU HT en est déduit au centime (pour
+ * les lectures qui ne connaissent que le HT) ; ligne en HT : comme avant, aucun TTC unitaire.
+ * La caisse, qui a une remise, a son propre point : `ligneDeVenteRemisee()` (`caisseService.ts`).
+ */
+export function prixDeLaLigne(ligne: LigneACalculer): PrixDeLaLigne {
+  if (ligneEnTtc(ligne)) {
+    const prixTtc = ligne.prix_unitaire_ttc!
+    return {
+      prix_unitaire_ht:  prixHtDepuisTtc(prixTtc, ligne.tva_taux),
+      prix_unitaire_ttc: prixTtc,
+      mode_calcul:       'ttc',
+    }
+  }
+  return { prix_unitaire_ht: ligne.prix_unitaire_ht ?? 0, prix_unitaire_ttc: null, mode_calcul: 'ht' }
 }
 
 /**

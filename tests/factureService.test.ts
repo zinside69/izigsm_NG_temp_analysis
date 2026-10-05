@@ -1221,7 +1221,9 @@ describe('createFacture()', () => {
     await expect(createFacture(db, 10, {
       ...BASE_INPUT,
       lignes: [{ description: 'X', quantite: 1, prix_unitaire_ht: -5, tva_taux: 20 }],
-    })).rejects.toThrow('prix_unitaire_ht ne peut pas être négatif.')
+    // AVANT (2026-10-05, ticket 03 prix TTC — message commun aux prix TTC et HT) :
+    // })).rejects.toThrow('prix_unitaire_ht ne peut pas être négatif.')
+    })).rejects.toThrow(/Prix unitaire invalide/)
   })
 
   it('lance Error si un taux de TVA n\'est pas autorisé', async () => {

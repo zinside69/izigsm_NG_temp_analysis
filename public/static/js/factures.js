@@ -510,12 +510,15 @@ async function saveFacture(action) {
     return;
   }
 
+  // AVANT (2026-10-05, ticket 03 prix TTC — le prix saisi est le TTC, le serveur calcule depuis lui) :
+  //   prix_unitaire_ht: parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0,
+  // })).filter(l => l.description || l.prix_unitaire_ht > 0);
   const lignes = factureLines.map(lid => ({
     description:      document.getElementById('fl-desc-'  + lid)?.value || '',
     quantite:         parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 1,
-    prix_unitaire_ht: parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0,
+    prix_unitaire_ttc: parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0,
     tva_taux:         parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0,
-  })).filter(l => l.description || l.prix_unitaire_ht > 0);
+  })).filter(l => l.description || l.prix_unitaire_ttc > 0);
 
   if (!devisId && !lignes.length) {
     showFlash('⚠️ Ajoutez au moins une ligne à la facture.', 'error');
@@ -756,6 +759,11 @@ function openModalAvoir(factureId) {
     modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'modal-avoir';
+    // AVANT (2026-10-05, ticket 03 prix TTC — lignes d'avoir saisies en TTC), dans le gabarit ci-dessous :
+    //   <th style="padding:4px 8px;text-align:right;width:100px;">P.U. HT (€)</th>
+    //   <th style="padding:4px 8px;text-align:right;width:90px;">Total HT</th>
+    // AVANT (2026-10-05, revue du ticket 03 — un taux par ligne, plus de 20 % imposé) :
+    //   <span style="color:var(--muted);">TVA 20% :</span> <strong id="avoir-total-tva">0,00 €</strong> &nbsp;
     modal.innerHTML = `
       <div class="modal" style="max-width:640px;">
         <div class="modal-header">
@@ -792,8 +800,9 @@ function openModalAvoir(factureId) {
             <thead><tr style="color:var(--muted);">
               <th style="padding:4px 8px;text-align:left;">Description</th>
               <th style="padding:4px 8px;text-align:right;width:70px;">Qté</th>
-              <th style="padding:4px 8px;text-align:right;width:100px;">P.U. HT (€)</th>
-              <th style="padding:4px 8px;text-align:right;width:90px;">Total HT</th>
+              <th style="padding:4px 8px;text-align:right;width:100px;">P.U. TTC (€)</th>
+              <th style="padding:4px 8px;text-align:right;width:80px;">TVA</th>
+              <th style="padding:4px 8px;text-align:right;width:90px;">Total TTC</th>
               <th style="width:32px;"></th>
             </tr></thead>
             <tbody id="avoir-lines"></tbody>
@@ -802,7 +811,7 @@ function openModalAvoir(factureId) {
 
           <div style="margin-top:12px;text-align:right;font-size:0.9rem;">
             <span style="color:var(--muted);">Total HT :</span> <strong id="avoir-total-ht">0,00 €</strong> &nbsp;
-            <span style="color:var(--muted);">TVA 20% :</span> <strong id="avoir-total-tva">0,00 €</strong> &nbsp;
+            <span style="color:var(--muted);">TVA :</span> <strong id="avoir-total-tva">0,00 €</strong> &nbsp;
             <span style="color:var(--muted);">Total TTC :</span> <strong id="avoir-total-ttc" style="color:var(--primary);">0,00 €</strong>
           </div>
         </div>
@@ -844,6 +853,8 @@ function addAvoirLine() {
   // Quantité entière ≥ 1 (recette 001 B) ; le serveur refuse le reste (400, message affiché).
   // AVANT (2026-10-03, recette 002 A) : type="number" min="1" step="1" — « 0,98 » restait affiché.
   // Entiers seulement à la saisie : `data-entier` (`app.js`), champ texte à pavé numérique.
+  // Revue du ticket 03 prix TTC (2026-10-05) : colonne « TVA » ajoutée après le prix — le PU saisi est
+  // un TTC, le HT s'en déduit par le taux de la ligne (20 % imposé auparavant, faux pour 0 / 5,5 / 10 %).
   tr.innerHTML = `
     <td style="padding:4px 8px;">
       <input type="text" id="al-desc-${lid}" placeholder="Description…"
@@ -859,6 +870,16 @@ function addAvoirLine() {
         style="width:90px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
         oninput="updateAvoirLineTotals(${lid})">
     </td>
+    <td style="padding:4px 8px;">
+      <select id="al-tva-${lid}"
+        style="width:75px;border:1px solid #e5e7eb;border-radius:6px;padding:5px 6px;font:inherit;font-size:0.88rem;text-align:right;"
+        onchange="updateAvoirLineTotals(${lid})">
+        <option value="20">20 %</option>
+        <option value="10">10 %</option>
+        <option value="5.5">5,5 %</option>
+        <option value="0">0 %</option>
+      </select>
+    </td>
     <td style="padding:4px 8px;text-align:right;">
       <span id="al-total-${lid}" style="font-weight:600;">0,00 €</span>
     </td>
@@ -867,6 +888,12 @@ function addAvoirLine() {
         style="border:none;background:none;cursor:pointer;color:var(--muted);font-size:1rem;" title="Supprimer">✕</button>
     </td>`;
   tbody.appendChild(tr);
+
+  // Taux proposé : celui par défaut de la boutique s'il est connu (sélecteur du formulaire de facture),
+  // sinon 20 % ; chaque ligne reste modifiable.
+  const tauxDefaut = document.getElementById('f-tva-defaut')?.value || '20';
+  const tvaEl = document.getElementById('al-tva-' + lid);
+  if (tvaEl) tvaEl.value = tauxDefaut;
 }
 
 function removeAvoirLine(lid) {
@@ -879,27 +906,51 @@ function removeAvoirLine(lid) {
   updateAvoirTotals();
 }
 
+/** Quantité, PU TTC et taux d'une ligne de la modale d'avoir, lus dans ses champs. */
+function lireLigneAvoir(lid) {
+  return {
+    quantite: parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0,
+    prixTtc:  parseFloat(document.getElementById('al-price-' + lid)?.value) || 0,
+    taux:     parseFloat(document.getElementById('al-tva-'   + lid)?.value) || 0,
+  };
+}
+
+// AVANT (2026-10-05, ticket 03 prix TTC — PU saisi en TTC, mêmes calculs que le serveur) :
+// function updateAvoirLineTotals(lid) {
+//   const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
+//   const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
+//   const total = qty * price;
+//   const el    = document.getElementById('al-total-' + lid);
+//   if (el) el.textContent = formatMoney(total);
+//   updateAvoirTotals();
+// }
+// 
+// function updateAvoirTotals() {
+//   const totalHT = avoirLines.reduce((s, lid) => {
+//     const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
+//     const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
+//     return s + qty * price;
+//   }, 0);
+//   const tva = totalHT * 0.2;
+//   const ttc = totalHT + tva;
+//   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
+//   set('avoir-total-ht',  totalHT);
+//   set('avoir-total-tva', tva);
+//   set('avoir-total-ttc', ttc);
+// }
 function updateAvoirLineTotals(lid) {
-  const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
-  const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
-  const total = qty * price;
+  const ligne = lireLigneAvoir(lid);
   const el    = document.getElementById('al-total-' + lid);
-  if (el) el.textContent = formatMoney(total);
+  if (el) el.textContent = formatMoney(montantsDeLaLigneTtc(ligne.quantite, ligne.prixTtc, ligne.taux).ttc);
   updateAvoirTotals();
 }
 
 function updateAvoirTotals() {
-  const totalHT = avoirLines.reduce((s, lid) => {
-    const qty   = parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 0;
-    const price = parseFloat(document.getElementById('al-price-' + lid)?.value) || 0;
-    return s + qty * price;
-  }, 0);
-  const tva = totalHT * 0.2;
-  const ttc = totalHT + tva;
+  const totaux = totauxDesLignesTtc(avoirLines.map(lireLigneAvoir));
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
-  set('avoir-total-ht',  totalHT);
-  set('avoir-total-tva', tva);
-  set('avoir-total-ttc', ttc);
+  set('avoir-total-ht',  totaux.ht);
+  set('avoir-total-tva', totaux.tva);
+  set('avoir-total-ttc', totaux.ttc);
 }
 
 async function confirmAvoir() {
@@ -913,12 +964,16 @@ async function confirmAvoir() {
   }
 
   // Construire les lignes
+  // AVANT (2026-10-05, ticket 03 prix TTC — le PU saisi est le TTC) :
+  //   prix_unitaire_ht: parseFloat(document.getElementById('al-price-' + lid)?.value) || 0,
+  //   tva_taux:         20,
+  // })).filter(l => l.description || l.prix_unitaire_ht > 0);
   const lignes = avoirLines.map(lid => ({
     description:      document.getElementById('al-desc-'  + lid)?.value.trim() || '',
     quantite:         parseFloat(document.getElementById('al-qty-'   + lid)?.value) || 1,
-    prix_unitaire_ht: parseFloat(document.getElementById('al-price-' + lid)?.value) || 0,
-    tva_taux:         20,
-  })).filter(l => l.description || l.prix_unitaire_ht > 0);
+    prix_unitaire_ttc: parseFloat(document.getElementById('al-price-' + lid)?.value) || 0,
+    tva_taux:          lireLigneAvoir(lid).taux,
+  })).filter(l => l.description || l.prix_unitaire_ttc > 0);
 
   if (!lignes.length) {
     showFlash('⚠️ Ajoutez au moins une ligne à l\'avoir.', 'error');
@@ -1127,6 +1182,25 @@ function _lignesRemisEtRendu(paiement) {
         </div>`;
 }
 
+/** Vrai si au moins une ligne du document a été calculée depuis le TTC (`mode_calcul`, migration 0063). */
+function documentEnTtc(lignes) {
+  return (lignes || []).some(l => l.mode_calcul === 'ttc');
+}
+
+/**
+ * Prix unitaire TTC imprimé d'une ligne : celui saisi pour une ligne calculée en TTC ; pour une ligne
+ * restée en HT dans un document en TTC (ex. déduction d'acompte), HT × (1 + taux) au centime — même
+ * calcul que `prixTtcDepuisHt()` (`src/lib/prixVente.ts`), que l'écran ne peut pas importer.
+ */
+function prixUnitaireTtcImprime(ligne) {
+  if (ligne.mode_calcul === 'ttc') return Number(ligne.prix_unitaire_ttc) || 0;
+  const prixHt = Number(ligne.prix_unitaire_ht) || 0;
+  const taux   = Number(ligne.tva_taux) || 0;
+  return Math.round(prixHt * (100 + taux)) / 100;
+}
+
+// AVANT (2026-10-05, ticket 03 prix TTC — dans le gabarit, en-tête de la colonne de prix) :
+//   <th class="text-right"  style="width:15%">P.U. HT</th>
 function _buildFactureHTML(d, printCssHref) {
   // Identités affichées : snapshot figé si la facture est émise, sinon jointure vivante.
   const ach = d.acheteurFige;
@@ -1178,12 +1252,18 @@ function _buildFactureHTML(d, printCssHref) {
         <strong>Appareil vendu :</strong> ${esc([a.marque, a.modele].filter(Boolean).join(' '))} — IMEI ${esc(a.imei)}
       </div>`).join('');
 
+  // Ticket 03 prix TTC : colonne du prix unitaire en TTC dès qu'une ligne a été calculée en TTC — le
+  // client relit « PU TTC × qté = total TTC ». Un document tout en HT (émis avant la bascule) garde sa
+  // colonne HT : il se réimprime à l'identique.
+  const colonnePrixEnTtc = documentEnTtc(d.lignes);
+  // AVANT (2026-10-05, ticket 03 prix TTC), dans le gabarit ci-dessous :
+  //   <td class="text-right">${formatMoney(l.prix_unitaire_ht)}</td>
   const lignesHTML = d.lignes.length
     ? d.lignes.map(l => `
         <tr>
           <td>${esc(l.description || l.designation || '—')}</td>
           <td class="text-center">${parseFloat(l.quantite || 1).toLocaleString('fr-FR')}</td>
-          <td class="text-right">${formatMoney(l.prix_unitaire_ht)}</td>
+          <td class="text-right">${formatMoney(colonnePrixEnTtc ? prixUnitaireTtcImprime(l) : l.prix_unitaire_ht)}</td>
           <td class="text-center">${parseFloat(l.tva_taux || 20)}%</td>
           <td class="text-right"><strong>${formatMoney(l.total_ttc)}</strong></td>
         </tr>`).join('')
@@ -1261,7 +1341,7 @@ function _buildFactureHTML(d, printCssHref) {
           <tr>
             <th style="width:45%">Description</th>
             <th class="text-center" style="width:10%">Qté</th>
-            <th class="text-right"  style="width:15%">P.U. HT</th>
+            <th class="text-right"  style="width:15%">${colonnePrixEnTtc ? 'P.U. TTC' : 'P.U. HT'}</th>
             <th class="text-right"  style="width:10%">TVA</th>
             <th class="text-right"  style="width:20%">Total TTC</th>
           </tr>
@@ -1377,33 +1457,90 @@ function removeFactureLine(lid) {
   updateFactureTotals();
 }
 
+/**
+ * Montants d'une ligne saisie en prix unitaire TTC (ticket 03 du chantier prix TTC), calculés
+ * EXACTEMENT comme le serveur (`calculLigne()`, `src/lib/db.ts`) — mêmes expressions, mêmes arrondis :
+ * TTC = arrondi(quantité × PU TTC) ; HT = arrondi(TTC ÷ (1 + taux)) ; TVA = TTC − HT.
+ * @returns {{ ht: number, tva: number, ttc: number }}
+ */
+function montantsDeLaLigneTtc(quantite, prixUnitaireTtc, tauxTva) {
+  const ttcEnCentimes = Math.round(quantite * prixUnitaireTtc * 100);
+  const htEnCentimes  = Math.round((ttcEnCentimes * 100) / (100 + tauxTva));
+  return {
+    ht:  htEnCentimes / 100,
+    tva: (ttcEnCentimes - htEnCentimes) / 100,
+    ttc: ttcEnCentimes / 100,
+  };
+}
+
+/**
+ * Totaux d'un document dont chaque ligne est saisie en TTC : même cumul que `calculLignes()`
+ * (chaque ligne arrondie avant d'être sommée), sinon l'aperçu diffère du document émis.
+ * @param {Array<{quantite:number, prixTtc:number, taux:number}>} lignes
+ */
+function totauxDesLignesTtc(lignes) {
+  const round2 = v => Math.round(v * 100) / 100;
+  let totalHT = 0, totalTVA = 0, totalTTC = 0;
+  lignes.forEach(l => {
+    const montants = montantsDeLaLigneTtc(l.quantite, l.prixTtc, l.taux);
+    totalHT  = round2(totalHT  + montants.ht);
+    totalTVA = round2(totalTVA + montants.tva);
+    totalTTC = round2(totalTTC + montants.ttc);
+  });
+  return { ht: totalHT, tva: totalTVA, ttc: totalTTC };
+}
+
+/** Quantité, PU TTC et taux d'une ligne du formulaire de facture, lus dans ses champs. */
+function lireLigneFacture(lid) {
+  return {
+    quantite: parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0,
+    prixTtc:  parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0,
+    taux:     parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0,
+  };
+}
+
+// AVANT (2026-10-05, ticket 03 prix TTC — lignes saisies en TTC, total de ligne en TTC) :
+// function updateFactureLineTotals(lid) {
+//   const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
+//   const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
+//   const el    = document.getElementById('fl-total-' + lid);
+//   if (el) el.textContent = formatMoney(qty * price);
+//   updateFactureTotals();
+// }
 function updateFactureLineTotals(lid) {
-  const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
-  const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
+  const ligne = lireLigneFacture(lid);
   const el    = document.getElementById('fl-total-' + lid);
-  if (el) el.textContent = formatMoney(qty * price);
+  if (el) el.textContent = formatMoney(montantsDeLaLigneTtc(ligne.quantite, ligne.prixTtc, ligne.taux).ttc);
   updateFactureTotals();
 }
 
+// AVANT (2026-10-05, ticket 03 prix TTC — calcul depuis le TTC, par totauxDesLignesTtc()) :
+// function updateFactureTotals() {
+//   // Même arrondi comptable que calculLignes() côté backend : chaque ligne est
+//   // arrondie avant d'être sommée, sinon l'aperçu diffère de la facture émise.
+//   const round2 = v => Math.round(v * 100) / 100;
+// 
+//   let totalHT = 0, totalTVA = 0;
+//   factureLines.forEach(lid => {
+//     const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
+//     const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
+//     const taux  = parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0;
+//     const ht    = round2(qty * price);
+//     totalHT  = round2(totalHT + ht);
+//     totalTVA = round2(totalTVA + round2(ht * taux / 100));
+//   });
+// 
+//   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
+//   set('f-subtotal-ht', totalHT);
+//   set('f-total-tva',   totalTVA);
+//   set('f-total-ttc',   round2(totalHT + totalTVA));
+// }
 function updateFactureTotals() {
-  // Même arrondi comptable que calculLignes() côté backend : chaque ligne est
-  // arrondie avant d'être sommée, sinon l'aperçu diffère de la facture émise.
-  const round2 = v => Math.round(v * 100) / 100;
-
-  let totalHT = 0, totalTVA = 0;
-  factureLines.forEach(lid => {
-    const qty   = parseFloat(document.getElementById('fl-qty-'   + lid)?.value) || 0;
-    const price = parseFloat(document.getElementById('fl-price-' + lid)?.value) || 0;
-    const taux  = parseFloat(document.getElementById('fl-tva-'   + lid)?.value) || 0;
-    const ht    = round2(qty * price);
-    totalHT  = round2(totalHT + ht);
-    totalTVA = round2(totalTVA + round2(ht * taux / 100));
-  });
-
+  const totaux = totauxDesLignesTtc(factureLines.map(lireLigneFacture));
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = formatMoney(val); };
-  set('f-subtotal-ht', totalHT);
-  set('f-total-tva',   totalTVA);
-  set('f-total-ttc',   round2(totalHT + totalTVA));
+  set('f-subtotal-ht', totaux.ht);
+  set('f-total-tva',   totaux.tva);
+  set('f-total-ttc',   totaux.ttc);
 }
 
 /** Applique le taux par défaut à toutes les lignes existantes. */
