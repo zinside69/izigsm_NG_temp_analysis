@@ -157,6 +157,13 @@ run_once() {
     log "DISJONCTEUR ACTIF — planificateur en PAUSE. Aucune nouvelle tache lancee."
     return 0
   fi
+  # (2026-10-05, defaut 114, O65 partie 1) Plafond de depense du jour atteint
+  # (60 $ par jour, tous projets, jour de Paris ; lib.sh) : aucune nouvelle tache
+  # lancee avant le lendemain. Test PJ4.
+  if plafond_jour_atteint; then
+    log "PLAFOND DU JOUR ATTEINT — $(depense_du_jour_usd) \$ sur $(plafond_jour_usd) \$ (tous projets). Aucune nouvelle tache lancee."
+    return 0
+  fi
 
   reconcilier
   # (2026-09-22, defaut 9) Le graphe lit l'etat des taches a la compilation : il

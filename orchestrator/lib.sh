@@ -484,3 +484,114 @@ consigne_correction() {
     + "Corrige ces points dans ton perimetre. Un rejet que tu juges infonde : ne le contourne pas, explique-le dans ecarts de ton compte rendu."' \
     "$1"
 }
+
+# ════ Plafond de depense par jour (2026-10-05, defaut 114, O65 partie 1) ════
+# Decision de l'operateur : plafond GLOBAL (tous les projets declares), 60 $ par
+# jour, jour de Paris. Reglage ORCH_PLAFOND_JOUR_USD dans ~/.orchestrateur.env
+# (60 par defaut). La depense se lit dans journal/couts.jsonl de chaque projet,
+# une ligne par appel payant (journaliser_cout). Avant, rien ne s'arretait sur
+# le cout (O16). Tests PJ1 a PJ5.
+
+# lire_reglage_orchestrateur <NOM> — valeur de la variable d'environnement si elle
+# est posee, sinon celle de ~/.orchestrateur.env (meme lecture qu'escalade.sh).
+# Rend 1 si la variable n'existe nulle part.
+lire_reglage_orchestrateur() {
+  local nom="$1" valeur ligne fichier_reglages
+  valeur="${!nom:-}"
+  if [[ -n "$valeur" ]]; then
+    printf '%s' "$valeur"
+    return 0
+  fi
+  fichier_reglages="${ORCHESTRATEUR_ENV:-$HOME/.orchestrateur.env}"
+  [[ -r "$fichier_reglages" ]] || return 1
+  ligne="$(grep -m1 -E "^[[:space:]]*(export[[:space:]]+)?${nom}[[:space:]]*=" "$fichier_reglages" 2>/dev/null)" || return 1
+  valeur="${ligne#*=}"
+  valeur="${valeur#\"}"; valeur="${valeur%\"}"
+  valeur="${valeur#\'}"; valeur="${valeur%\'}"
+  valeur="$(printf '%s' "$valeur" | tr -d '[:space:]')"
+  [[ -n "$valeur" ]] || return 1
+  printf '%s' "$valeur"
+}
+
+# bornes_du_jour_de_paris — imprime « debut fin » du jour de Paris, en UTC au
+# format des lignes de couts.jsonl (ex. « 2026-09-17T22:00:00Z 2026-09-18T22:00:00Z »).
+# ORCH_AUJOURDHUI (AAAA-MM-JJ), pose par les tests, remplace la date du jour.
+bornes_du_jour_de_paris() {
+  python3 - "${ORCH_AUJOURDHUI:-}" <<'PY'
+import sys
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+paris = ZoneInfo("Europe/Paris")
+jour_demande = sys.argv[1]
+if jour_demande:
+    jour = date.fromisoformat(jour_demande)
+else:
+    jour = datetime.now(paris).date()
+debut_a_paris = datetime.combine(jour, time(0, 0), paris)
+fin_a_paris = datetime.combine(jour + timedelta(days=1), time(0, 0), paris)
+format_des_journaux = "%Y-%m-%dT%H:%M:%SZ"
+print(debut_a_paris.astimezone(timezone.utc).strftime(format_des_journaux),
+      fin_a_paris.astimezone(timezone.utc).strftime(format_des_journaux))
+PY
+}
+
+# journaux_de_couts_des_projets — un chemin par ligne : le journal des couts du
+# projet courant, puis celui de chaque projet declare dans ORCH_PROJETS.
+journaux_de_couts_des_projets() {
+  local projets_declares projet
+  local -a liste_des_projets=()
+  printf '%s\n' "$ORCH_DIR/journal/couts.jsonl"
+  projets_declares="$(lire_reglage_orchestrateur ORCH_PROJETS || true)"
+  IFS=':' read -r -a liste_des_projets <<<"$projets_declares"
+  for projet in "${liste_des_projets[@]}"; do
+    if [[ -n "$projet" ]]; then
+      printf '%s\n' "$projet/.orchestrator/journal/couts.jsonl"
+    fi
+  done
+}
+
+# depense_du_jour_usd — somme des couts du jour de Paris, sur tous les projets.
+# Un projet declare deux fois (courant et dans ORCH_PROJETS) compte une fois :
+# les journaux sont dedoublonnes par leur chemin reel.
+depense_du_jour_usd() {
+  local debut_du_jour fin_du_jour journal
+  local -a journaux_existants=()
+  read -r debut_du_jour fin_du_jour < <(bornes_du_jour_de_paris)
+  while read -r journal; do
+    journaux_existants+=("$journal")
+  done < <(journaux_de_couts_des_projets | while read -r chemin; do
+             if [[ -f "$chemin" ]]; then
+               realpath "$chemin"
+             fi
+           done | sort -u)
+  if (( ${#journaux_existants[@]} == 0 )); then
+    printf '0\n'
+    return 0
+  fi
+  jq -Rn --arg debut "$debut_du_jour" --arg fin "$fin_du_jour" '
+    [ inputs | fromjson? | objects
+      | select((.ts // "") >= $debut and (.ts // "") < $fin)
+      | (.cout_usd // 0) ]
+    | add // 0' "${journaux_existants[@]}"
+}
+
+# plafond_jour_usd — plafond du jour en dollars (60 par defaut).
+plafond_jour_usd() {
+  local plafond
+  plafond="$(lire_reglage_orchestrateur ORCH_PLAFOND_JOUR_USD || true)"
+  printf '%s\n' "${plafond:-60}"
+}
+
+# plafond_jour_atteint — vrai (code 0) si la depense du jour atteint le plafond.
+plafond_jour_atteint() {
+  awk -v depense="$(depense_du_jour_usd)" -v plafond="$(plafond_jour_usd)" \
+    'BEGIN { if (depense >= plafond) exit 0; else exit 1 }'
+}
+
+# reste_du_jour_usd — ce qui reste a depenser aujourd'hui, deux decimales, jamais
+# negatif : passe a claude par --max-budget-usd.
+reste_du_jour_usd() {
+  awk -v depense="$(depense_du_jour_usd)" -v plafond="$(plafond_jour_usd)" \
+    'BEGIN { reste = plafond - depense; if (reste < 0) reste = 0; printf "%.2f\n", reste }'
+}

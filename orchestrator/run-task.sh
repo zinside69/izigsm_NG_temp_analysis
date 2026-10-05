@@ -347,6 +347,12 @@ REGLAGES_AGENT="$(jq -nc --arg h "'$ROOT/.claude/hooks/guard-ecriture.sh'" --arg
 # que soit la forme qui a echappe au hook. Test GG3.
 TETE_AVANT="$(git -C "$WT" rev-parse HEAD)"
 
+# (2026-10-05, defaut 114, O65 partie 1) Budget de cette session de l'agent : ce
+# qui reste du plafond de depense du jour (60 $ par jour, tous projets, jour de
+# Paris ; lib.sh). Passe a claude par --max-budget-usd : l'agent s'arrete au tour
+# suivant quand il est atteint (depassement possible d'un tour). Test PJ2.
+RESTE_DU_JOUR_USD="$(reste_du_jour_usd)"
+
 set +e
 # (2026-09-24, O7) Filet si l'agent commite malgre tout (autre forme de commande
 # que « git commit », skill qui commite) : l'identite git de son environnement est
@@ -358,6 +364,7 @@ GIT_COMMITTER_NAME="agent-$TASK_ID" GIT_COMMITTER_EMAIL="agent@local" \
 ORCH_AGENT_TACHE="$TASK_ID" ORCH_PERIMETRE="${TACHE[perimetre]:-}" ORCH_SOCLE="$ROOT" ORCH_WT="$WT" \
 ORCH_CRITIQUES="$ROOT/orchestrator/fichiers-critiques.json" \
 claude -p "$PROMPT" "${REPRISE[@]}" \
+  --max-budget-usd "$RESTE_DU_JOUR_USD" \
   --model "$MODEL" \
   --output-format stream-json --verbose \
   --max-turns "$MAX_TURNS" \
@@ -490,6 +497,15 @@ if [[ "$(jq -r 'select(.type == "result") | .subtype // empty' "$LOG" 2>/dev/nul
   log "Agent coupe a ${TOURS:-?} tours (plafond $MAX_TURNS) : travail partiel sur $BRANCH, controles non lances"
   cd "$ROOT"
   exit 33
+fi
+# (2026-10-05, defaut 114, O65 partie 1) Agent arrete par son budget (reste du
+# plafond du jour) : meme traitement que le plafond de tours — travail partiel
+# garde sur la branche (commit ci-dessus), controles NON lances, code 35 :
+# pipeline.sh en fait P19:plafond-jour-en-cours. Test PJ3.
+if [[ "$(jq -r 'select(.type == "result") | .subtype // empty' "$LOG" 2>/dev/null | tail -1 || true)" == error_max_budget_usd ]]; then
+  log "Agent arrete par son budget (reste du jour : $RESTE_DU_JOUR_USD \$) : travail partiel sur $BRANCH, controles non lances"
+  cd "$ROOT"
+  exit 35
 fi
 
 # --- 8. Porte -------------------------------------------------------------
