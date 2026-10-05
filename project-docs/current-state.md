@@ -1,4 +1,20 @@
-# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 151 — ticket 03 TTC fait, chantier 01-03 prêt à déployer)
+# iziGSM — État courant (MàJ : 2026-10-05 soir — chantier prix TTC 01-03 DÉPLOYÉ, v3.33 / 0063)
+
+## Déploiement du 2026-10-05 (soir) — prix TTC, tickets 01 + 02 + 03
+
+**Production : `izigsm-v3.33`, dernière migration `0063`. Dépôt et production alignés.**
+
+- Préconditions : suite E2E **complète** 403 verts + 2 rouges corrigés côté tests (`0534a61`) :
+  focus tardif de « + Ligne libre » (la quantité partait dans la désignation : « Petite pièce3 »,
+  facture à 90,79 € au lieu de 90,85 €) et un test `resolveur-boutique-pages` resté sur le champ HT
+  de la caisse (oubli du ticket 02). Rejoués 22/22.
+- `0062` et `0063` à distance (18:19:19 UTC), relues avant le code ; point Time Travel d'avant
+  consigné dans `journal-migrations.md`.
+- `npm run deploy` ; aperçu `40c0f24d` **puis** apex : `sw.js` v3.33, assets caisse / factures / stock
+  du manifeste en JavaScript avec le code du lot, pages TTC servies, routes sans jeton → 401.
+
+**Prochaine action** : recette à l'écran par l'exploitant (`telnet@bbox.fr`, Ctrl+F5) — voir
+`recovery-prompt.md` ; puis ticket 04.
 
 ## Checkpoint 151 — Ticket 03 prix TTC : factures et avoirs en TTC (2026-10-05)
 

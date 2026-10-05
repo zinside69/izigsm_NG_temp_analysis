@@ -104,6 +104,19 @@ Point de restauration relevé juste **avant** `0061` (2026-10-03, lecture seule)
 `0060`, 7 paiements, colonnes absentes. Relu après : dernière migration `0061`, deux colonnes `REAL`
 présentes, 7 paiements, aucun montant remis. Code (`izigsm-v3.24`) à déployer **après**.
 
+### 2026-10-05 — `0062` et `0063` (chantier prix TTC, tickets 01 à 03)
+
+| # | Migration | Appliquée (UTC) | Effet | R | Inverse |
+|---|---|---|---|---|---|
+| 55 | `0062_produits_prix_vente_ttc` | **2026-10-05 18:19:19** | `produits.prix_vente_ttc REAL NOT NULL DEFAULT 0`, repris au centime depuis `prix_vente_ht × (1 + taux)` (relu après : 0 fiche à HT > 0 restée à 0 € TTC) | | `ALTER TABLE produits DROP COLUMN prix_vente_ttc;` — **code revenu à `izigsm-v3.32` d'abord** (v3.33 lit et écrit cette colonne) ; détruit les prix TTC saisis depuis (le HT, toujours écrit, reste) |
+| 56 | `0063_lignes_document_prix_ttc` | **2026-10-05 18:19:19** | `lignes_document` + `prix_unitaire_ttc REAL`, `mode_calcul TEXT NOT NULL DEFAULT 'ht'` (CHECK `ttc`/`ht`) ; lignes existantes toutes `ht` | | `ALTER TABLE lignes_document DROP COLUMN mode_calcul; ALTER TABLE lignes_document DROP COLUMN prix_unitaire_ttc;` — **code revenu à `izigsm-v3.32` d'abord** (toute vente v3.33 écrit ces colonnes) ; ⚠ une ligne de facture **émise** en TTC perdrait son PU TTC (document légal) : vérifier d'abord `SELECT COUNT(*) FROM lignes_document WHERE mode_calcul = 'ttc'` |
+
+Point de restauration relevé juste **avant** `0062` (2026-10-05 17:58 UTC, lecture seule) :
+`000001f9-00000000-000050fb-df6acbf5c0336a19c66446020565dd02` — défait les deux migrations **et** toute
+écriture postérieure. Relu avant : dernière migration `0061`. Relu après : dernière migration `0063`,
+`produits.prix_vente_ttc` et les deux colonnes de `lignes_document` présentes, 0 fiche sans reprise,
+0 ligne hors mode `ht`. Code (`izigsm-v3.33`) déployé **après** : aperçu `40c0f24d` puis apex vérifiés.
+
 ## Vérification d'état (lecture seule, à rejouer à tout moment)
 
 ```
