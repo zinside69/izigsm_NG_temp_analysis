@@ -1,5 +1,13 @@
 # iziGSM — Décisions
 
+## 2026-10-05 — Fiches sans prix de vente : calcul en lot (option b)
+
+Mesuré en production (requête du ticket 01 prix TTC) : 795 fiches actives sur 796 de la boutique 2 sont
+à 0 € de prix de vente (imports Mobilax sans marge réglée), et seulement 5 fiches auront un TTC repris
+« non rond ». **Décision de l'exploitant** : un geste du manager calcule en lot le prix des fiches à 0 €,
+par la règle de l'import (marge de la famille, arrondi de la boutique) — ticket 12 du chantier
+`prix-ttc`, après le 06. Option écartée (a) : laisser le manager saisir au fil des ventes.
+
 ## 2026-10-04 — Synchro phone-specs-api ouverte au manager
 
 **Décision de l'exploitant**, après diagnostic (« la synchro ne fonctionne plus ») : le manager peut
