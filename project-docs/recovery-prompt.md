@@ -1,4 +1,22 @@
-# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 151 — tickets 01-03 TTC faits, à déployer)
+# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 152 — prix TTC 01-03 en production, recette à faire)
+
+## ➡ Première action (checkpoint 152 — remplace celle du 151)
+
+**Production `izigsm-v3.33` / `0063`, dépôt aligné et poussé (`5e4e03a`).** Chantier prix TTC : tickets
+01 + 02 + 03 déployés le 2026-10-05 au soir (journal : `journal-migrations.md`).
+
+1. **Recette à l'écran** par l'exploitant (`telnet@bbox.fr`, Ctrl+F5), puis relire en base distante :
+   stock en TTC ; caisse 19,99 € × 3 = 59,97 € (« P.U. TTC ») → ligne `mode_calcul = 'ttc'` ; facture
+   manuelle en TTC + impression « P.U. TTC » ; avoir à 5,5 % ; réimpression d'une ancienne facture identique.
+2. Puis **ticket 04** (services et prix par modèle en TTC) dans une session neuve :
+   `/mattpocock-skills:implement .scratch/prix-ttc/issues/04-services-et-prix-par-modele-en-ttc.md`.
+   Ordre restant : (04, 06, 09, 10) → 05 → 08 ; 06 → 07 ; 12 après 06.
+3. Restes notés : `todo.md` § « Restes du ticket 02 » et « Restes du ticket 03 ».
+
+⚠ Renommer un champ d'écran (`data-field`) : chercher dans **tout** `tests/e2e/`, pas les seuls fichiers
+du domaine — `resolveur-boutique-pages.spec.ts` saisit aussi en caisse (oubli du ticket 02, vu en suite complète).
+
+## Checkpoint 151 (historique)
 
 ## ➡ Première action (checkpoint 151 — remplace celle du 150)
 

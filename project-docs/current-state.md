@@ -1,6 +1,6 @@
-# iziGSM — État courant (MàJ : 2026-10-05 soir — chantier prix TTC 01-03 DÉPLOYÉ, v3.33 / 0063)
+# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 152 — prix TTC 01-03 en production, v3.33 / 0063)
 
-## Déploiement du 2026-10-05 (soir) — prix TTC, tickets 01 + 02 + 03
+## Checkpoint 152 — Déploiement du 2026-10-05 (soir) — prix TTC, tickets 01 + 02 + 03
 
 **Production : `izigsm-v3.33`, dernière migration `0063`. Dépôt et production alignés.**
 
