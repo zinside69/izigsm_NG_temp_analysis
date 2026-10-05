@@ -8,7 +8,18 @@
   `prixTtcDepuisHt()` copiée dans `stock.js` et `caisse.js` — une copie dans `app.js` suffirait.
 - [ ] E2E instable sous charge : `caisse-entiers-dernier-prix.spec.ts` « A : la quantité n'affiche que des
   entiers » lit parfois 198 au lieu de 98 en série longue (vert seul). À diagnostiquer (`/diagnosing-bugs`).
-- Impression PU TTC d'une ligne `mode_calcul = 'ttc'` : au ticket 03.
+- Impression PU TTC d'une ligne `mode_calcul = 'ttc'` : au ticket 03. — **fait** (`f390229`).
+
+## 🟡 2026-10-05 — Restes du ticket 03 prix TTC (checkpoint 151, revue)
+
+- [ ] Impression d'une vente de caisse remisée : PU TTC (avant remise) × qté ≠ total TTC de la ligne —
+  déjà le cas en HT ; ajouter une colonne « Remise » au document (`_buildFactureHTML()`), garantie A4 gardée.
+- [ ] `lignes_avoir` sans `prix_unitaire_ttc` / `mode_calcul` : le PU TTC saisi d'un avoir n'est pas
+  réimprimable (totaux exacts). Migration à prévoir si un avoir doit s'imprimer en TTC.
+- [ ] `checkFromDevis()` (`factures.js`) : code mort (aucun écrivain de `izigsm_devis_to_facture`), préremplit
+  un PU HT dans le champ TTC — retirer ou corriger.
+- [ ] Modale d'avoir : taux proposé = `#f-tva-defaut`, rempli seulement après ouverture du formulaire de
+  facture ; sinon 20 % (modifiable). Charger le taux par défaut de la boutique à l'ouverture de l'avoir.
 
 ## 🟠 2026-10-04 — Chantier « régime de la marge » (occasion, reconditionné) — décidé, à cadrer
 

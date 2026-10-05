@@ -1,4 +1,22 @@
-# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 150 — ticket 02 TTC fait, caisse en TTC)
+# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 151 — ticket 03 TTC fait, chantier 01-03 prêt à déployer)
+
+## Checkpoint 151 — Ticket 03 prix TTC : factures et avoirs en TTC (2026-10-05)
+
+**Production inchangée : `izigsm-v3.32` / `0061`. Dépôt EN AVANCE, chantier 01 + 02 + 03 complet**
+(`0062`, `0063` en attente). Vitest 1 492 + 2 permanents, tsc 31, E2E factures/caisse/XSS 25/25.
+
+- **Ticket 03 `done`** (`f390229`, sans migration) : `createFacture()` / `createAvoir()` en TTC
+  (`prixDeLaLigne()`, `ligneEnTtc()` dans `lib/db.ts`, partagés avec la caisse) ; `convertirDevis()` recopie
+  PU TTC et mode ; écran : facture et avoir saisis en TTC ; impression « P.U. TTC » dès qu'une ligne est en
+  TTC, document tout en HT réimprimé à l'identique.
+- Tests vus rouges d'abord : `factures-ttc-sqlite` (vrai SQLite, NF525), E2E `factures-ttc` (rouge sur
+  l'ancien build ; le cas « réimpression HT » vert dès le départ, comme attendu).
+- **Revue** — corrigé : taux de TVA d'avoir non contrôlé (texte concaténé, −100 % → division par zéro)
+  refusé avant tout numéro ; avoir figé à 20 % → taux par ligne ; double « ligne en TTC » ; blocs `AVANT`
+  résumés recopiés en entier (contrôle : aucune ligne retirée sans copie). Reporté (note du ticket) :
+  impression d'une vente remisée, PU TTC des lignes d'avoir, `checkFromDevis()` mort.
+
+**Prochaine action** : déployer 01 + 02 + 03 (`0062`, `0063` à distance d'abord), recette à l'écran.
 
 ## Checkpoint 150 — Ticket 02 prix TTC : caisse calculée depuis le TTC (2026-10-05)
 

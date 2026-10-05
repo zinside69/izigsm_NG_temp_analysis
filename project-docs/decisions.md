@@ -1,5 +1,15 @@
 # iziGSM — Décisions
 
+## 2026-10-05 — Factures et avoirs en TTC : précisions techniques du ticket 03 (revue)
+
+- **Impression** : colonne « P.U. TTC » dès qu'une ligne du document a `mode_calcul = 'ttc'` ; un
+  document tout en HT garde « P.U. HT » — Q19, une facture émise avant la bascule se réimprime à
+  l'identique. Ligne HT dans un document TTC (déduction d'acompte) : HT × (1 + taux) au centime.
+- **Avoir : un taux de TVA par ligne**, contrôlé contre la liste des factures avant tout numéro. Le 20 %
+  imposé, sans effet visible tant que l'avoir se saisissait en HT, faussait la ventilation dès la saisie
+  en TTC (franchise, 5,5 %, 10 %).
+- **Pas de migration au ticket 03** (cadrage) : `lignes_avoir` garde le PU HT déduit ; totaux exacts.
+
 ## 2026-10-05 — Caisse en TTC : précisions techniques du ticket 02 (revue)
 
 Décisions techniques prises en codant Q2 / Q11, sans changer leur sens :

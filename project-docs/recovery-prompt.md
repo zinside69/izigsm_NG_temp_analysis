@@ -1,4 +1,20 @@
-# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 150 — ticket 02 TTC fait, ticket 03 à faire)
+# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 151 — tickets 01-03 TTC faits, à déployer)
+
+## ➡ Première action (checkpoint 151 — remplace celle du 150)
+
+**Production inchangée : `izigsm-v3.32` / `0061`.** Sur `main` : tickets **01** (`8fc31a2`, `0062`), **02**
+(`10db60e`, `0063`) et **03** (`f390229`, sans migration) — le lot prix TTC est complet, `CACHE_VERSION` v3.33.
+
+1. **Déployer 01 + 02 + 03 ensemble** (`project-docs/modop-deploiement.md`), par l'exploitant :
+   `npx wrangler d1 migrations apply DB --remote` (`CLOUDFLARE_API_TOKEN` vidé du shell, lire
+   `Resource location: remote`) → relire `d1_migrations` distant (`0063` en dernier) → `npm run deploy` →
+   aperçu **puis** apex (`sw.js` v3.33, `caisse.*.js` et `factures.*.js` du manifeste en JavaScript).
+   Avant `0062` : la liste des TTC « non ronds » a été remise (checkpoint 149, 5 fiches).
+2. Recette à l'écran (Ctrl+F5) : stock en TTC ; vente 19,99 € × 3 = 59,97 € ; facture manuelle en TTC et
+   son impression « P.U. TTC » ; avoir à 5,5 % ; réimpression d'une ancienne facture identique.
+3. Puis ticket 04 (services en TTC) ; ticket 12 après le 06 (795 fiches à 0 €).
+
+## Checkpoint 150 (historique)
 
 ## ➡ Première action (checkpoint 150 — remplace celle du 149)
 

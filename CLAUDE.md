@@ -879,6 +879,21 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   périmètre (`sqlLigneVendueLaPlusRecente()`).
 - ⚠ `seed.sql` crée ses produits en HT seul, après `0062` : en local, prix TTC à 0 → « prix à saisir ».
 
+## Factures et avoirs en TTC (depuis 2026-10-05, ticket 03 chantier `prix-ttc`)
+
+- **`createFacture()` et `createAvoir()` reçoivent `prix_unitaire_ttc`** (fait foi ; HT seul encore
+  accepté) et calculent par `calculLigne()`. **`prixDeLaLigne()` et `ligneEnTtc()` (`lib/db.ts`) sont les
+  seuls points** « colonnes de prix d'une ligne » / « cette ligne est en TTC » — la caisse les partage. ⊥
+  une seconde définition dans un service.
+- **`createAvoir()` refuse prix illisible et taux hors `TVA_TAUX_AUTORISES` AVANT `nextNumero()`** : le
+  calcul TTC divise par (100 + taux) — un taux en texte se concatène (« 10020 »), −100 divise par zéro.
+  Absent → 20 %. Chaque ligne d'avoir a son taux à l'écran (`al-tva-*`), ⊥ un taux imposé.
+- **`convertirDevis()` recopie `prix_unitaire_ttc` et `mode_calcul`** : une ligne garde son mode.
+- **Impression** : colonne « P.U. TTC » dès qu'une ligne a `mode_calcul = 'ttc'` (`documentEnTtc()`) ;
+  une ligne HT dans un tel document s'imprime HT × (1 + taux). **Document tout en HT → réimprimé à
+  l'identique** (« P.U. HT ») : ⊥ convertir une facture émise avant la bascule.
+- `lignes_avoir` n'a ni `prix_unitaire_ttc` ni `mode_calcul` : PU HT déduit stocké, totaux exacts.
+
 ## Quantité de ligne et caisse « Barre unique + favoris » (depuis 2026-10-02, recette 001)
 
 - **Une quantité de ligne est un entier ≥ 1** — caisse, devis, factures, avoirs, lignes libres
@@ -1218,6 +1233,11 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-05 (checkpoint 151) : production inchangée (`izigsm-v3.32` / `0061`), `0062` et
+`0063` EN ATTENTE, chantier 01 + 02 + 03 COMPLET sur `main`, prêt à déployer.** Ticket 03 (`f390229`,
+sans migration) : factures et avoirs en TTC. `CACHE_VERSION` `izigsm-v3.33` (jamais déployée, inchangée).
+Ordre : `0062` puis `0063` en `--remote`, `d1_migrations` relu, **puis** `npm run deploy`, aperçu avant l'apex.
 
 **État au 2026-10-05 (checkpoint 150) : production inchangée (`izigsm-v3.32` / `0061`), `0062` et
 `0063` EN ATTENTE, dépôt EN AVANCE.** Tickets 01 et 02 du chantier prix TTC sur `main` (`8fc31a2`,
