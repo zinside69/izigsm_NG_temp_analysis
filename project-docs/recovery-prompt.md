@@ -1,4 +1,31 @@
-# Recovery Prompt — iziGSM — 2026-10-04 (checkpoint 148 — v3.32 en production, ticket 11 TTC livré)
+# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 149 — ticket 01 TTC fait, ticket 02 COMMENCÉ)
+
+## ➡ Première action (checkpoint 149 — reprise du ticket 02, session neuve)
+
+**Production inchangée : `izigsm-v3.32` / `0061`.** Sur `main` (non déployés) : ticket **01** (`8fc31a2`,
+migration `0062`, `CACHE_VERSION` v3.33), ticket **12** ajouté (`bc03159`), et le début du **02**.
+Requête des TTC non ronds jouée en production : 5 fiches (4 de démo en boutique 1, #696 en boutique 2) ;
+**795 fiches sur 796 de la boutique 2 sont à 0 €** → ticket 12 (calcul en lot), décision de l'exploitant.
+
+**Ticket 02 — où on en est** (`.scratch/prix-ttc/issues/02-caisse-calculee-depuis-le-ttc.md`) :
+1. ✅ `calculLigne()` + `calculLignes()` (`src/lib/db.ts`) : une ligne qui porte `prix_unitaire_ttc` se
+   calcule depuis le TTC, en centimes ; sinon calcul HT inchangé. Test `tests/calcul-lignes-ttc.test.ts`.
+2. ⏳ **Test rouge prêt** : `.scratch/prix-ttc/en-cours/vente-ttc-sqlite.test.ts.brouillon` → le remettre
+   dans `tests/vente-ttc-sqlite.test.ts` et le voir rouge. Il attend : migration **`0063`**
+   (`lignes_document.prix_unitaire_ttc REAL`, `mode_calcul TEXT NOT NULL DEFAULT 'ht'`) ;
+   `createVente()` — `LignePOS.prix_unitaire_ht` devient facultatif, `prix_unitaire_ttc` ajouté ; une
+   fonction « ligne remisée » commune aux totaux ET à l'INSERT (aujourd'hui la remise est appliquée deux
+   fois, l. ~436 et ~502) ; remise TTC = arrondi(PU TTC × (1 − r %)) ; INSERT : `prix_unitaire_ht` = HT
+   déduit avant remise, `prix_unitaire_ttc` et `mode_calcul` **en fin de liste** (copie figée dans
+   `tests/caisseService.test.ts` l. ~449) ; ligne HT seule acceptée (page en cache).
+3. Ensuite : route `validateVente` (prix TTC ≥ 0 ; HT accepté) ; `sqlDernierPrixVendu()` → aussi
+   `dernier_prix_vendu_ttc` ; `catalogueService` liste ses colonnes : ajouter `prix_vente_ttc` ; écran
+   `caisse.js` (prix proposé = TTC fiche ou dernier prix TTC, service = TTC depuis `prix_ht`, ligne libre
+   en TTC, en-têtes « P.U. TTC » / « Total TTC », `calculerTotauxCommeLeServeur()` en TTC, corps
+   `prix_unitaire_ttc`) ; E2E caisse ; `CACHE_VERSION` ; revue ; déploiement **01+02+03 ensemble**
+   (`0062` puis `0063` à distance **avant** le code).
+
+## Checkpoint 148 (historique)
 
 ## ➡ Première action (checkpoint 148 — complète celle du 147 ci-dessous)
 

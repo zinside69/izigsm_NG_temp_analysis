@@ -200,22 +200,56 @@ export function calculTva(prixHt: number, tauxTva: number): TvaResult {
 }
 
 /**
- * Agrège les lignes d'un document (facture, devis, avoir) pour calculer les totaux.
+ * Ligne d'un document. Une ligne qui porte un `prix_unitaire_ttc` se calcule depuis le TTC (ticket 02
+ * du chantier prix TTC) ; sinon depuis `prix_unitaire_ht`, comme avant. Le prix peut déjà intégrer une
+ * remise, appliquée en amont.
+ */
+export interface LigneACalculer {
+  quantite:           number
+  tva_taux:           number
+  prix_unitaire_ht?:  number
+  prix_unitaire_ttc?: number
+}
+
+/**
+ * Montants d'une ligne, arrondis au centime (calcul en centimes entiers).
+ * - Ligne TTC (Q2, 2026-10-04) : TTC = prix unitaire TTC × quantité ; HT = TTC ÷ (1 + taux) ;
+ *   TVA = TTC − HT. Le client paie exactement le prix affiché multiplié par la quantité.
+ * - Ligne HT (devis, factures, avoirs, anciennes pages de caisse) : HT = prix unitaire HT × quantité ;
+ *   TVA = HT × taux ; TTC = HT + TVA.
+ */
+export function calculLigne(ligne: LigneACalculer): { ht: number; tva: number; ttc: number } {
+  const ligneEnTtc = typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
+  if (ligneEnTtc) {
+    const ttcCentimes = Math.round(ligne.quantite * ligne.prix_unitaire_ttc! * 100)
+    const htCentimes  = Math.round((ttcCentimes * 100) / (100 + ligne.tva_taux))
+    return { ht: htCentimes / 100, tva: (ttcCentimes - htCentimes) / 100, ttc: ttcCentimes / 100 }
+  }
+  const ht  = Math.round(ligne.quantite * (ligne.prix_unitaire_ht ?? 0) * 100) / 100
+  const tva = Math.round(ht * (ligne.tva_taux / 100) * 100) / 100
+  return { ht, tva, ttc: Math.round((ht + tva) * 100) / 100 }
+}
+
+/**
+ * Agrège les lignes d'un document (facture, devis, avoir, vente) pour calculer les totaux.
  * Arrondit chaque ligne individuellement avant de sommer (méthode comptable).
  *
- * @param lignes  Tableau de lignes `{ quantite, prix_unitaire_ht, tva_taux }`
- *                — `prix_unitaire_ht` peut déjà intégrer une remise (appliquée en amont)
+ * @param lignes  Tableau de lignes (voir `LigneACalculer`) — en TTC ou en HT, ligne par ligne
  * @returns       `{ total_ht, total_tva, total_ttc }` — tous arrondis à 2 décimales
  */
-export function calculLignes(lignes: Array<{ quantite: number; prix_unitaire_ht: number; tva_taux: number }>) {
+// AVANT (2026-10-05, ticket 02 prix TTC — chaque ligne passe par calculLigne(), qui sait aussi le TTC) :
+// export function calculLignes(lignes: Array<{ quantite: number; prix_unitaire_ht: number; tva_taux: number }>) {
+//   … const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
+//     const tva = Math.round(ht * (l.tva_taux / 100) * 100) / 100
+//     total_ttc: Math.round((acc.total_ttc + ht + tva) * 100) / 100, …
+export function calculLignes(lignes: LigneACalculer[]) {
   return lignes.reduce(
     (acc, l) => {
-      const ht  = Math.round(l.quantite * l.prix_unitaire_ht * 100) / 100
-      const tva = Math.round(ht * (l.tva_taux / 100) * 100) / 100
+      const ligne = calculLigne(l)
       return {
-        total_ht:  Math.round((acc.total_ht + ht) * 100) / 100,
-        total_tva: Math.round((acc.total_tva + tva) * 100) / 100,
-        total_ttc: Math.round((acc.total_ttc + ht + tva) * 100) / 100,
+        total_ht:  Math.round((acc.total_ht + ligne.ht) * 100) / 100,
+        total_tva: Math.round((acc.total_tva + ligne.tva) * 100) / 100,
+        total_ttc: Math.round((acc.total_ttc + ligne.ttc) * 100) / 100,
       }
     },
     { total_ht: 0, total_tva: 0, total_ttc: 0 }

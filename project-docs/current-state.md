@@ -1,4 +1,21 @@
-# iziGSM — État courant (MàJ : 2026-10-04, checkpoint 148 — ticket 11 TTC livré, v3.32 en production)
+# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 149 — ticket 01 TTC fait, ticket 02 commencé)
+
+## Checkpoint 149 — Ticket 01 prix TTC, ticket 12 ajouté, ticket 02 commencé (2026-10-05)
+
+**Production inchangée : `izigsm-v3.32` / `0061`. Dépôt EN AVANCE** (non déployé, volontairement : 01 +
+02 + 03 partent ensemble). Vitest 1 459 + 2 permanents au ticket 01, tsc 32.
+
+- **Ticket 01 `done`** (`8fc31a2`) : migration `0062` (`produits.prix_vente_ttc`, reprise au centime),
+  `src/lib/prixVente.ts` (seul point des conversions), toutes les créations écrivent le TTC, fiche et liste
+  du stock en TTC, `CACHE_VERSION` v3.33. Revue : défaut « taux renvoyé à l'identique » corrigé.
+- **Requête des TTC non ronds jouée en production** (`--command`, le mode `--file` est refusé — erreur
+  10000) : 5 fiches. **795 fiches actives sur 796 de la boutique 2 sont à 0 €** (imports Mobilax sans
+  marge) → **ticket 12** « calcul en lot des prix manquants » (`bc03159`, après le 06), décision de
+  l'exploitant.
+- **Ticket 02 commencé** : `calculLigne()` / `calculLignes()` en mode TTC (vert). Test rouge de la vente
+  mis de côté dans `.scratch/prix-ttc/en-cours/` (fenêtre de contexte à 70 %). Suite : `recovery-prompt.md`.
+
+**Prochaine action** : session neuve, reprendre le ticket 02 au point 2 du recovery prompt.
 
 ## Checkpoint 148 — Ticket 11 du chantier prix TTC livré (2026-10-04, nuit)
 
