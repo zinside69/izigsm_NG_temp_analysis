@@ -87,7 +87,10 @@ test.describe('Stock — rafraîchissement manuel d\'une pièce fournisseur (san
     await bouton.click()
     await expect(page.locator('#stock-price-buy')).toHaveValue('12.5')
     // Prix de vente jamais touché ; marge recalculée : (25 - 12.5) / 25 * 100 = 50 %
-    await expect(page.locator('#stock-price')).toHaveValue('25')
+    // AVANT (2026-10-05, ticket 01 prix TTC — le champ porte le TTC : 25 € HT × 1,2 = 30 € TTC ; la
+    // marge se calcule toujours sur le HT déduit, 25 €) :
+    // await expect(page.locator('#stock-price')).toHaveValue('25')
+    await expect(page.locator('#stock-price')).toHaveValue('30')
     await expect(page.locator('#stock-marge')).toContainText('50')
     await expect(page.locator('#stock-fournisseur-stock')).toContainText('Mobilax')
     await expect(page.locator('#stock-fournisseur-stock')).toContainText('7 en stock')

@@ -843,6 +843,20 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **Les compteurs suivent la liste affichée** (décision B du 2026-09-15) : `renderStock()` appelle
   `renderKPIs(filtered)` — un seul filtrage pour les lignes et les compteurs, liste vide → 0.
 
+## Prix de vente TTC des pièces (depuis 2026-10-05, ticket 01 chantier `prix-ttc`)
+
+- **`produits.prix_vente_ttc`** (migration `0062`) est le prix de vente de référence : il fait foi,
+  le HT s'en déduit (décision Q1). **`src/lib/prixVente.ts` est le seul point des conversions**
+  (`prixHtDepuisTtc()`, `prixTtcDepuisHt()`, par les centimes) : ⊥ un second calcul côté serveur ;
+  l'écran `stock.js` en porte une copie du même nom, qu'il ne peut pas importer.
+- **La colonne `prix_vente_ht` reste écrite, déduite du TTC**, à chaque écriture : caisse, factures et
+  devis la lisent encore jusqu'au ticket 02. ⊥ un chemin d'écriture qui n'alimenterait que l'une des deux.
+- **Tout chemin qui écrit un produit écrit le TTC** : `createProduit()` (manuelle, Mobilax), import CSV
+  (création et mise à jour), clôture d'un reconditionnement. Un nouveau chemin doit passer par
+  `createProduit()` ou appeler `prixDeVenteACreer()`.
+- **Taux de TVA changé sans nouveau prix → HT gardé, TTC recalculé** (Q20) ; un taux **renvoyé à
+  l'identique** n'est pas un changement (sinon 9,99 € deviendrait 10,00 €).
+
 ## Quantité de ligne et caisse « Barre unique + favoris » (depuis 2026-10-02, recette 001)
 
 - **Une quantité de ligne est un entier ≥ 1** — caisse, devis, factures, avoirs, lignes libres

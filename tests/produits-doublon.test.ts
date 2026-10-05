@@ -21,14 +21,16 @@ import { updateProduit, ErreurCodeEnDoublon } from '../src/services/stockService
 const SECRET = 'secret-de-test'
 
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — colonne `imei` ajoutée EN FIN d'INSERT, positions des paramètres inchangées) : même requête sans `, imei` ni son 18ᵉ `?`
-const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump, imei) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+// AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté EN FIN d'INSERT) : la liste finissait par `prix_achat_cump, imei)` et 18 `?`
+const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump, imei, prix_vente_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
 const SQL_PORTEUR_CREATION = (champ: string) =>
   `SELECT id, nom FROM produits WHERE boutique_id = ? AND ${champ} = ? AND actif = 1 LIMIT 1`
 const SQL_PORTEUR_MODIFICATION = (champ: string) =>
   `SELECT id, nom FROM produits WHERE boutique_id = (SELECT boutique_id FROM produits WHERE id = ?) AND ${champ} = ? AND actif = 1 AND id <> ? LIMIT 1`
 const SQL_PRODUIT_ACTIF = 'SELECT id FROM produits WHERE id = ? AND actif = 1'
 // AVANT (2026-09-30, ticket 07 — IMEI à trois états ajouté avant `updated_at`, `WHERE id = ?` reste le dernier paramètre) : même requête sans la ligne `imei = CASE …`
-const SQL_UPDATE_PRODUIT = 'UPDATE produits SET nom = COALESCE(?, nom), sku = COALESCE(?, sku), marque = COALESCE(?, marque), categorie_id = COALESCE(?, categorie_id), famille = COALESCE(?, famille), prix_achat_ht= COALESCE(?, prix_achat_ht), prix_vente_ht= COALESCE(?, prix_vente_ht), tva_taux = COALESCE(?, tva_taux), stock_minimum= COALESCE(?, stock_minimum), fournisseur = COALESCE(?, fournisseur), code_barre = COALESCE(?, code_barre), description = COALESCE(?, description), imei = CASE WHEN ? = 1 THEN ? ELSE imei END, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+// AVANT (2026-10-04, ticket 01 prix TTC) : même requête sans `prix_vente_ttc = COALESCE(?, prix_vente_ttc),` avant `updated_at`
+const SQL_UPDATE_PRODUIT = 'UPDATE produits SET nom = COALESCE(?, nom), sku = COALESCE(?, sku), marque = COALESCE(?, marque), categorie_id = COALESCE(?, categorie_id), famille = COALESCE(?, famille), prix_achat_ht= COALESCE(?, prix_achat_ht), prix_vente_ht= COALESCE(?, prix_vente_ht), tva_taux = COALESCE(?, tva_taux), stock_minimum= COALESCE(?, stock_minimum), fournisseur = COALESCE(?, fournisseur), code_barre = COALESCE(?, code_barre), description = COALESCE(?, description), imei = CASE WHEN ? = 1 THEN ? ELSE imei END, prix_vente_ttc = COALESCE(?, prix_vente_ttc), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
 
 /** Messages du vrai moteur SQLite sur les index de 0048. */
 const VIOLATION = {

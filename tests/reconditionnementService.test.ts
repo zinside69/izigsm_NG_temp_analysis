@@ -340,7 +340,8 @@ describe('terminerOrdre', () => {
 
   it('cas 2 : crée un produit occasion + SKU OCC-', async () => {
     db.__setResponse(SQL_GET_ORDRE_TERMINER, ORDRE_EN_COURS)
-    db.__setResponse(`INSERT INTO produits (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, actif) VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1) RETURNING id`, { id: 88 })
+    // AVANT (2026-10-04, ticket 01 prix TTC) : l'INSERT du produit occasion finissait par `actif)` et `20, 1, 0, 1)` (sans `prix_vente_ttc`)
+    db.__setResponse(`INSERT INTO produits (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, actif, prix_vente_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1, ?) RETURNING id`, { id: 88 })
     db.__setResponse(`UPDATE ordres_reconditionnement SET statut = 'termine', produit_id = ?, prix_revente_ht = ?, grade = ?, description_travaux = COALESCE(?, description_travaux), date_fin = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND boutique_id = ? RETURNING *`, ORDRE_TERMINE)
 
     const result = await terminerOrdre(db as any, 1, 1, { prix_revente_ht: 350, grade: 'A' })
@@ -369,7 +370,8 @@ describe('terminerOrdre', () => {
 
   it('retourne OrdreRow terminé', async () => {
     db.__setResponse(SQL_GET_ORDRE_TERMINER, ORDRE_EN_COURS)
-    db.__setResponse(`INSERT INTO produits (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, actif) VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1) RETURNING id`, { id: 88 })
+    // AVANT (2026-10-04, ticket 01 prix TTC) : l'INSERT du produit occasion finissait par `actif)` et `20, 1, 0, 1)` (sans `prix_vente_ttc`)
+    db.__setResponse(`INSERT INTO produits (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, actif, prix_vente_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1, ?) RETURNING id`, { id: 88 })
     db.__setResponse(`UPDATE ordres_reconditionnement SET statut = 'termine', produit_id = ?, prix_revente_ht = ?, grade = ?, description_travaux = COALESCE(?, description_travaux), date_fin = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND boutique_id = ? RETURNING *`, ORDRE_TERMINE)
 
     const result = await terminerOrdre(db as any, 1, 1, { prix_revente_ht: 300, grade: 'B' })

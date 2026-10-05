@@ -29,6 +29,7 @@ import {
   type MouvementData,
   type FamilleProduit,
 } from '../services/stockService'
+import { ERREUR_PRIX_VENTE_NEGATIF } from '../lib/prixVente'
 
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any; db: Database }
@@ -133,10 +134,20 @@ stocks.post('/produits', requireRole('admin', 'manager'), async (c) => {
   // jamais un 500 nu ; toute autre erreur remonte telle quelle
   try {
     const created = await createProduit(db, boutiqueId, user.sub, body)
-    return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
+    // AVANT (2026-10-05, ticket 01 prix TTC — la réponse porte le TTC et le HT écrits) :
+    // return c.json({ success: true, id: created.id, message: 'Produit créé.' }, 201)
+    return c.json({
+      success: true, id: created.id, message: 'Produit créé.',
+      prix_vente_ttc: created.prix_vente_ttc, prix_vente_ht: created.prix_vente_ht,
+    }, 201)
   } catch (err: any) {
     // AVANT (2026-09-30, ticket 07 — IMEI invalide refusé en 422 lui aussi) : if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE].includes(err.message))
-    if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE, ERREUR_IMEI_INVALIDE].includes(err.message))
+    // AVANT (2026-10-05, ticket 01 prix TTC — prix de vente négatif refusé en 422 lui aussi) :
+    // if ([ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE, ERREUR_IMEI_INVALIDE].includes(err.message))
+    const refusDeSaisie = [
+      ERREUR_PRIX_ACHAT_NEGATIF, ERREUR_PRIX_VENTE_NEGATIF, ERREUR_QUANTITE_DEPART_INVALIDE, ERREUR_IMEI_INVALIDE,
+    ].includes(err.message)
+    if (refusDeSaisie)
       return c.json({ success: false, error: err.message }, 422)
     if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
     throw err
@@ -208,7 +219,10 @@ stocks.put('/produits/:id', requireRole('admin', 'manager'), async (c) => {
 
   try {
     await updateProduit(db, id, user.sub, body)
-    return c.json({ success: true, message: 'Produit mis à jour.' })
+    // AVANT (2026-10-05, ticket 01 prix TTC — la fiche relue est rendue, prix TTC et HT compris) :
+    // return c.json({ success: true, message: 'Produit mis à jour.' })
+    const produitModifie = await getProduitById(dbPort, id)
+    return c.json({ success: true, message: 'Produit mis à jour.', data: produitModifie })
   } catch (err: any) {
     if (err instanceof ErreurCodeEnDoublon) return reponseDoublon(c, err)
     const status = err.message.includes('introuvable') ? 404 : 422

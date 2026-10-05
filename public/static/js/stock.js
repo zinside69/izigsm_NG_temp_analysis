@@ -142,6 +142,9 @@ async function loadStock() {
       stock_minimum:   p.stock_minimum  ?? 0,
       price:           p.prix_vente_ht  ?? 0,
       prix_vente_ht:   p.prix_vente_ht  ?? 0,
+      // Prix de vente TTC de référence et taux de la fiche (ticket 01 prix TTC, 2026-10-04)
+      prix_vente_ttc:  p.prix_vente_ttc ?? 0,
+      tva_taux:        p.tva_taux       ?? 20,
       prix_achat_ht:   p.prix_achat_ht  ?? 0,
       marque:          p.marque         || '',
       // IMEI d'un appareil d'occasion (ticket 07)
@@ -287,6 +290,9 @@ function renderStock(search = '', categoryFilter = '', statusFilter = 'all') {
     return;
   }
 
+  // AVANT (2026-10-05, ticket 01 prix TTC — colonne prix de vente en TTC, tel que saisi ; la colonne
+  // « Valeur » reste calculée au HT, la valeur de stock est comptable) :
+  //   <td>${formatMoney(parseFloat(i.price) || 0)}</td>      (prix de vente HT)
   tbody.innerHTML = filtered.map(i => {
     const qty    = parseInt(i.qty)    || 0;
     const minQty = parseInt(i.minQty) || 0;
@@ -306,7 +312,7 @@ function renderStock(search = '', categoryFilter = '', statusFilter = 'all') {
           </div>
         </td>
         <td><span class="badge ${statusInfo.badgeClass}">${statusInfo.label}</span></td>
-        <td>${formatMoney(parseFloat(i.price) || 0)}</td>
+        <td>${formatMoney(parseFloat(i.prix_vente_ttc) || 0)}</td>
         <td>${formatMoney((parseFloat(i.price) || 0) * qty)}</td>
         <td>${escHtml(i.supplier || '—')}</td>
         <td>
@@ -371,8 +377,37 @@ function applyFilters() {
 }
 
 // ─── Modal Nouveau produit / Édition ───────────────────────────────────────
+/** Taux de TVA de la fiche ouverte : 20 % pour une fiche neuve, celui du produit sinon (ticket 01 prix TTC). */
+let ficheTauxTva = 20;
+
+/**
+ * HT depuis un TTC, arrondi au centime — même nom et même calcul (par les centimes) que
+ * `prixHtDepuisTtc()` côté serveur (`src/lib/prixVente.ts`), que l'écran ne peut pas importer.
+ */
+function prixHtDepuisTtc(prixTtc, tauxTva) {
+  return Math.round((prixTtc * 10000) / (100 + tauxTva)) / 100;
+}
+
+/**
+ * HT et TVA déduits du prix de vente TTC saisi, au taux de la fiche, affichés sous le champ (ticket 01
+ * prix TTC, 2026-10-04). Même calcul que le serveur (`prixHtDepuisTtc()`, `src/lib/prixVente.ts`) :
+ * par les centimes, HT = TTC ÷ (1 + taux) arrondi au centime.
+ */
+function afficherDetailPrixVente() {
+  const detail  = document.getElementById('stock-prix-detail');
+  const prixTtc = parseFloat(document.getElementById('stock-price').value);
+  const prixSaisi = Number.isFinite(prixTtc) && prixTtc > 0;
+  if (!prixSaisi) { detail.textContent = ''; return; }
+  const prixHt  = prixHtDepuisTtc(prixTtc, ficheTauxTva);
+  const tva     = Math.round((prixTtc - prixHt) * 100) / 100;
+  detail.textContent = `HT : ${formatMoney(prixHt)} · TVA ${ficheTauxTva} % : ${formatMoney(tva)}`;
+}
+document.getElementById('stock-price')?.addEventListener('input', afficherDetailPrixVente);
+
 function openNewStock() {
   resetStockForm();
+  ficheTauxTva = 20;
+  afficherDetailPrixVente();
   document.getElementById('modal-stock-title').textContent = 'Nouveau produit';
   document.getElementById('stock-id').value = '';
   loadCategories(); // Refresh catégories
@@ -397,7 +432,11 @@ function editStock(id) {
   document.getElementById('stock-qty').readOnly             = true;
   document.getElementById('btn-stock-ajuster').style.display = '';
   document.getElementById('stock-min-qty').value            = item.minQty      ?? 2;
-  document.getElementById('stock-price').value              = item.prix_vente_ht ?? '';
+  // AVANT (2026-10-04, ticket 01 prix TTC — la fiche montre le TTC de référence) :
+  // document.getElementById('stock-price').value              = item.prix_vente_ht ?? '';
+  document.getElementById('stock-price').value              = item.prix_vente_ttc ?? '';
+  ficheTauxTva = item.tva_taux ?? 20;
+  afficherDetailPrixVente();
   document.getElementById('stock-price-buy').value          = item.prix_achat_ht ?? '';
   document.getElementById('stock-supplier').value           = item.supplier    || '';
   document.getElementById('stock-notes').value              = item.notes       || '';
@@ -606,7 +645,10 @@ async function actualiserProduitFournisseur() {
     // Prix d'achat du formulaire ouvert réécrit ; le prix de vente n'est jamais touché (cadrage du
     // 2026-09-12) — la marge affichée est recalculée à partir des deux champs du formulaire.
     document.getElementById('stock-price-buy').value = res.data.prix_achat_ht;
-    const prixVente = parseFloat(document.getElementById('stock-price').value) || 0;
+    // AVANT (2026-10-04, ticket 01 prix TTC — le champ porte le TTC : la marge se calcule sur le HT déduit) :
+    // const prixVente = parseFloat(document.getElementById('stock-price').value) || 0;
+    const prixVenteTtc = parseFloat(document.getElementById('stock-price').value) || 0;
+    const prixVente = prixHtDepuisTtc(prixVenteTtc, ficheTauxTva);
     const prixAchat = Number(res.data.prix_achat_ht) || 0;
     afficherMarge(prixVente > 0 ? (prixVente - prixAchat) / prixVente * 100 : null);
     if (Number.isFinite(res.data.stock)) {
@@ -658,7 +700,9 @@ async function saveStock() {
     categorie_id:         categorieId,
     stock_actuel:         parseInt(document.getElementById('stock-qty').value)     || 0,
     stock_minimum:        seuilSaisi === '' ? undefined : (parseInt(seuilSaisi, 10) || 0),
-    prix_vente_ht:        parseFloat(document.getElementById('stock-price').value) || 0,
+    // AVANT (2026-10-04, ticket 01 prix TTC — le TTC fait foi, le serveur en déduit le HT) :
+    // prix_vente_ht:        parseFloat(document.getElementById('stock-price').value) || 0,
+    prix_vente_ttc:       parseFloat(document.getElementById('stock-price').value) || 0,
     prix_achat_ht:        parseFloat(document.getElementById('stock-price-buy').value) || 0,
     fournisseur:          document.getElementById('stock-supplier').value.trim()  || undefined,
     // Colonne `description` : `notes` n'existe pas, la saisie était perdue (trouvé le 2026-09-11)

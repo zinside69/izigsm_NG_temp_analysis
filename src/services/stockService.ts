@@ -23,6 +23,10 @@ import { parsePagination, auditLog } from '../lib/db'
 import type { Database } from '../ports/database'
 import { sqlSousSeuil } from '../lib/stockSeuil'
 import { luhnValide } from '../lib/scan'
+import {
+  prixDeVenteACreer, prixDeVenteAModifier, prixTtcDepuisHt, prixVenteTtcNegatif,
+  TAUX_TVA_PAR_DEFAUT, ERREUR_PRIX_VENTE_NEGATIF,
+} from '../lib/prixVente'
 // Seul point de résolution des valeurs par défaut de stock (`CLAUDE.md` § Stock). Pas de cycle :
 // boutiqueService n'importe de ce fichier qu'un type.
 import { resoudreDefautsStock, type DefautsStock, type DefautsStockEffectifs } from './boutiqueService'
@@ -46,6 +50,8 @@ export interface ProduitRow {
   prix_achat_ht:        number
   prix_achat_cump:      number
   prix_vente_ht:        number
+  /** Prix de vente TTC de référence (migration 0062, ticket 01 prix TTC) : il fait foi, le HT s'en déduit. */
+  prix_vente_ttc:       number
   tva_taux:             number
   stock_actuel:         number
   stock_minimum:        number
@@ -77,6 +83,8 @@ export interface CreateProduitData {
   famille?:              FamilleProduit
   prix_achat_ht?:        number
   prix_vente_ht?:        number
+  /** Prix de vente TTC de référence (ticket 01 prix TTC) : prioritaire sur `prix_vente_ht`. */
+  prix_vente_ttc?:       number
   tva_taux?:             number
   stock_actuel?:         number
   stock_minimum?:        number
@@ -107,6 +115,8 @@ export interface UpdateProduitData {
   famille?:              FamilleProduit
   prix_achat_ht?:        number
   prix_vente_ht?:        number
+  /** Prix de vente TTC de référence (ticket 01 prix TTC) : prioritaire sur `prix_vente_ht`. */
+  prix_vente_ttc?:       number
   tva_taux?:             number
   stock_minimum?:        number
   fournisseur?:          string | null
@@ -465,9 +475,12 @@ export async function createProduit(
   userId: number,
   data: CreateProduitData,
   options: CreateProduitOptions = {}
-): Promise<{ id: number }> {
+// AVANT (2026-10-05, ticket 01 prix TTC — les prix de vente écrits sont rendus avec l'id) : ): Promise<{ id: number }> {
+): Promise<{ id: number; prix_vente_ttc: number; prix_vente_ht: number }> {
   // Toute validation précède l'écriture : rien n'est inséré pour un prix ou une quantité refusés
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+  // Prix de vente TTC négatif refusé, comme le prix d'achat (ticket 01 prix TTC)
+  if (prixVenteTtcNegatif(data.prix_vente_ttc)) throw new Error(ERREUR_PRIX_VENTE_NEGATIF)
   // Entier ≥ 0 exigé : un « abc » donnait NaN, que `NaN < 0` laissait passer ; 1.5 aussi
   if (data.stock_actuel != null && !estEntierPositifOuNul(Number(data.stock_actuel)))
     throw new Error(ERREUR_QUANTITE_DEPART_INVALIDE)
@@ -484,6 +497,11 @@ export async function createProduit(
 
   const stockInitial = data.stock_actuel ?? 0
 
+  // Prix de vente : le TTC fait foi, le HT s'en déduit ; un HT seul est converti (ticket 01 prix
+  // TTC, 2026-10-04). La colonne HT reste écrite : la caisse la lit encore jusqu'au ticket 02.
+  const tauxTva     = data.tva_taux ?? TAUX_TVA_PAR_DEFAUT
+  const prixDeVente = prixDeVenteACreer(data.prix_vente_ttc, data.prix_vente_ht, tauxTva)
+
   // `description` et `fournisseur_id` en fin de liste : ajoutés au ticket 04 (import Mobilax),
   // ils ne décalent aucune colonne existante. `prix_achat_cump` de même (ticket 02
   // `reglages-stock-boutique`) : des pièces déjà en rayon valent leur prix d'achat au coût moyen
@@ -493,12 +511,19 @@ export async function createProduit(
   // devient un refus qui nomme le produit existant (ticket 01 `vente-lit-catalogue`)
   // `imei` en fin de liste (ticket 07, migration 0054) : ne décale aucune colonne existante.
   // Un IMEI déjà porté est refusé par l'index de 0054, converti comme un code-barres en doublon.
+  // AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté en fin de liste, HT déduit du TTC) :
+  //     INSERT INTO produits
+  //       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
+  //        stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
+  //        prix_achat_cump, imei)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //   … data.prix_vente_ht ?? 0, data.tva_taux ?? 20, …
   const result = await db.prepare(`
     INSERT INTO produits
       (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
        stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
-       prix_achat_cump, imei)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       prix_achat_cump, imei, prix_vente_ttc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
     boutiqueId,
@@ -508,8 +533,8 @@ export async function createProduit(
     data.marque                ?? null,
     famille,
     data.prix_achat_ht         ?? 0,
-    data.prix_vente_ht         ?? 0,
-    data.tva_taux              ?? 20,
+    prixDeVente.ht,
+    tauxTva,
     data.stock_actuel          ?? 0,
     seuilAlerte,
     data.fournisseur           ?? null,
@@ -519,6 +544,7 @@ export async function createProduit(
     options.fournisseur_id     ?? null,
     coutMoyenInitial(stockInitial, data.prix_achat_ht ?? 0),
     imei,
+    prixDeVente.ttc,
   ).first<{ id: number }>().catch(async (err) => {
     // AVANT (2026-09-30, ticket 07 — l'IMEI nettoyé sert à retrouver le porteur) : await leverSiCodeEnDoublon(db, err, data, { boutiqueId })
     await leverSiCodeEnDoublon(db, err, { ...data, imei }, { boutiqueId })
@@ -544,7 +570,8 @@ export async function createProduit(
     entite_id:   produitId,
   })
 
-  return { id: produitId }
+  // AVANT (2026-10-05, ticket 01 prix TTC) : return { id: produitId }
+  return { id: produitId, prix_vente_ttc: prixDeVente.ttc, prix_vente_ht: prixDeVente.ht }
 }
 
 /**
@@ -920,6 +947,8 @@ export async function updateProduit(
   data: UpdateProduitData
 ): Promise<void> {
   if (prixAchatNegatif(data.prix_achat_ht)) throw new Error(ERREUR_PRIX_ACHAT_NEGATIF)
+  // Prix de vente TTC négatif refusé, comme à la création (ticket 01 prix TTC)
+  if (prixVenteTtcNegatif(data.prix_vente_ttc)) throw new Error(ERREUR_PRIX_VENTE_NEGATIF)
   // IMEI à trois états (ticket 07) : absent = inchangé, vide = retiré, sinon valeur validée.
   // `COALESCE` ne sait pas retirer : indicateur « champ fourni », comme `api_plateforme` (0045).
   const imei = imeiAEcrire(data.imei)
@@ -933,6 +962,30 @@ export async function updateProduit(
   const familleUpd = data.famille && FAMILLES.includes(data.famille as FamilleProduit)
     ? data.famille : null
 
+  // Prix de vente (ticket 01 prix TTC, 2026-10-04) : un TTC envoyé fait foi, un HT seul est
+  // converti ; un taux changé sans prix garde le HT et recalcule le TTC (Q20). Le prix et le taux
+  // actuels ne sont lus que si un prix ou un taux est envoyé.
+  const unPrixOuUnTauxEstEnvoye =
+    data.prix_vente_ttc !== undefined || data.prix_vente_ht !== undefined || data.tva_taux !== undefined
+  let prixDeVente: { ttc: number; ht: number } | null = null
+  if (unPrixOuUnTauxEstEnvoye) {
+    // Prix et taux actuels de la fiche, par son identifiant. L'appartenance à la boutique est
+    // déjà gardée par la route (`assertBoutiqueOwnership`) et l'existence vérifiée juste au-dessus.
+    const actuel = await db
+      .prepare('SELECT prix_vente_ht, tva_taux FROM produits WHERE id = ?')
+      .bind(id)
+      .first<{ prix_vente_ht: number; tva_taux: number }>()
+    // Repli : seulement si la relecture ne rend rien (fiche supprimée entre-temps, l'UPDATE ne
+    // touchera alors aucune ligne) — jamais un prix inventé sur une fiche existante
+    prixDeVente = prixDeVenteAModifier(data.prix_vente_ttc, data.prix_vente_ht, data.tva_taux, {
+      ht:      actuel?.prix_vente_ht ?? 0,
+      tauxTva: actuel?.tva_taux      ?? TAUX_TVA_PAR_DEFAUT,
+    })
+  }
+
+  // AVANT (2026-10-04, ticket 01 prix TTC — HT lu du prix calculé, `prix_vente_ttc` ajouté en fin de liste) :
+  //   prix_vente_ht= COALESCE(?, prix_vente_ht),   lié à  data.prix_vente_ht ?? null
+  //   (aucune colonne prix_vente_ttc)
   await db.prepare(`
     UPDATE produits SET
       nom          = COALESCE(?, nom),
@@ -948,6 +1001,7 @@ export async function updateProduit(
       code_barre   = COALESCE(?, code_barre),
       description  = COALESCE(?, description),
       imei         = CASE WHEN ? = 1 THEN ? ELSE imei END,
+      prix_vente_ttc = COALESCE(?, prix_vente_ttc),
       updated_at   = CURRENT_TIMESTAMP
     WHERE id = ?
   `).bind(
@@ -957,7 +1011,7 @@ export async function updateProduit(
     data.categorie_id ?? null,
     familleUpd,
     data.prix_achat_ht ?? null,
-    data.prix_vente_ht ?? null,
+    prixDeVente?.ht   ?? null,
     data.tva_taux      ?? null,
     data.stock_minimum ?? null,
     data.fournisseur  ?? null,
@@ -966,6 +1020,7 @@ export async function updateProduit(
     data.description  ?? null,
     imei === undefined ? 0 : 1,
     imei ?? null,
+    prixDeVente?.ttc  ?? null,
     id,
   ).run().catch(async (err) => {
     // Code-barres ou SKU déjà porté par un autre produit (migration 0048) → refus nommant ce produit
@@ -1214,6 +1269,9 @@ export async function importCatalogueCsv(
       const pvHt    = iPvHt   >= 0 ? nombreCsv(row[iPvHt]) || 0  : 0
       const stock   = iStock  >= 0 ? parseInt(row[iStock]   ?? '0', 10) || 0 : 0
       const tva     = iTva    >= 0 ? nombreCsv(row[iTva]) || 20 : 20
+      // Prix de vente TTC écrit à côté du HT (ticket 01 prix TTC) : TTC = HT × (1 + taux), au
+      // centime, en attendant la colonne TTC du CSV et le prix calculé par la marge (tickets 06-07)
+      const pvTtc   = prixTtcDepuisHt(pvHt, tva)
       const marque  = iMarque >= 0 ? row[iMarque]?.trim() || null : null
       const fourn   = iFourn  >= 0 ? row[iFourn]?.trim()  || null : null
       const famRaw  = iFamille >= 0 ? row[iFamille]?.trim().toLowerCase() : ''
@@ -1226,6 +1284,11 @@ export async function importCatalogueCsv(
           .first<{ id: number; stock_actuel: number }>()
 
         if (existing) {
+          // AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté en fin de liste) :
+          //   … fournisseur   = COALESCE(?, fournisseur),
+          //     updated_at    = CURRENT_TIMESTAMP
+          //   WHERE id = ?
+          //   `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, existing.id).run()
           await db.prepare(`
             UPDATE produits SET
               nom           = ?,
@@ -1235,9 +1298,10 @@ export async function importCatalogueCsv(
               tva_taux      = ?,
               marque        = COALESCE(?, marque),
               fournisseur   = COALESCE(?, fournisseur),
+              prix_vente_ttc = ?,
               updated_at    = CURRENT_TIMESTAMP
             WHERE id = ?
-          `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, existing.id).run()
+          `).bind(nom, famille, paHt, pvHt, tva, marque, fourn, pvTtc, existing.id).run()
 
           if (stock > 0 && stock !== existing.stock_actuel) {
             await db.prepare(`
@@ -1267,14 +1331,18 @@ export async function importCatalogueCsv(
 
       // INSERT nouveau produit — coût moyen au prix d'achat de la ligne si des pièces sont
       // déclarées (valeur du stock juste dès l'import), 0 sinon (`DEFAULT` de la colonne)
+      // AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté en fin de liste) :
+      //      tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
+      //   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      //   … coutMoyenInitial(qte, paHt))
       const res = await db.prepare(`
         INSERT INTO produits
           (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-           tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump, prix_vente_ttc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id
       `).bind(boutiqueId, sku, nom, marque, famille, paHt, pvHt, tva, qte, seuil, fourn,
-              coutMoyenInitial(qte, paHt))
+              coutMoyenInitial(qte, paHt), pvTtc)
         .first<{ id: number }>()
 
       // Motif « Stock initial », commun à tous les chemins de création (decisions.md, story 25 —

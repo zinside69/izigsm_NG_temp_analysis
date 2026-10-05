@@ -154,12 +154,14 @@ const SQL_CHECK_PRODUIT_STOCK = n(`SELECT id, stock_actuel, boutique_id FROM pro
 // SQL INSERT produit
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — colonne `imei` ajoutée EN FIN d'INSERT,
 // positions des paramètres inchangées) : la liste finissait par `prix_achat_cump)` et 17 `?`
+// AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté EN FIN d'INSERT) : la liste
+// finissait par `prix_achat_cump, imei)` et 18 `?`
 const SQL_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux,
      stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id,
-     prix_achat_cump, imei)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     prix_achat_cump, imei, prix_vente_ttc)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -176,6 +178,7 @@ const SQL_INSERT_MOUVEMENT_INITIAL = n(`
 // SQL UPDATE produit (COALESCE)
 // AVANT (2026-09-30, ticket 07 — IMEI à trois états ajouté avant `updated_at` ; `WHERE id = ?`
 // reste le dernier paramètre) : même requête sans la ligne `imei = CASE …`
+// AVANT (2026-10-04, ticket 01 prix TTC) : même requête sans la ligne `prix_vente_ttc = COALESCE(…)`
 const SQL_UPDATE_PRODUIT = n(`
   UPDATE produits SET
     nom          = COALESCE(?, nom),
@@ -191,9 +194,11 @@ const SQL_UPDATE_PRODUIT = n(`
     code_barre   = COALESCE(?, code_barre),
     description  = COALESCE(?, description),
     imei         = CASE WHEN ? = 1 THEN ? ELSE imei END,
+    prix_vente_ttc = COALESCE(?, prix_vente_ttc),
     updated_at   = CURRENT_TIMESTAMP
   WHERE id = ?
 `)
+// (ajoutée avant `updated_at` ; `WHERE id = ?` reste le dernier paramètre)
 
 // SQL soft delete
 const SQL_SOFT_DELETE = n(`UPDATE produits SET actif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -246,6 +251,7 @@ const SQL_IMPORT_SELECT_SKU = n(
   `SELECT id, stock_actuel FROM produits WHERE boutique_id = ? AND sku = ? AND actif = 1 LIMIT 1`
 )
 
+// AVANT (2026-10-04, ticket 01 prix TTC) : même requête sans la ligne `prix_vente_ttc = ?`
 const SQL_IMPORT_UPDATE_PRODUIT = n(`
   UPDATE produits SET
     nom           = ?,
@@ -255,17 +261,19 @@ const SQL_IMPORT_UPDATE_PRODUIT = n(`
     tva_taux      = ?,
     marque        = COALESCE(?, marque),
     fournisseur   = COALESCE(?, fournisseur),
+    prix_vente_ttc = ?,
     updated_at    = CURRENT_TIMESTAMP
   WHERE id = ?
 `)
 
 // Params : boutique(0), sku(1), nom(2), marque(3), famille(4), prix_achat_ht(5), prix_vente_ht(6),
-// tva(7), stock_actuel(8), stock_minimum(9), fournisseur(10), prix_achat_cump(11)
+// tva(7), stock_actuel(8), stock_minimum(9), fournisseur(10), prix_achat_cump(11), prix_vente_ttc(12)
+// AVANT (2026-10-04, ticket 01 prix TTC) : la liste finissait par `prix_achat_cump)` et 12 `?`
 const SQL_IMPORT_INSERT_PRODUIT = n(`
   INSERT INTO produits
     (boutique_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht,
-     tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     tva_taux, stock_actuel, stock_minimum, fournisseur, prix_achat_cump, prix_vente_ttc)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   RETURNING id
 `)
 
@@ -519,7 +527,9 @@ describe('stockService', () => {
 
       const result = await createProduit(dbD1 as any, 1, 10, { nom: 'Nouveau Produit' })
 
-      expect(result).toEqual({ id: 42 })
+      // AVANT (2026-10-05, ticket 01 prix TTC — les prix de vente écrits sont rendus avec l'id) :
+      // expect(result).toEqual({ id: 42 })
+      expect(result.id).toBe(42)
     })
 
     it('enregistre un mouvement stock initial si stock_actuel > 0', async () => {
@@ -1116,9 +1126,12 @@ describe('stockService', () => {
       const calls = db.__getCalls()
       const updateCall = calls.find(c => c.sql === SQL_IMPORT_UPDATE_PRODUIT)
       expect(updateCall).toBeDefined()
-      // params : [nom, famille, paHt, pvHt, tva, marque, fourn, id]
+      // AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` lié avant l'id) :
+      //   // params : [nom, famille, paHt, pvHt, tva, marque, fourn, id]
+      //   expect(updateCall!.params[7]).toBe(5)
+      // params : [nom, famille, paHt, pvHt, tva, marque, fourn, pvTtc, id]
       expect(updateCall!.params[0]).toBe('Écran iPhone 14')
-      expect(updateCall!.params[7]).toBe(5)
+      expect(updateCall!.params[8]).toBe(5)
     })
 
     it('crée un mouvement inventaire si le stock CSV diffère du stock existant', async () => {

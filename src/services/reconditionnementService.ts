@@ -35,6 +35,7 @@
 
 import { nextNumero, parsePagination } from '../lib/db'
 import type { Database } from '../ports/database'
+import { prixTtcDepuisHt, TAUX_TVA_PAR_DEFAUT } from '../lib/prixVente'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -524,11 +525,18 @@ export async function terminerOrdre(
 
     const sku = `OCC-${ordre.numero}`
 
+    // AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté en fin de liste) :
+    //        tva_taux, stock_actuel, stock_minimum, actif)
+    //     VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1)
+    //   … data.prix_revente_ht ])
+    // Prix de vente TTC de la fiche créée : prix de revente HT × 1,20 au centime (taux de 20 % codé
+    // ci-dessous). La saisie du prix de revente en TTC est le ticket 10.
+    const prixVenteTtc = prixTtcDepuisHt(data.prix_revente_ht, TAUX_TVA_PAR_DEFAUT)
     const produitResult = await db.get<{ id: number }>(`
       INSERT INTO produits
         (boutique_id, nom, sku, marque, description, prix_achat_ht, prix_vente_ht,
-         tva_taux, stock_actuel, stock_minimum, actif)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1)
+         tva_taux, stock_actuel, stock_minimum, actif, prix_vente_ttc)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1, 0, 1, ?)
       RETURNING id
     `, [
       boutiqueId,
@@ -537,7 +545,8 @@ export async function terminerOrdre(
       ordre.appareil_marque ?? '',
       data.description_travaux ?? ordre.description_travaux ?? null,
       ordre.cout_revient,          // prix d'achat = coût de revient
-      data.prix_revente_ht
+      data.prix_revente_ht,
+      prixVenteTtc,
     ])
 
     if (!produitResult) throw new Error('Échec création produit occasion.')

@@ -255,7 +255,8 @@ describe('GET /api/mobilax/apercu', () => {
 // supervision (décision du 2026-09-11 : la plateforme ne fait pas de commerce).
 
 // AVANT (2026-09-30, ticket 07 `vente-lit-catalogue` — colonne `imei` ajoutée EN FIN d'INSERT, positions des paramètres inchangées) : même requête sans `, imei` ni son 18ᵉ `?`
-const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump, imei) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
+// AVANT (2026-10-04, ticket 01 prix TTC — `prix_vente_ttc` ajouté EN FIN d'INSERT) : la liste finissait par `prix_achat_cump, imei)` et 18 `?`
+const SQL_INSERT_PRODUIT = 'INSERT INTO produits (boutique_id, categorie_id, sku, nom, marque, famille, prix_achat_ht, prix_vente_ht, tva_taux, stock_actuel, stock_minimum, fournisseur, reference_fournisseur, code_barre, description, fournisseur_id, prix_achat_cump, imei, prix_vente_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id'
 const SQL_DOUBLON = 'SELECT id FROM produits WHERE boutique_id = ? AND fournisseur_id = ? AND reference_fournisseur = ? AND actif = 1 LIMIT 1'
 
 async function importer(

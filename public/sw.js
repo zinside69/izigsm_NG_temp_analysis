@@ -30,7 +30,8 @@
 // AVANT (2026-10-04, synchro phone-specs-api : résumé en échec et erreurs nommées — services.html, services.js) : const CACHE_VERSION  = 'izigsm-v3.29'
 // AVANT (2026-10-04, boutons du référentiel selon le rôle — services.html, services.js) : const CACHE_VERSION  = 'izigsm-v3.30'
 // AVANT (2026-10-04, CA HT et TTC côte à côte — dashboard.html/js, stats.html) : const CACHE_VERSION  = 'izigsm-v3.31'
-const CACHE_VERSION  = 'izigsm-v3.32'
+// AVANT (2026-10-05, ticket 01 prix TTC — fiche et liste du stock en TTC : stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.32'
+const CACHE_VERSION  = 'izigsm-v3.33'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`
