@@ -332,7 +332,9 @@ test.describe('Pages hors socle — la boutique consultée est bien celle visée
     // sont, dans l'ordre du gabarit : quantité, prix unitaire HT, remise.
     // AVANT (2026-10-03, recette 002 A — la quantité n'est plus un champ `number`, le 2e serait la
     // remise) : await page.locator('.linha-row input[type="number"]').nth(1).fill('50')
-    await page.locator('.linha-row [data-field="prix_unitaire_ht"]').fill('50')
+    // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC ; 60 € TTC = les 50 € HT d'avant) :
+    // await page.locator('.linha-row [data-field="prix_unitaire_ht"]').fill('50')
+    await page.locator('.linha-row [data-field="prix_unitaire_ttc"]').fill('60')
     await page.fill('#montant-remis', '100')
     await page.click('#btn-submit-vente')
 

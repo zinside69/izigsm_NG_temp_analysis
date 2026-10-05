@@ -47,6 +47,10 @@ const lignes = (page: Page) => page.locator('#lignes-container .linha-row')
 async function ligneLibre(page: Page, l: { designation: string; quantite: number; prixTtc: string; taux: string; remise?: string }) {
   await page.click('#btn-ligne-libre')
   const ligne = lignes(page).last()
+  // « + Ligne libre » donne le focus à la désignation après 50 ms (`ajouterLigne()`) : sans cette
+  // attente, ce focus tardif peut tomber pendant la saisie de la quantité, qui part alors dans la
+  // désignation (« Petite pièce3 », quantité 1 — vécu en suite complète le 2026-10-05).
+  await expect(ligne.locator('[data-field="designation"]')).toBeFocused()
   await ligne.locator('[data-field="designation"]').fill(l.designation)
   await ligne.locator('[data-field="quantite"]').fill(String(l.quantite))
   await ligne.locator('[data-field="prix_unitaire_ttc"]').fill(l.prixTtc)
