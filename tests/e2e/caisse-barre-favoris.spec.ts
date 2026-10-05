@@ -74,7 +74,8 @@ test('barre : focus à l\'ouverture ; code + Entrée ajoute l\'article, rescann�
   await page.keyboard.press('Enter')
   await expect(lignes(page)).toHaveCount(1)
   await expect(lignes(page).locator('[data-field="designation"]')).toHaveValue('E2E Barre écran')
-  await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('25')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('25')
+  await expect(lignes(page).locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('30')   // fiche 25 € HT → 30 € TTC
   await expect(barre(page)).toHaveValue('')
   await expect(barre(page)).toBeFocused()
 
@@ -152,7 +153,8 @@ test('favoris : les plus vendus d\'abord, prix TTC ; un clic = une ligne, deux =
   await tuiles(page).nth(0).click()
   await expect(lignes(page)).toHaveCount(1)
   await expect(lignes(page).locator('[data-field="quantite"]')).toHaveValue('2')
-  await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('8.25')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('8.25')
+  await expect(lignes(page).locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('9.9')  // fiche 8,25 € HT → 9,90 € TTC
   await expect(barre(page)).toBeFocused()
 })
 
@@ -199,9 +201,11 @@ test('« + Ligne libre », favori et scan dans la même vente, encaissée', asyn
   const libre = lignes(page).nth(2)
   await expect(libre.locator('[data-field="designation"]')).toBeFocused()
   await libre.locator('[data-field="designation"]').fill('Main d\'œuvre')
-  await libre.locator('[data-field="prix_unitaire_ht"]').fill('5')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await libre.locator('[data-field="prix_unitaire_ht"]').fill('5')
+  await libre.locator('[data-field="prix_unitaire_ttc"]').fill('6')
 
-  // 10 + 20 + 5 = 35 HT → 42,00 TTC
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : // 10 + 20 + 5 = 35 HT → 42,00 TTC
+  // 12 + 24 + 6 = 42,00 TTC (fiches à 10 et 20 € HT, ligne libre saisie à 6 € TTC)
   await expect(page.locator('#total-ttc-vente')).toHaveText(/42,00/)
   await page.fill('#montant-remis', '50')
   await page.click('#btn-submit-vente')

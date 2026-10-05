@@ -68,12 +68,14 @@ test('caisse : chercher un produit, ligne préremplie et modifiable, le stock ba
   const ligne = page.locator('#lignes-container .linha-row')
   await expect(ligne).toHaveCount(1)
   await expect(ligne.locator('[data-field="designation"]')).toHaveValue('E2E Coque transparente A54')
-  await expect(ligne.locator('[data-field="prix_unitaire_ht"]')).toHaveValue('20')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(ligne.locator('[data-field="prix_unitaire_ht"]')).toHaveValue('20')
+  await expect(ligne.locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('22')   // fiche 20 € HT à 10 % → 22 € TTC
   await expect(ligne.locator('[data-field="tva_taux"]')).toHaveValue('10')
 
   // Chaque champ reste modifiable : quantité et prix changés à la main
   await ligne.locator('[data-field="quantite"]').fill('2')
-  await ligne.locator('[data-field="prix_unitaire_ht"]').fill('18')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await ligne.locator('[data-field="prix_unitaire_ht"]').fill('18')
+  await ligne.locator('[data-field="prix_unitaire_ttc"]').fill('19.8')   // 2 × 19,80 € TTC = 39,60 €
   await expect(page.locator('#total-ttc-vente')).toHaveText(/39,60/)
 
   await page.fill('#montant-remis', '50')
@@ -105,7 +107,8 @@ test('caisse : un produit à 0 € bloque la validation tant qu\'aucun prix n\'e
   page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/api/caisse/vente')) ventesEnvoyees++ })
 
   await ajouterDepuisCatalogue(page, 'Nappe sans prix')
-  const prix = page.locator('#lignes-container [data-field="prix_unitaire_ht"]')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : const prix = page.locator('#lignes-container [data-field="prix_unitaire_ht"]')
+  const prix = page.locator('#lignes-container [data-field="prix_unitaire_ttc"]')
   await expect(prix).toHaveAttribute('data-prix-manquant', '1')
 
   await page.click('#btn-submit-vente')
@@ -175,7 +178,8 @@ test('caisse : vendre un service du catalogue, la facture garde le lien vers le 
   const ligne = page.locator('#lignes-container .linha-row')
   await expect(ligne).toHaveCount(1)
   await expect(ligne.locator('[data-field="designation"]')).toHaveValue('E2E Pose de film écran')
-  await expect(ligne.locator('[data-field="prix_unitaire_ht"]')).toHaveValue('12.5')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(ligne.locator('[data-field="prix_unitaire_ht"]')).toHaveValue('12.5')
+  await expect(ligne.locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('15')   // service 12,50 € HT → 15 € TTC
   // Renommée à la main : le lien, lui, reste celui du catalogue
   await ligne.locator('[data-field="designation"]').fill('Film posé en boutique')
 
@@ -205,7 +209,8 @@ test('caisse : un service à 0 € bloque la validation tant qu\'aucun prix n\'e
   const resultat = page.locator('#vente-produit-results [data-service-id]').first()
   await expect(resultat).toBeVisible({ timeout: 10_000 })
   await resultat.click()
-  const prix = page.locator('#lignes-container [data-field="prix_unitaire_ht"]')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : const prix = page.locator('#lignes-container [data-field="prix_unitaire_ht"]')
+  const prix = page.locator('#lignes-container [data-field="prix_unitaire_ttc"]')
   await expect(prix).toHaveAttribute('data-prix-manquant', '1')
 
   await page.click('#btn-submit-vente')

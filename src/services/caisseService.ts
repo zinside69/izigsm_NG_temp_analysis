@@ -34,7 +34,10 @@
  * Sprint 2.12 — MOD-12 Caisse POS
  */
 
-import { nextNumero, calculLignes } from '../lib/db'
+// AVANT (2026-10-05, ticket 02 prix TTC — calculLigne() calcule aussi chaque ligne écrite) :
+// import { nextNumero, calculLignes } from '../lib/db'
+import { nextNumero, calculLignes, calculLigne } from '../lib/db'
+import { prixHtDepuisTtc } from '../lib/prixVente'
 import { todayParis, currentMonthParis } from '../lib/timezone'
 import { buildCanonicalData, assertPeutEcrireAuRegistre } from '../lib/nf525'
 import type { Database } from '../ports/database'
@@ -47,9 +50,82 @@ export interface LignePOS {
   service_id?:     number
   designation:     string
   quantite:        number
-  prix_unitaire_ht: number
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse envoie désormais le prix TTC ; le HT seul reste
+  // accepté pour une page de caisse restée en cache) :
+  // prix_unitaire_ht: number
+  prix_unitaire_ht?:  number
+  prix_unitaire_ttc?: number  // prix affiché au client, avant remise — fait foi quand il est présent
   tva_taux:        number
   remise_pct?:     number  // remise en % sur la ligne
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Ligne de vente remisée — ticket 02 du chantier prix TTC (décisions Q2 et Q11 du 2026-10-04)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/** Ligne de vente prête à calculer et à écrire : remise appliquée, mode de calcul connu. */
+export interface LigneDeVenteRemisee {
+  quantite:           number
+  tva_taux:           number
+  mode_calcul:        'ttc' | 'ht'
+  /** Prix unitaire remisé, celui qui entre dans le calcul (TTC en mode TTC, HT en mode HT). */
+  prix_unitaire_ttc?: number
+  prix_unitaire_ht?:  number
+  /** Prix à écrire sur la ligne, avant remise (inchangé : la ligne a toujours gardé le prix brut). */
+  prix_unitaire_ht_avant_remise:  number
+  prix_unitaire_ttc_avant_remise: number | null
+}
+
+/** Vrai si la ligne porte un prix TTC exploitable : elle se calcule alors depuis le TTC. */
+function ligneEnvoyeeEnTtc(ligne: LignePOS): boolean {
+  return typeof ligne.prix_unitaire_ttc === 'number' && Number.isFinite(ligne.prix_unitaire_ttc)
+}
+
+/**
+ * Applique la remise d'une ligne et dit comment la calculer. Seul point de la remise en caisse :
+ * les totaux de la facture et les lignes écrites passent tous deux par ici.
+ * - Ligne en TTC : PU TTC remisé = arrondi au centime de PU TTC × (1 − remise %) (Q11), calculé en
+ *   centimes entiers (la virgule flottante perdait le demi-centime : 4,35 € − 10 % → 3,91 €).
+ * - Remise hors de 0-100 % ou illisible : refusée (erreur), avant tout numéro de facture.
+ * - Ligne en HT seul (page restée en cache) : ancien calcul, PU HT × (1 − remise %) sans arrondi.
+ */
+export function ligneDeVenteRemisee(ligne: LignePOS): LigneDeVenteRemisee {
+  const remisePct = ligne.remise_pct ?? 0
+  // Une remise hors de 0-100 % (ou illisible) ferait une ligne négative ou gonflée — voire nulle
+  // (NaN) — écrite sur une facture immuable et au journal NF525 : refusée avant tout numéro.
+  const remiseLisible = Number.isFinite(remisePct)
+  const remiseDansLesBornes = remiseLisible && remisePct >= 0 && remisePct <= 100
+  if (!remiseDansLesBornes) {
+    throw new Error(`Remise invalide sur « ${ligne.designation} » : un pourcentage entre 0 et 100 est attendu.`)
+  }
+  const coefficientDeRemise = 1 - remisePct / 100
+
+  if (ligneEnvoyeeEnTtc(ligne)) {
+    const prixTtc = ligne.prix_unitaire_ttc!
+    // AVANT (2026-10-05, revue du ticket 02 — en virgule flottante, 4,35 € − 10 % donnait 3,91 €) :
+    // const prixTtcRemiseEnCentimes = Math.round(prixTtc * coefficientDeRemise * 100)
+    // Calcul en centimes entiers : prix en centimes × (100 − remise) ÷ 100, un seul arrondi.
+    const prixTtcEnCentimes = Math.round(prixTtc * 100)
+    const prixTtcRemiseEnCentimes = Math.round((prixTtcEnCentimes * (100 - remisePct)) / 100)
+    return {
+      quantite:    ligne.quantite,
+      tva_taux:    ligne.tva_taux,
+      mode_calcul: 'ttc',
+      prix_unitaire_ttc: prixTtcRemiseEnCentimes / 100,
+      prix_unitaire_ht_avant_remise:  prixHtDepuisTtc(prixTtc, ligne.tva_taux),
+      prix_unitaire_ttc_avant_remise: prixTtc,
+    }
+  }
+
+  const prixHt = ligne.prix_unitaire_ht ?? 0
+  return {
+    quantite:    ligne.quantite,
+    tva_taux:    ligne.tva_taux,
+    mode_calcul: 'ht',
+    prix_unitaire_ht: prixHt * coefficientDeRemise,
+    prix_unitaire_ht_avant_remise:  prixHt,
+    prix_unitaire_ttc_avant_remise: null,
+  }
 }
 
 /** Données d'entrée pour enregistrer une vente en caisse. */
@@ -432,13 +508,16 @@ export async function createVente(
   }
 
   // ── 1. Calcul totaux ──────────────────────────────────────────────────────
-  // Appliquer remises ligne par ligne
-  const lignesCalculees = data.lignes.map(l => ({
-    quantite:          l.quantite,
-    prix_unitaire_ht:  l.prix_unitaire_ht * (1 - (l.remise_pct ?? 0) / 100),
-    tva_taux:          l.tva_taux,
-  }))
-  const totaux = calculLignes(lignesCalculees)
+  // AVANT (2026-10-05, ticket 02 prix TTC — remise et mode de calcul par ligneDeVenteRemisee(),
+  // commune aux totaux et aux lignes écrites à l'étape 4) :
+  // // Appliquer remises ligne par ligne
+  // const lignesCalculees = data.lignes.map(l => ({
+  //   quantite:          l.quantite,
+  //   prix_unitaire_ht:  l.prix_unitaire_ht * (1 - (l.remise_pct ?? 0) / 100),
+  //   tva_taux:          l.tva_taux,
+  // }))
+  const lignesRemisees = data.lignes.map(ligneDeVenteRemisee)
+  const totaux = calculLignes(lignesRemisees)
 
   // ── 1a. Ventilation du paiement (recette 002 B et C) ──────────────────────
   // Vérifiée ICI, avant le numéro de facture (étape 2) : une ventilation refusée ne doit
@@ -499,27 +578,39 @@ export async function createVente(
   const stockInsuffisant: StockInsuffisant[] = []
 
   for (const [index, l] of data.lignes.entries()) {
-    const prixApresRemise = l.prix_unitaire_ht * (1 - (l.remise_pct ?? 0) / 100)
-    const ligneHt  = Math.round(l.quantite * prixApresRemise * 100) / 100
-    const ligneTva = Math.round(ligneHt * (l.tva_taux / 100) * 100) / 100
+    // AVANT (2026-10-05, ticket 02 prix TTC — même calcul que les totaux, par ligneDeVenteRemisee()) :
+    // const prixApresRemise = l.prix_unitaire_ht * (1 - (l.remise_pct ?? 0) / 100)
+    // const ligneHt  = Math.round(l.quantite * prixApresRemise * 100) / 100
+    // const ligneTva = Math.round(ligneHt * (l.tva_taux / 100) * 100) / 100
+    const ligneRemisee = lignesRemisees[index]
+    const montantsDeLaLigne = calculLigne(ligneRemisee)
 
+    // AVANT (2026-10-05, ticket 02 prix TTC — prix TTC et mode de calcul ajoutés en fin de liste) :
+    //     (document_type, document_id, produit_id, service_id, description,
+    //      quantite, prix_unitaire_ht, tva_taux,
+    //      total_ht, total_tva, total_ttc)
+    //   VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    //   … l.prix_unitaire_ht, l.tva_taux, ligneHt, ligneTva, Math.round((ligneHt + ligneTva) * 100) / 100
     await db.prepare(`
       INSERT INTO lignes_document
         (document_type, document_id, produit_id, service_id, description,
          quantite, prix_unitaire_ht, tva_taux,
-         total_ht, total_tva, total_ttc)
-      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         total_ht, total_tva, total_ttc,
+         prix_unitaire_ttc, mode_calcul)
+      VALUES ('facture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       facture.id,
       l.produit_id  ?? null,
       l.service_id  ?? null,
       l.designation,
       l.quantite,
-      l.prix_unitaire_ht,
+      ligneRemisee.prix_unitaire_ht_avant_remise,
       l.tva_taux,
-      ligneHt,
-      ligneTva,
-      Math.round((ligneHt + ligneTva) * 100) / 100
+      montantsDeLaLigne.ht,
+      montantsDeLaLigne.tva,
+      montantsDeLaLigne.ttc,
+      ligneRemisee.prix_unitaire_ttc_avant_remise,
+      ligneRemisee.mode_calcul
     ).run()
 
     // Décrémenter stock si produit

@@ -82,6 +82,9 @@ describe('lireFavorisVente()', () => {
       type: 'produit', id: verre, nom: 'Verre trempé', sku: null, code_barre: null,
       prix_vente_ht: 8.25, tva_taux: 20, stock_actuel: 5,
       dernier_prix_vendu_ht: 10,   // recette 002 D : prix de la ligne vendue (fixture : 10 € HT)
+      // Ticket 02 prix TTC : fiche créée sans TTC (fixture HT seule) ; ligne vendue en HT → 10 × 1,20
+      prix_vente_ttc: 0,
+      dernier_prix_vendu_ttc: 12,
     })
     expect(fav[1]).toEqual({ type: 'service', id: pose, nom: 'Pose de film', reference: null, prix_ht: 15, tva_taux: 20 })
   })

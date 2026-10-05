@@ -1,0 +1,99 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { baseAuSchemaReel, type BaseReelle } from './helpers/d1Sqlite'
+import { createVente, verifierIntegriteChaine } from '../src/services/caisseService'
+import { D1DatabaseAdapter } from '../src/adapters/cloudflare/d1Database'
+
+/**
+ * Vente en caisse calculée depuis le TTC (ticket 02 du chantier prix TTC, décisions Q2 et Q11 de
+ * l'exploitant du 2026-10-04) : le client paie exactement prix affiché × quantité ; une remise
+ * s'applique au prix TTC unitaire (arrondi au centime), puis × quantité. La chaîne NF525 garde son
+ * format et reste intègre. Une ligne envoyée en HT seul (page de caisse restée en cache) garde
+ * l'ancien calcul.
+ *
+ * Contre un vrai SQLite au schéma réel (migration 0063 comprise). Montants calculés à la main.
+ */
+
+let base: BaseReelle
+
+beforeEach(() => {
+  base = baseAuSchemaReel()
+  base.sqlite.exec(`
+    INSERT INTO boutiques (id, nom) VALUES (1, 'Boutique 1');
+    INSERT INTO users (id, email, password_hash, prenom, nom, role_id, boutique_id, actif)
+      VALUES (1, 'vendeur@b1.fr', 'x', 'Vente', 'Deur', 2, 1, 1);
+  `)
+})
+
+function vendre(lignes: unknown[], paiement: Record<string, unknown> = { mode_paiement: 'cb' }) {
+  return createVente(base.d1, 1, 1, { lignes, ...paiement } as any)
+}
+
+const factureEnBase = (id: number) =>
+  base.sqlite.prepare('SELECT total_ht, total_tva, total_ttc FROM factures WHERE id = ?').get(id)
+const lignesEnBase = (id: number) => base.sqlite.prepare(
+  `SELECT prix_unitaire_ht, prix_unitaire_ttc, mode_calcul, total_ht, total_tva, total_ttc
+   FROM lignes_document WHERE document_type = 'facture' AND document_id = ? ORDER BY id`,
+).all(id)
+
+describe('createVente() — ligne en TTC', () => {
+  it('19,99 € TTC × 3 → 59,97 € facturés (et non 59,98 €), ligne stockée en mode TTC', async () => {
+    const { facture } = await vendre([{ designation: 'Câble', quantite: 3, prix_unitaire_ttc: 19.99, tva_taux: 20 }])
+    expect(factureEnBase(facture.id)).toEqual({ total_ht: 49.98, total_tva: 9.99, total_ttc: 59.97 })
+    expect(lignesEnBase(facture.id)).toEqual([{
+      prix_unitaire_ht: 16.66, prix_unitaire_ttc: 19.99, mode_calcul: 'ttc',
+      total_ht: 49.98, total_tva: 9.99, total_ttc: 59.97,
+    }])
+  })
+
+  it('journal NF525 : montant TTC de la vente = 59,97 €, chaîne intègre', async () => {
+    await vendre([{ designation: 'Câble', quantite: 3, prix_unitaire_ttc: 19.99, tva_taux: 20 }])
+    const journal = base.sqlite.prepare('SELECT montant_ht, montant_tva, montant_ttc FROM journal_nf525').all()
+    expect(journal).toEqual([{ montant_ht: 49.98, montant_tva: 9.99, montant_ttc: 59.97 }])
+    const verification = await verifierIntegriteChaine(new D1DatabaseAdapter(base.d1), 1)
+    expect(verification.integre).toBe(true)
+  })
+
+  it('paiement mixte accepté sur ce total : espèces 20,00 + CB 39,97', async () => {
+    const { facture } = await vendre(
+      [{ designation: 'Câble', quantite: 3, prix_unitaire_ttc: 19.99, tva_taux: 20 }],
+      { mode_paiement: 'mixte', paiements: [{ mode_paiement: 'especes', montant: 20 }, { mode_paiement: 'cb', montant: 39.97 }] },
+    )
+    expect(factureEnBase(facture.id).total_ttc).toBe(59.97)
+  })
+
+  it('remise 10 % sur 9,99 € TTC × 2 : 8,99 € l\'unité (arrondi au centime), 17,98 € facturés', async () => {
+    const { facture } = await vendre([{ designation: 'Coque', quantite: 2, prix_unitaire_ttc: 9.99, tva_taux: 20, remise_pct: 10 }])
+    expect(factureEnBase(facture.id).total_ttc).toBe(17.98)
+  })
+})
+
+describe('createVente() — remise : arrondie en centimes, bornée (revue du ticket 02)', () => {
+  it('remise 10 % sur 4,35 € TTC : 3,92 € (demi-centime arrondi au-dessus, pas 3,91 € de la virgule flottante)', async () => {
+    const { facture } = await vendre([{ designation: 'Film', quantite: 1, prix_unitaire_ttc: 4.35, tva_taux: 20, remise_pct: 10 }])
+    expect(factureEnBase(facture.id).total_ttc).toBe(3.92)
+  })
+
+  it('remise 50 % sur 1,15 € TTC : 0,58 €', async () => {
+    const { facture } = await vendre([{ designation: 'Pastille', quantite: 1, prix_unitaire_ttc: 1.15, tva_taux: 20, remise_pct: 50 }])
+    expect(factureEnBase(facture.id).total_ttc).toBe(0.58)
+  })
+
+  it.each([
+    ['non numérique (NaN)', Number.NaN],
+    ['au-dessus de 100 %', 150],
+    ['négative', -5],
+  ])('remise %s : vente refusée, aucune facture ni écriture au journal', async (_cas, remise) => {
+    await expect(vendre([{ designation: 'Câble', quantite: 1, prix_unitaire_ttc: 10, tva_taux: 20, remise_pct: remise }]))
+      .rejects.toThrow(/remise/i)
+    expect(base.sqlite.prepare('SELECT COUNT(*) AS nombre FROM factures').get()).toEqual({ nombre: 0 })
+    expect(base.sqlite.prepare('SELECT COUNT(*) AS nombre FROM journal_nf525').get()).toEqual({ nombre: 0 })
+  })
+})
+
+describe('createVente() — ligne envoyée en HT seul (page restée en cache)', () => {
+  it('220 € HT : ancien calcul, 264,00 € TTC, ligne stockée en mode HT', async () => {
+    const { facture } = await vendre([{ designation: 'Écran', quantite: 1, prix_unitaire_ht: 220, tva_taux: 20 }])
+    expect(factureEnBase(facture.id)).toEqual({ total_ht: 220, total_tva: 44, total_ttc: 264 })
+    expect(lignesEnBase(facture.id)[0].mode_calcul).toBe('ht')
+  })
+})

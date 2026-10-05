@@ -42,7 +42,8 @@
 
   const state = {
     tab:          'journal',
-    lignes:       [],              // [{produit_id?, service_id?, designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
+    // AVANT (2026-10-05, ticket 02 prix TTC) : lignes: [],  // [{produit_id?, service_id?, designation, quantite, prix_unitaire_ht, tva_taux, remise_pct}]
+    lignes:       [],              // [{produit_id?, service_id?, designation, quantite, prix_unitaire_ttc, tva_taux, remise_pct}]
     mode:         'especes',
     clientId:     null,
     clientNom:    '',
@@ -127,10 +128,13 @@
       if (btn.dataset.produitId) {
         const p = state.produits.get(Number(btn.dataset.produitId))
         // AVANT (2026-10-03, recette 002 D — fiche à 0 € : dernier prix vendu) : if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, p.prix_vente_ht, p.tva_taux)
-        if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, prixHtProduit(p), p.tva_taux)
+        // AVANT (2026-10-05, ticket 02 prix TTC — la caisse propose le prix TTC) :
+        // if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, prixHtProduit(p), p.tva_taux)
+        if (p) ajouterLigneCatalogue({ produit_id: p.id }, p.nom, prixTtcProduit(p), p.tva_taux)
       } else if (btn.dataset.serviceId) {
         const s = state.services.get(Number(btn.dataset.serviceId))
-        if (s) ajouterLigneCatalogue({ service_id: s.id }, s.nom, s.prix_ht, s.tva_taux)
+        // AVANT (2026-10-05, ticket 02 prix TTC) : if (s) ajouterLigneCatalogue({ service_id: s.id }, s.nom, s.prix_ht, s.tva_taux)
+        if (s) ajouterLigneCatalogue({ service_id: s.id }, s.nom, prixTtcService(s), s.tva_taux)
       } else {
         // Un dossier SAV s'ouvre dans sa page ; le panier n'est pas touché (récit 7)
         window.location.href = `/sav?dossier=${Number(btn.dataset.savId)}`
@@ -411,7 +415,8 @@
       idx:             state.ligneIdx++,
       designation:     '',
       quantite:        1,
-      prix_unitaire_ht: 0,
+      // AVANT (2026-10-05, ticket 02 prix TTC — une ligne libre se saisit en TTC) : prix_unitaire_ht: 0,
+      prix_unitaire_ttc: 0,
       tva_taux:        20,
       remise_pct:      0,
     })
@@ -433,15 +438,20 @@
   function updateLigne(idx, field, value) {
     const ligne = state.lignes.find(l => l.idx === idx)
     if (!ligne) return
-    if (['quantite', 'prix_unitaire_ht', 'tva_taux', 'remise_pct'].includes(field)) {
+    // AVANT (2026-10-05, ticket 02 prix TTC — le prix saisi est le TTC) :
+    // if (['quantite', 'prix_unitaire_ht', 'tva_taux', 'remise_pct'].includes(field)) {
+    if (['quantite', 'prix_unitaire_ttc', 'tva_taux', 'remise_pct'].includes(field)) {
       ligne[field] = parseFloat(value) || 0
     } else {
       ligne[field] = value
     }
     // Prix d'une ligne du catalogue : la mise en évidence suit la saisie, sans re-rendu
     // (un re-rendu ferait perdre le focus du champ en cours de frappe)
-    if (field === 'prix_unitaire_ht') {
-      const champ = document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${idx}"]`)
+    // AVANT (2026-10-05, ticket 02 prix TTC) :
+    // if (field === 'prix_unitaire_ht') {
+    //   const champ = document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${idx}"]`)
+    if (field === 'prix_unitaire_ttc') {
+      const champ = document.querySelector(`[data-field="prix_unitaire_ttc"][data-idx="${idx}"]`)
       if (champ) champ.dataset.prixManquant = prixManquant(ligne) ? '1' : '0'
     }
     // Mettre à jour le total de la ligne en temps réel
@@ -452,10 +462,13 @@
   function updateLigneTotaux(idx) {
     const ligne = state.lignes.find(l => l.idx === idx)
     if (!ligne) return
-    const ht  = ligne.quantite * ligne.prix_unitaire_ht * (1 - ligne.remise_pct / 100)
-    const ttc = ht * (1 + ligne.tva_taux / 100)
+    // AVANT (2026-10-05, ticket 02 prix TTC — même calcul que le serveur, par montantsDeLaLigne()) :
+    // const ht  = ligne.quantite * ligne.prix_unitaire_ht * (1 - ligne.remise_pct / 100)
+    // const ttc = ht * (1 + ligne.tva_taux / 100)
+    // const el  = document.querySelector(`[data-ligne-ttc="${idx}"]`)
+    // if (el) el.textContent = eur(ttc)
     const el  = document.querySelector(`[data-ligne-ttc="${idx}"]`)
-    if (el) el.textContent = eur(ttc)
+    if (el) el.textContent = eur(montantsDeLaLigne(ligne).ttc)
   }
 
   function renderLignes() {
@@ -474,8 +487,14 @@
     }
 
     container.innerHTML = state.lignes.map(l => {
-      const ht  = l.quantite * l.prix_unitaire_ht * (1 - l.remise_pct / 100)
-      const ttc = ht * (1 + l.tva_taux / 100)
+      // AVANT (2026-10-05, ticket 02 prix TTC — même calcul que le serveur, par montantsDeLaLigne()) :
+      // const ht  = l.quantite * l.prix_unitaire_ht * (1 - l.remise_pct / 100)
+      // const ttc = ht * (1 + l.tva_taux / 100)
+      const ttc = montantsDeLaLigne(l).ttc
+      // AVANT (2026-10-05, ticket 02 prix TTC — champ prix saisi en TTC), dans le gabarit ci-dessous :
+      //        data-field="prix_unitaire_ht" data-idx="${l.idx}"
+      //        type="number" min="0" step="0.01" value="${l.prix_unitaire_ht}"
+      //        oninput="CaisseApp._updateLigne(${l.idx},'prix_unitaire_ht',this.value)">
       // AVANT (jusqu'au 2026-10-02), champ quantité :
       //        type="number" min="0.01" step="0.01" value="${l.quantite}"
       // Quantité entière ≥ 1 (recette 001 B) : min="1" step="1", refus à l'encaissement.
@@ -493,10 +512,10 @@
                type="text" inputmode="numeric" pattern="[0-9]*" data-entier value="${l.quantite}"
                oninput="CaisseApp._updateLigne(${l.idx},'quantite',this.value)">
         <input class="col-span-2 input-field text-xs py-1.5 px-2 text-right"
-               data-field="prix_unitaire_ht" data-idx="${l.idx}"
+               data-field="prix_unitaire_ttc" data-idx="${l.idx}"
                data-prix-manquant="${prixManquant(l) ? '1' : '0'}"
-               type="number" min="0" step="0.01" value="${l.prix_unitaire_ht}"
-               oninput="CaisseApp._updateLigne(${l.idx},'prix_unitaire_ht',this.value)">
+               type="number" min="0" step="0.01" value="${l.prix_unitaire_ttc}"
+               oninput="CaisseApp._updateLigne(${l.idx},'prix_unitaire_ttc',this.value)">
         <select class="col-span-1 input-field text-xs py-1.5 px-1"
                 data-field="tva_taux" data-idx="${l.idx}"
                 onchange="CaisseApp._updateLigne(${l.idx},'tva_taux',this.value)">
@@ -534,20 +553,56 @@
    *
    * @returns {{ ht: number, tva: number, ttc: number }}
    */
+  // AVANT (2026-10-05, ticket 02 prix TTC — chaque ligne se calcule depuis le TTC, par montantsDeLaLigne()) :
+  // function calculerTotauxCommeLeServeur() {
+  //   let totalHt = 0, totalTva = 0, totalTtc = 0
+  //   for (const l of state.lignes) {
+  //     // La remise s'applique au prix unitaire, comme dans `createVente()` (étape 1)
+  //     const prixUnitaireRemise = l.prix_unitaire_ht * (1 - (l.remise_pct || 0) / 100)
+  //     const ligneHt  = arrondiAuCentime(l.quantite * prixUnitaireRemise)
+  //     const ligneTva = arrondiAuCentime(ligneHt * (l.tva_taux / 100))
+  //     totalHt  = arrondiAuCentime(totalHt + ligneHt)
+  //     totalTva = arrondiAuCentime(totalTva + ligneTva)
+  //     totalTtc = arrondiAuCentime(totalTtc + ligneHt + ligneTva)
+  //   }
+  //   return { ht: totalHt, tva: totalTva, ttc: totalTtc }
+  // }
   function calculerTotauxCommeLeServeur() {
     let totalHt = 0, totalTva = 0, totalTtc = 0
 
     for (const l of state.lignes) {
-      // La remise s'applique au prix unitaire, comme dans `createVente()` (étape 1)
-      const prixUnitaireRemise = l.prix_unitaire_ht * (1 - (l.remise_pct || 0) / 100)
-      const ligneHt  = arrondiAuCentime(l.quantite * prixUnitaireRemise)
-      const ligneTva = arrondiAuCentime(ligneHt * (l.tva_taux / 100))
-
-      totalHt  = arrondiAuCentime(totalHt + ligneHt)
-      totalTva = arrondiAuCentime(totalTva + ligneTva)
-      totalTtc = arrondiAuCentime(totalTtc + ligneHt + ligneTva)
+      const ligne = montantsDeLaLigne(l)
+      totalHt  = arrondiAuCentime(totalHt + ligne.ht)
+      totalTva = arrondiAuCentime(totalTva + ligne.tva)
+      totalTtc = arrondiAuCentime(totalTtc + ligne.ttc)
     }
     return { ht: totalHt, tva: totalTva, ttc: totalTtc }
+  }
+
+  /**
+   * Montants d'une ligne, calculés EXACTEMENT comme le serveur (ticket 02 du chantier prix TTC) :
+   * `ligneDeVenteRemisee()` puis `calculLigne()` (`caisseService.ts`, `lib/db.ts`) — mêmes
+   * expressions, mêmes arrondis, sans quoi un centime d'écart ferait refuser un paiement mixte.
+   * 1. PU TTC remisé = arrondi(PU TTC en centimes × (100 − remise) ÷ 100), en centimes entiers ;
+   * 2. TTC de la ligne = arrondi(quantité × PU TTC remisé) ;
+   * 3. HT = arrondi(TTC ÷ (1 + taux)) ; TVA = TTC − HT.
+   * @returns {{ ht: number, tva: number, ttc: number }}
+   */
+  function montantsDeLaLigne(l) {
+    // AVANT (2026-10-05, revue du ticket 02 — en virgule flottante, 4,35 € − 10 % donnait 3,91 €) :
+    // const coefficientDeRemise = 1 - (l.remise_pct || 0) / 100
+    // const prixTtcRemise = Math.round(l.prix_unitaire_ttc * coefficientDeRemise * 100) / 100
+    const remisePct = l.remise_pct || 0
+    const prixTtcEnCentimes = Math.round(l.prix_unitaire_ttc * 100)
+    const prixTtcRemise = Math.round((prixTtcEnCentimes * (100 - remisePct)) / 100) / 100
+
+    const ttcEnCentimes = Math.round(l.quantite * prixTtcRemise * 100)
+    const htEnCentimes  = Math.round((ttcEnCentimes * 100) / (100 + l.tva_taux))
+    return {
+      ht:  htEnCentimes / 100,
+      tva: (ttcEnCentimes - htEnCentimes) / 100,
+      ttc: ttcEnCentimes / 100,
+    }
   }
 
   function updateTotaux() {
@@ -711,19 +766,49 @@
    * fiche s'il est > 0, sinon le dernier prix HT vendu (`dernier_prix_vendu_ht`, serveur), sinon 0 —
    * la ligne reste alors « prix à saisir » (`prixManquant()`). La fiche n'est jamais modifiée.
    */
-  function prixHtProduit(r) {
-    const prixDeLaFiche = Number(r.prix_vente_ht) || 0
-    const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse propose le prix TTC, par prixTtcProduit()) :
+  // function prixHtProduit(r) {
+  //   const prixDeLaFiche = Number(r.prix_vente_ht) || 0
+  //   const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+  //   if (prixDeLaFiche > 0) return prixDeLaFiche        // la fiche a un prix : il fait foi
+  //   if (dernierPrixVendu > 0) return dernierPrixVendu  // sinon, le prix de la dernière vente
+  //   return 0                                           // sinon, prix à saisir par le vendeur
+  // }
+
+  /**
+   * Prix TTC proposé pour un produit du catalogue (ticket 02 du chantier prix TTC) : même règle que
+   * le prix HT de la recette 002 D, en TTC — celui de la fiche (`prix_vente_ttc`) s'il est > 0, sinon
+   * le dernier prix vendu TTC (`dernier_prix_vendu_ttc`, serveur), sinon 0 (prix à saisir).
+   */
+  function prixTtcProduit(r) {
+    const prixDeLaFiche = Number(r.prix_vente_ttc) || 0
+    const dernierPrixVendu = Number(r.dernier_prix_vendu_ttc) || 0
 
     if (prixDeLaFiche > 0) return prixDeLaFiche        // la fiche a un prix : il fait foi
     if (dernierPrixVendu > 0) return dernierPrixVendu  // sinon, le prix de la dernière vente
     return 0                                           // sinon, prix à saisir par le vendeur
   }
 
+  /**
+   * TTC depuis un HT : HT × (1 + taux / 100), arrondi au centime. Copie de `prixTtcDepuisHt()`
+   * (`src/lib/prixVente.ts`), que l'écran ne peut pas importer — même calcul, par les centimes.
+   */
+  function prixTtcDepuisHt(prixHt, tauxTva) {
+    return Math.round(prixHt * (100 + tauxTva)) / 100
+  }
+
+  /** Prix TTC proposé pour un service : ses tarifs restent en HT jusqu'au ticket 04, convertis ici. */
+  function prixTtcService(s) {
+    return prixTtcDepuisHt(Number(s.prix_ht) || 0, Number(s.tva_taux) || 0)
+  }
+
   /** « (dern.) » quand le prix affiché vient de la dernière vente et non de la fiche. */
   function marqueDernierPrix(r) {
-    const prixDeLaFiche = Number(r.prix_vente_ht) || 0
-    const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+    // AVANT (2026-10-05, ticket 02 prix TTC — prix comparés en TTC, comme prixTtcProduit()) :
+    // const prixDeLaFiche = Number(r.prix_vente_ht) || 0
+    // const dernierPrixVendu = Number(r.dernier_prix_vendu_ht) || 0
+    const prixDeLaFiche = Number(r.prix_vente_ttc) || 0
+    const dernierPrixVendu = Number(r.dernier_prix_vendu_ttc) || 0
 
     const prixVientDeLaDerniereVente = prixDeLaFiche === 0 && dernierPrixVendu > 0
     if (!prixVientDeLaDerniereVente) return ''
@@ -731,7 +816,10 @@
   }
 
   function prixManquant(ligne) {
-    return !!(ligne.produit_id || ligne.service_id) && !(ligne.prix_unitaire_ht > 0)
+    // AVANT (2026-10-05, ticket 02 prix TTC) : return !!(ligne.produit_id || ligne.service_id) && !(ligne.prix_unitaire_ht > 0)
+    const ligneDuCatalogue = !!(ligne.produit_id || ligne.service_id)
+    const prixSaisi = ligne.prix_unitaire_ttc > 0
+    return ligneDuCatalogue && !prixSaisi
   }
 
   function debouncedSearchProduit() {
@@ -783,10 +871,13 @@
     const nature = NATURE_RESULTAT[r.type]
     if (!nature) return ''
     const badge = `<span class="text-xs px-1.5 py-0.5 rounded ${nature.classe} mr-2" data-nature="${r.type}">${nature.libelle}</span>`
+    // AVANT (2026-10-05, ticket 02 prix TTC — prix proposés en TTC), dans l'affectation ci-dessous :
+    //   r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(prixHtProduit(r))} HT${marqueDernierPrix(r)} · stock ${Number(r.stock_actuel)}`]
+    //   : r.type === 'service' ? ['data-service-id', r.nom, r.reference, `${eur(r.prix_ht)} HT`]
     const [attribut, titre, detail, droite] =
       // AVANT (2026-10-03, recette 002 D) : r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(r.prix_vente_ht)} HT · stock ${Number(r.stock_actuel)}`]
-      r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(prixHtProduit(r))} HT${marqueDernierPrix(r)} · stock ${Number(r.stock_actuel)}`]
-      : r.type === 'service' ? ['data-service-id', r.nom, r.reference, `${eur(r.prix_ht)} HT`]
+      r.type === 'produit' ? ['data-produit-id', r.nom, r.sku, `${eur(prixTtcProduit(r))} TTC${marqueDernierPrix(r)} · stock ${Number(r.stock_actuel)}`]
+      : r.type === 'service' ? ['data-service-id', r.nom, r.reference, `${eur(prixTtcService(r))} TTC`]
       : ['data-sav-id', r.numero, r.client, `${esc(STATUT_SAV[r.statut] ?? r.statut)} · ouvrir`]
     return `
           <button type="button" ${attribut}="${Number(r.id)}"
@@ -803,13 +894,16 @@
    * Ajoute une ligne préremplie depuis le catalogue ; chaque champ reste modifiable.
    * `lien` porte `produit_id` ou `service_id` : il part avec la vente (récit 20).
    */
-  function ajouterLigneCatalogue(lien, nom, prixHt, tvaTaux) {
+  // AVANT (2026-10-05, ticket 02 prix TTC — la ligne reçoit le prix TTC proposé) :
+  // function ajouterLigneCatalogue(lien, nom, prixHt, tvaTaux) {
+  //   …   prix_unitaire_ht: Number(prixHt) || 0,
+  function ajouterLigneCatalogue(lien, nom, prixTtc, tvaTaux) {
     state.lignes.push({
       idx:              state.ligneIdx++,
       ...lien,
       designation:      nom,
       quantite:         1,
-      prix_unitaire_ht: Number(prixHt) || 0,
+      prix_unitaire_ttc: Number(prixTtc) || 0,
       tva_taux:         Number(tvaTaux),
       remise_pct:       0,
     })
@@ -910,8 +1004,10 @@
   /** Une tuile : nom échappé et prix TTC courant. La clé est lue par l'écouteur, jamais en `onclick`. */
   function renderTuileFavori(r) {
     // AVANT (2026-10-03, recette 002 D) : const prixHt = r.type === 'produit' ? r.prix_vente_ht : r.prix_ht
-    const prixHt = r.type === 'produit' ? prixHtProduit(r) : r.prix_ht
-    const ttc    = Number(prixHt || 0) * (1 + Number(r.tva_taux || 0) / 100)
+    // AVANT (2026-10-05, ticket 02 prix TTC — la tuile montre le prix TTC que la ligne recevra) :
+    // const prixHt = r.type === 'produit' ? prixHtProduit(r) : r.prix_ht
+    // const ttc    = Number(prixHt || 0) * (1 + Number(r.tva_taux || 0) / 100)
+    const ttc = r.type === 'produit' ? prixTtcProduit(r) : prixTtcService(r)
     return `
           <button type="button" data-favori="${r.type}:${Number(r.id)}"
                   class="text-left px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:border-blue-400 hover:bg-blue-50">
@@ -1016,8 +1112,11 @@
       return
     }
     // AVANT (2026-10-03, recette 002 D) : if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, r.prix_vente_ht, r.tva_taux)
-    if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, prixHtProduit(r), r.tva_taux)
-    else                      ajouterLigneCatalogue(lien, r.nom, r.prix_ht, r.tva_taux)
+    // AVANT (2026-10-05, ticket 02 prix TTC — prix proposés en TTC) :
+    // if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, prixHtProduit(r), r.tva_taux)
+    // else                      ajouterLigneCatalogue(lien, r.nom, r.prix_ht, r.tva_taux)
+    if (r.type === 'produit') ajouterLigneCatalogue(lien, r.nom, prixTtcProduit(r), r.tva_taux)
+    else                      ajouterLigneCatalogue(lien, r.nom, prixTtcService(r), r.tva_taux)
   }
 
   // ── Recherche client ─────────────────────────────────────────────────────────
@@ -1082,7 +1181,8 @@
       }
       if (prixManquant(l)) {
         toast(`Saisissez le prix de « ${esc(l.designation)} » avant de valider.`, 'warn')
-        document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${l.idx}"]`)?.focus()
+        // AVANT (2026-10-05, ticket 02 prix TTC) : document.querySelector(`[data-field="prix_unitaire_ht"][data-idx="${l.idx}"]`)?.focus()
+        document.querySelector(`[data-field="prix_unitaire_ttc"][data-idx="${l.idx}"]`)?.focus()
         return
       }
     }
@@ -1108,7 +1208,9 @@
         service_id:        l.service_id || undefined,
         designation:       l.designation,
         quantite:          l.quantite,
-        prix_unitaire_ht:  l.prix_unitaire_ht,
+        // AVANT (2026-10-05, ticket 02 prix TTC — le serveur calcule depuis le TTC envoyé) :
+        // prix_unitaire_ht:  l.prix_unitaire_ht,
+        prix_unitaire_ttc: l.prix_unitaire_ttc,
         tva_taux:          l.tva_taux,
         remise_pct:        l.remise_pct || 0,
       })),

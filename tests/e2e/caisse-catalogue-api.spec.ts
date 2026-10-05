@@ -63,6 +63,9 @@ test('recherche catalogue : un produit se trouve par nom, SKU et code-barres, r�
       stock_actuel:  4,
       // Recette 002 D (2026-10-03) : prix de la dernière vente, `null` pour un produit jamais vendu
       dernier_prix_vendu_ht: null,
+      // Ticket 02 prix TTC (2026-10-05) : prix TTC de la fiche (24,92 € HT → 29,90 €) et dernier prix TTC
+      prix_vente_ttc: 29.9,
+      dernier_prix_vendu_ttc: null,
     }])
   }
 })

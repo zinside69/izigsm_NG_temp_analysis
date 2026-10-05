@@ -54,7 +54,8 @@ test('écran au repos : un scan ouvre la vente et ajoute la ligne ; rescanné, l
   await expect(page.locator('#modal-vente')).not.toHaveClass(/hidden/)
   await expect(lignes(page)).toHaveCount(1)
   await expect(lignes(page).locator('[data-field="designation"]')).toHaveValue('E2E Douchette coque')
-  await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('15')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('15')
+  await expect(lignes(page).locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('18')   // fiche 15 € HT → 18 € TTC
 
   await scanner(page, '3700000000017')
   await expect(lignes(page)).toHaveCount(1)

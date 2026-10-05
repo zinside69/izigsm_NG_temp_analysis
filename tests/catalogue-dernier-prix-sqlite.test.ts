@@ -90,6 +90,13 @@ describe('dernier_prix_vendu_ht — résultats produit', () => {
     expect(await parChemin(id)).toEqual({ recherche: 220, code: 220, imei: 220, favoris: 220 })
   })
 
+  it('jamais vendu → null (prix à saisir), fiche inchangée — TTC compris (ticket 02 prix TTC)', async () => {
+    produit({ ean: EAN, imei: IMEI })
+    const r = (await rechercherParCode(db, 1, EAN))[0] as ResultatProduit
+    expect(r.dernier_prix_vendu_ttc).toBeNull()
+    expect(r.prix_vente_ttc).toBe(0)
+  })
+
   it('jamais vendu → null (prix à saisir), fiche inchangée', async () => {
     const id = produit({ ean: EAN, imei: IMEI })
     // `rechercherParCode()` ne rend que des produits : on le dit au typage pour lire leurs champs
@@ -98,5 +105,55 @@ describe('dernier_prix_vendu_ht — résultats produit', () => {
     expect(r.dernier_prix_vendu_ht).toBeNull()
     expect(r.prix_vente_ht).toBe(0)
     expect((await rechercherCatalogue(db, 1, 'Ecran')).find(x => x.id === id)).toMatchObject({ dernier_prix_vendu_ht: null })
+  })
+})
+
+/**
+ * Ticket 02 du chantier prix TTC : la caisse propose et saisit des prix TTC. Chaque résultat produit
+ * porte aussi `prix_vente_ttc` (fiche) et `dernier_prix_vendu_ttc` : le PU TTC de la dernière ligne
+ * vendue en TTC, ou — pour une ligne vendue avant la bascule, en HT — son HT × (1 + taux), au centime.
+ */
+describe('prix TTC — résultats produit', () => {
+  /** Une facture émise d'une ligne vendue en TTC (`mode_calcul = 'ttc'`). */
+  function venteEnTtc(produitId: number, prixHt: number, prixTtc: number) {
+    const id = Number(base.sqlite.prepare(`
+      INSERT INTO factures (boutique_id, client_id, numero, total_ht, total_tva, total_ttc, statut, locked, issued_at)
+      VALUES (1, 1, ?, 0, 0, 0, 'payee', 1, datetime('now'))
+    `).run(`F-${++numero}`).lastInsertRowid)
+    base.sqlite.prepare(`
+      INSERT INTO lignes_document (document_type, document_id, description, quantite, prix_unitaire_ht, tva_taux, produit_id, prix_unitaire_ttc, mode_calcul)
+      VALUES ('facture', ?, 'ligne', 1, ?, 20, ?, ?, 'ttc')
+    `).run(id, prixHt, produitId, prixTtc)
+  }
+
+  /** `[prix_vente_ttc, dernier_prix_vendu_ttc]` du produit `id` dans chacun des quatre chemins. */
+  async function prixTtcParChemin(id: number) {
+    const prix = (liste: any[]) => {
+      const r = liste.find(x => x.type === 'produit' && x.id === id)
+      return [r?.prix_vente_ttc, r?.dernier_prix_vendu_ttc]
+    }
+    return {
+      recherche: prix(await rechercherCatalogue(db, 1, 'Ecran')),
+      code:      prix(await rechercherParCode(db, 1, EAN)),
+      imei:      prix(await rechercherParImei(db, 1, IMEI)),
+      favoris:   prix(await lireFavorisVente(db, 1)),
+    }
+  }
+
+  it('dernière ligne vendue en TTC : son prix TTC tel que saisi (19,99 €)', async () => {
+    const id = produit({ ean: EAN, imei: IMEI })
+    base.sqlite.prepare('UPDATE produits SET prix_vente_ttc = 24.9 WHERE id = ?').run(id)
+    venteEnTtc(id, 16.66, 19.99)
+    expect(await prixTtcParChemin(id)).toEqual({
+      recherche: [24.9, 19.99], code: [24.9, 19.99], imei: [24.9, 19.99], favoris: [24.9, 19.99],
+    })
+  })
+
+  it('dernière ligne vendue avant la bascule (HT seul) : HT × 1,20 au centime (220 € HT → 264 €)', async () => {
+    const id = produit({ ean: EAN, imei: IMEI })
+    vente(id, 220)
+    expect(await prixTtcParChemin(id)).toEqual({
+      recherche: [0, 264], code: [0, 264], imei: [0, 264], favoris: [0, 264],
+    })
   })
 })

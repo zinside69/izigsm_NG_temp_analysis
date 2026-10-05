@@ -57,7 +57,8 @@ test('A : la quantité n\'affiche que des entiers — « 0,98 » devient 98, vid
   await expect(qte).toHaveValue('15')
 
   // Vide ou 0 en quittant le champ → 1 ; le total suit
-  await lignes(page).first().locator('[data-field="prix_unitaire_ht"]').fill('10')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await lignes(page).first().locator('[data-field="prix_unitaire_ht"]').fill('10')
+  await lignes(page).first().locator('[data-field="prix_unitaire_ttc"]').fill('12')   // 12 € TTC
   await qte.fill('0')
   await qte.blur()
   await expect(qte).toHaveValue('1')
@@ -84,7 +85,8 @@ test('D : fiche à 0 € → tuile, résultat et ligne au dernier prix vendu, ma
   await expect(tuile).toContainText('264,00')
   await expect(tuile).toContainText('(dern.)')
   await tuile.click()
-  await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('220')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(lignes(page).locator('[data-field="prix_unitaire_ht"]')).toHaveValue('220')
+  await expect(lignes(page).locator('[data-field="prix_unitaire_ttc"]')).toHaveValue('264')   // vendue 220 € HT → 264 € TTC
 
   // Scan dans la barre : même produit → quantité 2, prix inchangé
   await page.keyboard.type('3000000390016')
@@ -94,7 +96,8 @@ test('D : fiche à 0 € → tuile, résultat et ligne au dernier prix vendu, ma
   // Résultat de recherche : le dernier prix est affiché, marqué
   await page.locator('#vente-produit-search').pressSequentially('E2E Ecran')
   const resultat = page.locator('#vente-produit-results:not(.hidden) [data-produit-id]').first()
-  await expect(resultat).toContainText('220,00')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await expect(resultat).toContainText('220,00')
+  await expect(resultat).toContainText('264,00')
   await expect(resultat).toContainText('(dern.)')
 })
 
@@ -104,7 +107,8 @@ test('D : jamais vendue → prix à saisir, comme avant', async ({ page, request
   await ouvrirVente(page, tenant)
   await page.keyboard.type('3000000390023')
   await page.keyboard.press('Enter')
-  const prix = lignes(page).locator('[data-field="prix_unitaire_ht"]')
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : const prix = lignes(page).locator('[data-field="prix_unitaire_ht"]')
+  const prix = lignes(page).locator('[data-field="prix_unitaire_ttc"]')
   await expect(prix).toHaveValue('0')
   await expect(prix).toHaveAttribute('data-prix-manquant', '1')
 })

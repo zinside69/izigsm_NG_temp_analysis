@@ -24,11 +24,15 @@ const SCHEMA = `
     prix_vente_ht  REAL    NOT NULL DEFAULT 0,
     tva_taux       REAL    NOT NULL DEFAULT 20,
     stock_actuel   INTEGER NOT NULL DEFAULT 0,
-    actif          INTEGER NOT NULL DEFAULT 1
+    actif          INTEGER NOT NULL DEFAULT 1,
+    prix_vente_ttc REAL    NOT NULL DEFAULT 0   -- migration 0062 (ticket 01 prix TTC)
   );
   -- Lues par la sous-requête du dernier prix vendu (recette 002 D, 2026-10-03), vides ici
   CREATE TABLE factures (id INTEGER PRIMARY KEY, boutique_id INTEGER, locked INTEGER, statut TEXT, issued_at TEXT);
-  CREATE TABLE lignes_document (id INTEGER PRIMARY KEY, document_type TEXT, document_id INTEGER, produit_id INTEGER, prix_unitaire_ht REAL);
+  -- AVANT (2026-10-05, ticket 02 prix TTC — colonnes lues par le dernier prix vendu TTC) :
+  -- CREATE TABLE lignes_document (id INTEGER PRIMARY KEY, document_type TEXT, document_id INTEGER, produit_id INTEGER, prix_unitaire_ht REAL);
+  CREATE TABLE lignes_document (id INTEGER PRIMARY KEY, document_type TEXT, document_id INTEGER, produit_id INTEGER, prix_unitaire_ht REAL,
+                                tva_taux REAL, prix_unitaire_ttc REAL);
 `
 
 const EAN = '3760123456789'

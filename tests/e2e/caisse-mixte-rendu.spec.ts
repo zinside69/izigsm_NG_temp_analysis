@@ -156,7 +156,10 @@ test('C : espèces, 300 remis pour 264 → rendu 36 gardé sur le paiement', asy
 // Total affiché = total facturé
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('total affiché arrondi comme le serveur : 3 × 0,03 € HT → 0,12 € TTC, et un mixte sur ce total passe', async ({ page, request }) => {
+// AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : test('total affiché arrondi comme le serveur : 3 × 0,03 € HT → 0,12 € TTC, et un mixte sur ce total passe', async ({ page, request }) => {
+// AVANT (2026-10-05, revue du ticket 02 — 3 × 0,04 € TTC ne discriminait plus : une somme naïve donne aussi 0,12) :
+// test('total affiché arrondi comme le serveur : 3 × 0,04 € TTC → 0,12 € TTC, et un mixte sur ce total passe', async ({ page, request }) => {
+test('total affiché arrondi comme le serveur : 3 × 0,05 € TTC remisés de 10 % → 0,15 € TTC, et un mixte sur ce total passe', async ({ page, request }) => {
   const tenant = await createTenantAdmin(request)
   await seConnecter(page, { email: tenant.email, password: tenant.password })
   await page.waitForURL('**/dashboard**', { timeout: 15_000, waitUntil: 'commit' })
@@ -168,16 +171,25 @@ test('total affiché arrondi comme le serveur : 3 × 0,03 € HT → 0,12 € TT
     await page.click('#btn-ligne-libre')
     const ligne = page.locator('#lignes-container .linha-row').nth(i)
     await ligne.locator('[data-field="designation"]').fill(`Petite pièce ${i + 1}`)
-    await ligne.locator('[data-field="prix_unitaire_ht"]').fill('0.03')
+    // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : await ligne.locator('[data-field="prix_unitaire_ht"]').fill('0.03')
+    // AVANT (2026-10-05, revue du ticket 02 — prix remisé, voir le titre) : await ligne.locator('[data-field="prix_unitaire_ttc"]').fill('0.04')
+    await ligne.locator('[data-field="prix_unitaire_ttc"]').fill('0.05')
+    await ligne.locator('[data-field="remise_pct"]').fill('10')
   }
-  // Serveur : TVA arrondie par ligne (0,006 → 0,01) ×3 = 0,03 ; TTC = 0,09 + 0,03 = 0,12
-  await expect(page.locator('#total-ttc-vente')).toHaveText(/0,12/)
+  // AVANT (2026-10-05, ticket 02 prix TTC — la caisse se saisit en TTC) : // Serveur : TVA arrondie par ligne (0,006 → 0,01) ×3 = 0,03 ; TTC = 0,09 + 0,03 = 0,12
+  // AVANT (2026-10-05, revue du ticket 02) : // Serveur : chaque ligne vaut 0,04 € TTC (HT 0,03 arrondi, TVA 0,01) ; 3 lignes = 0,12 € TTC
+  // AVANT (2026-10-05, revue du ticket 02) : await expect(page.locator('#total-ttc-vente')).toHaveText(/0,12/)
+  // Serveur : PU remisé arrondi par ligne (0,045 → 0,05) ; 3 lignes = 0,15 € TTC. Une somme naïve,
+  // sans arrondi par ligne, afficherait 0,135 → 0,14 et un mixte saisi dessus serait refusé.
+  await expect(page.locator('#total-ttc-vente')).toHaveText(/0,15/)
 
   await page.click('[data-mode="mixte"]')
   await page.selectOption('#mixte-mode-1', 'especes')
   await page.selectOption('#mixte-mode-2', 'cb')
   await page.fill('#mixte-montant-1', '0.05')
-  await expect(page.locator('#mixte-montant-2')).toHaveText(/0,07/)
+  // AVANT (2026-10-05, revue du ticket 02) : await expect(page.locator('#mixte-montant-2')).toHaveText(/0,07/)
+  await expect(page.locator('#mixte-montant-2')).toHaveText(/0,10/)
   const factureId = await valider(page)
-  expect((await paiementsDe(request, tenant, factureId)).map(p => p.montant)).toEqual([0.05, 0.07])
+  // AVANT (2026-10-05, revue du ticket 02) : expect((await paiementsDe(request, tenant, factureId)).map(p => p.montant)).toEqual([0.05, 0.07])
+  expect((await paiementsDe(request, tenant, factureId)).map(p => p.montant)).toEqual([0.05, 0.1])
 })

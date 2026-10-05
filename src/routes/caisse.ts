@@ -94,8 +94,18 @@ function validateVente(body: any): string | null {
     // if (l.quantite === undefined || isNaN(Number(l.quantite)) || Number(l.quantite) <= 0)
     //   return `Ligne ${i + 1} : quantité invalide (> 0).`
     // Entier ≥ 1 : vérifié avant cette boucle, par `quantiteLigneInvalide()`.
-    if (l.prix_unitaire_ht === undefined || isNaN(Number(l.prix_unitaire_ht)) || Number(l.prix_unitaire_ht) < 0)
-      return `Ligne ${i + 1} : prix_unitaire_ht invalide (≥ 0).`
+    // AVANT (2026-10-05, ticket 02 prix TTC — la caisse envoie le prix TTC ; le HT seul reste accepté
+    // pour une page de caisse restée en cache) :
+    // if (l.prix_unitaire_ht === undefined || isNaN(Number(l.prix_unitaire_ht)) || Number(l.prix_unitaire_ht) < 0)
+    //   return `Ligne ${i + 1} : prix_unitaire_ht invalide (≥ 0).`
+    const prixTtcEnvoye = l.prix_unitaire_ttc !== undefined && l.prix_unitaire_ttc !== null
+    if (prixTtcEnvoye) {
+      const prixTtcInvalide = isNaN(Number(l.prix_unitaire_ttc)) || Number(l.prix_unitaire_ttc) < 0
+      if (prixTtcInvalide) return `Ligne ${i + 1} : prix_unitaire_ttc invalide (≥ 0).`
+    } else {
+      const prixHtInvalide = l.prix_unitaire_ht === undefined || isNaN(Number(l.prix_unitaire_ht)) || Number(l.prix_unitaire_ht) < 0
+      if (prixHtInvalide) return `Ligne ${i + 1} : prix invalide (prix_unitaire_ttc ≥ 0 attendu).`
+    }
     if (l.tva_taux === undefined || isNaN(Number(l.tva_taux)) || ![0, 5.5, 10, 20].includes(Number(l.tva_taux)))
       return `Ligne ${i + 1} : tva_taux invalide (0, 5.5, 10 ou 20).`
   }
@@ -178,7 +188,8 @@ caisse.get('/caisse/journal', async (c) => {
  *     "service_id":       2,       // optionnel
  *     "designation":      "Réparation écran",
  *     "quantite":         1,
- *     "prix_unitaire_ht": 80.00,
+ *     "prix_unitaire_ttc": 96.00,  // prix affiché, fait foi (ticket 02 prix TTC)
+ *     "prix_unitaire_ht": 80.00,   // accepté seul (page de caisse restée en cache)
  *     "tva_taux":         20,      // 0 | 5.5 | 10 | 20
  *     "remise_pct":       0        // optionnel
  *   }]
@@ -208,7 +219,12 @@ caisse.post('/caisse/vente', async (c) => {
         service_id:       l.service_id       ? Number(l.service_id)       : undefined,
         designation:      String(l.designation),
         quantite:         Number(l.quantite),
-        prix_unitaire_ht: Number(l.prix_unitaire_ht),
+        // AVANT (2026-10-05, ticket 02 prix TTC — le TTC fait foi quand il est envoyé) :
+        // prix_unitaire_ht: Number(l.prix_unitaire_ht),
+        prix_unitaire_ttc: (l.prix_unitaire_ttc !== undefined && l.prix_unitaire_ttc !== null)
+                             ? Number(l.prix_unitaire_ttc) : undefined,
+        prix_unitaire_ht:  (l.prix_unitaire_ht  !== undefined && l.prix_unitaire_ht  !== null)
+                             ? Number(l.prix_unitaire_ht)  : undefined,
         tva_taux:         Number(l.tva_taux),
         remise_pct:       l.remise_pct       ? Number(l.remise_pct)        : 0,
       })),
