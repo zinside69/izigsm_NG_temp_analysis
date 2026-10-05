@@ -857,6 +857,28 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
 - **Taux de TVA changé sans nouveau prix → HT gardé, TTC recalculé** (Q20) ; un taux **renvoyé à
   l'identique** n'est pas un changement (sinon 9,99 € deviendrait 10,00 €).
 
+## Caisse calculée depuis le TTC (depuis 2026-10-05, ticket 02 chantier `prix-ttc`)
+
+- **Une ligne de vente se calcule depuis le PU TTC** (Q2) : TTC = arrondi(PU TTC × qté), HT =
+  arrondi(TTC ÷ (1 + taux)), TVA = TTC − HT — `calculLigne()` (`lib/db.ts`). Une ligne sans
+  `prix_unitaire_ttc` garde l'ancien calcul HT (page de caisse en cache, devis, factures jusqu'au 03).
+- **`ligneDeVenteRemisee()` (`caisseService.ts`) est le seul point de la remise en caisse**, commun aux
+  totaux de la facture **et** aux lignes écrites (la remise était recopiée deux fois avant). Remise sur le
+  PU TTC **en centimes entiers** : `arrondi(centimes × (100 − r) ÷ 100)` — la virgule flottante perdait
+  le demi-centime (4,35 € − 10 % → 3,91 € au lieu de 3,92 €, trouvé en revue). Remise hors 0-100 % ou
+  illisible → **refus avant tout numéro** (une remise NaN faisait une vente à 0 € chaînée NF525).
+- **`montantsDeLaLigne()` (`caisse.js`) recopie ce calcul expression pour expression** : ⊥ un second
+  calcul à l'écran — un centime d'écart fait refuser un mixte. Preuve : `tests/e2e/caisse-ttc.spec.ts`
+  (total affiché = total facturé, plusieurs taux, prix non ronds, remises).
+- **`lignes_document.prix_unitaire_ttc` / `mode_calcul`** (`0063`) : `prix_unitaire_ht` d'une ligne TTC
+  = HT unitaire déduit **avant remise**, arrondi au centime — il ne retombe pas sur le total (impression :
+  ticket 03). Colonnes ajoutées **en fin** d'`INSERT`.
+- **Prix proposé en caisse = `prix_vente_ttc` de la fiche, sinon `dernier_prix_vendu_ttc`** (PU TTC de la
+  dernière ligne ; ligne d'avant la bascule : HT × (1 + taux)). Service : `prix_ht` converti
+  (`prixTtcService()`) jusqu'au ticket 04. Les deux sous-requêtes du dernier prix partagent un seul
+  périmètre (`sqlLigneVendueLaPlusRecente()`).
+- ⚠ `seed.sql` crée ses produits en HT seul, après `0062` : en local, prix TTC à 0 → « prix à saisir ».
+
 ## Quantité de ligne et caisse « Barre unique + favoris » (depuis 2026-10-02, recette 001)
 
 - **Une quantité de ligne est un entier ≥ 1** — caisse, devis, factures, avoirs, lignes libres
@@ -1196,6 +1218,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-05 (checkpoint 150) : production inchangée (`izigsm-v3.32` / `0061`), `0062` et
+`0063` EN ATTENTE, dépôt EN AVANCE.** Tickets 01 et 02 du chantier prix TTC sur `main` (`8fc31a2`,
+`10db60e`), `CACHE_VERSION` `izigsm-v3.33`. **01 + 02 + 03 partent ensemble** : `0062` puis `0063` à
+distance, `d1_migrations` relu, **puis** le code — sans `0063`, toute vente en caisse échoue
+(`createVente()` écrit `prix_unitaire_ttc`, `mode_calcul`) ; sans `0062`, la recherche catalogue aussi.
 
 **État au 2026-10-04 (nuit) : DÉPLOYÉ — production en `izigsm-v3.32`, migration `0061`.** Ticket 11 du
 chantier prix TTC : CA HT et TTC côte à côte (`3307ebb`). Aperçu `d484f700` **puis** apex relus : `sw.js` v3.32,

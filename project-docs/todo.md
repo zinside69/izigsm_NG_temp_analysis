@@ -1,5 +1,15 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 2026-10-05 — Restes du ticket 02 prix TTC (checkpoint 150, revue)
+
+- [ ] `seed.sql` : produits de démo créés en HT seul, joués après `0062` → `prix_vente_ttc` à 0 en
+  local, la caisse demande un prix. Écrire `prix_vente_ttc` dans le seed.
+- [ ] Ménage : sous-requête `dernier_prix_vendu_ht` plus lue par la caisse (`catalogueService.ts`) ;
+  `prixTtcDepuisHt()` copiée dans `stock.js` et `caisse.js` — une copie dans `app.js` suffirait.
+- [ ] E2E instable sous charge : `caisse-entiers-dernier-prix.spec.ts` « A : la quantité n'affiche que des
+  entiers » lit parfois 198 au lieu de 98 en série longue (vert seul). À diagnostiquer (`/diagnosing-bugs`).
+- Impression PU TTC d'une ligne `mode_calcul = 'ttc'` : au ticket 03.
+
 ## 🟠 2026-10-04 — Chantier « régime de la marge » (occasion, reconditionné) — décidé, à cadrer
 
 Décision de l'exploitant (cadrage TTC, Q10) : à prendre en compte, en chantier séparé, sur la base du

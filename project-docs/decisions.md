@@ -1,5 +1,17 @@
 # iziGSM — Décisions
 
+## 2026-10-05 — Caisse en TTC : précisions techniques du ticket 02 (revue)
+
+Décisions techniques prises en codant Q2 / Q11, sans changer leur sens :
+- **Remise arrondie en centimes entiers** : PU TTC remisé = arrondi(centimes × (100 − r) ÷ 100). Le
+  « arrondi au centime » de Q11 perdait le demi-centime en virgule flottante (4,35 € − 10 % → 3,91 €).
+- **Remise bornée à 0-100 %**, refusée sinon (et si illisible) avant tout numéro de facture : une facture
+  de caisse est émise et chaînée d'emblée, une ligne négative ou à 0 € serait irréparable.
+- **Ligne envoyée en HT seul acceptée** (ancien calcul, `mode_calcul = 'ht'`) : une page de caisse restée
+  en cache après le déploiement continue de vendre au lieu d'échouer.
+- **`prix_unitaire_ht` d'une ligne TTC** = HT unitaire déduit avant remise : la colonne reste remplie pour
+  les lectures existantes ; le document imprimé devra montrer le PU TTC (ticket 03).
+
 ## 2026-10-05 — Fiches sans prix de vente : calcul en lot (option b)
 
 Mesuré en production (requête du ticket 01 prix TTC) : 795 fiches actives sur 796 de la boutique 2 sont

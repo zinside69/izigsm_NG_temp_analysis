@@ -1,4 +1,23 @@
-# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 149 — ticket 01 TTC fait, ticket 02 commencé)
+# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 150 — ticket 02 TTC fait, caisse en TTC)
+
+## Checkpoint 150 — Ticket 02 prix TTC : caisse calculée depuis le TTC (2026-10-05)
+
+**Production inchangée : `izigsm-v3.32` / `0061`. Dépôt EN AVANCE** (non déployé : 01 + 02 + 03 ensemble ;
+`0062` et `0063` en attente). Vitest 1 478 + 2 permanents, tsc 32, E2E caisse 59/59.
+
+- **Ticket 02 `done`** (`10db60e`) : migration `0063` (`lignes_document.prix_unitaire_ttc`, `mode_calcul`) ;
+  `createVente()` calcule depuis le TTC par `ligneDeVenteRemisee()` (commune aux totaux et aux lignes) ;
+  route : `prix_unitaire_ttc`, HT seul encore accepté ; catalogue : `prix_vente_ttc`, `dernier_prix_vendu_ttc` ;
+  écran `caisse.js` en TTC (`montantsDeLaLigne()` = calcul du serveur, colonne « P.U. TTC »).
+- Tests vus rouges d'abord : `vente-ttc-sqlite` (vrai SQLite, chaîne NF525 intègre), catalogue TTC,
+  E2E `caisse-ttc` (cas 4,35 € − 10 % rouge sur l'ancien build). 6 E2E caisse adaptés au TTC.
+- **Revue (8 axes)** — corrigé : remise en centimes entiers (4,35 € − 10 % = 3,92 €, la virgule flottante
+  donnait 3,91 €), remise hors 0-100 % / illisible refusée avant tout numéro (NaN → vente à 0 € chaînée),
+  test du mixte rendu discriminant. Reporté (note dans le ticket) : impression PU HT (ticket 03), seed
+  local sans TTC, ménage (sous-requête HT inutilisée, copies de `prixTtcDepuisHt()`).
+- E2E instable sous charge, sans lien : « A : la quantité n'affiche que des entiers » (198 au lieu de 98).
+
+**Prochaine action** : ticket **03** (factures et avoirs en TTC), puis déploiement 01 + 02 + 03.
 
 ## Checkpoint 149 — Ticket 01 prix TTC, ticket 12 ajouté, ticket 02 commencé (2026-10-05)
 

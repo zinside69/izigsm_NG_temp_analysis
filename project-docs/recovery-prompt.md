@@ -1,4 +1,21 @@
-# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 149 — ticket 01 TTC fait, ticket 02 COMMENCÉ)
+# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 150 — ticket 02 TTC fait, ticket 03 à faire)
+
+## ➡ Première action (checkpoint 150 — remplace celle du 149)
+
+**Production inchangée : `izigsm-v3.32` / `0061`.** Sur `main` (non déployés ; le 02 non poussé au checkpoint) : tickets **01**
+(`8fc31a2`, `0062`) et **02** (`10db60e`, `0063` : caisse calculée depuis le TTC), `CACHE_VERSION` v3.33.
+
+1. **Ticket 03** (factures et avoirs en TTC) dans une session neuve :
+   `/mattpocock-skills:implement .scratch/prix-ttc/issues/03-factures-et-avoirs-en-ttc.md`.
+   Y traiter l'**impression** : une ligne `mode_calcul = 'ttc'` affiche son PU TTC (`prix_unitaire_ttc`),
+   sinon « PU HT × qté » ne retombe pas sur le total (note de revue du ticket 02).
+2. Puis **déployer 01 + 02 + 03 ensemble** : `0062` puis `0063` (et celle du 03) en `--remote`,
+   `d1_migrations` relu, **puis** `npm run deploy`, aperçu avant l'apex. Sans `0063`, toute vente échoue.
+3. Petits restes du 02 (ticket, § Revue) : `seed.sql` sans TTC, ménage.
+
+⚠ Calcul de la remise : `ligneDeVenteRemisee()` (serveur) ⇔ `montantsDeLaLigne()` (`caisse.js`), en centimes.
+
+## Checkpoint 149 (historique)
 
 ## ➡ Première action (checkpoint 149 — reprise du ticket 02, session neuve)
 
