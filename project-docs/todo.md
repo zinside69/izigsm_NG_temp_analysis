@@ -1,5 +1,23 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 2026-10-06 — Les avoirs n'existent nulle part à l'écran (recette du ticket 03, production)
+
+Trouvé en recette : `AV-2026-00001` (annule `FAC-2026-00009`, 70,52 €) est en base et au journal NF525
+(n° 13), mais l'exploitant ne le trouve pas — **aucune page ne lit les avoirs**. Mesuré dans le code :
+`GET /api/avoirs` et `GET /api/avoirs/:id` existent (`facturation.ts`), aucun écran ne les appelle ; seuls
+`factures.js` (fenêtre « Créer un avoir ») et `tickets.js` (clôture) font `POST /api/avoirs`.
+À **cadrer avant de coder** (conformité NF525 et comptabilité) :
+
+- [ ] **Liste des avoirs** dans Factures (onglet ou filtre) : numéro, date, facture d'origine, motif, montants ;
+  fiche d'un avoir ; **impression** d'un avoir (aujourd'hui impossible ; cf. `lignes_avoir` sans PU TTC, plus bas).
+- [ ] **Facture couverte par un avoir** : `FAC-2026-00009` reste `en_attente`, 70,52 € « à encaisser », alors
+  qu'un avoir total l'annule. Décider la règle (statut `annulee` posé par `createAvoir()` si avoir total ? reste
+  dû = TTC − avoirs ?) — sans jamais modifier la facture émise elle-même (immuabilité, `CLAUDE.md` § Factures).
+  En attendant, `FAC-2026-00009` est la facture de recette : à ignorer, **ne pas la retoucher à la main**.
+- [ ] **Export comptable** (`/api/stats/export/xlsx`) : lit les factures payées et les encaissements, **jamais
+  les avoirs** — un avoir sur une facture payée ne réduirait pas le chiffre exporté. Le CA des statistiques
+  (factures payées) a la même lacune.
+
 ## 🟡 2026-10-06 — Mise en forme vue en recette du ticket 04 (production, v3.35)
 
 - [ ] **Boîte « Services suggérés » d'une prise en charge mal mise en forme** : case à cocher rendue en
