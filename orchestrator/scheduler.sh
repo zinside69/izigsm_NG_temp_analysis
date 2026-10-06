@@ -317,6 +317,8 @@ run_once() {
     # Transition gardee READY -> RUNNING (Phase 5 / P3-a)
     if ! transition_etat "$ETAT_DIR/taches/$t.env" RUNNING scheduler; then
       log "transition refusee pour $t — tache ignoree"
+      # (2026-10-06, O65 partie 3) Avec --tache, rien n'est parti : refus, code 1.
+      refuser_si_tache_demandee "transition vers RUNNING refusee par la machine a etats"
       continue
     fi
     if (( DRY_RUN == 1 )); then
