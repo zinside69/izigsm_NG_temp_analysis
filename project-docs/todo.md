@@ -1,5 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 2026-10-06 — Services suggérés d'une prise en charge : les cases ne font rien
+
+- [ ] **Cocher un service suggéré reporte-t-il son prix ?** Les cases de « 💡 Services suggérés pour ce
+  modèle » (`loadServicesSuggestionsForModele()`, `tickets.js`) ne sont lues par aucun code : cocher n'a
+  aucun effet sur le ticket. La boîte elle-même ne s'affichait jamais avant le correctif du 2026-10-06
+  (enveloppe d'`apiGet` lue en `res.data.services`). Décision de l'exploitant ce jour-là : correctif
+  d'**affichage seul**, le comportement des cases à cadrer à part (remplir `#t-price` ? écraser un prix
+  déjà saisi ? lignes de devis ?).
+
 ## 🟡 2026-10-06 — Code-barres d'un service (recette du ticket 04, demande de l'exploitant)
 
 - [ ] **Saisir un code-barres à la création (et à la modification) d'un service** : la fenêtre « Nouveau
