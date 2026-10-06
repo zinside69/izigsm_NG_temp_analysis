@@ -1,4 +1,28 @@
-# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 154 — ticket 04 TTC déployé, v3.34 / 0064)
+# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 155 — services suggérés réparés, v3.35 / 0064)
+<!-- AVANT (2026-10-06, checkpoint 155 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 154 — ticket 04 TTC déployé, v3.34 / 0064) -->
+
+## Checkpoint 155 — Recette du ticket 04 et correctif des services suggérés (2026-10-06)
+
+**Production : `izigsm-v3.35`, dernière migration `0064` (inchangée). Dépôt et production alignés** (`b1b4fcf` + ce checkpoint).
+
+- **Recette du ticket 04 en production** (exploitant + Claude in Chrome) : service « Installation OS »
+  49,90 € TTC → HT 41,58 / TVA 8,32 ; trouvé en caisse à 49,90 € (aussi par sa référence SVC-001) ; panier
+  pièce 89 € + service → 138,90 €, rendu 1,10 € ; prix par modèle iPhone 12 à 59,90 € TTC → HT 49,92,
+  relu par l'API. **Lien de test iPhone 12 / Installation OS gardé** (décision de l'exploitant, autres tests).
+- **Défaut trouvé et corrigé** : les services suggérés d'une prise en charge ne s'affichaient **jamais**
+  (`tickets.js` lisait `res.data.services` sur l'enveloppe d'`apiGet`). Vu en production d'abord ; E2E
+  `prise-en-charge-services-suggeres.spec.ts` vu rouge, correctif d'affichage seul (décision : les cases
+  restent sans effet, `todo.md`), v3.35. Suite E2E complète 411/411. ⚠ Le correctif est parti dans
+  **`61ca19c sync: telnet: cibles tactiles mobile`** (`sync push` d'une autre fenêtre), contenu identique.
+- Déployé par l'exploitant (aperçu `e065390c`) ; aperçu **puis** apex relus : `sw.js` v3.35,
+  `tickets.80f5946c.js` en JavaScript avec le correctif, référencé par `/tickets`, route sans jeton → 401.
+  Preuve métier dans Chrome : iPhone 12 → « Installation OS 59.90 € PRIX SPÉ. » affiché.
+- Todo : code-barres d'un service ; cases des suggestions sans effet ; mise en forme de la boîte ; P.U. TTC
+  `49,9` en caisse.
+- Session de production de Chrome gardée (`localStorage`) : les tests Chrome n'exigent plus de reconnexion.
+
+**Prochaine action** : recette factures / avoir (01-03) — crée des documents NF525 irréversibles, à
+confirmer par l'exploitant ; puis ticket 06, 09 ou 10.
 <!-- AVANT (2026-10-06, checkpoint 154 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 153 — ticket 04 TTC fait, non déployé) -->
 
 ## Checkpoint 154 — Déploiement du ticket 04 prix TTC (2026-10-06, matin)

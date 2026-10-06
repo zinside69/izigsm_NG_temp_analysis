@@ -1,5 +1,15 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 2026-10-06 — Mise en forme vue en recette du ticket 04 (production, v3.35)
+
+- [ ] **Boîte « Services suggérés » d'une prise en charge mal mise en forme** : case à cocher rendue en
+  grand carré vide, nom du service en MAJUSCULES coupé sur deux lignes (« INSTALLATION / OS »). Les
+  `<label>` et `<input>` générés par `loadServicesSuggestionsForModele()` (`tickets.js`) héritent des
+  styles des champs du formulaire (intitulés en capitales, champs pleine largeur). Jamais vu avant le
+  2026-10-06 : la boîte ne s'affichait pas. Capture prise ce jour-là dans Claude in Chrome.
+- [ ] **Caisse, colonne « P.U. TTC » : `49,9` au lieu de `49,90`** (et `89` au lieu de `89,00`). Totaux
+  justes ; la valeur du champ n'est pas formatée à deux décimales (ou le champ est trop étroit) — à mesurer.
+
 ## 🟡 2026-10-06 — Services suggérés d'une prise en charge : les cases ne font rien
 
 - [ ] **Cocher un service suggéré reporte-t-il son prix ?** Les cases de « 💡 Services suggérés pour ce

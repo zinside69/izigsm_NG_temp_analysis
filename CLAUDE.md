@@ -1250,6 +1250,12 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-06 (checkpoint 155) : DÉPLOYÉ — production en `izigsm-v3.35`, migration `0064` (aucune
+nouvelle).** Services suggérés d'une prise en charge enfin affichés (`tickets.js`, enveloppe d'`apiGet`). E2E
+complets 411/411 ; aperçu `e065390c` **puis** apex relus (`sw.js` v3.35, `tickets.80f5946c.js` en JavaScript
+avec le correctif) ; preuve dans Chrome (iPhone 12 → Installation OS 59,90 € « prix spé. »). **Dépôt et
+production alignés.**
+
 **État au 2026-10-06 (checkpoint 154) : DÉPLOYÉ — production en `izigsm-v3.34`, migration `0064`.** Ticket 04
 du chantier prix TTC (services et prix par modèle). E2E complets 410/410 avant ; `0064` appliquée à distance à
 08:45:22 UTC et relue (colonnes présentes, 0 ligne sans reprise) **puis** le code. Aperçu `44592c02` **puis**
