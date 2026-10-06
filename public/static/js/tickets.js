@@ -1976,8 +1976,14 @@ async function loadServicesSuggestionsForModele(modeleId) {
 
   if (!modeleId) { box.style.display = 'none'; return; }
 
-  const res  = await apiGet(`/api/services/modeles/${modeleId}/services`);
-  const svcs = res.data?.services || [];
+  // AVANT (2026-10-06, recette du ticket 04 prix TTC — `res` était l'enveloppe d'apiGet : `res.data` est le
+  // corps `{ success, data: { modele, services } }`, donc `res.data.services` valait toujours undefined et la
+  // boîte restait masquée pour tout modèle, depuis toujours ; vu en production) :
+  // const res  = await apiGet(`/api/services/modeles/${modeleId}/services`);
+  // const svcs = res.data?.services || [];
+  // Corps de la réponse, déballé au point d'appel (`CLAUDE.md` § Enveloppe des réponses API)
+  const res  = (await apiGet(`/api/services/modeles/${modeleId}/services`)).data;
+  const svcs = res?.data?.services || [];
 
   if (!svcs.length) { box.style.display = 'none'; return; }
 
