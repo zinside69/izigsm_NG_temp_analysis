@@ -1,5 +1,16 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 2026-10-06 — Code-barres d'un service (recette du ticket 04, demande de l'exploitant)
+
+- [ ] **Saisir un code-barres à la création (et à la modification) d'un service** : la fenêtre « Nouveau
+  service » n'a que « Référence interne » (vu à l'écran pendant la recette du ticket 04). Constat dans le
+  code : `services` n'a **aucune** colonne code-barres (seulement `reference`), et le scan en caisse
+  (`rechercherParCode()`, `catalogueService.ts`) ne cherche que dans `produits` (`code_barre` OU `sku`).
+  À cadrer avant de coder : migration (numéro à réserver), unicité par boutique **partagée avec les
+  produits ?** (un même EAN sur une pièce et un service), le scan qui renvoie aussi des services
+  (`rechercherCatalogue()` est déjà typé par `type`), conversion de la violation d'index en
+  `ErreurCodeEnDoublon` comme pour les produits.
+
 ## 🟡 2026-10-05 — Restes du ticket 02 prix TTC (checkpoint 150, revue)
 
 - [ ] `seed.sql` : produits de démo créés en HT seul, joués après `0062` → `prix_vente_ttc` à 0 en
