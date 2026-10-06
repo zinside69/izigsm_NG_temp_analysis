@@ -1,4 +1,19 @@
-# iziGSM — État courant (MàJ : 2026-10-05, checkpoint 152 — prix TTC 01-03 en production, v3.33 / 0063)
+# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 153 — ticket 04 TTC fait, non déployé)
+
+## Checkpoint 153 — Ticket 04 prix TTC : services et prix par modèle en TTC (2026-10-06)
+
+**Production inchangée : `izigsm-v3.33` / `0063`. Dépôt EN AVANCE** (`555c8bd`, poussé) : `0064` en attente,
+`CACHE_VERSION` v3.34. Vitest 1 525 + 2 permanents, tsc 31.
+
+- **Ticket 04 `done`** : `0064` (`services.prix_ttc`, `service_modeles.prix_ttc_specifique`, reprise au taux du
+  service) ; requête des non-ronds `scripts/sql/prix-ttc-non-ronds-services.sql` ; TTC prioritaire, HT converti ;
+  lectures sur le TTC stocké (catalogue, prix par modèle, caisse, vitrine) ; écran en TTC, HT en second.
+- **Décision de l'exploitant** : Q20 au formulaire — taux changé, TTC renvoyé à l'identique → HT fixe, TTC
+  recalculé (prix par modèle compris), dans `prixDeVenteAModifier()` : corrige aussi la fiche produit (ticket 01).
+- Revue : 0 % enregistré à 20 %, taux en texte concaténé, second calcul en SQL, prix vide, 0 € spécifique perdu…
+  corrigés (détail dans le ticket). E2E « 0,98 → 98 » stabilisé (même focus tardif que caisse-ttc).
+
+**Prochaine action** : déployer le 04 (non-ronds en production → `0064` → code), ou ticket suivant (06, 09, 10).
 
 ## Checkpoint 152 — Déploiement du 2026-10-05 (soir) — prix TTC, tickets 01 + 02 + 03
 

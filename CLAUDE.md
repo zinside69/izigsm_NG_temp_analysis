@@ -879,6 +879,22 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   périmètre (`sqlLigneVendueLaPlusRecente()`).
 - ⚠ `seed.sql` crée ses produits en HT seul, après `0062` : en local, prix TTC à 0 → « prix à saisir ».
 
+## Services et prix par modèle en TTC (depuis 2026-10-06, ticket 04 chantier `prix-ttc`)
+
+- **`services.prix_ttc` et `service_modeles.prix_ttc_specifique`** (`0064`) font foi ; le HT s'en déduit
+  et reste écrit. `prix_ttc` porte le nom que l'API exposait déjà (calculé à la lecture avant) : ⊥ un
+  `ROUND(prix_ht * …) AS prix_ttc` dans une requête — il masquerait la colonne stockée.
+- **Toute écriture passe par `createService()` / `updateService()` / `linkServiceModele()`** : TTC prioritaire,
+  HT converti, par `prixDeVenteACreer()` / `prixDeVenteAModifier()`. Un prix par modèle n'a pas de taux
+  propre : celui du service. **Taux du service changé → ses prix par modèle gardent leur HT, TTC recalculé
+  par `prixTtcDepuisHt()`** (`recalculerPrixParModele()`), ⊥ un calcul en SQL.
+- **Q20 au formulaire (décision du 2026-10-06)** : taux changé et TTC renvoyé à l'identique = prix non
+  touché → HT fixe, TTC recalculé. `prixDeVenteAModifier()` le reconnaît par `prixActuel.ttc` : **tout
+  appelant passe le TTC actuel** (services, pièces) — sans lui, le TTC renvoyé ferait foi.
+- **Taux reçu en texte → `tauxEnNombre()`** avant tout calcul : `100 + "10"` vaut « 10010 ». À l'écran, ⊥
+  `|| 20` sur un taux : 0 % (franchise) est un taux. Idem un prix à 0 € n'est pas « aucun prix ».
+- Caisse : un service est proposé à **son** `prix_ttc` (recherche sans modèle) ; vitrine publique : `prix_ttc`.
+
 ## Factures et avoirs en TTC (depuis 2026-10-05, ticket 03 chantier `prix-ttc`)
 
 - **`createFacture()` et `createAvoir()` reçoivent `prix_unitaire_ttc`** (fait foi ; HT seul encore
@@ -1233,6 +1249,12 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-06 (checkpoint 153) : production inchangée (`izigsm-v3.33` / `0063`), `0064` EN
+ATTENTE, dépôt EN AVANCE.** Ticket 04 (`555c8bd`, poussé) : services et prix par modèle en TTC,
+`CACHE_VERSION` `izigsm-v3.34`. Ordre : requête des non-ronds en production, `0064` en `--remote`,
+`d1_migrations` relu, **puis** le code — sans `0064`, liste, fiche et création de service tombent en
+`no such column` (`prix_ttc` lu et écrit), recherche de la caisse et vitrine aussi.
 
 **État au 2026-10-05 (soir) : DÉPLOYÉ — production en `izigsm-v3.33`, migration `0063`.** Chantier
 prix TTC, tickets 01 + 02 + 03 : `0062` et `0063` appliquées à distance à 18:19:19 UTC (relues : colonnes

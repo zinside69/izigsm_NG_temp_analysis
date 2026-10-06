@@ -6,9 +6,16 @@
   local, la caisse demande un prix. Écrire `prix_vente_ttc` dans le seed.
 - [ ] Ménage : sous-requête `dernier_prix_vendu_ht` plus lue par la caisse (`catalogueService.ts`) ;
   `prixTtcDepuisHt()` copiée dans `stock.js` et `caisse.js` — une copie dans `app.js` suffirait.
-- [ ] E2E instable sous charge : `caisse-entiers-dernier-prix.spec.ts` « A : la quantité n'affiche que des
+- [x] E2E instable sous charge : `caisse-entiers-dernier-prix.spec.ts` « A : la quantité n'affiche que des
   entiers » lit parfois 198 au lieu de 98 en série longue (vert seul). À diagnostiquer (`/diagnosing-bugs`).
 - Impression PU TTC d'une ligne `mode_calcul = 'ttc'` : au ticket 03. — **fait** (`f390229`).
+
+## 🟡 2026-10-06 — Restes du ticket 04 prix TTC (checkpoint 153)
+
+- [ ] `seed.sql` : services créés en HT seul (comme les pièces) → `prix_ttc` à 0 en local après `0064`.
+- [ ] Copie de plus du calcul HT depuis TTC à l'écran (`htDeduitDuTtc()`, `services.js`) — avec celles de
+  `stock.js`, `caisse.js`, `factures.js` : une copie commune dans `app.js` (noms distincts à unifier).
+- Corrigé le 2026-10-06 : E2E « 0,98 → 98 » (focus tardif de « + Ligne libre » attendu dans le test).
 
 ## 🟡 2026-10-05 — Restes du ticket 03 prix TTC (checkpoint 151, revue)
 

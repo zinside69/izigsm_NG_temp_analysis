@@ -1,4 +1,16 @@
-# Recovery Prompt — iziGSM — 2026-10-05 (checkpoint 152 — prix TTC 01-03 en production, recette à faire)
+# Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 153 — ticket 04 TTC fait, à déployer)
+
+## ➡ Première action (checkpoint 153 — remplace celle du 152)
+
+**Production `izigsm-v3.33` / `0063`. Dépôt poussé (`555c8bd`) : ticket 04 fait, `0064` en attente, v3.34.**
+
+1. **Déployer le ticket 04** (`modop-deploiement.md`) : suite E2E complète ; jouer en production
+   `scripts/sql/prix-ttc-non-ronds-services.sql` (par `--command`, le `--file` distant est refusé) et remettre
+   la liste ; Time Travel relevé ; `0064` en `--remote` ; `d1_migrations` relu ; `npm run deploy` ; aperçu puis apex.
+2. Recette à l'écran toujours à faire (01-03, et 04 après déploiement) avec `telnet@bbox.fr`.
+3. Tickets restants : (06, 09, 10) → 05 → 08 ; 06 → 07 ; 12 après 06. Session neuve par ticket.
+
+## Checkpoint 152 (historique)
 
 ## ➡ Première action (checkpoint 152 — remplace celle du 151)
 

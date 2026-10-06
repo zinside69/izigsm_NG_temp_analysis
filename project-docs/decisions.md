@@ -1,5 +1,16 @@
 # iziGSM — Décisions
 
+## 2026-10-06 — Q20 au formulaire : un TTC renvoyé à l'identique n'est pas un nouveau prix
+
+**Décision de l'exploitant** (revue du ticket 04) : un formulaire renvoie toujours le TTC affiché. Quand le
+taux de TVA change et que ce TTC est **identique** à celui en base, le prix n'a pas été touché : le HT
+reste fixe, le TTC est recalculé au nouveau taux (Q20) — service, prix par modèle et pièce. Un TTC
+**différent** est un nouveau prix, qui fait foi au nouveau taux. Écarté : « TTC fixe, HT recalculé »
+(modifiait Q20). Porté par `prixDeVenteAModifier()` (`prixActuel.ttc`).
+
+- Caisse : un service y est proposé à **son** TTC — la recherche ne connaît aucun modèle d'appareil ; le
+  prix par modèle s'applique là où un modèle est choisi (ticket, ticket 05).
+
 ## 2026-10-05 — Factures et avoirs en TTC : précisions techniques du ticket 03 (revue)
 
 - **Impression** : colonne « P.U. TTC » dès qu'une ligne du document a `mode_calcul = 'ttc'` ; un
