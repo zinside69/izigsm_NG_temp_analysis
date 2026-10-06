@@ -1,4 +1,21 @@
-# Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 153 — ticket 04 TTC fait, à déployer)
+# Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 156 — chantier avoirs cadré, spec à écrire)
+<!-- AVANT (2026-10-06, checkpoint 156 — titre mis à jour) : # Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 153 — ticket 04 TTC fait, à déployer) -->
+
+## ➡ Première action (checkpoint 156 — remplace celle du 153)
+
+**Production `izigsm-v3.35` / `0064`** (ticket 04 TTC + services suggérés des prises en charge). Chantier prix
+TTC 01-04 **recetté en production** (`FAC-2026-00009`, `AV-2026-00001`, chaîne NF525 intègre).
+
+1. **Chantier « avoirs »** : cadrage fait (`decisions.md` § 2026-10-06 « Chantier avoirs cadré », Q1-Q19 ;
+   `CONTEXT.md`). Session neuve : `/mattpocock-skills:to-spec` puis `/mattpocock-skills:to-tickets`, sans
+   `/compact` entre les deux. Migration **`0068`** réservée ; tickets NF525 (plafond + `annulee` + reprise ;
+   clôture) codés avec l'exploitant, tickets d'écran confiables au socle.
+2. `FAC-2026-00009` reste « Émise, 70,52 € » jusqu'au chantier : facture de recette, **ne pas la retoucher**.
+3. Ensuite : tickets prix TTC restants (06, 09, 10 → 05 → 08 ; 07 après 06 ; 12 après 06).
+4. Lien de test iPhone 12 / Installation OS (59,90 € TTC) **gardé** en boutique 2 pour d'autres tests.
+5. Chrome : session de production gardée (`localStorage`) — tests Claude in Chrome sans reconnexion.
+
+## Checkpoint 153 (historique)
 
 ## ➡ Première action (checkpoint 153 — remplace celle du 152)
 

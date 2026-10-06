@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 155 — services suggérés réparés, v3.35 / 0064)
+# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 156 — chantier avoirs cadré, spec à écrire)
+<!-- AVANT (2026-10-06, checkpoint 156 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 155 — services suggérés réparés, v3.35 / 0064) -->
+
+## Checkpoint 156 — Chantier « avoirs » cadré (2026-10-06, fin de journée)
+
+**Production inchangée : `izigsm-v3.35`, dernière migration `0064`. Dépôt en avance de documentation
+seulement** (aucun code depuis le 155).
+
+- Point de départ : `AV-2026-00001` introuvable à l'écran (aucune page ne lit les avoirs) ; `FAC-2026-00009`
+  reste « à encaisser ». Entrée 🔴 P1 au `todo.md` (`125eeaa`).
+- **Grilling Q1-Q19** (`/grill-with-docs`, exploitant) → `decisions.md` § 2026-10-06 « Chantier avoirs cadré »
+  (`6c84099`) ; glossaire `CONTEXT.md` : Avoir complété, Bon d'achat, Reste dû, Facture annulée. Essentiel :
+  onglet « Avoirs » ; reste dû unique (Factures + tableau de bord) ; facture couverte → `annulee` (+ reprise
+  par migration) ; plafond avant `nextNumero()` ; avoir prérempli ; clôture avec ligne « Avoirs émis » ;
+  impression d'un avoir ; acompte annulé → `bon_achat` ; migration **`0068`** réservée ; tickets NF525 codés
+  avec l'exploitant. Hors chantier au todo : export/CA nets des avoirs, remboursement d'argent, `montant_paye`
+  de la caisse, bon d'achat en caisse.
+- Faits relevés (exploration du code) : `createAvoir()` sans plafond et sans effet sur la facture ; `annulee`
+  jamais écrit ; `cloturerJournee()` additionne les avoirs en positif ; aucune impression d'avoir.
+
+**Prochaine action** : session neuve, `/init recover`, puis `/mattpocock-skills:to-spec` (s'appuyer sur
+`decisions.md` § 2026-10-06 « Chantier avoirs cadré » : le grilling n'est plus dans la fenêtre), puis
+`/mattpocock-skills:to-tickets` dans la même session.
 <!-- AVANT (2026-10-06, checkpoint 155 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 154 — ticket 04 TTC déployé, v3.34 / 0064) -->
 
 ## Checkpoint 155 — Recette du ticket 04 et correctif des services suggérés (2026-10-06)
