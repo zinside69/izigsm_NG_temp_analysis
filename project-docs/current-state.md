@@ -23,6 +23,17 @@
 
 **Prochaine action** : recette factures / avoir (01-03) — crée des documents NF525 irréversibles, à
 confirmer par l'exploitant ; puis ticket 06, 09 ou 10.
+
+**Recette 01-03 faite le même jour** (recette complète décidée par l'exploitant, Claude in Chrome, boutique 2) :
+- `FAC-2026-00008` = vente de caisse de l'exploitant (nappe 89 € + Installation OS 49,90 €) : 138,90 €, lignes
+  `mode_calcul = 'ttc'`, PU TTC conservés (relu en base distante).
+- `FAC-2026-00009` (facture manuelle, client « CLIENT 1 ») : 3 × 19,99 € à 20 % + 10,55 € à 5,5 % → HT 59,98,
+  TVA 10,54, TTC 70,52 ; lignes `ttc` ; impression « P.U. TTC » et ventilation par taux justes (document
+  généré sans boîte d'impression). Réimpression de `FAC-2026-00007` (03/10) toujours en « P.U. HT ».
+- `AV-2026-00001` sur la `FAC-2026-00009` (motif « Recette ticket 03 prix TTC — annulation ») : mêmes lignes,
+  taux 20 % et **5,5 % gardés**, 70,52 € ; journal NF525 n° 11-13 (vente, facture, avoir).
+- `GET /api/caisse/integrite` → intègre, 0 anomalie ; `GET /api/boutiques/2/nf525/verify` → valide, 10 entrées.
+- **Chantier prix TTC 01-04 recetté en production.** Prochaine action : ticket 06, 09 ou 10.
 <!-- AVANT (2026-10-06, checkpoint 154 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 153 — ticket 04 TTC fait, non déployé) -->
 
 ## Checkpoint 154 — Déploiement du ticket 04 prix TTC (2026-10-06, matin)
