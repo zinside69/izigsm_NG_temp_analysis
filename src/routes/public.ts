@@ -189,7 +189,9 @@ pub.get('/catalogue/:slug', async (c) => {
           id:            svc.id,
           nom:           svc.nom,
           description:   svc.description,
-          prix_ttc:      Math.round(svc.prix_ht * (1 + svc.tva_taux / 100) * 100) / 100,
+          // AVANT (2026-10-06, ticket 04 prix TTC — le TTC stocké fait foi, plus recalculé depuis le HT) :
+          // prix_ttc:      Math.round(svc.prix_ht * (1 + svc.tva_taux / 100) * 100) / 100,
+          prix_ttc:      svc.prix_ttc,
           duree_minutes: svc.duree_minutes,
         })
       }

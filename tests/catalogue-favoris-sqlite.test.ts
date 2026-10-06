@@ -86,7 +86,9 @@ describe('lireFavorisVente()', () => {
       prix_vente_ttc: 0,
       dernier_prix_vendu_ttc: 12,
     })
-    expect(fav[1]).toEqual({ type: 'service', id: pose, nom: 'Pose de film', reference: null, prix_ht: 15, tva_taux: 20 })
+    // AVANT (2026-10-06, ticket 04 prix TTC — le service porte son TTC stocké ; fixture en HT seul → 0) :
+    // expect(fav[1]).toEqual({ type: 'service', id: pose, nom: 'Pose de film', reference: null, prix_ht: 15, tva_taux: 20 })
+    expect(fav[1]).toEqual({ type: 'service', id: pose, nom: 'Pose de film', reference: null, prix_ht: 15, tva_taux: 20, prix_ttc: 0 })
   })
 
   it('ignore brouillons, factures annulées, ventes de plus de 90 jours et lignes libres', async () => {

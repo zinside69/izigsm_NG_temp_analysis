@@ -797,8 +797,18 @@
     return Math.round(prixHt * (100 + tauxTva)) / 100
   }
 
-  /** Prix TTC proposé pour un service : ses tarifs restent en HT jusqu'au ticket 04, convertis ici. */
+  // AVANT (2026-10-06, ticket 04 prix TTC — le service porte son TTC stocké, `prix_ttc`) :
+  // /** Prix TTC proposé pour un service : ses tarifs restent en HT jusqu'au ticket 04, convertis ici. */
+  // function prixTtcService(s) {
+  //   return prixTtcDepuisHt(Number(s.prix_ht) || 0, Number(s.tva_taux) || 0)
+  // }
+  /**
+   * Prix TTC proposé pour un service : son TTC stocké (`prix_ttc`, migration 0064), tel que saisi au
+   * catalogue. Repli sur la conversion du HT seulement si la réponse n'en porte pas (serveur antérieur).
+   */
   function prixTtcService(s) {
+    const prixTtcFourni = typeof s.prix_ttc === 'number' && Number.isFinite(s.prix_ttc)
+    if (prixTtcFourni) return s.prix_ttc
     return prixTtcDepuisHt(Number(s.prix_ht) || 0, Number(s.tva_taux) || 0)
   }
 

@@ -43,7 +43,8 @@ const SQL_BOUTIQUE_ID_BY_SLUG = `SELECT id, nom FROM boutiques WHERE slug = ? AN
 
 const SQL_CATEGORIES = `SELECT id, nom, description, couleur, ordre FROM categories_services WHERE boutique_id = ? AND actif = 1 AND parent_id IS NULL ORDER BY ordre ASC, nom ASC`
 
-const SQL_SERVICES = `SELECT s.id, s.nom, s.description, s.prix_ht, s.tva_taux, s.duree_minutes, s.categorie_id FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.categorie_id ASC, s.nom ASC`
+// AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel, prix_ttc lu) : const SQL_SERVICES = `SELECT s.id, s.nom, s.description, s.prix_ht, s.tva_taux, s.duree_minutes, s.categorie_id FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.categorie_id ASC, s.nom ASC`
+const SQL_SERVICES = `SELECT s.id, s.nom, s.description, s.prix_ht, s.tva_taux, s.duree_minutes, s.categorie_id, s.prix_ttc FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.categorie_id ASC, s.nom ASC`
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

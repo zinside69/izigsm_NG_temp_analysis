@@ -14,8 +14,16 @@
 export function validateService(body: any): string | null {
   if (!body.nom?.trim())
     return 'Nom du service obligatoire.'
-  if (body.prix_ht === undefined || body.prix_ht === null || isNaN(Number(body.prix_ht)) || Number(body.prix_ht) < 0)
-    return 'Prix HT obligatoire (≥ 0).'
+  // AVANT (2026-10-06, ticket 04 prix TTC — le prix se saisit en TTC ; le HT seul reste accepté) :
+  // if (body.prix_ht === undefined || body.prix_ht === null || isNaN(Number(body.prix_ht)) || Number(body.prix_ht) < 0)
+  //   return 'Prix HT obligatoire (≥ 0).'
+  // Le prix contrôlé est celui qui fait foi : le TTC s'il est envoyé, sinon le HT d'un ancien écran
+  // Un prix vide (« ») vaut absent, comme dans la route (`nombreOuAbsent()`) : sinon Number('') = 0 passerait
+  const estAbsent = (valeur: unknown) => valeur === undefined || valeur === null || valeur === ''
+  const prixQuiFaitFoi = estAbsent(body.prix_ttc) ? body.prix_ht : body.prix_ttc
+  const prixIllisibleOuNegatif = isNaN(Number(prixQuiFaitFoi)) || Number(prixQuiFaitFoi) < 0
+  if (estAbsent(prixQuiFaitFoi) || prixIllisibleOuNegatif)
+    return 'Prix obligatoire (TTC, ou HT pour un ancien écran), ≥ 0.'
   if (body.tva_taux !== undefined && ![0, 5.5, 10, 20].includes(Number(body.tva_taux)))
     return 'Taux TVA invalide. Valeurs acceptées : 0, 5.5, 10, 20.'
   if (body.duree_minutes !== undefined && body.duree_minutes !== null && (isNaN(Number(body.duree_minutes)) || Number(body.duree_minutes) < 0))

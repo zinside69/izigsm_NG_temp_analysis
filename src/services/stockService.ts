@@ -971,15 +971,20 @@ export async function updateProduit(
   if (unPrixOuUnTauxEstEnvoye) {
     // Prix et taux actuels de la fiche, par son identifiant. L'appartenance à la boutique est
     // déjà gardée par la route (`assertBoutiqueOwnership`) et l'existence vérifiée juste au-dessus.
+    // AVANT (2026-10-06, revue du ticket 04 — TTC actuel lu aussi : un TTC renvoyé à l'identique avec un
+    // nouveau taux garde le HT, Q20 au formulaire) :
+    //   .prepare('SELECT prix_vente_ht, tva_taux FROM produits WHERE id = ?')
+    //   .first<{ prix_vente_ht: number; tva_taux: number }>()
     const actuel = await db
-      .prepare('SELECT prix_vente_ht, tva_taux FROM produits WHERE id = ?')
+      .prepare('SELECT prix_vente_ht, tva_taux, prix_vente_ttc FROM produits WHERE id = ?')
       .bind(id)
-      .first<{ prix_vente_ht: number; tva_taux: number }>()
+      .first<{ prix_vente_ht: number; tva_taux: number; prix_vente_ttc: number }>()
     // Repli : seulement si la relecture ne rend rien (fiche supprimée entre-temps, l'UPDATE ne
     // touchera alors aucune ligne) — jamais un prix inventé sur une fiche existante
     prixDeVente = prixDeVenteAModifier(data.prix_vente_ttc, data.prix_vente_ht, data.tva_taux, {
       ht:      actuel?.prix_vente_ht ?? 0,
       tauxTva: actuel?.tva_taux      ?? TAUX_TVA_PAR_DEFAUT,
+      ttc:     actuel?.prix_vente_ttc,
     })
   }
 

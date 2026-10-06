@@ -192,8 +192,11 @@ test('recherche catalogue : un service se trouve par nom et par référence, typ
   const id = await creerService(request, headers, { nom: 'E2E Pose de film hydrogel', reference: 'E2E-POSE-HG', prix_ht: 12.5 })
 
   for (const q of ['hydrogel', 'E2E-POSE-HG']) {
+    // AVANT (2026-10-06, ticket 04 prix TTC — le service porte son TTC stocké : 12,50 € HT → 15 € TTC) :
+    //   type: 'service', id, nom: 'E2E Pose de film hydrogel', reference: 'E2E-POSE-HG', prix_ht: 12.5, tva_taux: 20,
     expect((await chercher(request, headers, q)).data, q).toEqual([{
       type: 'service', id, nom: 'E2E Pose de film hydrogel', reference: 'E2E-POSE-HG', prix_ht: 12.5, tva_taux: 20,
+      prix_ttc: 15,
     }])
   }
 })

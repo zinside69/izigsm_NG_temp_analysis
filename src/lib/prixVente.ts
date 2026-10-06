@@ -35,7 +35,9 @@ export function prixHtDepuisTtc(prixTtc: number, tauxTva: number): number {
 }
 
 /** Vrai si la valeur est un nombre fini (ni `null`, ni absent, ni une chaîne) — un prix ou un taux. */
-function estUnNombreFini(valeur: unknown): valeur is number {
+// AVANT (2026-10-06, revue du ticket 04 — exportée : seul test « prix lisible » du serveur) :
+// function estUnNombreFini(valeur: unknown): valeur is number {
+export function estUnNombreFini(valeur: unknown): valeur is number {
   return typeof valeur === 'number' && Number.isFinite(valeur)
 }
 
@@ -66,18 +68,31 @@ export function prixDeVenteACreer(prixTtcEnvoye: unknown, prixHtEnvoye: unknown,
  * @param prixTtcEnvoye  TTC envoyé (prioritaire), ou absent
  * @param prixHtEnvoye   HT envoyé par un ancien écran, ou absent
  * @param tauxEnvoye     taux de TVA envoyé, ou absent
- * @param prixActuel     prix et taux actuels de la fiche (relus en base)
+ * @param prixActuel     prix et taux actuels de la fiche (relus en base) ; `ttc` facultatif — fourni, il
+ *                       permet de reconnaître un TTC renvoyé à l'identique (précision de Q20, 2026-10-06)
  */
+// AVANT (2026-10-06, revue du ticket 04 — TTC actuel accepté, voir « TTC renvoyé à l'identique ») :
+//   prixActuel: { ht: number; tauxTva: number },
 export function prixDeVenteAModifier(
   prixTtcEnvoye: unknown,
   prixHtEnvoye: unknown,
   tauxEnvoye: unknown,
-  prixActuel: { ht: number; tauxTva: number },
+  prixActuel: { ht: number; tauxTva: number; ttc?: number },
 ): PrixDeVente | null {
   // Un taux renvoyé à l'identique (client qui renvoie toute la fiche) n'est pas un changement :
   // sinon le TTC serait recalculé depuis le HT déduit, et 9,99 € deviendrait 10,00 €
   const tauxChange = estUnNombreFini(tauxEnvoye) && tauxEnvoye !== prixActuel.tauxTva
   const tauxFinal  = tauxChange ? (tauxEnvoye as number) : prixActuel.tauxTva
+
+  // Q20 au formulaire (décision de l'exploitant du 2026-10-06, revue du ticket 04) : un formulaire renvoie
+  // toujours le TTC affiché. Taux changé et TTC renvoyé à l'identique = prix non touché, pas un nouveau
+  // prix : le HT reste fixe, le TTC est recalculé au nouveau taux (branche « seul le taux change »).
+  const ttcActuelConnu = estUnNombreFini(prixActuel.ttc)
+  const ttcRenvoyeALIdentique = ttcActuelConnu && estUnNombreFini(prixTtcEnvoye) && prixTtcEnvoye === prixActuel.ttc
+  const aucunHtEnvoye = !estUnNombreFini(prixHtEnvoye)
+  if (tauxChange && ttcRenvoyeALIdentique && aucunHtEnvoye) {
+    return { ttc: prixTtcDepuisHt(prixActuel.ht, tauxFinal), ht: prixActuel.ht }
+  }
 
   // Un prix est envoyé : même règle qu'à la création, avec le taux final de la fiche
   const unPrixEstEnvoye = estUnNombreFini(prixTtcEnvoye) || estUnNombreFini(prixHtEnvoye)

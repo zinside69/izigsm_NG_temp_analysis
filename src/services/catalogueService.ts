@@ -106,6 +106,8 @@ export interface ResultatService {
   reference: string | null
   prix_ht:   number
   tva_taux:  number
+  /** Prix TTC stocké du service (migration 0064) — celui que la caisse propose (ticket 04 prix TTC). */
+  prix_ttc:  number
 }
 
 /** Un dossier SAV trouvé : le choisir l'ouvre, il n'ajoute rien à une vente. */
@@ -268,8 +270,10 @@ async function chercherProduits(db: Database, boutiqueId: number, motif: string)
 }
 
 async function chercherServices(db: Database, boutiqueId: number, motif: string): Promise<ResultatService[]> {
+  // AVANT (2026-10-06, ticket 04 prix TTC — TTC stocké du service lu), ligne de la requête :
+  //     SELECT id, nom, reference, prix_ht, tva_taux
   const lignes = await db.all<Omit<ResultatService, 'type'>>(`
-    SELECT id, nom, reference, prix_ht, tva_taux
+    SELECT id, nom, reference, prix_ht, tva_taux, prix_ttc
     FROM   services
     WHERE  boutique_id = ? AND actif = 1
       AND  (nom LIKE ? ESCAPE '\\' OR reference LIKE ? ESCAPE '\\')
@@ -284,6 +288,7 @@ async function chercherServices(db: Database, boutiqueId: number, motif: string)
     reference: s.reference,
     prix_ht:   s.prix_ht,
     tva_taux:  s.tva_taux,
+    prix_ttc:  s.prix_ttc,
   }))
 }
 
@@ -381,8 +386,10 @@ export async function lireFavorisVente(
       WHERE  ${factureRetenue}
       GROUP  BY p.id
     `, [boutiqueId, periode]),
+    // AVANT (2026-10-06, ticket 04 prix TTC — TTC stocké du service lu), ligne de la requête :
+    //       SELECT s.id, s.nom, s.reference, s.prix_ht, s.tva_taux,
     db.all<Omit<ResultatService, 'type'> & { vendus: number }>(`
-      SELECT s.id, s.nom, s.reference, s.prix_ht, s.tva_taux,
+      SELECT s.id, s.nom, s.reference, s.prix_ht, s.tva_taux, s.prix_ttc,
              SUM(ld.quantite) AS vendus
       FROM   lignes_document ld
       JOIN   factures f ON f.id = ld.document_id
@@ -404,6 +411,7 @@ export async function lireFavorisVente(
     ...(services ?? []).map(s => ({ vendus: s.vendus, r: {
       type: 'service' as const, id: s.id, nom: s.nom, reference: s.reference,
       prix_ht: s.prix_ht, tva_taux: s.tva_taux,
+      prix_ttc: s.prix_ttc,
     } })),
   ]
   return tous

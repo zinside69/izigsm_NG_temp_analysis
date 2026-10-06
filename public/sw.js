@@ -31,7 +31,8 @@
 // AVANT (2026-10-04, boutons du référentiel selon le rôle — services.html, services.js) : const CACHE_VERSION  = 'izigsm-v3.30'
 // AVANT (2026-10-04, CA HT et TTC côte à côte — dashboard.html/js, stats.html) : const CACHE_VERSION  = 'izigsm-v3.31'
 // AVANT (2026-10-05, ticket 01 prix TTC — fiche et liste du stock en TTC : stock.html, stock.js) : const CACHE_VERSION  = 'izigsm-v3.32'
-const CACHE_VERSION  = 'izigsm-v3.33'
+// AVANT (2026-10-06, ticket 04 prix TTC — services et prix par modèle en TTC : services.html, services.js, caisse.js) : const CACHE_VERSION  = 'izigsm-v3.33'
+const CACHE_VERSION  = 'izigsm-v3.34'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

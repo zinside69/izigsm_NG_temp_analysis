@@ -46,6 +46,10 @@ test('A : la quantité n\'affiche que des entiers — « 0,98 » devient 98, vid
   const tenant = await createTenantAdmin(request)
   await ouvrirVente(page, tenant)
   await page.click('#btn-ligne-libre')
+  // « + Ligne libre » donne le focus à la désignation après 50 ms (`ajouterLigne()`) : tombé pendant la
+  // frappe, ce focus fait quitter le champ quantité (« 0 » → 1 à la sortie) et la suite donnait « 198 »
+  // au lieu de « 98 » (instable depuis le 2026-10-05, `todo.md`). On l'attend avant de saisir.
+  await expect(lignes(page).first().locator('[data-field="designation"]')).toBeFocused()
   const qte = lignes(page).first().locator('[data-field="quantite"]')
 
   await qte.fill('')

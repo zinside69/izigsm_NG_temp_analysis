@@ -104,6 +104,8 @@ export interface ServicePublic {
   tva_taux:      number
   duree_minutes: number | null
   categorie_id:  number
+  /** Prix TTC stocké du service (migration 0064, ticket 04 prix TTC) — celui affiché au client. */
+  prix_ttc:      number
 }
 
 // ─── Ticket ───────────────────────────────────────────────────────────────────
@@ -246,7 +248,9 @@ export async function getCategoriesPubliques(
 
 /**
  * Retourne les services actifs d'une boutique avec leurs données tarifaires brutes.
- * Le prix TTC est calculé côté appelant (`prix_ht × (1 + tva_taux/100)`).
+ * AVANT (2026-10-06, ticket 04 prix TTC), ligne de cette documentation :
+ *   * Le prix TTC est calculé côté appelant (`prix_ht × (1 + tva_taux/100)`).
+ * Depuis : le prix TTC est stocké (`prix_ttc`, migration 0064) et lu tel quel.
  * Triés par catégorie puis par nom.
  *
  * @param db         - Port Database
@@ -257,9 +261,11 @@ export async function getServicesPublics(
   db:         Database,
   boutiqueId: number
 ): Promise<ServicePublic[]> {
+  // AVANT (2026-10-06, ticket 04 prix TTC — TTC stocké lu), fin de la liste des colonnes :
+  //            s.duree_minutes, s.categorie_id
   return db.all<ServicePublic>(`
     SELECT s.id, s.nom, s.description, s.prix_ht, s.tva_taux,
-           s.duree_minutes, s.categorie_id
+           s.duree_minutes, s.categorie_id, s.prix_ttc
     FROM   services s
     WHERE  s.boutique_id = ? AND s.actif = 1
     ORDER  BY s.categorie_id ASC, s.nom ASC

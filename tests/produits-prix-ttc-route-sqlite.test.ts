@@ -83,6 +83,12 @@ describe('PUT /api/produits/:id — prix de vente TTC', () => {
     expect(prixEnBase(id)).toEqual({ ht: 8.25, ttc: 9.08, taux: 10 })
   })
 
+  it('taux changé, TTC renvoyé à l\'identique par le formulaire : HT gardé, TTC recalculé (Q20, 2026-10-06)', async () => {
+    const id = await creerEcran()   // 9,90 € TTC, HT 8,25
+    await appeler('PUT', `/api/produits/${id}`, { prix_vente_ttc: 9.9, tva_taux: 10 })
+    expect(prixEnBase(id)).toEqual({ ht: 8.25, ttc: 9.08, taux: 10 })
+  })
+
   it('même taux renvoyé avec la fiche (client qui renvoie tout) : TTC inchangé (9,99 € reste 9,99 €)', async () => {
     const { corps } = await appeler('POST', '/api/produits', { nom: 'Câble', prix_vente_ttc: 9.99, tva_taux: 20 })
     await appeler('PUT', `/api/produits/${corps.id}`, { nom: 'Câble USB-C', tva_taux: 20 })

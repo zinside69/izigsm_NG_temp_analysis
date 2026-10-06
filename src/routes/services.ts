@@ -68,6 +68,21 @@ import {
 
 import type { Database } from '../ports/database'
 
+/** Un prix du corps de requête en nombre ; absent (`undefined` / `null` / vide) → `undefined`, illisible → NaN. */
+function nombreOuAbsent(valeur: unknown): number | undefined {
+  const valeurAbsente = valeur === undefined || valeur === null || valeur === ''
+  if (valeurAbsente) return undefined
+  return Number(valeur)
+}
+
+/**
+ * Prix d'un service lus dans le corps, en nombres (ticket 04 prix TTC) : le service décide « TTC
+ * prioritaire, sinon HT converti » sur des nombres — un TTC resté en texte serait ignoré au profit du HT.
+ */
+function prixDuCorps(body: any): { prix_ttc?: number; prix_ht?: number } {
+  return { prix_ttc: nombreOuAbsent(body.prix_ttc), prix_ht: nombreOuAbsent(body.prix_ht) }
+}
+
 type Bindings = { DB: D1Database; KV: import("../lib/d1kv").D1KVNamespace; JWT_SECRET: string }
 type Variables = { user: any; db: Database }
 
@@ -323,7 +338,9 @@ services.post('/services', requireRole('admin', 'manager'), async (c) => {
   const boutiqueId = getBoutiqueId(user, body.boutique_id?.toString())
   if (!boutiqueId) return c.json({ success: false, error: 'boutique_id requis.' }, 400)
 
-  const id = await createService(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+  // AVANT (2026-10-06, ticket 04 prix TTC — prix convertis en nombres : un TTC en texte retomberait sur le HT) :
+  // const id = await createService(c.env.DB, { ...body, boutique_id: boutiqueId }, user.sub)
+  const id = await createService(c.env.DB, { ...body, ...prixDuCorps(body), boutique_id: boutiqueId }, user.sub)
   return c.json({ success: true, id, message: 'Service créé.' }, 201)
 })
 
@@ -353,7 +370,8 @@ services.put('/services/:id', requireRole('admin', 'manager'), async (c) => {
   const deny = assertBoutiqueOwnership(user, existing, 'Service')
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
-  await updateService(c.env.DB, id, body, user.sub)
+  // AVANT (2026-10-06, ticket 04 prix TTC — prix convertis en nombres) : await updateService(c.env.DB, id, body, user.sub)
+  await updateService(c.env.DB, id, { ...body, ...prixDuCorps(body) }, user.sub)
   return c.json({ success: true, message: 'Service mis à jour.' })
 })
 
@@ -618,10 +636,20 @@ services.post('/services/modeles/:id/services', requireRole('admin', 'manager'),
   const deny      = assertBoutiqueOwnership(user, service, 'Service')
   if (deny) return c.json({ success: false, error: deny.error }, deny.status)
 
+  // Prix spécifique saisi en TTC (ticket 04 prix TTC) ; un HT seul est converti au taux du service
+  const prixTtcSpecifique = nombreOuAbsent(body.prix_ttc_specifique)
+  const prixHtSpecifique  = nombreOuAbsent(body.prix_ht_specifique)
+  const prixSpecifiqueInvalide = (prixTtcSpecifique !== undefined && (Number.isNaN(prixTtcSpecifique) || prixTtcSpecifique < 0))
+                              || (prixHtSpecifique  !== undefined && (Number.isNaN(prixHtSpecifique)  || prixHtSpecifique  < 0))
+  if (prixSpecifiqueInvalide) return c.json({ success: false, error: 'Prix spécifique invalide (≥ 0).' }, 400)
+
+  // AVANT (2026-10-06, ticket 04 prix TTC — TTC spécifique transmis, prioritaire) :
+  //     prix_ht_specifique:  body.prix_ht_specifique ?? null,
   await linkServiceModele(c.env.DB, {
     service_id:          serviceId,
     modele_id:           modeleId,
-    prix_ht_specifique:  body.prix_ht_specifique ?? null,
+    prix_ht_specifique:  prixHtSpecifique ?? null,
+    prix_ttc_specifique: prixTtcSpecifique ?? null,
   }, user.sub)
   return c.json({ success: true, message: 'Service lié au modèle.' })
 })

@@ -312,8 +312,12 @@ async function openModalService(id = null) {
       const s = res.data.data;
       document.getElementById('svc-nom').value         = s.nom;
       document.getElementById('svc-description').value = s.description || '';
-      document.getElementById('svc-prix').value        = s.prix_ht;
-      document.getElementById('svc-tva').value         = s.tva_taux || 20;
+      // AVANT (2026-10-06, ticket 04 prix TTC — le champ porte le TTC stocké) :
+      // document.getElementById('svc-prix').value        = s.prix_ht;
+      document.getElementById('svc-prix').value        = s.prix_ttc;
+      // AVANT (2026-10-06, revue du ticket 04 — un taux 0 % se rechargeait en 20 %, `||` prend 0 pour absent) :
+      // document.getElementById('svc-tva').value         = s.tva_taux || 20;
+      document.getElementById('svc-tva').value         = s.tva_taux ?? 20;
       document.getElementById('svc-duree').value       = s.duree_minutes || '';
       document.getElementById('svc-garantie').value    = s.garantie_jours || 0;
       document.getElementById('svc-reference').value   = s.reference || '';
@@ -324,8 +328,42 @@ async function openModalService(id = null) {
     document.getElementById('svc-categorie').value = _filtrecat;
   }
 
+  afficherDetailPrixService();
   openModal('modal-service');
 }
+
+/**
+ * HT depuis un TTC : TTC ÷ (1 + taux / 100), arrondi au centime par les centimes — même calcul que
+ * `prixHtDepuisTtc()` (`src/lib/prixVente.ts`), que l'écran ne peut pas importer. Nom distinct de la
+ * copie de `stock.js` : une page ne doit pas redéfinir une fonction d'un autre script.
+ */
+function htDeduitDuTtc(prixTtc, tauxTva) {
+  return Math.round((prixTtc * 10000) / (100 + tauxTva)) / 100;
+}
+
+/**
+ * Sous le champ « Prix TTC » du service : le HT et la TVA déduits du TTC saisi, au taux choisi
+ * (ticket 04 prix TTC — le TTC fait foi, le HT est donné en second). Rien tant qu'aucun prix n'est saisi.
+ */
+/** Taux de TVA choisi dans le formulaire du service : 0 % est un taux (franchise), pas une absence. */
+function tauxChoisi() {
+  const taux = parseFloat(document.getElementById('svc-tva').value);
+  return Number.isFinite(taux) ? taux : 20;
+}
+
+function afficherDetailPrixService() {
+  const detail  = document.getElementById('svc-prix-detail');
+  if (!detail) return;
+  const prixTtc = parseFloat(document.getElementById('svc-prix').value);
+  const taux    = parseFloat(document.getElementById('svc-tva').value) || 0;
+  const prixSaisi = Number.isFinite(prixTtc) && prixTtc > 0;
+  if (!prixSaisi) { detail.textContent = ''; return; }
+  const prixHt = htDeduitDuTtc(prixTtc, taux);
+  const tva    = Math.round((prixTtc - prixHt) * 100) / 100;
+  detail.textContent = `HT : ${prixHt.toFixed(2)} € · TVA ${taux} % : ${tva.toFixed(2)} €`;
+}
+document.getElementById('svc-prix')?.addEventListener('input', afficherDetailPrixService);
+document.getElementById('svc-tva')?.addEventListener('change', afficherDetailPrixService);
 
 /**
  * Enregistre le service (création ou mise à jour) via ApiService.
@@ -338,8 +376,12 @@ async function saveService() {
     nom:            document.getElementById('svc-nom').value.trim(),
     categorie_id:   parseInt(document.getElementById('svc-categorie').value) || null,
     description:    document.getElementById('svc-description').value.trim() || null,
-    prix_ht:        parseFloat(document.getElementById('svc-prix').value) || 0,
-    tva_taux:       parseFloat(document.getElementById('svc-tva').value) || 20,
+    // AVANT (2026-10-06, ticket 04 prix TTC — le prix saisi est le TTC, le serveur en déduit le HT) :
+    // prix_ht:        parseFloat(document.getElementById('svc-prix').value) || 0,
+    prix_ttc:       parseFloat(document.getElementById('svc-prix').value) || 0,
+    // AVANT (2026-10-06, revue du ticket 04 — 0 % s'enregistrait en 20 % : faux HT pour une boutique en franchise) :
+    // tva_taux:       parseFloat(document.getElementById('svc-tva').value) || 20,
+    tva_taux:       tauxChoisi(),
     duree_minutes:  parseInt(document.getElementById('svc-duree').value)  || null,
     garantie_jours: parseInt(document.getElementById('svc-garantie').value) || 0,
     reference:      document.getElementById('svc-reference').value.trim() || null,
@@ -702,6 +744,8 @@ async function openModalLiaison(modeleId, modeleName) {
   document.getElementById('modal-liaison').classList.add('open');
 }
 
+// Ticket 04 prix TTC (2026-10-06) : dans le gabarit ci-dessous, le HT effectif s'affiche après le TTC
+// (« HT 107.50 € ») — le TTC fait foi, le HT est donné en second.
 async function refreshLiaisonList(modeleId) {
   // `GET /api/services/modeles/:id/services` répond `{ success, data: { modele, services } }`.
   const res  = (await apiGet(`/api/services/modeles/${modeleId}/services`)).data;
@@ -717,6 +761,7 @@ async function refreshLiaisonList(modeleId) {
       <div>
         <span style="font-weight:600;font-size:13px;">${escHtml(s.nom)}</span>
         <span style="color:#6366f1;margin-left:8px;font-size:13px;">${s.prix_ttc_effectif?.toFixed(2)} € TTC</span>
+        <span style="color:#94a3b8;margin-left:6px;font-size:11px;">HT ${Number(s.prix_ht_effectif || 0).toFixed(2)} €</span>
         ${s.prix_ht_specifique != null ? `<span style="font-size:11px;color:#f59e0b;margin-left:6px;">prix spécifique</span>` : ''}
         <div style="font-size:11px;color:#94a3b8;">${escHtml(s.categorie_nom || '')}</div>
       </div>
@@ -729,13 +774,18 @@ async function refreshLiaisonList(modeleId) {
 async function addLiaison() {
   const modeleId  = parseInt(document.getElementById('liaison-modele-id').value, 10);
   const serviceId = parseInt(document.getElementById('liaison-service-select').value, 10);
-  const prix      = parseFloat(document.getElementById('liaison-prix-specifique').value) || null;
+  // AVANT (2026-10-06, revue du ticket 04 — un prix spécifique à 0 € devenait « aucun prix ») :
+  // const prix      = parseFloat(document.getElementById('liaison-prix-specifique').value) || null;
+  const saisiePrix = document.getElementById('liaison-prix-specifique').value.trim();
+  const aucunPrixSaisi = saisiePrix === '';
+  const prix      = aucunPrixSaisi ? null : parseFloat(saisiePrix);
 
   if (!serviceId) return alert('Sélectionner un service.');
 
   const res = (await apiPost(`/api/services/modeles/${modeleId}/services`, {
     service_id:          serviceId,
-    prix_ht_specifique:  prix,
+    // AVANT (2026-10-06, ticket 04 prix TTC — prix spécifique saisi en TTC) : prix_ht_specifique:  prix,
+    prix_ttc_specifique: prix,
   })).data;
   if (!res?.success) return alert(res?.error || 'Erreur.');
   document.getElementById('liaison-service-select').value = '';

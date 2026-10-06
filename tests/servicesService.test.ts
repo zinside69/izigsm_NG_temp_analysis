@@ -54,7 +54,8 @@ const SQL_LIST_MODELES_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_
 
 const SQL_LIST_MODELES_MARQUE_TYPE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.actif = 1 AND mo.marque_id = ? AND mo.type = ? ORDER BY ma.nom ASC, mo.nom ASC LIMIT 500`
 
-const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif, sm.prix_ht_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 AND s.boutique_id = ? ORDER BY c.nom ASC, s.nom ASC`
+// AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel : TTC stocké) : const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, ROUND(COALESCE(sm.prix_ht_specifique, s.prix_ht) * (1 + s.tva_taux / 100), 2) AS prix_ttc_effectif, sm.prix_ht_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 AND s.boutique_id = ? ORDER BY c.nom ASC, s.nom ASC`
+const SQL_SERVICES_BY_MODELE = `SELECT s.id, s.nom, s.description, s.reference, s.tva_taux, s.garantie_jours, s.duree_minutes, COALESCE(sm.prix_ht_specifique, s.prix_ht) AS prix_ht_effectif, COALESCE(sm.prix_ttc_specifique, s.prix_ttc) AS prix_ttc_effectif, sm.prix_ht_specifique, sm.prix_ttc_specifique, c.nom AS categorie_nom, c.couleur AS categorie_couleur FROM service_modeles sm JOIN services s ON s.id = sm.service_id AND s.actif = 1 LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE sm.modele_id = ? AND sm.actif = 1 AND s.boutique_id = ? ORDER BY c.nom ASC, s.nom ASC`
 
 const SQL_MODELE_WITH_MARQUE = `SELECT mo.*, ma.nom AS marque_nom FROM modeles_appareils mo JOIN marques_appareils ma ON ma.id = mo.marque_id WHERE mo.id = ? AND mo.actif = 1`
 
@@ -62,13 +63,16 @@ const SQL_LIST_CATEGORIES = `SELECT c.*, COUNT(s.id) as nb_services FROM categor
 
 const SQL_COUNT_SERVICES = `SELECT COUNT(*) as cnt FROM services s WHERE s.boutique_id = ? AND s.actif = 1`
 
-const SQL_LIST_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY c.ordre ASC, c.nom ASC, s.nom ASC LIMIT ? OFFSET ?`
+// AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel : TTC stocké) : const SQL_LIST_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY c.ordre ASC, c.nom ASC, s.nom ASC LIMIT ? OFFSET ?`
+const SQL_LIST_SERVICES = `SELECT s.*, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY c.ordre ASC, c.nom ASC, s.nom ASC LIMIT ? OFFSET ?`
 
-const SQL_GET_SERVICE = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.id = ? AND s.actif = 1`
+// AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel : TTC stocké) : const SQL_GET_SERVICE = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.id = ? AND s.actif = 1`
+const SQL_GET_SERVICE = `SELECT s.*, c.nom as categorie_nom, c.couleur as categorie_couleur FROM services s LEFT JOIN categories_services c ON c.id = s.categorie_id WHERE s.id = ? AND s.actif = 1`
 
 const SQL_ARBRE_CATEGORIES = `SELECT * FROM categories_services WHERE boutique_id = ? AND actif = 1 ORDER BY parent_id NULLS FIRST, ordre ASC, nom ASC`
 
-const SQL_ARBRE_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.nom ASC`
+// AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel : TTC stocké) : const SQL_ARBRE_SERVICES = `SELECT s.*, ROUND(s.prix_ht * (1 + s.tva_taux / 100), 2) as prix_ttc FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.nom ASC`
+const SQL_ARBRE_SERVICES = `SELECT s.* FROM services s WHERE s.boutique_id = ? AND s.actif = 1 ORDER BY s.nom ASC`
 
 // ══════════════════════════════════════════════════════════════════════════════
 // listCategories() — port Database
@@ -206,7 +210,8 @@ describe('createService()', () => {
 
   beforeEach(() => {
     db = createMockD1()
-    db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
+    // AVANT (2026-10-06, ticket 04 prix TTC — copie du SQL réel : TTC stocké) : db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
+    db.__setResponse('INSERT INTO services (boutique_id, categorie_id, nom, description, prix_ht, tva_taux, duree_minutes, reference, garantie_jours, prix_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id', { id: 9 })
     db.__setResponse('INSERT INTO audit_logs', null)
   })
 
