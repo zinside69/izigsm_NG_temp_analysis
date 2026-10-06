@@ -1250,6 +1250,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-06 (checkpoint 154) : DÉPLOYÉ — production en `izigsm-v3.34`, migration `0064`.** Ticket 04
+du chantier prix TTC (services et prix par modèle). E2E complets 410/410 avant ; `0064` appliquée à distance à
+08:45:22 UTC et relue (colonnes présentes, 0 ligne sans reprise) **puis** le code. Aperçu `44592c02` **puis**
+apex relus : `sw.js` v3.34, `services.e6585a6d.js` et `caisse.530cdac1.js` en JavaScript avec le code TTC,
+`/api/services` sans jeton → 401. Point Time Travel d'avant `0064` dans `journal-migrations.md`. **Dépôt et
+production alignés.** Recette à l'écran par l'exploitant à faire (01 à 04).
+
 **État au 2026-10-06 (checkpoint 153) : production inchangée (`izigsm-v3.33` / `0063`), `0064` EN
 ATTENTE, dépôt EN AVANCE.** Ticket 04 (`555c8bd`, poussé) : services et prix par modèle en TTC,
 `CACHE_VERSION` `izigsm-v3.34`. Ordre : requête des non-ronds en production, `0064` en `--remote`,

@@ -1,4 +1,23 @@
-# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 153 — ticket 04 TTC fait, non déployé)
+# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 154 — ticket 04 TTC déployé, v3.34 / 0064)
+<!-- AVANT (2026-10-06, checkpoint 154 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 153 — ticket 04 TTC fait, non déployé) -->
+
+## Checkpoint 154 — Déploiement du ticket 04 prix TTC (2026-10-06, matin)
+
+**Production : `izigsm-v3.34`, dernière migration `0064`. Dépôt et production alignés** (`7fe8d59` + ce checkpoint).
+
+- Préconditions : vitest 1 525 + 2 permanents (agenda), tsc 31, **E2E complets 410/410** sur la vraie base
+  locale (migrations locales à jour, build, serveur relancé, workerd purgés, aucune charge parallèle).
+- Base distante avant : dernière migration `0063` ; requête des TTC non ronds des services : 1 ligne, le
+  service de sonde « Sonde migration 0038 » (boutique 5, 1,20 € TTC) — rien à corriger. Point Time Travel
+  d'avant relevé dans `journal-migrations.md`.
+- `0064` à distance (08:45:22 UTC), relue **avant** le code : deux colonnes présentes, 0 ligne sans reprise.
+- `npm run deploy` ; aperçu `44592c02` **puis** apex : `sw.js` v3.34, `services.e6585a6d.js` et
+  `caisse.530cdac1.js` (manifeste) en JavaScript avec le code TTC et référencés par `/services` et `/caisse`,
+  `/api/health` 200, `/api/services` sans jeton → 401 (GET et POST).
+- Note : `curl` vers une URL externe est redirigé par le hook context-mode → contrôles faits en `fetch` (ctx_execute).
+
+**Prochaine action** : recette à l'écran par l'exploitant (`telnet@bbox.fr`, Ctrl+F5) — 04 : service à
+49,90 € TTC, prix par modèle, proposé à 49,90 € en caisse ; et 01-03 toujours à recetter. Puis ticket 06, 09 ou 10.
 
 ## Checkpoint 153 — Ticket 04 prix TTC : services et prix par modèle en TTC (2026-10-06)
 

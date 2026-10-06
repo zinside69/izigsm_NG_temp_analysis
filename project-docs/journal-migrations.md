@@ -117,6 +117,20 @@ Point de restauration relevé juste **avant** `0062` (2026-10-05 17:58 UTC, lect
 `produits.prix_vente_ttc` et les deux colonnes de `lignes_document` présentes, 0 fiche sans reprise,
 0 ligne hors mode `ht`. Code (`izigsm-v3.33`) déployé **après** : aperçu `40c0f24d` puis apex vérifiés.
 
+### 2026-10-06 — `0064` (chantier prix TTC, ticket 04 : services et prix par modèle)
+
+| # | Migration | Appliquée (UTC) | Effet | R | Inverse |
+|---|---|---|---|---|---|
+| 57 | `0064_services_prix_ttc` | **2026-10-06 08:45:22** | `services.prix_ttc REAL NOT NULL DEFAULT 0` et `service_modeles.prix_ttc_specifique REAL`, repris au centime au taux du service (relu après : 0 service à HT > 0 resté à 0 € TTC, 0 prix par modèle sans reprise) | | `ALTER TABLE service_modeles DROP COLUMN prix_ttc_specifique; ALTER TABLE services DROP COLUMN prix_ttc;` — **code revenu à `izigsm-v3.33` d'abord** (v3.34 lit et écrit ces colonnes : liste, fiche et création de service, recherche de la caisse, vitrine) ; détruit les prix TTC saisis depuis (le HT, toujours écrit, reste) |
+
+Point de restauration relevé juste **avant** `0064` (2026-10-06, lecture seule) :
+`000001fc-00000000-000050fc-50bb136c9865c32d2a74ce08156a65a8` — défait la migration **et** toute
+écriture postérieure. Relu avant : dernière migration `0063` ; requête des TTC non ronds
+(`scripts/sql/prix-ttc-non-ronds-services.sql`) : 1 seule ligne, le service de sonde « Sonde
+migration 0038 » (boutique 5, 1,00 € HT → 1,20 € TTC), rien à corriger. Relu après : dernière
+migration `0064`, deux colonnes présentes, 0 ligne sans reprise. Code (`izigsm-v3.34`) déployé
+**après** : aperçu `44592c02` puis apex vérifiés.
+
 ## Vérification d'état (lecture seule, à rejouer à tout moment)
 
 ```
