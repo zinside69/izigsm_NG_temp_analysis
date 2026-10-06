@@ -512,3 +512,10 @@ PY
 fermer_issue_escalade "$TASK_ID" resolue "$ETAT_DIR/escalades"
 
 log "Reponse enregistree : $TASK_ID -> $DECISION_H ($ORIGINE)"
+
+# (2026-10-06, O60) Une passe du planificateur sans --tache prend la premiere
+# tache eligible, pas forcement celle-ci (T-008 partie a la place de T-007, le
+# 30/09). On donne la commande qui lance celle-ci seule. Test TC7.
+if [[ "$CIBLE" == "READY" ]]; then
+  log "Pour lancer $TASK_ID seule : orchestrator/scheduler.sh --tache $TASK_ID"
+fi
