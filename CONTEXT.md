@@ -90,6 +90,20 @@ fois émise.
 
 **Avoir** — annulation partielle ou totale d'une facture. Ne modifie jamais la facture
 d'origine. `avoirs` + `lignes_avoir`.
+Toujours rattaché à **une** facture ; le cumul des avoirs d'une facture ne dépasse jamais son total
+TTC (tranché le 2026-10-06). Un avoir n'est pas un remboursement : il dit ce qui est dû, pas ce qui a
+été rendu.
+
+**Bon d'achat** — avoir que le client utilisera sur un achat futur, avec une date d'expiration
+(ex. acompte d'un ticket annulé, 60 jours). Type d'avoir, pas un document à part.
+_À éviter_ : avoir « remboursement » pour un bon (le type dit ce que le client reçoit).
+
+**Reste dû** — ce que le client doit encore sur une facture : total TTC − paiements − avoirs émis.
+Une facture au reste dû nul n'est plus « à encaisser » ni « en retard ».
+
+**Facture annulée** — facture entièrement couverte par ses avoirs. Son contenu reste figé ; seul son
+état change, et elle reste consultable et réimprimable.
+_À éviter_ : facture supprimée (une facture ne se supprime jamais).
 
 **Ligne de document** — poste d'un devis ou d'une facture. Table commune
 `lignes_document`.

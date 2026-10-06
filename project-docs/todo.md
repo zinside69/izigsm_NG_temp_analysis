@@ -18,6 +18,20 @@ Trouvé en recette : `AV-2026-00001` (annule `FAC-2026-00009`, 70,52 €) est en
   les avoirs** — un avoir sur une facture payée ne réduirait pas le chiffre exporté. Le CA des statistiques
   (factures payées) a la même lacune.
 
+**Cadré le 2026-10-06** (`decisions.md`, grilling Q1-Q19) : les deux premiers points forment le chantier
+« avoirs » (spec et tickets à suivre) ; l'export et le CA = chantier séparé, ci-dessous.
+
+## 🟡 2026-10-06 — Hors du chantier « avoirs » (décisions Q1, Q8, Q11, Q13)
+
+- [ ] **Chantier « export et CA nets des avoirs »** (Q1) : à cadrer avec l'expert-comptable — date de l'avoir
+  ou de la facture, CA net, place de l'avoir dans l'export Excel.
+- [ ] **Remboursement d'argent sur un avoir** (Q8) : aucun paiement négatif ni mode « remboursement » n'existe ;
+  la sortie d'espèces / CB et son effet sur la clôture = chantier caisse / NF525, codé avec l'exploitant.
+- [ ] **`montant_paye` non écrit par un encaissement en caisse** (Q13) : `caisseService.enregistrerEncaissement()`
+  passe la facture à `payee` sans mettre à jour `montant_paye`. Le reste dû contourne (facture `payee` → 0).
+- [ ] **Utiliser un bon d'achat en caisse** (Q11) : statut d'avoir `utilise` jamais écrit, aucune déduction
+  d'un bon en caisse ; expiration non contrôlée.
+
 ## 🟡 2026-10-06 — Mise en forme vue en recette du ticket 04 (production, v3.35)
 
 - [ ] **Boîte « Services suggérés » d'une prise en charge mal mise en forme** : case à cocher rendue en

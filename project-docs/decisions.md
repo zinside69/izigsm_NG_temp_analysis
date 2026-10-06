@@ -1,5 +1,44 @@
 # iziGSM — Décisions
 
+## 2026-10-06 — Chantier « avoirs » cadré (grilling Q1-Q19, exploitant)
+
+Point de départ : `AV-2026-00001` (recette du ticket 03 prix TTC) introuvable à l'écran ; aucune page ne
+lit les avoirs, `FAC-2026-00009` reste « à encaisser » malgré un avoir total. Termes au `CONTEXT.md`
+(Avoir, Bon d'achat, Reste dû, Facture annulée).
+
+- **Q1 — Périmètre** : ce chantier = **voir** les avoirs + **facture couverte**. Export comptable et CA nets
+  des avoirs = **chantier séparé**, à cadrer avec l'expert-comptable.
+- **Q2, Q3, Q4, Q16 — Écran** : onglet **« Avoirs »** dans Factures (numéro, date, client, facture d'origine
+  en lien, type, motif, TTC, expiration d'un bon d'achat ; recherche numéro/client, filtre par type, total du
+  mois ; ni export ni statistiques). Lien facture ↔ avoir affiché **dans les deux sens**. Consultation et
+  impression : **tous les rôles** de la boutique ; création : manager (et admin de boutique), inchangé.
+- **Q5, Q13, Q17 — Reste dû** = TTC − paiements − avoirs émis ; facture `payee` → reste dû **0** (la caisse
+  pose `payee` sans écrire `montant_paye`, défaut noté hors chantier). **Une seule fonction**, lue par la page
+  Factures **et** par l'encart « impayés » du tableau de bord (qui lit aujourd'hui le statut `emise`, jamais écrit).
+- **Q5, Q12, Q15 — `annulee`** : une facture dont le cumul des avoirs atteint le TTC passe **`annulee`**, payée
+  ou non (le paiement reste lisible dans son historique). Écrit par `createAvoir()` ; **reprise par migration**
+  pour les factures déjà couvertes (en production : `FAC-2026-00009`). Seule la colonne d'état change, comme
+  pour un paiement : le contenu de la facture émise reste figé. Pas d'ADR : réversible sans perte.
+- **Q6 — Plafond** : le cumul des avoirs d'une facture ne dépasse **jamais** son TTC ; refus **avant
+  `nextNumero()`** (aucun numéro brûlé). Aujourd'hui un avoir de 1 000 € sur une facture de 70 € passe —
+  « ce n'est pas logique » (exploitant).
+- **Q7 — Saisie** : la fenêtre d'avoir est **préremplie** des lignes de la facture, modifiables et supprimables
+  (avoir total ou partiel, un seul geste).
+- **Q9, Q14 — Clôture de caisse** : `cloturerJournee()` additionne aujourd'hui les avoirs **en positif**.
+  Ventes inchangées + **ligne séparée « Avoirs émis »** + net. Aucune clôture passée à recalculer (seule la
+  n° 1 du 03/10, antérieure à tout avoir).
+- **Q10, Q18 — Impression d'un avoir** : gabarit de la facture, titre AVOIR + numéro, « relatif à la facture
+  FAC-… du … », motif, type, expiration, identités **figées de la facture d'origine** (snapshots), montants en
+  positif, TVA par taux, une page A4. `lignes_avoir` + `prix_unitaire_ttc`, `mode_calcul` (migration) : un
+  avoir saisi en TTC s'imprime « P.U. TTC », un ancien avoir à l'identique.
+- **Q11 — Acompte d'un ticket annulé** : l'avoir créé par `tickets.js` est un **`bon_achat`** (expiration
+  60 jours affichée), plus un « remboursement ».
+- **Q19 — Qui code** : tickets NF525 (plafond + `annulee` + reprise ; clôture) **codés avec l'exploitant**,
+  jamais par le socle ; tickets d'écran (onglet, préremplissage, impression, tableau de bord) confiables au
+  socle. Migration **`0068`** réservée au chantier.
+- **Hors chantier** (todo) : remboursement d'argent sur un avoir (Q8) ; `montant_paye` non écrit par la caisse
+  (Q13) ; utilisation d'un bon d'achat en caisse (Q11) ; export et CA nets des avoirs (Q1).
+
 ## 2026-10-06 — Q20 au formulaire : un TTC renvoyé à l'identique n'est pas un nouveau prix
 
 **Décision de l'exploitant** (revue du ticket 04) : un formulaire renvoie toujours le TTC affiché. Quand le
