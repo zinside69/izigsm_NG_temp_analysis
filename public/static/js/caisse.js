@@ -220,6 +220,10 @@
         setEl('total-ht-jour',  eur(d.totaux.total_ht))
         setEl('total-tva-jour', eur(d.totaux.total_tva))
         setEl('total-ttc-jour', eur(d.totaux.total_ttc))
+        // Avoirs du jour, à part des ventes (ticket 02 chantier avoirs) ; zone masquée sans avoir
+        const avoirsDuJourTtc = d.totaux_avoirs?.total_ttc || 0
+        document.getElementById('zone-avoirs-jour')?.classList.toggle('hidden', !avoirsDuJourTtc)
+        setEl('total-avoirs-jour', avoirsDuJourTtc ? '− ' + eur(avoirsDuJourTtc) : eur(0))
       }
 
       // Badge clôture + bouton
@@ -261,6 +265,31 @@
 
   // ── Clôtures ────────────────────────────────────────────────────────────────
 
+  /**
+   * Avoirs émis d'une clôture, en texte visible : TTC (en négatif) et, dessous, HT et TVA
+   * (ticket 02 chantier avoirs, story 46 — le détail ne doit pas se cacher dans une bulle au survol).
+   */
+  function avoirsDeLaCloture(cloture) {
+    if (!cloture.avoirs_ttc) return eur(0)
+    return `− ${eur(cloture.avoirs_ttc)}
+      <div class="text-xs text-gray-400" data-champ="avoirs-detail">HT ${eur(cloture.avoirs_ht)} · TVA ${eur(cloture.avoirs_tva)}</div>`
+  }
+
+  /** Une ligne de l'historique des clôtures : ventes, avoirs émis, net du jour (calculé par le serveur). */
+  function ligneDeCloture(cloture) {
+    return `
+        <div class="grid grid-cols-8 gap-2 px-4 py-2.5 border-b border-gray-50 text-sm hover:bg-gray-50" data-cloture="${echapperHtml(cloture.date_cloture)}">
+          <span class="font-medium text-gray-800">${echapperHtml(cloture.date_cloture)}</span>
+          <span class="text-center text-gray-600">${cloture.nb_transactions}</span>
+          <span class="text-right text-gray-600 tabular-nums">${eur(cloture.total_ht)}</span>
+          <span class="text-right text-orange-600 tabular-nums">${eur(cloture.total_tva)}</span>
+          <span class="text-right font-semibold text-gray-800 tabular-nums" data-champ="ventes-ttc">${eur(cloture.total_ttc)}</span>
+          <span class="text-right text-red-600 tabular-nums" data-champ="avoirs-ttc">${avoirsDeLaCloture(cloture)}</span>
+          <span class="text-right font-semibold text-gray-900 tabular-nums" data-champ="net-ttc">${eur(cloture.net_ttc)}</span>
+          <span class="text-center text-gray-500 text-xs truncate">${echapperHtml(cloture.caissier_nom || '—')}</span>
+        </div>`
+  }
+
   async function refreshClotures() {
     try {
       const data = (await apiGet('/api/caisse/clotures')).data
@@ -274,16 +303,18 @@
         return
       }
 
-      list.innerHTML = data.data.map(c => `
-        <div class="grid grid-cols-6 gap-2 px-4 py-2.5 border-b border-gray-50 text-sm hover:bg-gray-50">
-          <span class="font-medium text-gray-800">${c.date_cloture}</span>
-          <span class="text-center text-gray-600">${c.nb_transactions}</span>
-          <span class="text-right text-gray-600 tabular-nums">${eur(c.total_ht)}</span>
-          <span class="text-right text-orange-600 tabular-nums">${eur(c.total_tva)}</span>
-          <span class="text-right font-semibold text-gray-800 tabular-nums">${eur(c.total_ttc)}</span>
-          <span class="text-center text-gray-500 text-xs truncate">${c.caissier_nom || '—'}</span>
-        </div>
-      `).join('')
+      // AVANT (2026-10-08, ticket 02 chantier avoirs — ventes, avoirs émis (HT / TVA / TTC) et net du jour) :
+      // list.innerHTML = data.data.map(c => `
+      //   <div class="grid grid-cols-6 gap-2 px-4 py-2.5 border-b border-gray-50 text-sm hover:bg-gray-50">
+      //     <span class="font-medium text-gray-800">${c.date_cloture}</span>
+      //     <span class="text-center text-gray-600">${c.nb_transactions}</span>
+      //     <span class="text-right text-gray-600 tabular-nums">${eur(c.total_ht)}</span>
+      //     <span class="text-right text-orange-600 tabular-nums">${eur(c.total_tva)}</span>
+      //     <span class="text-right font-semibold text-gray-800 tabular-nums">${eur(c.total_ttc)}</span>
+      //     <span class="text-center text-gray-500 text-xs truncate">${c.caissier_nom || '—'}</span>
+      //   </div>
+      // `).join('')
+      list.innerHTML = data.data.map(ligneDeCloture).join('')
     } catch (e) {
       console.error('Clôtures:', e)
     }
@@ -298,7 +329,11 @@
     try {
       const data = (await apiPost('/api/caisse/cloture', date ? { date } : {})).data
       if (data?.success) {
-        toast(`Journée ${data.data.date_cloture} clôturée — ${data.data.nb_transactions} transaction(s)`, 'success')
+        // AVANT (2026-10-08, ticket 02 chantier avoirs — le message dit aussi ventes, avoirs émis et net) :
+        // toast(`Journée ${data.data.date_cloture} clôturée — ${data.data.nb_transactions} transaction(s)`, 'success')
+        const cloture = data.data
+        const partieAvoirs = cloture.avoirs_ttc ? ` − avoirs ${eur(cloture.avoirs_ttc)}` : ''
+        toast(`Journée ${cloture.date_cloture} clôturée — ventes ${eur(cloture.total_ttc)}${partieAvoirs} = net ${eur(cloture.net_ttc)}`, 'success')
         refreshKpis()
         refreshJournal()
       } else {

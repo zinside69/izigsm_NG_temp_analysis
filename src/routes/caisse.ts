@@ -339,7 +339,10 @@ caisse.get('/caisse/clotures', async (c) => {
  * Délègue à `cloturerJournee()` — génère le hash de clôture SHA-256
  * enchaîné avec la dernière transaction du journal.
  *
- * @returns 201 `{ success: true, data: { hash_cloture, nb_transactions, total_ttc } }`
+ * AVANT (2026-10-08, ticket 02 chantier avoirs — ventes, avoirs émis et net rendus) :
+ *   @returns 201 `{ success: true, data: { hash_cloture, nb_transactions, total_ttc } }`
+ * @returns 201 `{ success: true, data: { hash_cloture, nb_transactions, total_ht, total_tva, total_ttc (ventes seules),
+ *          avoirs_ht, avoirs_tva, avoirs_ttc, net_ttc (ventes − avoirs) } }`
  * @returns 400 si journée déjà clôturée, format date invalide, ou aucune transaction
  */
 // AVANT (2026-10-01) : requireRole('admin', 'gerant') — le rôle `gerant` n'a jamais existé (table

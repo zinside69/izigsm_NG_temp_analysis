@@ -1,5 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 P1 2026-10-08 — Une facture émise puis encaissée en caisse compte deux fois (revue du ticket 02 avoirs)
+
+- [ ] **Double comptage au journal NF525** : l'émission écrit une écriture `facture`, l'encaissement en caisse
+  (`enregistrerEncaissement()`) écrit en plus une écriture `encaissement` du même `total_ttc`. La clôture, le CA du
+  jour et du mois et les totaux du journal comptent les deux (`TYPES_COMPTES_COMME_VENTES`, `caisseService.ts`).
+  Défaut **antérieur** au chantier avoirs, laissé tel quel : le corriger change le sens des chiffres déjà
+  clôturés. À cadrer avec l'exploitant et l'expert-comptable (un encaissement est un flux de trésorerie, pas un
+  chiffre d'affaires) — **jamais au socle**. Mesurer d'abord en production combien de jours clôturés sont touchés.
+
 ## 🟠 2026-10-08 — Chantier « journal technique de production » (décisions du 2026-10-08)
 
 - [ ] Grilling puis spec : requêtes + erreurs détaillées ; journaux Cloudflare + table D1 des erreurs lisible en

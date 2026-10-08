@@ -142,6 +142,11 @@
         <div id="total-ttc-jour" class="font-bold text-blue-600 text-base">0,00 €</div>
       </div>
     </div>
+    <!-- Avoirs émis du jour, hors des totaux des ventes ci-dessus (ticket 02 chantier avoirs) -->
+    <div id="zone-avoirs-jour" class="px-4 py-2 bg-red-50 border-b border-gray-100 text-sm text-right hidden">
+      <span class="text-gray-500">Avoirs émis du jour (hors ventes) :</span>
+      <span id="total-avoirs-jour" class="font-bold text-red-600 tabular-nums">0,00 €</span>
+    </div>
 
     <!-- En-tête colonnes journal -->
     <div class="journal-row bg-gray-50 font-medium text-gray-600 text-xs uppercase tracking-wide">
@@ -168,12 +173,24 @@
       <span class="text-xs text-gray-400">30 dernières</span>
     </div>
     <!-- En-tête colonnes -->
+    <template data-avant="2026-10-08, ticket 02 chantier avoirs — ventes et avoirs émis séparés, net du jour">
     <div class="grid grid-cols-6 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500 uppercase tracking-wide">
       <span>Date</span>
       <span class="text-center">Transactions</span>
       <span class="text-right">Total HT</span>
       <span class="text-right">TVA</span>
       <span class="text-right">Total TTC</span>
+      <span class="text-center">Caissier</span>
+    </div>
+    </template>
+    <div class="grid grid-cols-8 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-medium text-gray-500 uppercase tracking-wide">
+      <span>Date</span>
+      <span class="text-center">Transactions</span>
+      <span class="text-right">Ventes HT</span>
+      <span class="text-right">TVA</span>
+      <span class="text-right">Ventes TTC</span>
+      <span class="text-right">Avoirs émis</span>
+      <span class="text-right">Net TTC</span>
       <span class="text-center">Caissier</span>
     </div>
     <div id="clotures-list">

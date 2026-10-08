@@ -267,8 +267,13 @@ describe('getKpisCaisse', () => {
   it('retourne les KPIs du jour correctement', async () => {
     const db = createMockDatabase()
     // SQL réel : COUNT + COALESCE SUM avec paramètre dynamique ? pour la date du jour
+    // AVANT (2026-10-08, ticket 02 chantier avoirs — le CA du jour ne compte que les ventes) :
+    // db.__setResponseFn(
+    //   'SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc, COALESCE(SUM(montant_ht),0) as ht FROM journal_nf525 WHERE boutique_id = ? AND DATE(date_transaction) = ?',
+    //   () => ({ nb: 5, ttc: 360.0, ht: 300.0 })
+    // )
     db.__setResponseFn(
-      'SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc, COALESCE(SUM(montant_ht),0) as ht FROM journal_nf525 WHERE boutique_id = ? AND DATE(date_transaction) = ?',
+      "SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc, COALESCE(SUM(montant_ht),0) as ht FROM journal_nf525 WHERE boutique_id = ? AND DATE(date_transaction) = ? -- CA du jour = ventes seules, comme la clôture (ticket 02 chantier avoirs) : un avoir n'est pas un CA AND type_transaction IN ('vente', 'encaissement', 'facture')",
       () => ({ nb: 5, ttc: 360.0, ht: 300.0 })
     )
 
@@ -595,9 +600,13 @@ describe('getCaisseJournal()', () => {
   })
 
   it('agrège les totaux et signale une journée non clôturée', async () => {
+    // AVANT (2026-10-08, ticket 02 chantier avoirs — une écriture réelle porte toujours son type, NOT NULL ;
+    // les totaux du jour ne comptent que les ventes) :
+    //   { montant_ht: 100, montant_tva: 20, montant_ttc: 120 },
+    //   { montant_ht: 50,  montant_tva: 10, montant_ttc: 60 },
     db.__setListResponse(SQL_TRANSACTIONS, [
-      { montant_ht: 100, montant_tva: 20, montant_ttc: 120 },
-      { montant_ht: 50,  montant_tva: 10, montant_ttc: 60 },
+      { type_transaction: 'vente', montant_ht: 100, montant_tva: 20, montant_ttc: 120 },
+      { type_transaction: 'vente', montant_ht: 50,  montant_tva: 10, montant_ttc: 60 },
     ])
 
     const result = await getCaisseJournal(db, 1, '2026-07-01')
@@ -630,12 +639,22 @@ describe('cloturerJournee()', () => {
       AND  est_cloture = 0
     ORDER  BY id ASC
   `)
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — avoirs du jour ajoutés en fin de liste, migration 0068) :
+  // const SQL_INSERT_CLOTURE = n(`
+  //   INSERT INTO clotures_journalieres
+  //     (boutique_id, date_cloture, nb_transactions,
+  //      total_ht, total_tva, total_ttc,
+  //      hash_cloture, hash_precedent, user_id)
+  //   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //   RETURNING *
+  // `)
   const SQL_INSERT_CLOTURE = n(`
     INSERT INTO clotures_journalieres
       (boutique_id, date_cloture, nb_transactions,
        total_ht, total_tva, total_ttc,
-       hash_cloture, hash_precedent, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       hash_cloture, hash_precedent, user_id,
+       avoirs_ht, avoirs_tva, avoirs_ttc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING *
   `)
 
@@ -654,9 +673,12 @@ describe('cloturerJournee()', () => {
   })
 
   it('calcule les totaux et insère la clôture avec un hash de 64 caractères', async () => {
+    // AVANT (2026-10-08, ticket 02 chantier avoirs — une écriture réelle porte toujours son type, NOT NULL) :
+    //   { montant_ht: 100, montant_tva: 20, montant_ttc: 120, hash_courant: 'a'.repeat(64) },
+    //   { montant_ht: 50,  montant_tva: 10, montant_ttc: 60,  hash_courant: 'b'.repeat(64) },
     db.__setListResponse(SQL_TRANSACTIONS_NON_CLOTUREES, [
-      { montant_ht: 100, montant_tva: 20, montant_ttc: 120, hash_courant: 'a'.repeat(64) },
-      { montant_ht: 50,  montant_tva: 10, montant_ttc: 60,  hash_courant: 'b'.repeat(64) },
+      { type_transaction: 'vente', montant_ht: 100, montant_tva: 20, montant_ttc: 120, hash_courant: 'a'.repeat(64) },
+      { type_transaction: 'vente', montant_ht: 50,  montant_tva: 10, montant_ttc: 60,  hash_courant: 'b'.repeat(64) },
     ])
     db.__setResponseFn(SQL_INSERT_CLOTURE, (params: any[]) => ({
       id: 1, boutique_id: params[0], date_cloture: params[1],

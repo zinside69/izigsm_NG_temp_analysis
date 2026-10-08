@@ -34,7 +34,8 @@
 // AVANT (2026-10-06, ticket 04 prix TTC — services et prix par modèle en TTC : services.html, services.js, caisse.js) : const CACHE_VERSION  = 'izigsm-v3.33'
 // AVANT (2026-10-06, services suggérés d'une prise en charge affichés — tickets.js) : const CACHE_VERSION  = 'izigsm-v3.34'
 // AVANT (2026-10-08, ticket 01 chantier avoirs — bouton d'avoir figé pendant l'envoi, annulation d'un ticket à acompte déjà couvert : factures.js, tickets.js) : const CACHE_VERSION  = 'izigsm-v3.35'
-const CACHE_VERSION  = 'izigsm-v3.36'
+// AVANT (2026-10-08, ticket 02 chantier avoirs — historique des clôtures : ventes, avoirs émis, net : caisse.html, caisse.js) : const CACHE_VERSION  = 'izigsm-v3.36'
+const CACHE_VERSION  = 'izigsm-v3.37'
 const CACHE_STATIC   = `${CACHE_VERSION}-static`
 const CACHE_PAGES    = `${CACHE_VERSION}-pages`
 const CACHE_API      = `${CACHE_VERSION}-api`

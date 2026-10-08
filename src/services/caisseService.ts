@@ -307,6 +307,12 @@ export interface ClotureSummary {
   hash_precedent:   string
   user_id:          number
   created_at:       string
+  /** Avoirs émis le jour de la clôture, hors du total des ventes (migration 0068, ticket 02 chantier avoirs). */
+  avoirs_ht:        number
+  avoirs_tva:       number
+  avoirs_ttc:       number
+  /** Net du jour = ventes − avoirs émis (calculé par `netDuJour()`, jamais stocké). */
+  net_ttc?:         number
 }
 
 // ─── Hash NF525 (Web Crypto — compatible Cloudflare Workers) ──────────────────
@@ -915,6 +921,8 @@ export async function getCaisseJournal(
     total_tva:       number
     total_ttc:       number
   }
+  /** Avoirs émis le jour, hors des totaux des ventes (ticket 02 chantier avoirs). */
+  totaux_avoirs: { total_ht: number; total_tva: number; total_ttc: number }
   est_cloture:  boolean
   cloture?:     ClotureSummary
 }> {
@@ -937,7 +945,10 @@ export async function getCaisseJournal(
     `, [boutiqueId, targetDate]),
   ])
 
-  const totaux = transactions.reduce(
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — les totaux du jour ne comptent que les ventes, comme la
+  // clôture ; les avoirs du jour sont rendus à part dans `totaux_avoirs`) :
+  // const totaux = transactions.reduce(
+  const totaux = transactions.filter(estUneVente).reduce(
     (acc, t) => ({
       nb_transactions: acc.nb_transactions + 1,
       total_ht:        Math.round((acc.total_ht  + t.montant_ht)  * 100) / 100,
@@ -951,12 +962,50 @@ export async function getCaisseJournal(
     date:         targetDate,
     transactions,
     totaux,
+    totaux_avoirs: totauxDesEcritures(transactions.filter(estUnAvoir)),
     est_cloture:  !!cloture,
     cloture:      cloture ?? undefined,
   }
 }
 
 // ─── Clôture journalière NF525 ────────────────────────────────────────────────
+
+/**
+ * Types d'écritures du journal NF525 comptées comme ventes dans la clôture, le CA du jour et du mois, et les
+ * totaux du journal (ticket 02 du chantier avoirs, revue : liste nommée plutôt que « tout sauf un avoir », pour
+ * qu'un type nouveau ne tombe pas dans les ventes sans que personne le décide).
+ * ⚠ Une facture émise PUIS encaissée en caisse écrit `facture` et `encaissement` : elle compte deux fois.
+ * Défaut antérieur, laissé tel quel en attendant la décision de l'exploitant (`todo.md` 🔴 P1 2026-10-08).
+ */
+const TYPES_COMPTES_COMME_VENTES = ['vente', 'encaissement', 'facture']
+
+/** Une écriture du journal NF525 comptée comme vente. */
+function estUneVente(ecriture: JournalEntry): boolean {
+  return TYPES_COMPTES_COMME_VENTES.includes(ecriture.type_transaction)
+}
+
+/** Une écriture du journal NF525 qui enregistre un avoir. */
+function estUnAvoir(ecriture: JournalEntry): boolean {
+  return ecriture.type_transaction === 'avoir'
+}
+
+/** Condition SQL « écriture comptée comme vente », pour les sommes faites en base (CA du jour, du mois). */
+function sqlEstUneVente(): string {
+  const typesEntreGuillemets = TYPES_COMPTES_COMME_VENTES.map(type => `'${type}'`).join(', ')
+  return `type_transaction IN (${typesEntreGuillemets})`
+}
+
+/** Totaux HT, TVA, TTC d'une liste d'écritures du journal, au centime. */
+function totauxDesEcritures(ecritures: JournalEntry[]): { total_ht: number; total_tva: number; total_ttc: number } {
+  return ecritures.reduce(
+    (acc, ecriture) => ({
+      total_ht:  Math.round((acc.total_ht  + ecriture.montant_ht)  * 100) / 100,
+      total_tva: Math.round((acc.total_tva + ecriture.montant_tva) * 100) / 100,
+      total_ttc: Math.round((acc.total_ttc + ecriture.montant_ttc) * 100) / 100,
+    }),
+    { total_ht: 0, total_tva: 0, total_ttc: 0 },
+  )
+}
 
 /**
  * Effectue la clôture journalière NF525 (opération irréversible).
@@ -1016,21 +1065,27 @@ export async function cloturerJournee(
     throw new Error(`Aucune transaction à clôturer pour le ${targetDate}.`)
   }
 
-  // Calcul totaux
-  const totaux = transactions.reduce(
-    (acc, t) => ({
-      total_ht:  Math.round((acc.total_ht  + t.montant_ht)  * 100) / 100,
-      total_tva: Math.round((acc.total_tva + t.montant_tva) * 100) / 100,
-      total_ttc: Math.round((acc.total_ttc + t.montant_ttc) * 100) / 100,
-    }),
-    { total_ht: 0, total_tva: 0, total_ttc: 0 }
-  )
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — les avoirs s'additionnaient aux ventes, en positif ;
+  // ventes et avoirs émis sont désormais totalisés à part, décisions Q9 et Q14) :
+  // // Calcul totaux
+  // const totaux = transactions.reduce(
+  //   (acc, t) => ({
+  //     total_ht:  Math.round((acc.total_ht  + t.montant_ht)  * 100) / 100,
+  //     total_tva: Math.round((acc.total_tva + t.montant_tva) * 100) / 100,
+  //     total_ttc: Math.round((acc.total_ttc + t.montant_ttc) * 100) / 100,
+  //   }),
+  //   { total_ht: 0, total_tva: 0, total_ttc: 0 }
+  // )
+  const totauxDesVentes   = totauxDesEcritures(transactions.filter(estUneVente))
+  const totauxDesAvoirs   = totauxDesEcritures(transactions.filter(estUnAvoir))
 
   // Hash de clôture : SHA-256 sur la concaténation de tous les hash_courant du jour
   // + hash de la clôture précédente (chaînage inter-journées)
   const hashPrecedentCloture = await getHashPrecedentCloture(db, boutiqueId)
   const tousLesHash = transactions.map(t => t.hash_courant).join('|')
-  const donneesHashCloture = `cloture|${targetDate}|${transactions.length}|${Math.round(totaux.total_ttc * 100)}|${tousLesHash}|${hashPrecedentCloture}`
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — même format ; le total intégré devient celui des ventes seules) :
+  // const donneesHashCloture = `cloture|${targetDate}|${transactions.length}|${Math.round(totaux.total_ttc * 100)}|${tousLesHash}|${hashPrecedentCloture}`
+  const donneesHashCloture = `cloture|${targetDate}|${transactions.length}|${Math.round(totauxDesVentes.total_ttc * 100)}|${tousLesHash}|${hashPrecedentCloture}`
   const hashCloture = await sha256(donneesHashCloture)
 
   // AVANT (2026-10-03 — deux écritures séparées : un échec de la seconde laissait les ventes
@@ -1075,24 +1130,50 @@ export async function cloturerJournee(
         AND  est_cloture = 0`,
     params: [targetDate, boutiqueId, targetDate],
   }
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — les avoirs du jour enregistrés à part, colonnes posées
+  // par la migration 0068, ajoutées en fin de liste) :
+  // const enregistrementDeLaCloture = {
+  //   sql: `
+  //     INSERT INTO clotures_journalieres
+  //       (boutique_id, date_cloture, nb_transactions,
+  //        total_ht, total_tva, total_ttc,
+  //        hash_cloture, hash_precedent, user_id)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //     RETURNING *`,
+  //   params: [
+  //     boutiqueId,
+  //     targetDate,
+  //     transactions.length,
+  //     totaux.total_ht,
+  //     totaux.total_tva,
+  //     totaux.total_ttc,
+  //     hashCloture,
+  //     hashPrecedentCloture,
+  //     userId,
+  //   ],
+  // }
   const enregistrementDeLaCloture = {
     sql: `
       INSERT INTO clotures_journalieres
         (boutique_id, date_cloture, nb_transactions,
          total_ht, total_tva, total_ttc,
-         hash_cloture, hash_precedent, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         hash_cloture, hash_precedent, user_id,
+         avoirs_ht, avoirs_tva, avoirs_ttc)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING *`,
     params: [
       boutiqueId,
       targetDate,
       transactions.length,
-      totaux.total_ht,
-      totaux.total_tva,
-      totaux.total_ttc,
+      totauxDesVentes.total_ht,
+      totauxDesVentes.total_tva,
+      totauxDesVentes.total_ttc,
       hashCloture,
       hashPrecedentCloture,
       userId,
+      totauxDesAvoirs.total_ht,
+      totauxDesAvoirs.total_tva,
+      totauxDesAvoirs.total_ttc,
     ],
   }
 
@@ -1103,7 +1184,13 @@ export async function cloturerJournee(
   const cloture = lignesDeLaCloture[0] as ClotureSummary | undefined
 
   if (!cloture) throw new Error('Échec enregistrement clôture NF525.')
-  return cloture
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — le net du jour rendu avec la clôture) : return cloture
+  return { ...cloture, net_ttc: netDuJour(cloture) }
+}
+
+/** Net du jour d'une clôture = ventes − avoirs émis, en centimes puis en euros (seule définition du net). */
+function netDuJour(cloture: { total_ttc: number; avoirs_ttc: number }): number {
+  return (enCentimes(cloture.total_ttc) - enCentimes(cloture.avoirs_ttc ?? 0)) / 100
 }
 
 // ─── Vérification intégrité chaîne NF525 ─────────────────────────────────────
@@ -1215,6 +1302,8 @@ export async function getKpisCaisse(
       SELECT COUNT(*) as nb, COALESCE(SUM(montant_ttc),0) as ttc, COALESCE(SUM(montant_ht),0) as ht
       FROM journal_nf525
       WHERE boutique_id = ? AND DATE(date_transaction) = ?
+        -- CA du jour = ventes seules, comme la clôture (ticket 02 chantier avoirs) : un avoir n'est pas un CA
+        AND ${sqlEstUneVente()}
     `, [boutiqueId, today]),
 
     db.get<{ nb: number; ttc: number }>(`
@@ -1222,6 +1311,8 @@ export async function getKpisCaisse(
       FROM journal_nf525
       WHERE boutique_id = ?
         AND strftime('%Y-%m', date_transaction) = ?
+        -- CA du mois = ventes seules, comme la clôture (ticket 02 chantier avoirs)
+        AND ${sqlEstUneVente()}
     `, [boutiqueId, mois]),
 
     db.get<{ nb: number }>(`
@@ -1275,7 +1366,9 @@ export async function listClotures(
   boutiqueId: number,
   limit       = 30
 ): Promise<ClotureSummary[]> {
-  return db.all<any>(`
+  // AVANT (2026-10-08, ticket 02 chantier avoirs — chaque clôture rendue avec son net du jour, calculé ici) :
+  // return db.all<any>(`
+  const clotures = await db.all<any>(`
     SELECT cj.*, u.prenom || ' ' || u.nom AS caissier_nom
     FROM   clotures_journalieres cj
     LEFT   JOIN users u ON u.id = cj.user_id
@@ -1283,4 +1376,5 @@ export async function listClotures(
     ORDER  BY cj.id DESC
     LIMIT  ?
   `, [boutiqueId, limit])
+  return clotures.map(cloture => ({ ...cloture, net_ttc: netDuJour(cloture) }))
 }
