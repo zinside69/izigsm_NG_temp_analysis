@@ -1,4 +1,24 @@
-# iziGSM — État courant (MàJ : 2026-10-08, checkpoint 157 — ticket 01 avoirs en production, v3.36 / 0068)
+# iziGSM — État courant (MàJ : 2026-10-08, checkpoint 158 — ticket 02 avoirs en production, v3.37 / 0068)
+<!-- AVANT (2026-10-08, checkpoint 158 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-08, checkpoint 157 — ticket 01 avoirs en production, v3.36 / 0068) -->
+
+## Checkpoint 158 — Ticket 02 avoirs en production ; journal technique cadré ; Mobilax bloqué (2026-10-08)
+
+**Production : `izigsm-v3.37`, dernière migration `0068`. Dépôt et production alignés** (`7030a35` + ce checkpoint).
+
+- **Ticket 02 `done`** (`7030a35`) : clôture = ventes seules (`TYPES_COMPTES_COMME_VENTES`), avoirs du jour à part
+  (`avoirs_*`), net par `netDuJour()` ; CA du jour / du mois et totaux du journal alignés (revue) ; écran :
+  historique Ventes / Avoirs (HT et TVA visibles) / Net, bandeau des avoirs du jour, message de clôture. Sans migration.
+  Déployé par l'exploitant (aperçu `8b2aa7a6`), relu aperçu puis apex, preuve dans Chrome (clôture n° 1 :
+  370,80 / 0,00 / 370,80). ⚠ Après un déploiement, le service worker garde l'ancien JS tant que le nouveau attend :
+  Ctrl+F5 ou « Recharger » du bandeau.
+- **Journal technique de production** cadré (`d3eed4a`, `decisions.md`) : requêtes + erreurs détaillées ;
+  journaux Cloudflare + table D1 des erreurs ; alerte ntfy + email. Grilling et spec à faire.
+- **Double comptage** facture + encaissement au journal NF525 : défaut antérieur, 🔴 P1 au `todo.md`, à cadrer.
+- **Mobilax** : appels authentifiés bloqués (502 après 60 s en local, sans réponse en production) — 🔴 `todo.md`.
+- Suite E2E : arrêtée une fois par manque de mémoire (2,2 Go libres) ; relancée à 6,5 Go : 407 verts.
+
+**Prochaine action** : retester Mobilax ; tickets 03 → 04 → 05 → 06 et 07 du chantier avoirs (écrans, confiables au
+socle après relecture) ; grilling du journal technique.
 <!-- AVANT (2026-10-08, checkpoint 157 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 156 — chantier avoirs cadré, spec à écrire) -->
 
 ## Checkpoint 157 — Chantier avoirs : spec, tickets, ticket 01 en production (2026-10-08)

@@ -1,5 +1,14 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🔴 2026-10-08 — Mobilax bloque les appels authentifiés (production comprise)
+
+- [ ] Mesuré le 2026-10-08 : l'API Mobilax (`apiv2.mobilax.pro/v1.0/external`, préproduction) répond en < 200 ms
+  **sans** clé (401), mais toute recherche **authentifiée** reste sans réponse : le serveur local rend 502 après
+  60 s, et en production (`/api/mobilax/produits` depuis l'écran Stock) la requête n'avait pas abouti après 55 s.
+  8 E2E Mobilax rouges pour cette seule raison. `MOBILAX_API_BASE` de production pointe la même préproduction :
+  recherche et import Mobilax indisponibles pour les boutiques. Pistes : clé de préprod tournée ou révoquée
+  (elle avait circulé en clair, `todo.md`), `/auth` en panne chez Mobilax, quota. Retester, puis contacter Mobilax.
+
 ## 🔴 P1 2026-10-08 — Une facture émise puis encaissée en caisse compte deux fois (revue du ticket 02 avoirs)
 
 - [ ] **Double comptage au journal NF525** : l'émission écrit une écriture `facture`, l'encaissement en caisse

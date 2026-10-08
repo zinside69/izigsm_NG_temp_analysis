@@ -1269,6 +1269,13 @@ npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
 
+**État au 2026-10-08 (checkpoint 158) : DÉPLOYÉ — production en `izigsm-v3.37`, migration `0068` (aucune
+nouvelle).** Ticket 02 du chantier avoirs : clôture, CA du jour / du mois et totaux du journal = ventes seules,
+avoirs émis à part, net du jour. Déployé par l'exploitant (aperçu `8b2aa7a6`) ; aperçu **puis** apex relus :
+`sw.js` v3.37, `caisse.0277389c.js` en JavaScript avec le code du ticket, `/caisse` porte `zone-avoirs-jour`,
+routes de clôture sans jeton → 401. Preuve dans Chrome : historique « Ventes 370,80 € · Avoirs 0,00 € · Net
+370,80 € » pour la clôture n° 1. **Dépôt et production alignés.**
+
 **État au 2026-10-08 (checkpoint 157) : DÉPLOYÉ — production en `izigsm-v3.36`, migration `0068`.** Ticket 01
 du chantier avoirs (plafond, facture couverte `annulee`, lignes d'avoir en TTC). E2E complets verts (3 échecs de
 charge rejoués seuls verts) ; `0068` appliquée à distance à 09:42:21 UTC et relue (`FAC-2026-00009` `annulee`,
