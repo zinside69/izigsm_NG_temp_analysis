@@ -1,5 +1,10 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟠 2026-10-08 — Chantier « journal technique de production » (décisions du 2026-10-08)
+
+- [ ] Grilling puis spec : requêtes + erreurs détaillées ; journaux Cloudflare + table D1 des erreurs lisible en
+  console plateforme ; alerte ntfy + email (une par type d'erreur et par heure). `decisions.md` § 2026-10-08.
+
 ## 🟡 2026-10-08 — Suites du ticket 01 avoirs (revue)
 
 - [ ] **Deux avoirs simultanés sur la même facture** peuvent passer le plafond (lecture de la somme puis

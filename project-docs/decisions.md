@@ -1,5 +1,24 @@
 # iziGSM — Décisions
 
+## 2026-10-08 — Journal technique de production (« panic full ») : chantier cadré en 3 décisions
+
+Demande de l'exploitant : un journal qui trace le fonctionnement de repairdesk.fr pour déboguer en production.
+Constat (relevé dans le code ce jour-là) : **aucun** journal technique — `wrangler.jsonc` n'active pas les
+journaux Cloudflare (`observability`), `index.tsx` n'a pas d'`app.onError` (une erreur 500 ne laisse aucune trace
+exploitable), 20 `console.error` perdus hors `wrangler tail`. Les journaux existants sont métier (`audit_logs`,
+`journal_actions_plateforme` — admin plateforme seul —, `email_logs`, `journal_nf525` légal, synchro catalogue).
+
+- **Périmètre** : chaque requête API (date, boutique, utilisateur, méthode, route, statut, durée) **et** chaque
+  erreur détaillée (message, pile d'appel, corps de la requête **expurgé** — mots de passe, clés, secrets).
+  Écarté : erreurs seules (on ne voit pas ce qui précède) ; corps et réponses de tout (volume, RGPD).
+- **Stockage** : **les deux** — journaux Cloudflare activés (tout le flux, rétention courte, tableau de bord
+  Cloudflare) **et** les erreurs gardées dans une table D1, lisibles depuis la console plateforme. Compatibilité
+  des journaux Cloudflare avec un projet **Pages** à vérifier au cadrage.
+- **Alerte** : une erreur 500 en production prévient l'exploitant **par ntfy et par email**, au plus une fois par
+  type d'erreur et par heure.
+- Reste à cadrer (grilling) : expurgation (réutiliser celle de `journal_actions_plateforme`), rétention de la
+  table, données clients dans les corps, coût D1, page de consultation, sujet ntfy et destinataire email.
+
 ## 2026-10-06 — Chantier « avoirs » cadré (grilling Q1-Q19, exploitant)
 
 Point de départ : `AV-2026-00001` (recette du ticket 03 prix TTC) introuvable à l'écran ; aucune page ne
