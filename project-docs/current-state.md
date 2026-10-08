@@ -15,6 +15,8 @@
   journaux Cloudflare + table D1 des erreurs ; alerte ntfy + email. Grilling et spec à faire.
 - **Double comptage** facture + encaissement au journal NF525 : défaut antérieur, 🔴 P1 au `todo.md`, à cadrer.
 - **Mobilax** : appels authentifiés bloqués (502 après 60 s en local, sans réponse en production) — 🔴 `todo.md`.
+  Correction de l'exploitant : API de **préproduction** seule (pas encore d'API de production) → pas de panne pour
+  les boutiques, seulement des tests Mobilax impossibles pour l'instant.
 - Suite E2E : arrêtée une fois par manque de mémoire (2,2 Go libres) ; relancée à 6,5 Go : 407 verts.
 
 **Prochaine action** : retester Mobilax ; tickets 03 → 04 → 05 → 06 et 07 du chantier avoirs (écrans, confiables au

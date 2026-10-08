@@ -8,6 +8,9 @@
   8 E2E Mobilax rouges pour cette seule raison. `MOBILAX_API_BASE` de production pointe la même préproduction :
   recherche et import Mobilax indisponibles pour les boutiques. Pistes : clé de préprod tournée ou révoquée
   (elle avait circulé en clair, `todo.md`), `/auth` en panne chez Mobilax, quota. Retester, puis contacter Mobilax.
+  **Correction de l'exploitant (même jour)** : ce n'est **pas** une panne de production pour les boutiques — seule
+  l'API de **préproduction** existe aujourd'hui (pas encore d'API de production Mobilax). Le blocage empêche de
+  tester Mobilax (écrans, E2E), rien de plus. Priorité ramenée à 🟡.
 
 ## 🔴 P1 2026-10-08 — Une facture émise puis encaissée en caisse compte deux fois (revue du ticket 02 avoirs)
 
