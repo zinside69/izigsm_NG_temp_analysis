@@ -42,6 +42,7 @@ import { nextNumero, calculLignes, calculLigne, ligneEnTtc } from '../lib/db'
 import { prixHtDepuisTtc } from '../lib/prixVente'
 import { todayParis, currentMonthParis } from '../lib/timezone'
 import { buildCanonicalData, assertPeutEcrireAuRegistre } from '../lib/nf525'
+import { enCentimes } from '../lib/montants'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -167,10 +168,11 @@ export interface PartDePaiement {
   rendu_monnaie: number | null  // monnaie rendue — part en espèces seulement
 }
 
-/** Un montant en euros converti en centimes entiers, pour comparer sans erreur d'arrondi. */
-function enCentimes(montantEnEuros: number): number {
-  return Math.round(montantEnEuros * 100)
-}
+// AVANT (2026-10-08, ticket 01 chantier avoirs — mise en commun dans `lib/montants.ts`, importée en tête) :
+// /** Un montant en euros converti en centimes entiers, pour comparer sans erreur d'arrondi. */
+// function enCentimes(montantEnEuros: number): number {
+//   return Math.round(montantEnEuros * 100)
+// }
 
 /**
  * Décide des lignes `paiements` d'une vente, ou refuse — **avant toute écriture** : un refus ne

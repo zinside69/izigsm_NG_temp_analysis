@@ -988,6 +988,11 @@ async function confirmAvoir() {
     lignes,
   };
 
+  // Bouton figé pendant l'envoi (ticket 01 chantier avoirs, revue) : un double-clic enverrait deux
+  // avoirs qui liraient chacun « rien d'annulé » et dépasseraient ensemble le plafond de la facture.
+  const boutonEmettre = document.querySelector('#modal-avoir .modal-footer .btn-primary');
+  if (boutonEmettre) boutonEmettre.disabled = true;
+
   try {
     const result = await apiPost('/api/avoirs', payload);
     if (result.ok) {
@@ -1003,6 +1008,8 @@ async function confirmAvoir() {
     console.warn('[factures] confirmAvoir erreur réseau', err);
     showFlash('⚠️ Erreur réseau — réessayez.', 'error');
   }
+  // Le `catch` ne relance rien : le bouton est rendu quelle que soit l'issue de l'envoi
+  if (boutonEmettre) boutonEmettre.disabled = false;
 }
 
 // ─── Impression / PDF (Sprint 2.13) ──────────────────────────────────────────

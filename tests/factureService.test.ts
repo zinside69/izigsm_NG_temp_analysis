@@ -918,10 +918,16 @@ describe('createAvoir()', () => {
       facture_id: 20, motif: 'Test hash', lignes: [LIGNE_AVOIR_INPUT],
     })
 
-    const calls = db.__getCalls()
-    const updateHashCall = calls.find(c => c.sql === SQL_UPDATE_AVOIR_HASH)
-    expect(updateHashCall).toBeDefined()
-    expect(updateHashCall!.params[1]).toBe(8)
+    // AVANT (2026-10-08, ticket 01 chantier avoirs — l'empreinte part désormais dans un lot `batch()` avec
+    // l'état de la facture ; la doublure `mockD1` ne consigne pas les requêtes d'un lot. Le comportement
+    // — l'avoir porte l'empreinte de son écriture au journal — est prouvé contre un vrai SQLite :
+    // `tests/avoirs-plafond-sqlite.test.ts`) :
+    // const calls = db.__getCalls()
+    // const updateHashCall = calls.find(c => c.sql === SQL_UPDATE_AVOIR_HASH)
+    // expect(updateHashCall).toBeDefined()
+    // expect(updateHashCall!.params[1]).toBe(8)
+    expect(db.batch).toHaveBeenCalled()
+    void SQL_UPDATE_AVOIR_HASH
   })
 
   it('appelle auditLog CREATE_AVOIR', async () => {

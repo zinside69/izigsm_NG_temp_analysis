@@ -13,9 +13,11 @@ import {
   updateStatutDevis, convertirDevis, getStatsDevis,
   expireDevisPerimes, type StatutDevis,
 } from '../services/devisService'
+// AVANT (2026-10-08, ticket 01 chantier avoirs — ErreurPlafondAvoir importée) :
+//   listAvoirs, getAvoir, createAvoir, createFactureAcompte,
 import {
   listFactures, getFacture, ajouterPaiement, emettreFacture,
-  listAvoirs, getAvoir, createAvoir, createFactureAcompte,
+  listAvoirs, getAvoir, createAvoir, createFactureAcompte, ErreurPlafondAvoir,
   createFacture, type CreateFactureInput,
 } from '../services/factureService'
 import { sendEmail } from '../services/emailService'
@@ -641,6 +643,14 @@ facturation.post('/avoirs', requireRole('admin', 'manager'), async (c) => {
       message:    'Avoir créé et enregistré dans le journal NF525.',
     }, 201)
   } catch (err: any) {
+    // Plafond dépassé (ticket 01 chantier avoirs) : saisie à corriger → 400, code et montant encore
+    // annulable rendus à part, le message restant lisible tel quel à l'écran.
+    if (err instanceof ErreurPlafondAvoir) {
+      return c.json({
+        success: false, error: err.message, code: err.code,
+        encore_annulable: err.encoreAnnulableCentimes / 100,
+      }, 400)
+    }
     const status = err.message.includes('introuvable') ? 404
                  : err.message.includes('non émise')   ? 400 : 422
     return c.json({ success: false, error: err.message }, status)

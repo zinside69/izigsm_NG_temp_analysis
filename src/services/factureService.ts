@@ -20,6 +20,7 @@
 import { nextNumero, auditLog, parsePagination, calculLignes, calculLigne, prixDeLaLigne } from '../lib/db'
 import { enregistrerTransaction, assertPeutEcrireAuRegistre } from '../lib/nf525'
 import { todayParis } from '../lib/timezone'
+import { enCentimes, formaterCentimesEnEuros } from '../lib/montants'
 import type { Database } from '../ports/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -715,6 +716,74 @@ export async function getAvoir(db: Database, id: number): Promise<any | null> {
   return { ...avoir, lignes: lignes ?? [] }
 }
 
+/** État que prend une facture entièrement couverte par ses avoirs (ticket 01 du chantier avoirs, Q5). */
+const ETAT_FACTURE_COUVERTE: StatutFacture = 'annulee'
+
+/**
+ * Refus d'un avoir dont le cumul dépasserait le total TTC de sa facture (ticket 01 du chantier avoirs,
+ * décision Q6). Message lisible tel quel par l'opérateur ; la route le reconnaît par son type et renvoie
+ * le code `plafond_depasse` à part. Le montant encore annulable n'est jamais négatif (une facture créditée
+ * au-delà de son total avant le plafond afficherait sinon « −X € »).
+ */
+export class ErreurPlafondAvoir extends Error {
+  readonly code = 'plafond_depasse'
+  readonly encoreAnnulableCentimes: number
+  constructor(encoreAnnulableCentimes: number) {
+    const montantAffichable = Math.max(0, encoreAnnulableCentimes)
+    super(
+      'Le cumul des avoirs dépasserait le total de la facture. ' +
+      `Montant encore annulable : ${formaterCentimesEnEuros(montantAffichable)}.`
+    )
+    this.name = 'ErreurPlafondAvoir'
+    this.encoreAnnulableCentimes = montantAffichable
+  }
+}
+
+/** Ce qu'un nouvel avoir ferait à sa facture : le dépasser, ou la couvrir entièrement. */
+interface CouvertureDeLaFacture {
+  /** Montant TTC encore annulable avant ce nouvel avoir, en centimes. */
+  encoreAnnulableCentimes: number
+  /** Le nouvel avoir ferait dépasser le cumul au-delà du total TTC → refus. */
+  avoirDepasseLeTotal: boolean
+  /** Avec ce nouvel avoir, le cumul atteint le total TTC → la facture passe « annulee ». */
+  factureEntierementCouverte: boolean
+}
+
+/**
+ * Compare un nouvel avoir à ce qui reste annulable sur sa facture, en centimes.
+ * @param totalFactureCentimes - Total TTC de la facture
+ * @param dejaAnnuleCentimes   - Somme des avoirs déjà émis sur elle
+ * @param nouvelAvoirCentimes  - Total TTC du nouvel avoir
+ */
+function couvertureDeLaFacture(
+  totalFactureCentimes: number, dejaAnnuleCentimes: number, nouvelAvoirCentimes: number,
+): CouvertureDeLaFacture {
+  const encoreAnnulableCentimes = totalFactureCentimes - dejaAnnuleCentimes
+  return {
+    encoreAnnulableCentimes,
+    avoirDepasseLeTotal:        nouvelAvoirCentimes > encoreAnnulableCentimes,
+    factureEntierementCouverte: nouvelAvoirCentimes === encoreAnnulableCentimes,
+  }
+}
+
+/**
+ * Somme TTC des avoirs déjà émis sur une facture, en centimes (ticket 01 du chantier avoirs).
+ * Définition partagée par le plafond d'un nouvel avoir, l'état « annulée » de la facture et le reste dû
+ * (ticket 03). La migration 0068 en recopie la formule pour sa reprise : une migration est figée et ne
+ * peut pas appeler le code.
+ * @param db        - Instance D1Database
+ * @param factureId - Facture dont on additionne les avoirs
+ */
+export async function sommeDesAvoirsEnCentimes(db: D1Database, factureId: number): Promise<number> {
+  const resultat = await db.prepare(`
+    SELECT COALESCE(SUM(ROUND(avoir_de_la_facture.total_ttc * 100)), 0) AS somme_centimes
+    FROM   avoirs AS avoir_de_la_facture
+    -- Seulement les avoirs de cette facture
+    WHERE  avoir_de_la_facture.facture_id = ?
+  `).bind(factureId).first<{ somme_centimes: number }>()
+  return resultat?.somme_centimes ?? 0
+}
+
 /**
  * Crée un avoir sur une facture émise (NF525 — chaîne SHA-256 obligatoire).
  * La facture source doit être locked (émise) pour émettre un avoir.
@@ -767,6 +836,16 @@ export async function createAvoir(
   const boutiqueId                      = facture.boutique_id
   // AVANT (2026-10-05, ticket 03 prix TTC) : const { total_ht, total_tva, total_ttc } = calculLignes(input.lignes)
   const { total_ht, total_tva, total_ttc } = calculLignes(lignesAvecTaux)
+
+  // Plafond (ticket 01 du chantier avoirs, décision Q6 du 2026-10-06) : le cumul des avoirs d'une facture
+  // ne dépasse jamais son total TTC. Contrôlé AVANT nextNumero() : un refus ne consomme aucun numéro.
+  const couverture = couvertureDeLaFacture(
+    enCentimes(facture.total_ttc),
+    await sommeDesAvoirsEnCentimes(db, input.facture_id),
+    enCentimes(total_ttc),
+  )
+  if (couverture.avoirDepasseLeTotal) throw new ErreurPlafondAvoir(couverture.encoreAnnulableCentimes)
+
   const numero                          = await nextNumero(db, boutiqueId, 'avoir')
 
   // Insérer l'avoir
@@ -803,17 +882,34 @@ export async function createAvoir(
   //     l.tva_taux ?? 20, ht, tva, ht + tva
   //   )
   // })
+  // AVANT (2026-10-08, ticket 01 chantier avoirs — la ligne garde son PU TTC et son mode de calcul,
+  // migration 0068 ; colonnes ajoutées en fin d'INSERT pour ne décaler aucun paramètre) :
+  // const stmts = lignesAvecTaux.map((l, i) => {
+  //   const montants = calculLigne(l)
+  //   const prix     = prixDeLaLigne(l)
+  //   return db.prepare(`
+  //     INSERT INTO lignes_avoir
+  //       (avoir_id, ordre, description, quantite, prix_unitaire_ht,
+  //        tva_taux, total_ht, total_tva, total_ttc)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //   `).bind(
+  //     avoirId, i + 1, l.description, l.quantite, prix.prix_unitaire_ht,
+  //     l.tva_taux, montants.ht, montants.tva, montants.ttc
+  //   )
+  // })
   const stmts = lignesAvecTaux.map((l, i) => {
     const montants = calculLigne(l)
     const prix     = prixDeLaLigne(l)
     return db.prepare(`
       INSERT INTO lignes_avoir
         (avoir_id, ordre, description, quantite, prix_unitaire_ht,
-         tva_taux, total_ht, total_tva, total_ttc)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         tva_taux, total_ht, total_tva, total_ttc,
+         prix_unitaire_ttc, mode_calcul)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       avoirId, i + 1, l.description, l.quantite, prix.prix_unitaire_ht,
-      l.tva_taux, montants.ht, montants.tva, montants.ttc
+      l.tva_taux, montants.ht, montants.tva, montants.ttc,
+      prix.prix_unitaire_ttc, prix.mode_calcul
     )
   })
   if (stmts.length > 0) await db.batch(stmts)
@@ -832,8 +928,22 @@ export async function createAvoir(
     user_id:          userId,
   })
 
-  await db.prepare('UPDATE avoirs SET hash_nf525 = ? WHERE id = ?')
-    .bind(hashNf525, avoirId).run()
+  // AVANT (2026-10-08, ticket 01 chantier avoirs — empreinte de l'avoir et état de la facture écrits
+  // ensemble, en une transaction : `CLAUDE.md` § Port Database, `batch()`) :
+  // await db.prepare('UPDATE avoirs SET hash_nf525 = ? WHERE id = ?')
+  //   .bind(hashNf525, avoirId).run()
+  const ecrituresApresJournal = [
+    db.prepare('UPDATE avoirs SET hash_nf525 = ? WHERE id = ?').bind(hashNf525, avoirId),
+  ]
+  // Facture entièrement couverte → « annulee » (ticket 01 du chantier avoirs, décisions Q5 et Q12), payée ou
+  // non. APRÈS l'écriture au journal : un échec du chaînage ne laisse pas une facture annulée sans avoir
+  // chaîné. Seule la colonne d'état change — contenu, numéro, instantanés et chaînage restent figés.
+  if (couverture.factureEntierementCouverte) {
+    ecrituresApresJournal.push(
+      db.prepare('UPDATE factures SET statut = ? WHERE id = ?').bind(ETAT_FACTURE_COUVERTE, input.facture_id),
+    )
+  }
+  await db.batch(ecrituresApresJournal)
 
   await auditLog(db, {
     boutique_id: boutiqueId, user_id: userId,

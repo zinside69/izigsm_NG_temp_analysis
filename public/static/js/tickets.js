@@ -1083,7 +1083,17 @@ async function changeStatus(id, statut) {
           lignes:     [{ description: 'Acompte annulé', quantite: 1, prix_unitaire_ht: prixHt, tva_taux: tvaTaux }],
           date_expiration: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
         });
-        if (!rAvoir.data?.success) {
+        // AVANT (2026-10-08, ticket 01 chantier avoirs — une facture d'acompte déjà entièrement couverte par
+        // un avoir ne bloque plus l'annulation ; sans cela, un avoir créé puis un changement de statut en
+        // échec rendaient le ticket impossible à annuler, toute nouvelle tentative tombant sur le plafond) :
+        // if (!rAvoir.data?.success) {
+        //   showFlash('Erreur: ' + (rAvoir.error || rAvoir.data?.error || 'Échec de la création de l\'avoir.'), 'error');
+        //   return;
+        // }
+        const plafondAtteint       = rAvoir.data?.code === 'plafond_depasse';
+        const acompteDejaCouvert   = plafondAtteint && rAvoir.data?.encore_annulable === 0;
+        const avoirCreeOuDejaFait  = rAvoir.data?.success || acompteDejaCouvert;
+        if (!avoirCreeOuDejaFait) {
           showFlash('Erreur: ' + (rAvoir.error || rAvoir.data?.error || 'Échec de la création de l\'avoir.'), 'error');
           return;
         }
