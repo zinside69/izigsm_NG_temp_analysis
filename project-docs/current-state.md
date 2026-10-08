@@ -19,8 +19,11 @@
   les boutiques, seulement des tests Mobilax impossibles pour l'instant.
 - Suite E2E : arrêtée une fois par manque de mémoire (2,2 Go libres) ; relancée à 6,5 Go : 407 verts.
 
-**Prochaine action** : retester Mobilax ; tickets 03 → 04 → 05 → 06 et 07 du chantier avoirs (écrans, confiables au
-socle après relecture) ; grilling du journal technique.
+- **Mobilax préproduction, mesuré le soir** : connexion et catalogue rapides (< 0,5 s), **recherche de produits
+  lente** (20,7 s, parfois > 30-60 s) → E2E Mobilax instables, sans défaut de notre côté (`todo.md`).
+
+**Prochaine action** : tickets 03 → 04 → 05 → 06 et 07 du chantier avoirs (écrans, confiables au socle après
+relecture) ; grilling du journal technique ; cadrage du double comptage facture + encaissement.
 <!-- AVANT (2026-10-08, checkpoint 157 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 156 — chantier avoirs cadré, spec à écrire) -->
 
 ## Checkpoint 157 — Chantier avoirs : spec, tickets, ticket 01 en production (2026-10-08)

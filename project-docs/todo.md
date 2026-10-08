@@ -13,6 +13,11 @@
   tester Mobilax (écrans, E2E), rien de plus. Priorité ramenée à 🟡.
   **Rétabli le même jour** : recherche « samsung A15 » testée à l'écran par l'exploitant → 742 pièces, prix et
   disponibilités affichés. Blocage passager côté préproduction Mobilax. Reste : rejouer les 8 E2E Mobilax.
+  **Mesuré le soir même** (script hors dépôt, clé de `.dev.vars`) : `POST /auth` 200 en 0,4 s, `/catalog/series`
+  200 en 0,3 s (2 316 séries), mais `GET /products?search=samsung a15&page=1&limit=100` **200 en 20,7 s**, et un
+  essai précédent sans réponse en 30 s. La **recherche de produits** de la préproduction est lente (≈ 20 s à > 60 s)
+  → E2E Mobilax (délais 20-30 s) instables tant qu'elle l'est. Piste d'écran : après ~10 s d'attente, afficher
+  « Mobilax répond lentement… » au lieu d'un « Recherche en cours… » muet. À revoir avec l'API de production.
 
 ## 🔴 P1 2026-10-08 — Une facture émise puis encaissée en caisse compte deux fois (revue du ticket 02 avoirs)
 

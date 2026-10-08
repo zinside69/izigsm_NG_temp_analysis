@@ -1,7 +1,21 @@
 # Recovery Prompt — iziGSM — 2026-10-08 (checkpoint 157 — ticket 01 avoirs en production)
 <!-- AVANT (2026-10-08, checkpoint 157 — titre mis à jour) : # Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 156 — chantier avoirs cadré, spec à écrire) -->
 
-## ➡ Première action (checkpoint 157 — remplace celle du 156)
+## ➡ Première action (checkpoint 158 — remplace celle du 157)
+
+**Production `izigsm-v3.37` / `0068`.** Chantier avoirs : tickets **01 et 02 en production** (plafond, facture
+couverte annulée, clôture ventes / avoirs / net, CA du jour sans avoirs).
+
+1. **Tickets 03 → 04 → 05 → 06** (écran des factures, en série) et **07** (tickets) du chantier avoirs —
+   confiables au socle après relecture de leur conception, ou ici :
+   `/mattpocock-skills:implement .scratch/avoirs/issues/03-reste-du-unique-et-lien-facture-avoirs.md`.
+2. **🔴 P1 double comptage** facture + encaissement au journal NF525 : à cadrer avec l'exploitant (et
+   l'expert-comptable) avant tout code — `todo.md`.
+3. **Journal technique de production** : grilling puis spec (`decisions.md` § 2026-10-08).
+4. Mobilax préproduction : recherche lente (≈ 20 s) — E2E Mobilax instables, ne pas les prendre pour une régression.
+5. Mémoire : la suite E2E complète demande ~6 Go libres (arrêtée à 2,2 Go le 2026-10-08).
+
+## ➡ Première action (checkpoint 157 — historique)
 
 **Production `izigsm-v3.36` / `0068`.** Chantier avoirs : spec + 7 tickets (`.scratch/avoirs/`) ; **ticket 01 en
 production** (plafond, `FAC-2026-00009` annulée, lignes d'avoir en TTC).
