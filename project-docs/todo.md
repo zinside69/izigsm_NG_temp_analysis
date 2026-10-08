@@ -1,5 +1,17 @@
 # iziGSM — TODO (project-docs, distinct de docs/TODO.md qui suit les sprints produit)
 
+## 🟡 2026-10-08 — Suites du ticket 01 avoirs (revue)
+
+- [ ] **Deux avoirs simultanés sur la même facture** peuvent passer le plafond (lecture de la somme puis
+  écriture, sans verrou). Parade d'écran posée (bouton figé pendant l'envoi) ; une garantie serveur serait à
+  concevoir — même absence de verrou pour la vente en caisse. À cadrer avec la caisse, pas isolément.
+- [ ] **Base locale : les E2E accumulent des boutiques** (11 860 le 2026-10-08, purgée à 12 le même jour,
+  sauvegarde dans le scratchpad de la session) — au-delà de quelques milliers, la console des boutiques ralentit
+  et des E2E dépassent leur délai en suite complète. Piste durable : faire supprimer à chaque test sa boutique.
+- [ ] **« Se souvenir de moi » absent de l'écran de connexion** (constat de l'exploitant, 2026-10-08), alors que
+  `CLAUDE.md` § checkpoint 73 parle d'un compte « n'ayant pas coché se souvenir de moi ». Mesurer ce que fait
+  la connexion aujourd'hui (support de la session) avant de corriger l'un ou l'autre.
+
 ## 🔴 P1 2026-10-06 — Les avoirs n'existent nulle part à l'écran (recette du ticket 03, production)
 
 Trouvé en recette : `AV-2026-00001` (annule `FAC-2026-00009`, 70,52 €) est en base et au journal NF525

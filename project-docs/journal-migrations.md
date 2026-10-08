@@ -131,6 +131,19 @@ migration 0038 » (boutique 5, 1,00 € HT → 1,20 € TTC), rien à corriger. 
 migration `0064`, deux colonnes présentes, 0 ligne sans reprise. Code (`izigsm-v3.34`) déployé
 **après** : aperçu `44592c02` puis apex vérifiés.
 
+### 2026-10-08 — `0068` (chantier avoirs, ticket 01 : avoir plafonné, facture couverte annulée)
+
+| # | Migration | Appliquée (UTC) | Effet | R | Inverse |
+|---|---|---|---|---|---|
+| 58 | `0068_avoirs_ttc_cloture_facture_annulee` | **2026-10-08 09:42:21** | `lignes_avoir` + `prix_unitaire_ttc REAL`, `mode_calcul TEXT NOT NULL DEFAULT 'ht'` (CHECK `ttc`/`ht`) ; `clotures_journalieres` + `avoirs_ht`, `avoirs_tva`, `avoirs_ttc` (défaut 0) ; **reprise** : facture entièrement couverte par ses avoirs → `annulee` (relu après : `FAC-2026-00009` seule, `annulee`) | | `UPDATE factures SET statut = 'en_attente' WHERE numero = 'FAC-2026-00009';` puis `ALTER TABLE clotures_journalieres DROP COLUMN avoirs_ttc;` / `avoirs_tva` / `avoirs_ht` ; `ALTER TABLE lignes_avoir DROP COLUMN mode_calcul;` / `prix_unitaire_ttc` — **code revenu à `izigsm-v3.35` d'abord** (v3.36 écrit ces colonnes à chaque avoir) ; détruit les PU TTC d'avoir saisis depuis ; ⚠ toute facture passée `annulee` par un avoir émis après le déploiement serait à remettre à la main |
+
+Point de restauration relevé juste **avant** `0068` (2026-10-08, lecture seule) :
+`00000219-00000000-000050fe-30e046b67ba5dd3cc7c79b49f5b9dd15` — défait la migration **et** toute
+écriture postérieure. Relu avant : dernière migration `0064`, `FAC-2026-00009` `en_attente` couverte à
+70,52 €, 1 clôture. Relu après : dernière migration `0068`, `FAC-2026-00009` `annulee` (seule), 2 + 3
+colonnes présentes, ligne d'`AV-2026-00001` en `ht`, clôture n° 1 intacte (370,80 / 0). Code
+(`izigsm-v3.36`) déployé **après** : aperçu `aebcc360` puis apex vérifiés.
+
 ## Vérification d'état (lecture seule, à rejouer à tout moment)
 
 ```

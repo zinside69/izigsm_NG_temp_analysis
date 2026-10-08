@@ -1,4 +1,26 @@
-# iziGSM — État courant (MàJ : 2026-10-06, checkpoint 156 — chantier avoirs cadré, spec à écrire)
+# iziGSM — État courant (MàJ : 2026-10-08, checkpoint 157 — ticket 01 avoirs en production, v3.36 / 0068)
+<!-- AVANT (2026-10-08, checkpoint 157 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 156 — chantier avoirs cadré, spec à écrire) -->
+
+## Checkpoint 157 — Chantier avoirs : spec, tickets, ticket 01 en production (2026-10-08)
+
+**Production : `izigsm-v3.36`, dernière migration `0068`. Dépôt et production alignés** (`59ee8c9` + ce checkpoint).
+
+- **Spec et 7 tickets** (`.scratch/avoirs/`, `7740275`) : 50 stories, 3 coutures ; 01-02 NF525 avec l'exploitant,
+  03-07 confiables au socle (03 → 04 → 05 → 06 en série, fichiers partagés).
+- **Ticket 01 `done`** (`59ee8c9`) : plafond avant `nextNumero()` (`ErreurPlafondAvoir`, 400 `plafond_depasse`),
+  facture couverte → `annulee` (lot `batch()` avec l'empreinte de l'avoir, après le journal), lignes d'avoir en
+  TTC, migration `0068` (reprise : `FAC-2026-00009` annulée), `src/lib/montants.ts`. Revue à deux axes : bouton
+  figé pendant l'envoi, annulation d'un ticket à acompte déjà couvert débloquée, encore annulable borné à 0.
+  Vitest 1 542 + 2 permanents, tsc 31, E2E complets verts (3 échecs de charge rejoués seuls verts).
+- ⚠ En cours de route : un `git stash pop` lancé par erreur a appliqué un vieux stash du 25/07 sur `tickets.js` ;
+  fichier remis à HEAD, stash intact (`stray-loop-run-2026-07-25…`).
+- **Base locale purgée** : 11 860 → 12 boutiques (1, 2 + les 10 plus récentes), 26 → 10 Mo, 0 violation de clé ;
+  sauvegarde `base-locale-avant-purge-2026-10-08.sqlite` (scratchpad de la session) ; script hors dépôt.
+- **Déployé** : `0068` à 09:42:21 UTC relue, puis code (aperçu `aebcc360` puis apex). Preuve dans Chrome :
+  `FAC-2026-00009` « Annulée » ; avoir de 1 € refusé (« encore annulable : 0,00 € »), compteur d'avoirs à 1.
+
+**Prochaine action** : ticket **02** (clôture : ventes et avoirs séparés, NF525, avec l'exploitant) — session
+neuve : `/mattpocock-skills:implement .scratch/avoirs/issues/02-cloture-ventes-et-avoirs-separes.md`.
 <!-- AVANT (2026-10-06, checkpoint 156 — titre mis à jour) : # iziGSM — État courant (MàJ : 2026-10-06, checkpoint 155 — services suggérés réparés, v3.35 / 0064) -->
 
 ## Checkpoint 156 — Chantier « avoirs » cadré (2026-10-06, fin de journée)

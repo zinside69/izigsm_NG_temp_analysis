@@ -910,6 +910,25 @@ du HMAC, aucun n'était réutilisable pour une valeur qu'un service doit pouvoir
   l'identique** (« P.U. HT ») : ⊥ convertir une facture émise avant la bascule.
 - `lignes_avoir` n'a ni `prix_unitaire_ttc` ni `mode_calcul` : PU HT déduit stocké, totaux exacts.
 
+## Avoirs — plafond et facture couverte (depuis 2026-10-08, ticket 01 chantier `avoirs`)
+
+- **Le cumul des avoirs d'une facture ne dépasse jamais son total TTC** (Q6). `createAvoir()` le contrôle par
+  `couvertureDeLaFacture()` + `sommeDesAvoirsEnCentimes()` **avant `nextNumero()`** : un refus ne consomme
+  aucun numéro. Refus = `ErreurPlafondAvoir` → 400, `code: 'plafond_depasse'`, `encore_annulable` (jamais négatif).
+- **Facture entièrement couverte → `annulee`**, payée ou non (Q5, Q12), écrit **après** le journal NF525, **dans le
+  même `batch()`** que l'empreinte de l'avoir. Seule la colonne d'état change : contenu, numéro, instantanés et
+  chaînage restent figés. ⊥ un second écrivain de `annulee`.
+- **`sommeDesAvoirsEnCentimes()` est la définition de « déjà annulé »** (plafond, `annulee`, reste dû du ticket 03).
+  La migration `0068` en recopie la formule pour sa reprise (une migration ne peut pas appeler le code).
+- **Argent comparé en centimes entiers** : `enCentimes()` / `formaterCentimesEnEuros()` (`src/lib/montants.ts`),
+  partagés par la caisse et la facturation. ⊥ une nouvelle copie privée.
+- **`lignes_avoir.prix_unitaire_ttc` / `mode_calcul`** (`0068`) : écrits par `prixDeLaLigne()`, comme les lignes de
+  facture ; colonnes ajoutées en fin d'`INSERT`.
+- **Pas de verrou serveur contre deux avoirs simultanés** (même absence que la caisse) : l'écran fige « Émettre
+  l'avoir » pendant l'envoi. `todo.md`.
+- Annulation d'un ticket dont l'acompte est **déjà couvert** (`plafond_depasse`, encore annulable 0) : elle aboutit
+  (`tickets.js`) — sinon un échec du changement de statut rendait le ticket impossible à annuler.
+
 ## Quantité de ligne et caisse « Barre unique + favoris » (depuis 2026-10-02, recette 001)
 
 - **Une quantité de ligne est un entier ≥ 1** — caisse, devis, factures, avoirs, lignes libres
@@ -1249,6 +1268,15 @@ appliquée à distance **avant** `npm run deploy`, jamais après :
 npx wrangler d1 migrations apply DB --remote
 npm run deploy
 ```
+
+**État au 2026-10-08 (checkpoint 157) : DÉPLOYÉ — production en `izigsm-v3.36`, migration `0068`.** Ticket 01
+du chantier avoirs (plafond, facture couverte `annulee`, lignes d'avoir en TTC). E2E complets verts (3 échecs de
+charge rejoués seuls verts) ; `0068` appliquée à distance à 09:42:21 UTC et relue (`FAC-2026-00009` `annulee`,
+colonnes présentes) **puis** le code. Aperçu `aebcc360` **puis** apex relus : `sw.js` v3.36,
+`factures.00058e0b.js` et `tickets.d6342bf8.js` en JavaScript avec le code du ticket, `/api/avoirs` sans jeton →
+401. Preuve dans Chrome : `FAC-2026-00009` « Annulée » ; avoir de 1 € refusé (400, « encore annulable :
+0,00 € »), compteur d'avoirs inchangé à 1. Point Time Travel dans `journal-migrations.md`. **Dépôt et production
+alignés.**
 
 **État au 2026-10-06 (checkpoint 155) : DÉPLOYÉ — production en `izigsm-v3.35`, migration `0064` (aucune
 nouvelle).** Services suggérés d'une prise en charge enfin affichés (`tickets.js`, enveloppe d'`apiGet`). E2E

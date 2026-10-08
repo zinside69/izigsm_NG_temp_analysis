@@ -1,4 +1,19 @@
-# Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 156 — chantier avoirs cadré, spec à écrire)
+# Recovery Prompt — iziGSM — 2026-10-08 (checkpoint 157 — ticket 01 avoirs en production)
+<!-- AVANT (2026-10-08, checkpoint 157 — titre mis à jour) : # Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 156 — chantier avoirs cadré, spec à écrire) -->
+
+## ➡ Première action (checkpoint 157 — remplace celle du 156)
+
+**Production `izigsm-v3.36` / `0068`.** Chantier avoirs : spec + 7 tickets (`.scratch/avoirs/`) ; **ticket 01 en
+production** (plafond, `FAC-2026-00009` annulée, lignes d'avoir en TTC).
+
+1. **Ticket 02** (clôture : ventes et avoirs émis séparés — NF525, codé avec l'exploitant, colonnes déjà posées
+   par `0068`) : `/mattpocock-skills:implement .scratch/avoirs/issues/02-cloture-ventes-et-avoirs-separes.md`.
+2. Puis 03 → 04 → 05 → 06 (écran des factures, en série) et 07 ; confiables au socle après relecture.
+3. Prix TTC restants : 06, 09, 10 → 05 → 08 ; 07 après 06 ; 12 après 06.
+4. Lien de test iPhone 12 / Installation OS gardé en boutique 2. Chrome : la session de production expire
+   (reconnexion de l'exploitant nécessaire après quelques jours ; « se souvenir de moi » n'existe pas — `todo.md`).
+
+## Checkpoint 156 (historique)
 <!-- AVANT (2026-10-06, checkpoint 156 — titre mis à jour) : # Recovery Prompt — iziGSM — 2026-10-06 (checkpoint 153 — ticket 04 TTC fait, à déployer) -->
 
 ## ➡ Première action (checkpoint 156 — remplace celle du 153)
